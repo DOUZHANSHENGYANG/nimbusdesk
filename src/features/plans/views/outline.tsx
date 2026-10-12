@@ -1,0 +1,355 @@
+import { Fragment, useRef, useState } from "react";
+import { ChevronRight, Clock, Pencil, Plus, Trash2, X } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import {
+  childrenOf,
+  subtreeProgress,
+  type PlanTask,
+} from "@/features/plans/types";
+import { doneTitleStyle } from "@/features/plans/views/shared";
+
+/** 兄弟排序：未完成在前、已完成沉底（display 层，不动存储顺序 → 取消勾选自动恢复原位） */
+function sortDoneLast(tasks: PlanTask[]): PlanTask[] {
+  const active = tasks.filter((t) => t.status !== "done");
+  const done = tasks.filter((t) => t.status === "done");
+  return [...active, ...done];
+}
+import { useDayTasks, usePlans } from "@/features/plans/store";
+import { StatusButton } from "@/features/plans/views/shared";
+import { useModal } from "@/components/shell/modal-host";
+import { gsap, useGSAP } from "@/lib/gsap";
+import { cn } from "@/lib/utils";
+
+const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
+/** 每层缩进（树形引导线间距） */
+const INDENT = 20;
+
+/** 大纲视图：Todoist 式多级任务树 —— 顶部快速添加 + 引导线 + 父任务进度 + 完成沉底 */
+export function OutlineView({ date }: { date: string }) {
+  const { t } = useTranslation();
+  const tasks = useDayTasks(date);
+  const addTask = usePlans((s) => s.addTask);
+  const roots = sortDoneLast(childrenOf(tasks, null));
+  const listRef = useRef<HTMLDivElement>(null);
+  const [input, setInput] = useState("");
+
+  useGSAP(
+    () => {
+      const rows = listRef.current?.querySelectorAll<HTMLElement>("[data-row]");
+      if (rows && rows.length) {
+        gsap.from(rows, { autoAlpha: 0, y: 6, duration: 0.26, stagger: 0.02, ease: "power2.out", clearProps: "all" });
+      }
+    },
+    { dependencies: [date, tasks.length], scope: listRef },
+  );
+
+  const submit = () => {
+    const v = input.trim();
+    if (!v) return;
+    addTask(date, null, v);
+    setInput("");
+  };
+
+  return (
+    <div className="flex flex-col" ref={listRef}>
+      {/* 顶部快速添加（Todoist 式） */}
+      <div className="mb-2 flex items-center gap-2 rounded-xl border border-border bg-card px-3 py-2.5 transition-colors focus-within:border-brand/60 focus-within:shadow-[var(--pr-shadow-glow)]">
+        <Plus className="size-4 shrink-0 text-brand" strokeWidth={2.4} />
+        <input
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && submit()}
+          placeholder={t("plans.addPlaceholder")}
+          className="w-full bg-transparent text-[13px] outline-none placeholder:text-muted-foreground/60"
+        />
+      </div>
+
+      {roots.length === 0 ? (
+        <p className="py-8 text-center text-[13px] text-muted-foreground">{t("plans.emptyDay")}</p>
+      ) : (
+        <RowsWithDoneDivider
+          list={roots}
+          dividerIndent={4}
+          label={t("plans.doneGroup")}
+          render={(task) => <TaskRow date={date} task={task} depth={0} />}
+        />
+      )}
+    </div>
+  );
+}
+
+/** 渲染一行列表（根级或子级），已完成后插入分组分隔线 */
+function RowsWithDoneDivider({
+  list,
+  render,
+  dividerIndent,
+  label,
+}: {
+  list: PlanTask[];
+  render: (task: PlanTask) => React.ReactNode;
+  dividerIndent: number;
+  label: string;
+}) {
+  const activeCount = list.filter((t) => t.status !== "done").length;
+  return (
+    <>
+      {list.map((task, idx) => (
+        <Fragment key={task.id}>
+          {idx === activeCount && activeCount > 0 && activeCount < list.length && (
+            <div
+              className="flex items-center gap-2 py-1.5 text-[10px] font-semibold tracking-wide text-muted-foreground/70"
+              style={{ paddingLeft: dividerIndent }}
+            >
+              <span className="h-px flex-1 bg-border" />
+              {label}
+              <span className="h-px flex-1 bg-border" />
+            </div>
+          )}
+          {render(task)}
+        </Fragment>
+      ))}
+    </>
+  );
+}
+
+function TaskRow({ date, task, depth }: { date: string; task: PlanTask; depth: number }) {
+  const { t } = useTranslation();
+  const { confirm } = useModal();
+  const tasks = useDayTasks(date);
+  const addTask = usePlans((s) => s.addTask);
+  const updateTask = usePlans((s) => s.updateTask);
+  const removeTask = usePlans((s) => s.removeTask);
+  const toggleDone = usePlans((s) => s.toggleDone);
+
+  const children = sortDoneLast(childrenOf(tasks, task.id));
+  const sub = subtreeProgress(tasks, task.id);
+  const [open, setOpen] = useState(true);
+  const [editing, setEditing] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const [draft, setDraft] = useState({ title: "", time: "", note: "" });
+  const [childInput, setChildInput] = useState("");
+
+  const startEdit = () => {
+    setDraft({ title: task.title, time: task.time ?? "", note: task.note ?? "" });
+    setEditing(true);
+  };
+
+  const saveEdit = () => {
+    const title = draft.title.trim();
+    if (!title) return;
+    updateTask(date, task.id, {
+      title,
+      time: TIME_RE.test(draft.time) ? draft.time : undefined,
+      note: draft.note.trim() || undefined,
+    });
+    setEditing(false);
+  };
+
+  const addChild = () => {
+    const v = childInput.trim();
+    if (!v) return;
+    addTask(date, task.id, v);
+    setChildInput("");
+  };
+
+  const onDelete = async () => {
+    const ok = await confirm({
+      title: t("plans.deleteConfirm"),
+      description: task.title,
+      danger: true,
+    });
+    if (ok) removeTask(date, task.id);
+  };
+
+  const hasKids = children.length > 0;
+
+  return (
+    <div data-row>
+      {/* 任务行 */}
+      <div
+        className={cn(
+          "group flex min-h-10 items-center gap-2 rounded-lg py-1 pr-1 transition-colors hover:bg-surface-hover",
+        )}
+        style={{ paddingLeft: 4 }}
+      >
+        {/* 展开/占位 */}
+        <button
+          type="button"
+          onClick={() => setOpen(!open)}
+          className={cn(
+            "grid size-5 shrink-0 place-items-center rounded text-muted-foreground transition-transform duration-200",
+            hasKids ? "hover:bg-muted hover:text-foreground" : "invisible",
+            open && hasKids && "rotate-90",
+          )}
+        >
+          <ChevronRight className="size-4" />
+        </button>
+
+        <StatusButton status={task.status} onToggle={() => toggleDone(date, task.id)} />
+
+        {/* 标题 / 编辑态 */}
+        {editing ? (
+          <div className="flex min-w-0 flex-1 flex-col gap-1.5 rounded-lg border border-border bg-card p-2.5">
+            <input
+              autoFocus
+              value={draft.title}
+              onChange={(e) => setDraft({ ...draft, title: e.target.value })}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") saveEdit();
+                if (e.key === "Escape") setEditing(false);
+              }}
+              className="w-full bg-transparent text-[13px] font-medium outline-none"
+              placeholder={t("plans.titleLabel")}
+            />
+            <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1 rounded-md bg-muted px-2 py-1">
+                <Clock className="size-3.5 text-muted-foreground" />
+                <input
+                  value={draft.time}
+                  onChange={(e) => setDraft({ ...draft, time: e.target.value })}
+                  placeholder="HH:mm"
+                  className="w-14 bg-transparent font-mono text-[12px] outline-none placeholder:text-muted-foreground/50"
+                />
+              </div>
+              <input
+                value={draft.note}
+                onChange={(e) => setDraft({ ...draft, note: e.target.value })}
+                placeholder={t("plans.noteLabel")}
+                className="min-w-0 flex-1 bg-transparent text-[12px] text-muted-foreground outline-none placeholder:text-muted-foreground/50"
+              />
+              <button
+                type="button"
+                onClick={() => setEditing(false)}
+                className="grid size-6 place-items-center rounded-md text-muted-foreground hover:bg-muted"
+              >
+                <X className="size-3.5" />
+              </button>
+            </div>
+          </div>
+        ) : (
+          <>
+            <button
+              type="button"
+              onClick={startEdit}
+              title={t("plans.editTip")}
+              className="min-w-0 flex-1 truncate text-left text-[13px] leading-5"
+            >
+              <span style={doneTitleStyle(task.status === "done")}>
+                {task.title}
+              </span>
+              {/* 父任务进度徽章 */}
+              {sub.total > 0 && (
+                <span
+                  className={cn(
+                    "ml-2 inline-block rounded-full px-1.5 py-px align-middle text-[10px] font-semibold",
+                    sub.done === sub.total
+                      ? "bg-success/15 text-success"
+                      : "bg-brand/10 text-brand",
+                  )}
+                >
+                  {sub.done}/{sub.total}
+                </span>
+              )}
+            </button>
+
+            {/* 时间 / 备注：固定右侧，保证一行 */}
+            {(task.time || task.note) && (
+              <div className="flex max-w-[45%] shrink-0 items-center gap-1.5">
+                {task.note && (
+                  <span
+                    className="min-w-0 truncate text-[11px] text-muted-foreground/70"
+                    title={task.note}
+                  >
+                    ≡ {task.note}
+                  </span>
+                )}
+                {task.time && (
+                  <span className="shrink-0 rounded-md bg-muted px-1.5 py-px font-mono text-[11px] text-muted-foreground">
+                    {task.time}
+                  </span>
+                )}
+              </div>
+            )}
+          </>
+        )}
+
+        {/* 悬停操作 */}
+        {!editing && (
+          <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity duration-150 group-hover:opacity-100">
+            <RowAction title={t("plans.editTip")} onClick={startEdit}>
+              <Pencil className="size-3.5" />
+            </RowAction>
+            <RowAction title={t("plans.addChild")} onClick={() => setAdding(!adding)}>
+              <Plus className="size-4" />
+            </RowAction>
+            <RowAction title={t("common.confirm")} danger onClick={() => void onDelete()}>
+              <Trash2 className="size-3.5" />
+            </RowAction>
+          </div>
+        )}
+      </div>
+
+      {/* 添加子任务输入 */}
+      {adding && (
+        <div
+          className="flex items-center gap-2 py-1"
+          style={{ paddingLeft: 26 + depth * INDENT }}
+        >
+          <input
+            autoFocus
+            value={childInput}
+            onChange={(e) => setChildInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") addChild();
+              if (e.key === "Escape") setAdding(false);
+            }}
+            onBlur={addChild}
+            placeholder={t("plans.addPlaceholder")}
+            className="w-full rounded-md border border-border bg-card px-2.5 py-1.5 text-[12px] outline-none placeholder:text-muted-foreground/50 focus:border-brand/50"
+          />
+        </div>
+      )}
+
+      {/* 子树：缩进 + 竖向引导线（Workflowy 式层级视觉） */}
+      {open && hasKids && (
+        <div
+          className="relative border-l-2 border-border/50"
+          style={{ marginLeft: 14 + depth * INDENT }}
+        >
+          <RowsWithDoneDivider
+            list={children}
+            dividerIndent={4}
+            label={t("plans.doneGroup")}
+            render={(child) => <TaskRow date={date} task={child} depth={depth + 1} />}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function RowAction({
+  title,
+  danger,
+  onClick,
+  children,
+}: {
+  title: string;
+  danger?: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      title={title}
+      onClick={onClick}
+      className={cn(
+        "grid size-6 place-items-center rounded-md text-muted-foreground transition-colors",
+        danger ? "hover:bg-destructive/10 hover:text-destructive" : "hover:bg-muted hover:text-foreground",
+      )}
+    >
+      {children}
+    </button>
+  );
+}

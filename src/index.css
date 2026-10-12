@@ -1,0 +1,177 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "@fontsource-variable/geist";
+@import "./styles/tokens.css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  /* 字体 */
+  --font-sans: "Geist Variable", "Segoe UI", "Microsoft YaHei UI", "PingFang SC",
+    "Noto Sans SC", sans-serif;
+  --font-heading: var(--font-sans);
+
+  /* shadcn 语义色映射 */
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-info: var(--info);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+
+  /* Brand 直用 */
+  --color-brand: var(--pr-brand-500);
+  --color-brand-strong: var(--pr-brand-600);
+  --color-brand-soft: var(--pr-brand-200);
+
+  /* 圆角 */
+  --radius-sm: calc(var(--pr-radius-sm) - 2px);
+  --radius-md: var(--pr-radius-sm);
+  --radius-lg: var(--pr-radius-md);
+  --radius-xl: var(--pr-radius-lg);
+  --radius-2xl: var(--pr-radius-xl);
+}
+
+/* ── 基础 ─────────────────────────────────────────────── */
+* {
+  border-color: var(--color-border);
+  outline-color: color-mix(in oklch, var(--ring) 50%, transparent);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  margin: 0;
+  background: var(--color-background);
+  color: var(--color-foreground);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  user-select: none;
+  cursor: default;
+}
+
+input,
+textarea {
+  user-select: text;
+  cursor: text;
+}
+
+::selection {
+  background: oklch(0.60 0.21 277 / 0.30);
+}
+
+/* 滚动条 */
+::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 99px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-muted-foreground);
+  background-clip: content-box;
+}
+
+/* 焦点环（自绘，无原生蓝框） */
+:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 1px;
+  border-radius: var(--pr-radius-xs);
+}
+
+/* ── 主题径向过渡（View Transitions，配合 lib/theme.ts）─────
+   明→暗：新快照（含内容）以点击点为圆心扩散；
+   暗→明：旧快照（含内容）反向收拢为一点。                */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+/* 扩散：new 快照在上层长出 */
+html[data-vt="out"]::view-transition-new(root) {
+  animation: vt-expand var(--pr-dur-theme-out) var(--pr-ease-theme-out) both;
+}
+@keyframes vt-expand {
+  from {
+    clip-path: circle(0px at var(--vt-x, 50%) var(--vt-y, 50%));
+  }
+  to {
+    clip-path: circle(var(--vt-r, 150%) at var(--vt-x, 50%) var(--vt-y, 50%));
+  }
+}
+
+/* 收拢：old 快照置顶缩回一点 */
+html[data-vt="in"]::view-transition-old(root) {
+  z-index: 2;
+  animation: vt-collapse var(--pr-dur-theme-in) var(--pr-ease-theme-in) both;
+}
+@keyframes vt-collapse {
+  from {
+    clip-path: circle(var(--vt-r, 150%) at var(--vt-x, 50%) var(--vt-y, 50%));
+  }
+  to {
+    clip-path: circle(0px at var(--vt-x, 50%) var(--vt-y, 50%));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ── 桌面栅栏窗口：html/body 透明露出桌面 ── */
+html.fence-root,
+html.fence-root body,
+html.fence-root #root {
+  background: transparent !important;
+  overflow: hidden;
+}

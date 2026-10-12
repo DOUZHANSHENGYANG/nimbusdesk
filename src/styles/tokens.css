@@ -1,0 +1,175 @@
+/* ============================================================
+   NimbusDesk 云台 · Design Tokens
+   三层结构：Primitive（原料）→ Semantic（语义）→ Component（组件）
+   只允许在这里定义颜色/圆角/阴影/动效时长；组件层直接消费 token。
+   ============================================================ */
+
+:root {
+  /* ── 1. Primitive · 色板原料 ─────────────────────────── */
+
+  /* Brand · 电光靛紫 */
+  --pr-brand-50: oklch(0.97 0.014 277);
+  --pr-brand-100: oklch(0.93 0.035 277);
+  --pr-brand-200: oklch(0.86 0.07 277);
+  --pr-brand-300: oklch(0.77 0.12 277);
+  --pr-brand-400: oklch(0.68 0.17 277);
+  --pr-brand-500: oklch(0.60 0.21 277);
+  --pr-brand-600: oklch(0.53 0.22 277);
+  --pr-brand-700: oklch(0.46 0.20 277);
+  --pr-brand-800: oklch(0.38 0.15 277);
+  --pr-brand-900: oklch(0.30 0.11 277);
+  --pr-brand-950: oklch(0.21 0.07 277);
+
+  /* Neutral · 蓝调中性 */
+  --pr-gray-0: oklch(1 0 0);
+  --pr-gray-25: oklch(0.985 0.002 270);
+  --pr-gray-50: oklch(0.965 0.003 270);
+  --pr-gray-100: oklch(0.93 0.004 270);
+  --pr-gray-150: oklch(0.90 0.005 270);
+  --pr-gray-200: oklch(0.86 0.006 270);
+  --pr-gray-300: oklch(0.76 0.008 270);
+  --pr-gray-400: oklch(0.64 0.010 270);
+  --pr-gray-500: oklch(0.55 0.012 270);
+  --pr-gray-600: oklch(0.45 0.013 270);
+  --pr-gray-700: oklch(0.36 0.014 270);
+  --pr-gray-750: oklch(0.31 0.014 270);
+  --pr-gray-800: oklch(0.26 0.014 270);
+  --pr-gray-850: oklch(0.22 0.014 270);
+  --pr-gray-900: oklch(0.185 0.013 270);
+  --pr-gray-925: oklch(0.165 0.012 270);
+  --pr-gray-950: oklch(0.145 0.012 270);
+  --pr-gray-975: oklch(0.125 0.010 270);
+  --pr-gray-1000: oklch(0.105 0.008 270);
+
+  /* Status */
+  --pr-red-500: oklch(0.595 0.22 25);
+  --pr-red-600: oklch(0.537 0.21 25);
+  --pr-green-500: oklch(0.68 0.16 155);
+  --pr-green-600: oklch(0.60 0.15 155);
+  --pr-amber-500: oklch(0.76 0.15 75);
+  --pr-blue-500: oklch(0.62 0.17 240);
+
+  /* ── 1. Primitive · 几何与动效原料 ──────────────────── */
+  --pr-radius-xs: 6px;
+  --pr-radius-sm: 8px;
+  --pr-radius-md: 12px;
+  --pr-radius-lg: 16px;
+  --pr-radius-xl: 22px;
+
+  --pr-shadow-1: 0 1px 2px oklch(0 0 0 / 0.10), 0 1px 6px oklch(0 0 0 / 0.06);
+  --pr-shadow-2: 0 4px 14px oklch(0 0 0 / 0.12), 0 2px 5px oklch(0 0 0 / 0.08);
+  --pr-shadow-3: 0 12px 34px oklch(0 0 0 / 0.18), 0 4px 12px oklch(0 0 0 / 0.10);
+  --pr-shadow-glow: 0 0 0 1px oklch(0.60 0.21 277 / 0.25), 0 0 22px oklch(0.60 0.21 277 / 0.28);
+
+  --pr-dur-fast: 120ms;
+  --pr-dur-base: 220ms;
+  --pr-dur-slow: 420ms;
+  --pr-dur-theme-out: 560ms;
+  --pr-dur-theme-in: 480ms;
+  --pr-ease-theme-out: cubic-bezier(0.05, 0.7, 0.1, 1);
+  --pr-ease-theme-in: cubic-bezier(0.3, 0, 0.8, 0.15);
+  --pr-ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --pr-ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+}
+
+/* ── 2. Semantic · 语义层（明/暗两套）─────────────────── */
+:root {
+  color-scheme: light;
+
+  --background: var(--pr-gray-50);
+  --foreground: var(--pr-gray-800);
+  --card: var(--pr-gray-0);
+  --card-foreground: var(--pr-gray-800);
+  --popover: var(--pr-gray-0);
+  --popover-foreground: var(--pr-gray-800);
+  --primary: var(--pr-brand-600);
+  --primary-foreground: var(--pr-gray-0);
+  --secondary: var(--pr-gray-100);
+  --secondary-foreground: var(--pr-gray-700);
+  --muted: var(--pr-gray-100);
+  --muted-foreground: var(--pr-gray-500);
+  --accent: var(--pr-brand-50);
+  --accent-foreground: var(--pr-brand-700);
+  --destructive: var(--pr-red-600);
+  --destructive-foreground: var(--pr-gray-0);
+  --success: var(--pr-green-600);
+  --warning: var(--pr-amber-500);
+  --info: var(--pr-blue-500);
+  --border: var(--pr-gray-150);
+  --input: var(--pr-gray-200);
+  --ring: oklch(0.53 0.22 277 / 0.45);
+
+  --sidebar: var(--pr-gray-100);
+  --sidebar-foreground: var(--pr-gray-600);
+  --sidebar-primary: var(--pr-brand-600);
+  --sidebar-primary-foreground: var(--pr-gray-0);
+  --sidebar-accent: oklch(0.53 0.22 277 / 0.10);
+  --sidebar-accent-foreground: var(--pr-brand-700);
+  --sidebar-border: var(--pr-gray-150);
+  --sidebar-ring: oklch(0.53 0.22 277 / 0.45);
+
+  --chart-1: var(--pr-brand-500);
+  --chart-2: var(--pr-green-500);
+  --chart-3: var(--pr-amber-500);
+  --chart-4: var(--pr-blue-500);
+  --chart-5: var(--pr-red-500);
+
+  --surface-hover: oklch(0.53 0.22 277 / 0.06);
+  --scrollbar-thumb: var(--pr-gray-300);
+  --backdrop: oklch(0.2 0.01 270 / 0.42);
+}
+
+.dark {
+  color-scheme: dark;
+
+  --background: var(--pr-gray-950);
+  --foreground: var(--pr-gray-50);
+  --card: var(--pr-gray-900);
+  --card-foreground: var(--pr-gray-50);
+  --popover: var(--pr-gray-850);
+  --popover-foreground: var(--pr-gray-50);
+  --primary: var(--pr-brand-500);
+  --primary-foreground: var(--pr-gray-0);
+  --secondary: var(--pr-gray-850);
+  --secondary-foreground: var(--pr-gray-100);
+  --muted: var(--pr-gray-875, var(--pr-gray-850));
+  --muted-foreground: var(--pr-gray-400);
+  --accent: oklch(0.60 0.21 277 / 0.16);
+  --accent-foreground: var(--pr-brand-200);
+  --destructive: var(--pr-red-500);
+  --destructive-foreground: var(--pr-gray-0);
+  --success: var(--pr-green-500);
+  --warning: var(--pr-amber-500);
+  --info: var(--pr-blue-500);
+  --border: oklch(1 0 0 / 0.09);
+  --input: oklch(1 0 0 / 0.13);
+  --ring: oklch(0.68 0.17 277 / 0.55);
+
+  --sidebar: var(--pr-gray-975);
+  --sidebar-foreground: var(--pr-gray-300);
+  --sidebar-primary: var(--pr-brand-500);
+  --sidebar-primary-foreground: var(--pr-gray-0);
+  --sidebar-accent: oklch(0.68 0.17 277 / 0.14);
+  --sidebar-accent-foreground: var(--pr-brand-200);
+  --sidebar-border: oklch(1 0 0 / 0.07);
+  --sidebar-ring: oklch(0.68 0.17 277 / 0.55);
+
+  --chart-1: var(--pr-brand-400);
+  --chart-2: var(--pr-green-500);
+  --chart-3: var(--pr-amber-500);
+  --chart-4: var(--pr-blue-500);
+  --chart-5: var(--pr-red-500);
+
+  --surface-hover: oklch(0.68 0.17 277 / 0.09);
+  --scrollbar-thumb: var(--pr-gray-750);
+  --backdrop: oklch(0.08 0.008 270 / 0.58);
+}
+
+/* ── 3. Component · 组件层 ────────────────────────────── */
+:root {
+  --titlebar-h: 42px;
+  --sidebar-w: 228px;
+  --sidebar-w-collapsed: 64px;
+  --page-pad: 24px;
+  --radius: var(--pr-radius-md);
+}
