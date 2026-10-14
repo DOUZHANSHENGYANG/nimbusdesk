@@ -2,7 +2,8 @@ import { useState } from "react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
-import { FolderOpen, FolderInput, ExternalLink, Database, Palette, Info, Bot } from "lucide-react";
+import { FolderOpen, FolderInput, ExternalLink, Database, Palette, Info, Bot, ArrowLeft } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { useModal } from "@/components/shell/modal-host";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -18,6 +19,7 @@ import { cn } from "@/lib/utils";
 
 export function SettingsPage() {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const { confirm } = useModal();
   const theme = useSettings((s) => s.theme);
   const setTheme = useSettings((s) => s.setTheme);
@@ -89,6 +91,19 @@ export function SettingsPage() {
   return (
     <div className="h-full overflow-y-auto">
       <div className="mx-auto flex w-full max-w-2xl flex-col gap-5 p-6 pb-10">
+        {/* ── 独立路由页头：返回 ── */}
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => navigate(-1)}
+            className="flex items-center gap-1.5 rounded-lg px-2 py-1 text-[13px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          >
+            <ArrowLeft className="size-4" />
+            {t("common.back")}
+          </button>
+          <h1 className="text-[17px] font-semibold tracking-tight">{t("settings.title")}</h1>
+        </div>
+
         {/* ── AI（资讯） ─────────────────────── */}
         <Card>
           <CardHeader>
