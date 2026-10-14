@@ -111,6 +111,21 @@ export async function renameEntry(path: string, newName: string): Promise<string
 }
 
 /** 删除到系统回收站（可撤销） */
+
+/** 在 parentDir 下创建目录（递归），返回最终路径 */
+export async function ensureDir(path: string): Promise<string> {
+  return invoke<string>("ensure_dir", { path });
+}
+
+/** 取 Windows 原生图标（PNG data URL；无图标返回 null） */
+export async function nativeIcon(path: string): Promise<string | null> {
+  return invoke<string | null>("native_icon", { path });
+}
+
+/** 批量取原生图标（一次 IPC，栅栏一屏用） */
+export async function nativeIcons(paths: string[]): Promise<(string | null)[]> {
+  return invoke<(string | null)[]>("native_icons", { paths });
+}
 export async function deleteEntry(path: string): Promise<void> {
   await invoke("delete_entry", { path });
 }

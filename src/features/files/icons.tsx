@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   AppWindow,
   File as FileIcon,
@@ -14,8 +14,65 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import type { ItemType } from "@/stores/files";
+import { inTauri, nativeIcon } from "@/lib/tauri";
 import { cn } from "@/lib/utils";
 
+
+/* ── 原生图标缓存（按路径，模块级；栅栏与文件页共享） ── */
+
+const nativeCache = new Map<string, string | null>();
+const pending = new Map<string, Promise<string | null>>();
+const subscribers = new Set<() => void>();
+
+function notify() {
+  for (const fn of subscribers) fn();
+}
+
+/**
+ * 取 Windows 原生图标（资源管理器同款）。
+ * 同一路径只请求一次，结果模块级缓存；取不到返回 null → 调用方回退 lucide 图标。
+ */
+export function useNativeIcon(path: string | undefined, enabled: boolean): string | null {
+  const [icon, setIcon] = useState<string | null>(() =>
+    path ? (nativeCache.get(path) ?? null) : null,
+  );
+
+  useEffect(() => {
+    if (!path || !enabled) {
+      setIcon(null);
+      return;
+    }
+    if (nativeCache.has(path)) {
+      setIcon(nativeCache.get(path) ?? null);
+      return;
+    }
+    let alive = true;
+    const sub = () => {
+      if (alive) setIcon(nativeCache.get(path) ?? null);
+    };
+    subscribers.add(sub);
+
+    const task =
+      pending.get(path) ??
+      nativeIcon(path)
+        .catch(() => null)
+        .then((v) => {
+          nativeCache.set(path, v);
+          pending.delete(path);
+          notify();
+          return v;
+        });
+    pending.set(path, task);
+    void task.then(() => sub());
+
+    return () => {
+      alive = false;
+      subscribers.delete(sub);
+    };
+  }, [path, enabled]);
+
+  return icon;
+}
 /** 扩展名 → 专属图标 + 颜色（默认图标兜底） */
 const EXT_MAP: Record<string, { Icon: LucideIcon; cls: string }> = {
   pdf: { Icon: FileText, cls: "text-red-500" },
@@ -86,13 +143,17 @@ export function ItemIcon({
   path,
   iconUrl,
   className,
+  native = true,
 }: {
   type: ItemType;
   path: string;
   iconUrl?: string;
   className?: string;
+  /** 本地条目是否优先用 Windows 原生图标（默认是） */
+  native?: boolean;
 }) {
   const [broken, setBroken] = useState(false);
+  const nativeUrl = useNativeIcon(type === "url" ? undefined : path, native && inTauri);
 
   if (type === "url") {
     if (iconUrl && !broken) {
@@ -107,6 +168,18 @@ export function ItemIcon({
       );
     }
     return <Globe className={cn("shrink-0 text-info", className)} strokeWidth={1.8} />;
+  }
+
+  // 本地条目：优先原生图标（与资源管理器/桌面一致），取不到再回退
+  if (nativeUrl) {
+    return (
+      <img
+        src={nativeUrl}
+        alt=""
+        draggable={false}
+        className={cn("shrink-0 object-contain", className)}
+      />
+    );
   }
 
   if (type === "folder") {

@@ -10,6 +10,11 @@ import {
   FolderTree,
   FolderX,
   Monitor,
+  FileText,
+  FileSpreadsheet,
+  FileCode,
+  FileImage,
+  FileArchive,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import {
@@ -18,6 +23,9 @@ import {
   ContextMenuItem,
   ContextMenuSeparator,
   ContextMenuShortcut,
+  ContextMenuSub,
+  ContextMenuSubContent,
+  ContextMenuSubTrigger,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
 import type { FileItem } from "@/stores/files";
@@ -25,6 +33,19 @@ import type { FileActions } from "@/features/files/actions";
 
 /** 条目上的标记：右键时据此判断命中了哪一条 */
 export const ITEM_ATTR = "data-item-id";
+
+/** Windows「新建」子菜单里的常见类型（扩展名 → 图标 + i18n key） */
+const NEW_TYPES = [
+  { ext: "txt", Icon: FileText, key: "txt" },
+  { ext: "md", Icon: FileText, key: "md" },
+  { ext: "docx", Icon: FileText, key: "docx" },
+  { ext: "xlsx", Icon: FileSpreadsheet, key: "xlsx" },
+  { ext: "pptx", Icon: FileText, key: "pptx" },
+  { ext: "json", Icon: FileCode, key: "json" },
+  { ext: "html", Icon: FileCode, key: "html" },
+  { ext: "png", Icon: FileImage, key: "png" },
+  { ext: "zip", Icon: FileArchive, key: "zip" },
+] as const;
 
 /* ── 菜单内容片段（由 FileAreaContextMenu 按目标选择） ── */
 
@@ -95,20 +116,31 @@ function BlankMenuItems({
 
   return (
     <>
-      <ContextMenuItem
-        disabled={!canCreate}
-        onSelect={() => categoryId && void actions.create(categoryId, "folder")}
-      >
-        <FolderPlus className="size-3.5" />
-        {t("files.ctx.newFolder")}
-      </ContextMenuItem>
-      <ContextMenuItem
-        disabled={!canCreate}
-        onSelect={() => categoryId && void actions.create(categoryId, "file")}
-      >
-        <FilePlus2 className="size-3.5" />
-        {t("files.ctx.newFile")}
-      </ContextMenuItem>
+      {/* 新建：与 Windows 一致，常用类型收进二级菜单 */}
+      <ContextMenuSub>
+        <ContextMenuSubTrigger disabled={!canCreate}>
+          <FilePlus2 className="size-3.5" />
+          {t("files.ctx.new")}
+        </ContextMenuSubTrigger>
+        <ContextMenuSubContent className="min-w-44">
+          <ContextMenuItem
+            onSelect={() => categoryId && void actions.create(categoryId, "folder")}
+          >
+            <FolderPlus className="size-3.5" />
+            {t("files.ctx.newFolder")}
+          </ContextMenuItem>
+          <ContextMenuSeparator />
+          {NEW_TYPES.map(({ ext, Icon, key }) => (
+            <ContextMenuItem
+              key={ext}
+              onSelect={() => categoryId && void actions.create(categoryId, "file", { ext })}
+            >
+              <Icon className="size-3.5" />
+              {t(`files.newType.${key}`)}
+            </ContextMenuItem>
+          ))}
+        </ContextMenuSubContent>
+      </ContextMenuSub>
 
       <ContextMenuSeparator />
 
@@ -125,6 +157,10 @@ function BlankMenuItems({
           {t("files.ctx.unbindDir")}
         </ContextMenuItem>
       )}
+      <ContextMenuItem onSelect={() => void actions.chooseRoot()}>
+        <FolderOpen className="size-3.5" />
+        {actions.filesRoot ? t("files.ctx.changeRoot") : t("files.ctx.setRoot")}
+      </ContextMenuItem>
     </>
   );
 }

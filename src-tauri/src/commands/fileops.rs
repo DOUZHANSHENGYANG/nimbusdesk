@@ -129,6 +129,27 @@ pub async fn delete_entries(paths: Vec<String>) -> Result<(), String> {
     .map_err(|e| format!("task join error: {e}"))?
 }
 
+/// 确保目录存在（递归创建）。用于「全局根目录 + 分类子目录」自动就位。
+#[tauri::command]
+pub async fn ensure_dir(path: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let p = PathBuf::from(path.trim());
+        if p.as_os_str().is_empty() {
+            return Err("empty-path".into());
+        }
+        if p.is_dir() {
+            return Ok(p.to_string_lossy().to_string());
+        }
+        if p.exists() {
+            return Err("not-a-dir".into());
+        }
+        std::fs::create_dir_all(&p).map_err(|e| e.to_string())?;
+        Ok(p.to_string_lossy().to_string())
+    })
+    .await
+    .map_err(|e| format!("task join error: {e}"))?
+}
+
 /// 用 Shell 的 SHFileOperationW + FOF_ALLOWUNDO 走回收站。
 #[cfg(windows)]
 fn to_recycle_bin(paths: &[String]) -> Result<(), String> {

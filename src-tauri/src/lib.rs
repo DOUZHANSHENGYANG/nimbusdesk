@@ -28,6 +28,9 @@ pub fn run() {
             commands::fileops::delete_entries,
             commands::site::fetch_site_meta,
             commands::dragdrop::drag_out,
+            commands::shellicon::native_icon,
+            commands::fileops::ensure_dir,
+            commands::shellicon::native_icons,
         ])
         .setup(|app| {
             tray::create(app)?;

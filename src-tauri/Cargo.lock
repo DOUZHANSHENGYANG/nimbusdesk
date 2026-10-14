@@ -2325,6 +2325,8 @@ checksum = "650eef8c711430f1a879fdd01d4745a7deea475becfb90269c06775983bbf086"
 name = "nimbusdesk"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
+ "png 0.17.16",
  "reqwest 0.12.28",
  "serde",
  "serde_json",

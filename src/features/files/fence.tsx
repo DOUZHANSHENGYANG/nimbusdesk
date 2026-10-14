@@ -400,7 +400,6 @@ function FencePanel({ categoryId }: { categoryId: string }) {
       if (mode === "out") return;
       if (mode === "idle") {
         if (Math.hypot(ev.clientX - sx, ev.clientY - sy) < 5) return;
-        // 已选中（或网址条目）→ 拖动=排序；未选中的本地条目 → 仅当拖出栅栏时才移出
         mode = wasSelected || !isLocal ? "reorder" : "out";
         if (mode === "reorder") setDragId(item.id);
       }
@@ -441,6 +440,35 @@ function FencePanel({ categoryId }: { categoryId: string }) {
     void p;
   };
 
+  /* ── 标题栏拖动 ──
+     不用 data-tauri-drag-region：它把双击实现为「切换最大化」，
+     而这里双击要用于改名。改为按下后位移超过阈值才发起系统拖动。 */
+  const startTitleDrag = (e: React.PointerEvent) => {
+    if (e.button !== 0 || !win) return;
+    // 落在按钮/输入框上时不拖
+    if ((e.target as HTMLElement).closest("button,input")) return;
+    const sx = e.clientX;
+    const sy = e.clientY;
+    let dragging = false;
+    const el = e.currentTarget as HTMLElement;
+
+    const onMove = (ev: PointerEvent) => {
+      if (dragging) return;
+      if (Math.hypot(ev.clientX - sx, ev.clientY - sy) < 4) return;
+      dragging = true;
+      cleanup();
+      void win.startDragging().catch(() => undefined);
+    };
+    const cleanup = () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", cleanup);
+      el.removeEventListener("pointercancel", cleanup);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", cleanup);
+    el.addEventListener("pointercancel", cleanup);
+  };
+
   return (
     <div
       className="absolute inset-0 p-0"
@@ -459,9 +487,9 @@ function FencePanel({ categoryId }: { categoryId: string }) {
           backdropFilter: "blur(2px)",
         }}
       >
-        {/* 迷你标题栏：整条均可拖动（deep 让子元素也成为拖拽区），双击名称才进入重命名 */}
+        {/* 迷你标题栏：按住拖动移动（自己实现，避免双击被当成最大化）；双击名称 = 改名 */}
         <div
-          data-tauri-drag-region="deep"
+          onPointerDown={startTitleDrag}
           className="flex h-9 shrink-0 cursor-default items-center gap-1.5 border-b border-border/60 px-3 select-none"
         >
           {renaming ? (
@@ -591,7 +619,7 @@ function FencePanel({ categoryId }: { categoryId: string }) {
                       />
                     ) : (
                       <span
-                        className="line-clamp-2 w-full break-all leading-tight text-foreground/85"
+                        className="line-clamp-2 w-full break-all text-center leading-tight text-foreground/85"
                         style={{ fontSize: Math.max(9, Math.round(10 * scale)) }}
                       >
                         {item.title}

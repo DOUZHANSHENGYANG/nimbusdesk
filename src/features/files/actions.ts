@@ -8,6 +8,7 @@ import {
   createEntry,
   deleteEntry,
   deleteEntries,
+  ensureDir as ensureDirOnDisk,
   openPath,
   openUrl,
   pickFolder,
@@ -15,6 +16,7 @@ import {
   revealInExplorer,
 } from "@/lib/tauri";
 import { inTauri } from "@/lib/tauri";
+import { useSettings } from "@/stores/settings";
 
 /** Rust 侧错误码 → 可读文案（未命中则回落到原始字符串） */
 const ERR_KEYS: Record<string, string> = {
@@ -24,6 +26,7 @@ const ERR_KEYS: Record<string, string> = {
   "already-exists": "files.err.alreadyExists",
   "not-found": "files.err.notFound",
   "parent-missing": "files.err.parentMissing",
+  "not-a-dir": "files.err.notADir",
   "unsupported-platform": "files.err.unsupported",
 };
 
@@ -34,6 +37,8 @@ const ERR_KEYS: Record<string, string> = {
 export function useFileActions() {
   const { t } = useTranslation();
   const { confirm, prompt } = useModal();
+  const filesRoot = useSettings((s) => s.filesRoot);
+  const setFilesRoot = useSettings((s) => s.setFilesRoot);
 
   const categories = useFiles((s) => s.categories);
   const items = useFiles((s) => s.items);
@@ -93,45 +98,99 @@ export function useFileActions() {
     [t],
   );
 
-  /* ── 新建（落到分类绑定目录，并同时登记为条目） ───────── */
+  /* ── 目录解析 ─────────────────────────────────────────
+     优先级：分类自带 dir → <全局根目录>/<分类名>（自动创建）
+     这样只要设一次根目录，所有分类都能直接新建，无需逐个绑定。 */
 
-  /** 分类未绑定目录时提示先绑定；返回可用的目标目录 */
-  const ensureDir = useCallback(
+  const resolveDir = useCallback(
     async (categoryId: string): Promise<string | null> => {
       const cat = categoryOf(categoryId);
-      if (cat?.dir) return cat.dir;
-      const ok = await confirm({
-        title: t("files.bindDirTitle"),
-        description: t("files.bindDirHint"),
-        confirmText: t("files.bindDirPick"),
-      });
-      if (!ok) return null;
-      const picked = await pickFolder();
-      if (!picked) return null;
-      setCategoryDir(categoryId, picked);
-      return picked;
+      if (!cat) return null;
+      if (cat.dir) return cat.dir;
+      if (!filesRoot) return null;
+      const sep = filesRoot.includes("\\") ? "\\" : "/";
+      const target = `${filesRoot.replace(/[\\/]+$/, "")}${sep}${cat.name}`;
+      try {
+        return await ensureDirOnDisk(target);
+      } catch (e) {
+        toast.error(explain(e));
+        return null;
+      }
     },
-    [categoryOf, confirm, setCategoryDir, t],
+    [categoryOf, explain, filesRoot],
   );
 
+  /** 选择一个全局根目录：所有分类的默认落盘位置 */
+  const chooseRoot = useCallback(async () => {
+    const picked = await pickFolder();
+    if (!picked) return;
+    setFilesRoot(picked);
+    toast.success(t("files.rootBound", { dir: picked }));
+  }, [setFilesRoot, t]);
+
+  const clearRoot = useCallback(() => {
+    setFilesRoot(null);
+    toast.success(t("files.rootCleared"));
+  }, [setFilesRoot, t]);
+
+  /** 解析可写目录；未配置根目录且分类未绑定时，引导选择根目录 */
+  const ensureDir = useCallback(
+    async (categoryId: string): Promise<string | null> => {
+      const ready = await resolveDir(categoryId);
+      if (ready) return ready;
+      if (!filesRoot) {
+        const ok = await confirm({
+          title: t("files.rootTitle"),
+          description: t("files.rootHint"),
+          confirmText: t("files.rootPick"),
+        });
+        if (!ok) return null;
+        const picked = await pickFolder();
+        if (!picked) return null;
+        setFilesRoot(picked);
+        const sep = picked.includes("\\") ? "\\" : "/";
+        const cat = categoryOf(categoryId);
+        try {
+          return await ensureDirOnDisk(`${picked.replace(/[\\/]+$/, "")}${sep}${cat?.name ?? "files"}`);
+        } catch (e) {
+          toast.error(explain(e));
+          return null;
+        }
+      }
+      return null;
+    },
+    [categoryOf, confirm, explain, filesRoot, resolveDir, setFilesRoot, t],
+  );
+
+  /**
+   * 新建文件/文件夹。`ext` 用于 Windows 风格「新建 → 某类型文件」：
+   * 传入扩展名时自动补后缀并预填对应默认名，不再询问。
+   */
   const create = useCallback(
-    async (categoryId: string, kind: "folder" | "file", initialName?: string) => {
+    async (
+      categoryId: string,
+      kind: "folder" | "file",
+      opts?: { name?: string; ext?: string },
+    ) => {
       if (!inTauri) return null;
       const dir = await ensureDir(categoryId);
       if (!dir) return null;
 
-      // 默认名遵循 Windows 习惯；重名由 Rust 侧拒绝并提示
-      const base =
-        initialName?.trim() ||
-        (kind === "folder" ? t("files.newFolderName") : t("files.newFileName"));
-      const entered = initialName
-        ? base
-        : await prompt({
-            title: kind === "folder" ? t("files.newFolder") : t("files.newFile"),
-            initial: base,
-          });
-      if (entered === null) return null; // 用户取消
-      const name = entered.trim() || base;
+      // 默认名遵循 Windows 习惯（新建文本文档 / 新建文件夹…）
+      const fallback =
+        kind === "folder" ? t("files.newFolderName") : t(`files.newFileNames.${opts?.ext ?? "txt"}` as const);
+      const base = opts?.name?.trim() || fallback || t("files.newFileName");
+
+      // 指定了类型 → 直接创建（Windows 也是立即落盘再让用户改名）
+      let name = opts?.ext ? `${base}.${opts.ext}` : base;
+      if (!opts?.ext && !opts?.name) {
+        const entered = await prompt({
+          title: kind === "folder" ? t("files.newFolder") : t("files.newFile"),
+          initial: base,
+        });
+        if (entered === null) return null; // 用户取消
+        name = entered.trim() || base;
+      }
 
       try {
         const created = await createEntry(dir, name, kind);
@@ -265,6 +324,7 @@ export function useFileActions() {
     () => ({
       items,
       categories,
+      filesRoot,
       categoryOf,
       open,
       reveal,
@@ -275,15 +335,20 @@ export function useFileActions() {
       removeMany,
       bindDir,
       unbindDir,
+      chooseRoot,
+      clearRoot,
       explain,
     }),
     [
       bindDir,
       categories,
       categoryOf,
+      chooseRoot,
+      clearRoot,
       copyPath,
       create,
       explain,
+      filesRoot,
       items,
       open,
       remove,
