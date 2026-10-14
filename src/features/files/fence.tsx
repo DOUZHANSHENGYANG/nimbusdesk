@@ -7,6 +7,8 @@ import { Providers } from "@/app/providers";
 import { useFiles, useFences, DEFAULT_FENCE, type FileItem } from "@/stores/files";
 import { inTauri, probePaths, openPath, openUrl, dragOut, windowReady } from "@/lib/tauri";
 import { ItemIcon } from "@/features/files/icons";
+import { useFileActions } from "@/features/files/actions";
+import { FileAreaContextMenu, ITEM_ATTR } from "@/features/files/menu";
 import { cn } from "@/lib/utils";
 
 const win = inTauri ? getCurrentWebviewWindow() : null;
@@ -63,6 +65,12 @@ function FencePanel({ categoryId }: { categoryId: string }) {
   /** 落点竖线：插入位 + 相对网格容器的坐标 */
   const [drop, setDrop] = useState<{ anchorId: string | null; x: number; y: number; h: number } | null>(null);
 
+  const actions = useFileActions();
+  /** 就地重命名的条目 id（与分类改名互不影响） */
+  const [renameItemId, setRenameItemId] = useState<string | null>(null);
+  const [itemDraft, setItemDraft] = useState("");
+  const itemRenameRef = useRef<HTMLInputElement>(null);
+
   const renameCategory = useFiles((s) => s.renameCategory);
 
   const startRename = () => {
@@ -84,6 +92,22 @@ function FencePanel({ categoryId }: { categoryId: string }) {
       if (!dup) renameCategory(categoryId, clean);
     }
     setRenaming(false);
+  };
+
+  /** 就地重命名条目：提交时同步磁盘（actions.rename 内部处理） */
+  const beginItemRename = (item: FileItem) => {
+    setSelectedId(item.id);
+    setItemDraft(item.title);
+    setRenameItemId(item.id);
+    requestAnimationFrame(() => itemRenameRef.current?.select());
+  };
+
+  const commitItemRename = async (item: FileItem) => {
+    if (renameItemId !== item.id) return;
+    const next = itemDraft.trim();
+    setRenameItemId(null);
+    if (!next || next === item.title) return;
+    await actions.rename(item, next);
   };
 
   const scale = fence.scale ?? 1;
@@ -396,15 +420,21 @@ function FencePanel({ categoryId }: { categoryId: string }) {
           </TitleBtn>
         </div>
 
-        {/* 条目网格（自适应行列，名称不截断） */}
-        <div
-          ref={gridWrapRef}
-          onMouseDown={(e) => {
-            // 点空白处取消选中（条目上带 data-item 标记）
-            if (!(e.target as HTMLElement).closest("[data-item]")) setSelectedId(null);
-          }}
-          className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-2"
+        {/* 条目网格：空白处右键 = 新建/绑定目录；条目右键 = 打开/重命名/删除 */}
+        <FileAreaContextMenu
+          items={items}
+          actions={actions}
+          categoryId={categoryId}
+          onRenameInline={beginItemRename}
         >
+          <div
+            ref={gridWrapRef}
+            onMouseDown={(e) => {
+              // 点空白处取消选中（条目上带 data-item 标记）
+              if (!(e.target as HTMLElement).closest("[data-item]")) setSelectedId(null);
+            }}
+            className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-2"
+          >
           {pageItems.length === 0 ? (
             <div className="grid h-full place-items-center px-4 text-center text-[11px] leading-relaxed text-muted-foreground">
               {t("files.fenceEmpty")}
@@ -422,15 +452,19 @@ function FencePanel({ categoryId }: { categoryId: string }) {
               {pageItems.map((item) => {
                 const isSelected = selectedId === item.id;
                 const isDragging = dragId === item.id;
+                const isRenaming = renameItemId === item.id;
                 return (
                   <div
-                    data-item
                     key={item.id}
+                    {...{ [ITEM_ATTR]: item.id }}
+                    data-item
                     ref={(el) => {
                       if (el) itemRefs.current.set(item.id, el);
                       else itemRefs.current.delete(item.id);
                     }}
-                    onPointerDown={(e) => startItemDrag(e, item)}
+                    onPointerDown={(e) => {
+                      if (!isRenaming) startItemDrag(e, item);
+                    }}
                     onDoubleClick={() => openItem(item.path, item.type)}
                     title={t("files.itemHint")}
                     className={cn(
@@ -453,12 +487,28 @@ function FencePanel({ categoryId }: { categoryId: string }) {
                         className="size-full"
                       />
                     </span>
-                    <span
-                      className="line-clamp-2 w-full break-all leading-tight text-foreground/85"
-                      style={{ fontSize: Math.max(9, Math.round(10 * scale)) }}
-                    >
-                      {item.title}
-                    </span>
+                    {isRenaming ? (
+                      <input
+                        ref={itemRenameRef}
+                        value={itemDraft}
+                        onChange={(e) => setItemDraft(e.target.value)}
+                        onPointerDown={(e) => e.stopPropagation()}
+                        onDoubleClick={(e) => e.stopPropagation()}
+                        onBlur={() => void commitItemRename(item)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") void commitItemRename(item);
+                          if (e.key === "Escape") setRenameItemId(null);
+                        }}
+                        className="w-full rounded border border-brand/60 bg-card px-1 py-0.5 text-center text-[10px] outline-none"
+                      />
+                    ) : (
+                      <span
+                        className="line-clamp-2 w-full break-all leading-tight text-foreground/85"
+                        style={{ fontSize: Math.max(9, Math.round(10 * scale)) }}
+                      >
+                        {item.title}
+                      </span>
+                    )}
                   </div>
                 );
               })}
@@ -472,7 +522,8 @@ function FencePanel({ categoryId }: { categoryId: string }) {
               )}
             </div>
           )}
-        </div>
+          </div>
+        </FileAreaContextMenu>
 
         {/* 翻页圆点 */}
         {pages > 1 && (

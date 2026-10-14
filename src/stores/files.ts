@@ -10,6 +10,8 @@ export interface FileCategory {
   id: string;
   name: string;
   createdAt: number;
+  /** 绑定的真实磁盘目录：右键「新建文件/文件夹」在此目录中创建 */
+  dir?: string;
 }
 
 export interface FileItem {
@@ -33,6 +35,8 @@ interface FilesState {
   addCategory: (name: string) => string;
   renameCategory: (id: string, name: string) => void;
   removeCategory: (id: string) => void;
+  /** 绑定/更换分类的真实磁盘目录（null = 解绑） */
+  setCategoryDir: (id: string, dir: string | null) => void;
   addItem: (item: Omit<FileItem, "id" | "createdAt">) => void;
   addItems: (items: Omit<FileItem, "id" | "createdAt">[]) => void;
   updateItem: (id: string, patch: Partial<Omit<FileItem, "id" | "createdAt">>) => void;
@@ -74,6 +78,13 @@ export const useFiles = create<FilesState>()(
           categories: s.categories.map((c) => (c.id === id ? { ...c, name: clean } : c)),
         }));
       },
+
+      setCategoryDir: (id, dir) =>
+        set((s) => ({
+          categories: s.categories.map((c) =>
+            c.id === id ? { ...c, dir: dir?.trim() || undefined } : c,
+          ),
+        })),
 
       removeCategory: (id) =>
         set((s) => ({

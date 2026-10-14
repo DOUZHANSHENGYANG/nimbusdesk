@@ -22,6 +22,10 @@ pub fn run() {
             commands::sys::open_path,
             commands::sys::reveal_in_explorer,
             commands::fs::probe_paths,
+            commands::fileops::create_entry,
+            commands::fileops::rename_entry,
+            commands::fileops::delete_entry,
+            commands::fileops::delete_entries,
             commands::site::fetch_site_meta,
             commands::dragdrop::drag_out,
         ])

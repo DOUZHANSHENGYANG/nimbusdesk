@@ -94,6 +94,32 @@ export async function revealInExplorer(path: string): Promise<void> {
   await invoke("reveal_in_explorer", { path });
 }
 
+/* ── 真实磁盘文件操作（右键菜单用） ───────────────────── */
+
+/** 在 parentDir 下新建文件夹/空文件，返回新路径 */
+export async function createEntry(
+  parentDir: string,
+  name: string,
+  kind: "folder" | "file",
+): Promise<string> {
+  return invoke<string>("create_entry", { parentDir, name, kind });
+}
+
+/** 重命名磁盘条目（同目录内），返回新路径 */
+export async function renameEntry(path: string, newName: string): Promise<string> {
+  return invoke<string>("rename_entry", { path, newName });
+}
+
+/** 删除到系统回收站（可撤销） */
+export async function deleteEntry(path: string): Promise<void> {
+  await invoke("delete_entry", { path });
+}
+
+/** 批量删除到回收站（一次可撤销操作） */
+export async function deleteEntries(paths: string[]): Promise<void> {
+  await invoke("delete_entries", { paths });
+}
+
 /** 是否运行在 Tauri 环境（浏览器 pnpm dev 时为 false） */
 export const inTauri =
   typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;

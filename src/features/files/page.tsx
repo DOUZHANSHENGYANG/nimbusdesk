@@ -34,6 +34,8 @@ import { useModal } from "@/components/shell/modal-host";
 import { copyText } from "@/lib/clipboard";
 import { motion } from "motion/react";
 import { ItemIcon } from "@/features/files/icons";
+import { useFileActions, type FileActions } from "@/features/files/actions";
+import { FileAreaContextMenu, CategoryContextMenu, ITEM_ATTR } from "@/features/files/menu";
 import {
   Dialog,
   DialogContent,
@@ -65,7 +67,6 @@ export function FilesPage() {
   const addCategory = useFiles((s) => s.addCategory);
   const renameCategory = useFiles((s) => s.renameCategory);
   const removeCategory = useFiles((s) => s.removeCategory);
-  const removeItem = useFiles((s) => s.removeItem);
   const fences = useFences((s) => s.fences);
   const setOpen = useFences((s) => s.setOpen);
   const filesHydrated = useFiles.persist.hasHydrated();
@@ -79,6 +80,8 @@ export function FilesPage() {
     editing: null,
   });
   const restored = useRef(new Set<string>());
+
+  const actions = useFileActions();
 
   // 首次使用：默认分类
   useEffect(() => {
@@ -134,14 +137,8 @@ export function FilesPage() {
     void p.catch(() => toast.error(t("files.openErr")));
   };
 
-  const onDeleteItem = async (item: FileItem) => {
-    const ok = await confirm({
-      title: t("common.confirm"),
-      description: item.title,
-      danger: true,
-    });
-    if (ok) removeItem(item.id);
-  };
+  // 删除统一走 actions（本地文件进回收站，网址仅移出列表）
+  const onDeleteItem = (item: FileItem) => void actions.remove(item);
 
   const toggleFence = async (catId: string, name: string) => {
     const f = fences[catId] ?? DEFAULT_FENCE;
@@ -221,6 +218,7 @@ export function FilesPage() {
               count={items.filter((i) => i.categoryId === cat.id).length}
               active={selected === cat.id}
               fenceOn={fences[cat.id]?.open ?? false}
+              actions={actions}
               onClick={() => setSelected(cat.id)}
               onToggleFence={() => void toggleFence(cat.id, cat.name)}
               onRenameConfirm={onRenameConfirm}
@@ -302,91 +300,97 @@ export function FilesPage() {
           </div>
         )}
 
-        {/* ── 条目网格 ── */}
-        <div ref={gridRef} className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-2.5">
-          {filtered.map((item) => (
-            <div
-              key={item.id}
-              data-card
-              onClick={() => openItem(item)}
-              className="group relative cursor-pointer rounded-xl border border-border bg-card p-3 shadow-[var(--pr-shadow-1)] transition-all duration-150 hover:-translate-y-0.5 hover:shadow-[var(--pr-shadow-2)]"
-            >
-              <div className="flex items-start gap-2">
-                <ItemIcon
-                  type={item.type}
-                  path={item.path}
-                  iconUrl={item.iconUrl}
-                  className="size-5"
-                />
-                <p className="min-w-0 flex-1 break-all text-[13px] font-medium leading-5">
-                  {item.title}
-                </p>
+        {/* ── 条目网格（空白处右键 = 新建/绑定目录；条目右键 = 打开/重命名/删除） ── */}
+        <FileAreaContextMenu items={filtered} actions={actions} categoryId={selected}>
+          <div
+            ref={gridRef}
+            className="grid min-h-24 grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-2.5"
+          >
+            {filtered.map((item) => (
+              <div
+                key={item.id}
+                {...{ [ITEM_ATTR]: item.id }}
+                data-card
+                onClick={() => openItem(item)}
+                className="group relative cursor-pointer rounded-xl border border-border bg-card p-3 shadow-[var(--pr-shadow-1)] transition-all duration-150 hover:-translate-y-0.5 hover:shadow-[var(--pr-shadow-2)]"
+              >
+                  <div className="flex items-start gap-2">
+                    <ItemIcon
+                      type={item.type}
+                      path={item.path}
+                      iconUrl={item.iconUrl}
+                      className="size-5"
+                    />
+                    <p className="min-w-0 flex-1 break-all text-[13px] font-medium leading-5">
+                      {item.title}
+                    </p>
+                  </div>
+
+                  {item.note && (
+                    <p className="mt-0.5 truncate text-[11px] text-muted-foreground/70" title={item.note}>
+                      {item.note}
+                    </p>
+                  )}
+                  <p className="mt-0.5 truncate text-[11px] text-muted-foreground/60" title={item.path}>
+                    {item.path}
+                  </p>
+
+                  {item.tags.length > 0 && (
+                    <div className="mt-1.5 flex flex-wrap gap-1">
+                      {item.tags.map((tag) => (
+                        <span key={tag} className="rounded-full bg-brand/10 px-1.5 text-[10px] text-brand">
+                          #{tag}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* 悬停操作 */}
+                  <div className="absolute inset-x-2 top-2 flex justify-end gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+                    <CardAction
+                      title={t("files.copyPath")}
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        if (await copyText(item.path)) toast.success(t("files.copied"));
+                      }}
+                    >
+                      <Copy className="size-3.5" />
+                    </CardAction>
+                    {item.type !== "url" && (
+                      <CardAction
+                        title={t("files.ctx.reveal")}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void revealInExplorer(item.path).catch(() => toast.error(t("files.openErr")));
+                        }}
+                      >
+                        <ExternalLink className="size-3.5" />
+                      </CardAction>
+                    )}
+                    <CardAction
+                      title={t("files.renameItem")}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void actions.rename(item);
+                      }}
+                    >
+                      <Pencil className="size-3.5" />
+                    </CardAction>
+                    <CardAction
+                      title={t("files.ctx.deleteDisk")}
+                      danger
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void onDeleteItem(item);
+                      }}
+                    >
+                      <Trash2 className="size-3.5" />
+                    </CardAction>
+                  </div>
               </div>
-
-              {item.note && (
-                <p className="mt-0.5 truncate text-[11px] text-muted-foreground/70" title={item.note}>
-                  {item.note}
-                </p>
-              )}
-              <p className="mt-0.5 truncate text-[11px] text-muted-foreground/60" title={item.path}>
-                {item.path}
-              </p>
-
-              {item.tags.length > 0 && (
-                <div className="mt-1.5 flex flex-wrap gap-1">
-                  {item.tags.map((tag) => (
-                    <span key={tag} className="rounded-full bg-brand/10 px-1.5 text-[10px] text-brand">
-                      #{tag}
-                    </span>
-                  ))}
-                </div>
-              )}
-
-              {/* 悬停操作 */}
-              <div className="absolute inset-x-2 top-2 flex justify-end gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
-                <CardAction
-                  title={t("files.copyPath")}
-                  onClick={async (e) => {
-                    e.stopPropagation();
-                    if (await copyText(item.path)) toast.success(t("files.copied"));
-                  }}
-                >
-                  <Copy className="size-3.5" />
-                </CardAction>
-                {item.type !== "url" && (
-                  <CardAction
-                    title={t("settings.openDir")}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      void revealInExplorer(item.path).catch(() => toast.error(t("files.openErr")));
-                    }}
-                  >
-                    <ExternalLink className="size-3.5" />
-                  </CardAction>
-                )}
-                <CardAction
-                  title={t("files.editItem")}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setModal({ open: true, editing: item });
-                  }}
-                >
-                  <Pencil className="size-3.5" />
-                </CardAction>
-                <CardAction
-                  title={t("common.confirm")}
-                  danger
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    void onDeleteItem(item);
-                  }}
-                >
-                  <Trash2 className="size-3.5" />
-                </CardAction>
-              </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        </FileAreaContextMenu>
 
         {filtered.length === 0 && (
           <p className="py-10 text-center text-[13px] text-muted-foreground">{t("files.empty")}</p>
@@ -411,6 +415,7 @@ function CategoryChip({
   count,
   active,
   fenceOn,
+  actions,
   onClick,
   onToggleFence,
   onRenameConfirm,
@@ -422,6 +427,7 @@ function CategoryChip({
   count: number;
   active: boolean;
   fenceOn?: boolean;
+  actions?: FileActions;
   onClick: () => void;
   onToggleFence?: () => void;
   onRenameConfirm?: (id: string, name: string) => Promise<boolean>;
@@ -432,6 +438,7 @@ function CategoryChip({
   const [renaming, setRenaming] = useState(false);
   const [draft, setDraft] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
+  const boundDir = catId ? actions?.categoryOf(catId)?.dir : undefined;
 
   const startRename = () => {
     setDraft(label);
@@ -445,7 +452,7 @@ function CategoryChip({
     if (ok) setRenaming(false); // 重名 → 保持编辑态让用户改
   };
 
-  return (
+  const chip = (
     <div
       className={cn(
         "flex items-center gap-0.5 rounded-full border py-1 pl-3 pr-1 text-[12px] font-medium transition-colors",
@@ -473,6 +480,10 @@ function CategoryChip({
         </button>
       )}
 
+      {boundDir && !renaming && (
+        <FolderOpen className="size-3 shrink-0 text-brand/70" aria-label={boundDir} />
+      )}
+
       {onToggleFence && !renaming && (
         <button
           type="button"
@@ -498,7 +509,7 @@ function CategoryChip({
               <MoreHorizontal className="size-3.5" />
             </button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="min-w-40">
+          <DropdownMenuContent align="start" className="min-w-44">
             <DropdownMenuItem onClick={onToggleFence}>
               <Monitor className="size-3.5" />
               {t("files.fence")}
@@ -507,11 +518,11 @@ function CategoryChip({
               <Pencil className="size-3.5" />
               {t("files.renameCategory")}
             </DropdownMenuItem>
-            <DropdownMenuItem
-              onClick={() => {
-                onCopyPaths?.();
-              }}
-            >
+            <DropdownMenuItem onClick={() => void actions?.bindDir(catId)}>
+              <FolderOpen className="size-3.5" />
+              {boundDir ? t("files.ctx.changeDir") : t("files.ctx.bindDir")}
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => onCopyPaths?.()}>
               <Copy className="size-3.5" />
               {t("files.copyPaths")}
             </DropdownMenuItem>
@@ -525,6 +536,23 @@ function CategoryChip({
       )}
     </div>
   );
+
+  // 分类 chip 右键菜单：新建 / 改名 / 栅栏 / 绑定目录 / 删除
+  if (catId && actions && onToggleFence && onDelete) {
+    return (
+      <CategoryContextMenu
+        categoryId={catId}
+        actions={actions}
+        onRename={startRename}
+        onDelete={onDelete}
+        onToggleFence={onToggleFence}
+        fenceOn={!!fenceOn}
+      >
+        {chip}
+      </CategoryContextMenu>
+    );
+  }
+  return chip;
 }
 
 function CardAction({
