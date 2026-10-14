@@ -37,6 +37,8 @@ interface FilesState {
   addItems: (items: Omit<FileItem, "id" | "createdAt">[]) => void;
   updateItem: (id: string, patch: Partial<Omit<FileItem, "id" | "createdAt">>) => void;
   removeItem: (id: string) => void;
+  /** 栅栏内拖拽排序：把 dragged 移到 target 之前（同分类内） */
+  reorderItem: (draggedId: string, targetId: string) => void;
 }
 
 function uid() {
@@ -98,6 +100,21 @@ export const useFiles = create<FilesState>()(
 
       removeItem: (id) =>
         set((s) => ({ items: s.items.filter((i) => i.id !== id) })),
+
+      reorderItem: (draggedId, targetId) =>
+        set((s) => {
+          if (draggedId === targetId) return s;
+          const items = [...s.items];
+          const from = items.findIndex((i) => i.id === draggedId);
+          const to = items.findIndex((i) => i.id === targetId);
+          if (from < 0 || to < 0) return s;
+          // 仅同分类内排序
+          if (items[from].categoryId !== items[to].categoryId) return s;
+          const [moved] = items.splice(from, 1);
+          const idx = items.findIndex((i) => i.id === targetId);
+          items.splice(idx, 0, moved);
+          return { items };
+        }),
     }),
     { name: "files", storage: createJSONStorage(() => tauriJsonStorage), version: 1 },
   ),
@@ -112,6 +129,10 @@ export interface FenceState {
   h: number;
   ghost: boolean;
   open: boolean;
+  /** 置顶（覆盖 always-on-bottom） */
+  pinned?: boolean;
+  /** 内容缩放（Ctrl+滚轮，0.7–1.6） */
+  scale?: number;
 }
 
 interface FencesStoreState {
@@ -119,6 +140,8 @@ interface FencesStoreState {
   setGeometry: (categoryId: string, geo: { x: number; y: number; w: number; h: number }) => void;
   setGhost: (categoryId: string, ghost: boolean) => void;
   setOpen: (categoryId: string, open: boolean) => void;
+  setPinned: (categoryId: string, pinned: boolean) => void;
+  setScale: (categoryId: string, scale: number) => void;
 }
 
 export const DEFAULT_FENCE: FenceState = { x: 180, y: 160, w: 280, h: 340, ghost: true, open: false };
@@ -141,6 +164,22 @@ export const useFences = create<FencesStoreState>()(
           fences: {
             ...s.fences,
             [categoryId]: { ...(s.fences[categoryId] ?? DEFAULT_FENCE), ghost },
+          },
+        })),
+
+      setPinned: (categoryId, pinned) =>
+        set((s) => ({
+          fences: {
+            ...s.fences,
+            [categoryId]: { ...(s.fences[categoryId] ?? DEFAULT_FENCE), pinned },
+          },
+        })),
+
+      setScale: (categoryId, scale) =>
+        set((s) => ({
+          fences: {
+            ...s.fences,
+            [categoryId]: { ...(s.fences[categoryId] ?? DEFAULT_FENCE), scale },
           },
         })),
 

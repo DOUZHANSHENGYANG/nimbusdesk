@@ -18,6 +18,7 @@
     "core:window:allow-hide",
     "core:window:allow-start-dragging",
     "core:window:allow-set-title",
+    "core:window:allow-set-always-on-top",
     {
       "identifier": "http:default",
       "allow": [

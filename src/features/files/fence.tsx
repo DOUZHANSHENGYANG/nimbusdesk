@@ -1,18 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
-import { Eye, EyeOff, X } from "lucide-react";
+import { Eye, EyeOff, X, Pin, PinOff, GripVertical } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Providers } from "@/app/providers";
-import { ItemIcon } from "@/features/files/icons";
 import { useFiles, useFences, DEFAULT_FENCE } from "@/stores/files";
 import { inTauri, probePaths, openPath, openUrl, dragOut, windowReady } from "@/lib/tauri";
+import { ItemIcon } from "@/features/files/icons";
 import { cn } from "@/lib/utils";
 
-const PAGE_SIZE = 12; // 4 列 × 3 行
 const win = inTauri ? getCurrentWebviewWindow() : null;
 
-/** 桌面悬浮栅栏窗口：透明面板 + 幽灵模式 + 翻页 + 拖入收集 + OLE 拖出 */
+/** 桌面悬浮栅栏：自适应网格 + 置顶 + 拖拽排序 + Ctrl 滚轮缩放 + 幽灵 + 翻页 + 拖入/拖出 */
 export function FenceWindow({ categoryId }: { categoryId: string }) {
   return (
     <Providers>
@@ -21,11 +20,16 @@ export function FenceWindow({ categoryId }: { categoryId: string }) {
   );
 }
 
+const SCALE_MIN = 0.7;
+const SCALE_MAX = 1.6;
+const GAP = 6;
+
 function FencePanel({ categoryId }: { categoryId: string }) {
   const { t } = useTranslation();
   const categories = useFiles((s) => s.categories);
   const allItems = useFiles((s) => s.items); // 稳定引用，selector 内不得造新数组
   const addItems = useFiles((s) => s.addItems);
+  const reorderItem = useFiles((s) => s.reorderItem);
   const category = useMemo(
     () => categories.find((c) => c.id === categoryId),
     [categories, categoryId],
@@ -38,6 +42,8 @@ function FencePanel({ categoryId }: { categoryId: string }) {
   const setGhost = useFences((s) => s.setGhost);
   const setGeometry = useFences((s) => s.setGeometry);
   const setOpen = useFences((s) => s.setOpen);
+  const setPinned = useFences((s) => s.setPinned);
+  const setScale = useFences((s) => s.setScale);
 
   const [page, setPage] = useState(0);
   const [hover, setHover] = useState(false);
@@ -46,6 +52,11 @@ function FencePanel({ categoryId }: { categoryId: string }) {
   const renameRef = useRef<HTMLInputElement>(null);
   const dragOutBusy = useRef(false);
   const suppressClickUntil = useRef(0);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const gridWrapRef = useRef<HTMLDivElement>(null);
+  const [gridSize, setGridSize] = useState({ w: 0, h: 0 });
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [overId, setOverId] = useState<string | null>(null);
 
   const renameCategory = useFiles((s) => s.renameCategory);
 
@@ -70,10 +81,14 @@ function FencePanel({ categoryId }: { categoryId: string }) {
     setRenaming(false);
   };
 
-  const pages = Math.max(1, Math.ceil(items.length / PAGE_SIZE));
-  const safePage = Math.min(page, pages - 1);
-  const pageItems = items.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE);
-  const ghosted = fence.ghost && !hover;
+  const scale = fence.scale ?? 1;
+  const pinned = fence.pinned ?? false;
+
+  /* ── 置顶状态应用（启动/切换时） ── */
+  useEffect(() => {
+    if (!win) return;
+    void win.setAlwaysOnTop(pinned).catch(() => undefined);
+  }, [pinned]);
 
   /* ── 启动：显示窗口 + 关闭时同步开关状态 ── */
   useEffect(() => {
@@ -108,6 +123,29 @@ function FencePanel({ categoryId }: { categoryId: string }) {
     };
   }, [categoryId, setGeometry]);
 
+  /* ── 网格尺寸测量（自适应行列） ── */
+  useEffect(() => {
+    const el = gridWrapRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver((entries) => {
+      const r = entries[0]?.contentRect;
+      if (r) setGridSize({ w: r.width, h: r.height });
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  const cellW = Math.max(64, Math.round(78 * scale));
+  const cellH = Math.max(80, Math.round(94 * scale));
+  const cols = Math.max(1, Math.floor((gridSize.w + GAP) / (cellW + GAP)));
+  const rows = Math.max(1, Math.floor((gridSize.h + GAP) / (cellH + GAP)));
+  const pageSize = Math.max(1, cols * rows);
+
+  const pages = Math.max(1, Math.ceil(items.length / pageSize));
+  const safePage = Math.min(page, pages - 1);
+  const pageItems = items.slice(safePage * pageSize, safePage * pageSize + pageSize);
+  const ghosted = fence.ghost && !hover;
+
   /* ── 拖入收集：桌面/资源管理器 → 栅栏 ── */
   useEffect(() => {
     if (!win) return;
@@ -128,14 +166,14 @@ function FencePanel({ categoryId }: { categoryId: string }) {
         try {
           const probed = await probePaths(paths);
           if (cancelled) return;
-          const valid = probed.filter((p) => p.kind !== "missing");
+          const valid = probed.filter((x) => x.kind !== "missing");
           if (!valid.length) return;
           addItems(
-            valid.map((p) => ({
+            valid.map((x) => ({
               categoryId,
-              type: p.kind === "folder" ? ("folder" as const) : ("file" as const),
-              title: p.name,
-              path: p.path,
+              type: x.kind === "folder" ? ("folder" as const) : ("file" as const),
+              title: x.name,
+              path: x.path,
               tags: [],
             })),
           );
@@ -150,6 +188,24 @@ function FencePanel({ categoryId }: { categoryId: string }) {
       void un.then((fn) => fn());
     };
   }, [categoryId, addItems, t]);
+
+  /* ── 滚轮：翻页 / Ctrl+滚轮缩放（非 passive 才能拦截 Ctrl 滚轮） ── */
+  useEffect(() => {
+    const el = panelRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      if (e.ctrlKey) {
+        e.preventDefault();
+        const next = Math.min(SCALE_MAX, Math.max(SCALE_MIN, scale + (e.deltaY < 0 ? 0.06 : -0.06)));
+        setScale(categoryId, Math.round(next * 100) / 100);
+        return;
+      }
+      if (e.deltaY > 0) setPage((p) => Math.min(p + 1, pages - 1));
+      else setPage((p) => Math.max(p - 1, 0));
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, [pages, scale, categoryId, setScale]);
 
   /* ── 拖出：按住条目移动即发起 OLE 拖拽 ── */
   const startDragOut = (e: React.MouseEvent, path: string, isLocal: boolean) => {
@@ -183,7 +239,10 @@ function FencePanel({ categoryId }: { categoryId: string }) {
 
   const openItem = (path: string, type: string) => {
     if (Date.now() < suppressClickUntil.current) return;
-    const p = type === "url" ? openUrl(path).catch(() => toast.error(t("common.error"))) : openPath(path).catch(() => toast.error(t("common.error")));
+    const p =
+      type === "url"
+        ? openUrl(path).catch(() => toast.error(t("common.error")))
+        : openPath(path).catch(() => toast.error(t("common.error")));
     void p;
   };
 
@@ -194,11 +253,7 @@ function FencePanel({ categoryId }: { categoryId: string }) {
       onMouseLeave={() => setHover(false)}
     >
       <div
-        data-tauri-drag-region
-        onWheel={(e) => {
-          if (e.deltaY > 0) setPage((p) => Math.min(p + 1, pages - 1));
-          else setPage((p) => Math.max(p - 1, 0));
-        }}
+        ref={panelRef}
         className={cn(
           "flex h-full w-full flex-col overflow-hidden rounded-2xl border transition-opacity duration-300",
           ghosted ? "opacity-[0.14]" : "opacity-100",
@@ -209,10 +264,10 @@ function FencePanel({ categoryId }: { categoryId: string }) {
           backdropFilter: "blur(2px)",
         }}
       >
-        {/* 迷你标题栏（可拖拽移动窗口；双击名称 = 重命名分类） */}
+        {/* 迷你标题栏（空白区拖拽移动；双击名称 = 重命名） */}
         <div
           data-tauri-drag-region
-          className="flex h-9 shrink-0 items-center gap-2 border-b border-border/60 px-3 select-none"
+          className="flex h-9 shrink-0 items-center gap-1.5 border-b border-border/60 px-3 select-none"
         >
           {renaming ? (
             <input
@@ -236,52 +291,108 @@ function FencePanel({ categoryId }: { categoryId: string }) {
             </span>
           )}
           <span className="shrink-0 text-[10px] text-muted-foreground">{items.length}</span>
-          <button
-            type="button"
+          <TitleBtn
+            title={pinned ? t("files.unpin") : t("files.pin")}
+            active={pinned}
+            onClick={() => setPinned(categoryId, !pinned)}
+          >
+            {pinned ? <Pin className="size-3.5" /> : <PinOff className="size-3.5" />}
+          </TitleBtn>
+          <TitleBtn
             title={t("files.ghostToggle")}
             onClick={() => setGhost(categoryId, !fence.ghost)}
-            className="grid size-5 place-items-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
           >
             {fence.ghost ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
-          </button>
-          <button
-            type="button"
-            onClick={() => void win?.close()}
-            className="grid size-5 place-items-center rounded text-muted-foreground hover:bg-red-500 hover:text-white"
-          >
+          </TitleBtn>
+          <TitleBtn danger title={t("titlebar.close")} onClick={() => void win?.close()}>
             <X className="size-3.5" />
-          </button>
+          </TitleBtn>
         </div>
 
-        {/* 条目网格 */}
-        <div className="min-h-0 flex-1 overflow-hidden p-2">
+        {/* 条目网格（自适应行列，名称不截断） */}
+        <div ref={gridWrapRef} className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-2">
           {pageItems.length === 0 ? (
             <div className="grid h-full place-items-center px-4 text-center text-[11px] leading-relaxed text-muted-foreground">
               {t("files.fenceEmpty")}
             </div>
           ) : (
-            <div className="grid h-full grid-cols-4 grid-rows-3 gap-1">
+            <div
+              className="mx-auto grid"
+              style={{
+                gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
+                gap: GAP,
+                maxWidth: cols * (cellW + GAP),
+              }}
+            >
               {pageItems.map((item) => {
                 const isLocal = item.type !== "url";
+                const isOver = overId === item.id && dragId !== null && dragId !== item.id;
                 return (
-                  <button
+                  <div
                     key={item.id}
-                    type="button"
-                    title={t("files.dragOutHint")}
-                    onMouseDown={(e) => startDragOut(e, item.path, isLocal)}
-                    onClick={() => openItem(item.path, item.type)}
-                    className="flex min-h-0 flex-col items-center justify-center gap-1 rounded-lg p-1 transition-colors hover:bg-surface-hover"
+                    onDragOver={(e) => {
+                      if (!dragId) return;
+                      e.preventDefault();
+                      setOverId(item.id);
+                    }}
+                    onDragLeave={() => setOverId((v) => (v === item.id ? null : v))}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      if (dragId) reorderItem(dragId, item.id);
+                      setDragId(null);
+                      setOverId(null);
+                    }}
+                    className={cn(
+                      "group relative flex cursor-pointer flex-col items-center justify-center gap-1 rounded-lg p-1 transition-colors hover:bg-surface-hover",
+                      isOver && "ring-2 ring-brand bg-brand/10",
+                    )}
+                    style={{ height: cellH }}
                   >
-                    <ItemIcon
-                      type={item.type}
-                      path={item.path}
-                      iconUrl={item.iconUrl}
-                      className="size-7"
-                    />
-                    <span className="line-clamp-2 w-full break-all text-center text-[10px] leading-tight text-foreground/85">
-                      {item.title}
-                    </span>
-                  </button>
+                    {/* 排序手柄：悬停浮现，拖拽=排序（不与 OLE 拖出冲突） */}
+                    <div
+                      draggable
+                      onDragStart={(e) => {
+                        e.dataTransfer.effectAllowed = "move";
+                        e.dataTransfer.setData("text/plain", `reorder:${item.id}`);
+                        setDragId(item.id);
+                      }}
+                      onDragEnd={() => {
+                        setDragId(null);
+                        setOverId(null);
+                      }}
+                      onMouseDown={(e) => e.stopPropagation()}
+                      title={t("files.reorderHint")}
+                      className="absolute -top-0.5 left-0 z-10 grid size-4 cursor-grab place-items-center rounded text-muted-foreground/0 transition-colors group-hover:text-muted-foreground/70 active:cursor-grabbing"
+                    >
+                      <GripVertical className="size-3" />
+                    </div>
+
+                    <button
+                      type="button"
+                      title={t("files.dragOutHint")}
+                      onMouseDown={(e) => startDragOut(e, item.path, isLocal)}
+                      onClick={() => openItem(item.path, item.type)}
+                      className="flex h-full w-full flex-col items-center justify-center gap-1 rounded-lg p-1 text-center"
+                    >
+                      <span
+                        className="grid place-items-center"
+                        style={{ width: Math.round(34 * scale), height: Math.round(34 * scale) }}
+                      >
+                        <ItemIcon
+                          type={item.type}
+                          path={item.path}
+                          iconUrl={item.iconUrl}
+                          className="size-full"
+                        />
+                      </span>
+                      <span
+                        className="line-clamp-2 w-full break-all leading-tight text-foreground/85"
+                        style={{ fontSize: Math.max(9, Math.round(10 * scale)) }}
+                      >
+                        {item.title}
+                      </span>
+                    </button>
+                  </div>
                 );
               })}
             </div>
@@ -306,5 +417,37 @@ function FencePanel({ categoryId }: { categoryId: string }) {
         )}
       </div>
     </div>
+  );
+}
+
+function TitleBtn({
+  title,
+  active,
+  danger,
+  onClick,
+  children,
+}: {
+  title: string;
+  active?: boolean;
+  danger?: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      title={title}
+      onClick={onClick}
+      className={cn(
+        "grid size-5 shrink-0 place-items-center rounded transition-colors",
+        danger
+          ? "text-muted-foreground hover:bg-red-500 hover:text-white"
+          : active
+            ? "text-brand"
+            : "text-muted-foreground hover:bg-muted hover:text-foreground",
+      )}
+    >
+      {children}
+    </button>
   );
 }

@@ -94,7 +94,10 @@ export function Titlebar() {
           <ToolbarButton
             title={t("nav.settings")}
             active={location.pathname === "/settings"}
-            onClick={() => navigate("/settings")}
+            onClick={() => {
+              if (location.pathname === "/settings") navigate(-1);
+              else navigate("/settings");
+            }}
           >
             <Settings2 className="size-4" />
           </ToolbarButton>
