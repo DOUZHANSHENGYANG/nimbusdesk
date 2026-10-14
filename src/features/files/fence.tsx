@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
-import { Eye, EyeOff, X, Pin, PinOff, GripVertical } from "lucide-react";
+import { Eye, EyeOff, X, Pin, PinOff } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Providers } from "@/app/providers";
-import { useFiles, useFences, DEFAULT_FENCE } from "@/stores/files";
+import { useFiles, useFences, DEFAULT_FENCE, type FileItem } from "@/stores/files";
 import { inTauri, probePaths, openPath, openUrl, dragOut, windowReady } from "@/lib/tauri";
 import { ItemIcon } from "@/features/files/icons";
 import { cn } from "@/lib/utils";
@@ -29,7 +29,7 @@ function FencePanel({ categoryId }: { categoryId: string }) {
   const categories = useFiles((s) => s.categories);
   const allItems = useFiles((s) => s.items); // 稳定引用，selector 内不得造新数组
   const addItems = useFiles((s) => s.addItems);
-  const reorderItem = useFiles((s) => s.reorderItem);
+  const moveItemBefore = useFiles((s) => s.moveItemBefore);
   const category = useMemo(
     () => categories.find((c) => c.id === categoryId),
     [categories, categoryId],
@@ -54,9 +54,14 @@ function FencePanel({ categoryId }: { categoryId: string }) {
   const suppressClickUntil = useRef(0);
   const panelRef = useRef<HTMLDivElement>(null);
   const gridWrapRef = useRef<HTMLDivElement>(null);
+  const gridRef = useRef<HTMLDivElement>(null);
+  const itemRefs = useRef(new Map<string, HTMLDivElement>());
   const [gridSize, setGridSize] = useState({ w: 0, h: 0 });
+  /** 单击选中的条目（选中后拖动 = 排序） */
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [dragId, setDragId] = useState<string | null>(null);
-  const [overId, setOverId] = useState<string | null>(null);
+  /** 落点竖线：插入位 + 相对网格容器的坐标 */
+  const [drop, setDrop] = useState<{ anchorId: string | null; x: number; y: number; h: number } | null>(null);
 
   const renameCategory = useFiles((s) => s.renameCategory);
 
@@ -207,34 +212,116 @@ function FencePanel({ categoryId }: { categoryId: string }) {
     return () => el.removeEventListener("wheel", onWheel);
   }, [pages, scale, categoryId, setScale]);
 
-  /* ── 拖出：按住条目移动即发起 OLE 拖拽 ── */
-  const startDragOut = (e: React.MouseEvent, path: string, isLocal: boolean) => {
-    if (!isLocal || dragOutBusy.current || !win) return;
+  /* ── 落点计算：指针位置 → 插入位 + 竖线几何（相对网格容器） ── */
+  const computeDrop = (cx: number, cy: number) => {
+    const grid = gridRef.current;
+    if (!grid || pageItems.length === 0) return null;
+    const gr = grid.getBoundingClientRect();
+    let local = pageItems.length;
+    for (let i = 0; i < pageItems.length; i++) {
+      const el = itemRefs.current.get(pageItems[i].id);
+      if (!el) continue;
+      const r = el.getBoundingClientRect();
+      // 行主序：先看是否落在该行之前，再看是否在该行中线左侧
+      if (cy < r.bottom && (cy < r.top || cx < r.left + r.width / 2)) {
+        local = i;
+        break;
+      }
+    }
+    const anchorEl = itemRefs.current.get(
+      pageItems[Math.min(local, pageItems.length - 1)].id,
+    );
+    if (!anchorEl) return null;
+    const ar = anchorEl.getBoundingClientRect();
+    const atEnd = local >= pageItems.length;
+    // 插到本页末尾时，锚点为下一页首条（保证跨页顺序正确），无下一页则移到分类末尾
+    const globalIdx = safePage * pageSize + local;
+    const anchorId = items[globalIdx]?.id ?? null;
+    return {
+      anchorId,
+      x: (atEnd ? ar.right : ar.left) - gr.left + (atEnd ? GAP / 2 : -GAP / 2),
+      y: ar.top - gr.top,
+      h: ar.height,
+    };
+  };
+
+  /* ── 条目指针手势：单击选中 · 窗口内拖动=排序 · 拖出窗口=系统拖出 ── */
+  const startItemDrag = (e: React.PointerEvent, item: FileItem) => {
+    if (e.button !== 0 || dragOutBusy.current) return;
+    /** 按下时是否已选中：已选中 → 拖动=排序；未选中 → 拖动=拖出 */
+    const wasSelected = selectedId === item.id;
+    setSelectedId(item.id);
+    const el = e.currentTarget as HTMLElement;
+    const pointerId = e.pointerId;
     const sx = e.clientX;
     const sy = e.clientY;
-    let started = false;
+    const isLocal = item.type !== "url";
+    let mode: "idle" | "reorder" | "out" = "idle";
+    let pending: { anchorId: string | null; x: number; y: number; h: number } | null = null;
 
-    const onMove = (ev: MouseEvent) => {
-      if (started) return;
-      if (Math.hypot(ev.clientX - sx, ev.clientY - sy) < 6) return;
-      started = true;
+    const isOutside = (cx: number, cy: number) => {
+      const p = panelRef.current?.getBoundingClientRect();
+      if (!p) return false;
+      return cx <= p.left || cx >= p.right || cy <= p.top || cy >= p.bottom;
+    };
+
+    const cleanup = () => {
+      el.removeEventListener("pointermove", onMove);
+      el.removeEventListener("pointerup", onUp);
+      el.removeEventListener("pointercancel", onUp);
+      if (el.hasPointerCapture(pointerId)) el.releasePointerCapture(pointerId);
+    };
+
+    /** 交给系统 OLE 拖拽（可落到桌面/资源管理器） */
+    const beginDragOut = () => {
+      mode = "out";
       dragOutBusy.current = true;
-      setHover(true);
       suppressClickUntil.current = Date.now() + 800;
-      void dragOut([path])
+      pending = null;
+      setDrop(null);
+      setDragId(null);
+      cleanup();
+      void dragOut([item.path])
         .catch(() => undefined)
         .finally(() => {
           dragOutBusy.current = false;
         });
+    };
+
+    const onMove = (ev: PointerEvent) => {
+      if (mode === "out") return;
+      if (mode === "idle") {
+        if (Math.hypot(ev.clientX - sx, ev.clientY - sy) < 5) return;
+        // 已选中（或网址条目）→ 拖动=排序；未选中的本地条目 → 仅当拖出栅栏时才移出
+        mode = wasSelected || !isLocal ? "reorder" : "out";
+        if (mode === "reorder") setDragId(item.id);
+      }
+      // 越过栅栏边界 → 转为系统拖出（网址条目留在原地）
+      if (isOutside(ev.clientX, ev.clientY)) {
+        if (isLocal) beginDragOut();
+        return;
+      }
+      if (mode !== "reorder") return;
+      pending = computeDrop(ev.clientX, ev.clientY);
+      setDrop(pending);
+    };
+
+    const onUp = (ev: PointerEvent) => {
+      if (mode === "reorder" && pending && !isOutside(ev.clientX, ev.clientY)) {
+        moveItemBefore(item.id, pending.anchorId);
+        suppressClickUntil.current = Date.now() + 300;
+      }
+      pending = null;
+      setDrop(null);
+      setDragId(null);
       cleanup();
     };
-    const onUp = () => cleanup();
-    const cleanup = () => {
-      window.removeEventListener("mousemove", onMove);
-      window.removeEventListener("mouseup", onUp);
-    };
-    window.addEventListener("mousemove", onMove);
-    window.addEventListener("mouseup", onUp);
+
+    // 指针捕获：拖出窗口仍能收到 move/up，状态不会卡死
+    el.setPointerCapture(pointerId);
+    el.addEventListener("pointermove", onMove);
+    el.addEventListener("pointerup", onUp);
+    el.addEventListener("pointercancel", onUp);
   };
 
   const openItem = (path: string, type: string) => {
@@ -310,14 +397,22 @@ function FencePanel({ categoryId }: { categoryId: string }) {
         </div>
 
         {/* 条目网格（自适应行列，名称不截断） */}
-        <div ref={gridWrapRef} className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-2">
+        <div
+          ref={gridWrapRef}
+          onMouseDown={(e) => {
+            // 点空白处取消选中（条目上带 data-item 标记）
+            if (!(e.target as HTMLElement).closest("[data-item]")) setSelectedId(null);
+          }}
+          className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-2"
+        >
           {pageItems.length === 0 ? (
             <div className="grid h-full place-items-center px-4 text-center text-[11px] leading-relaxed text-muted-foreground">
               {t("files.fenceEmpty")}
             </div>
           ) : (
             <div
-              className="mx-auto grid"
+              ref={gridRef}
+              className="relative mx-auto grid"
               style={{
                 gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
                 gap: GAP,
@@ -325,76 +420,56 @@ function FencePanel({ categoryId }: { categoryId: string }) {
               }}
             >
               {pageItems.map((item) => {
-                const isLocal = item.type !== "url";
-                const isOver = overId === item.id && dragId !== null && dragId !== item.id;
+                const isSelected = selectedId === item.id;
+                const isDragging = dragId === item.id;
                 return (
                   <div
+                    data-item
                     key={item.id}
-                    onDragOver={(e) => {
-                      if (!dragId) return;
-                      e.preventDefault();
-                      setOverId(item.id);
+                    ref={(el) => {
+                      if (el) itemRefs.current.set(item.id, el);
+                      else itemRefs.current.delete(item.id);
                     }}
-                    onDragLeave={() => setOverId((v) => (v === item.id ? null : v))}
-                    onDrop={(e) => {
-                      e.preventDefault();
-                      if (dragId) reorderItem(dragId, item.id);
-                      setDragId(null);
-                      setOverId(null);
-                    }}
+                    onPointerDown={(e) => startItemDrag(e, item)}
+                    onDoubleClick={() => openItem(item.path, item.type)}
+                    title={t("files.itemHint")}
                     className={cn(
-                      "group relative flex cursor-pointer flex-col items-center justify-center gap-1 rounded-lg p-1 transition-colors hover:bg-surface-hover",
-                      isOver && "ring-2 ring-brand bg-brand/10",
+                      "group relative flex touch-none flex-col items-center justify-center gap-1 rounded-lg p-1 transition-colors select-none",
+                      isSelected
+                        ? "cursor-grab bg-brand/12 ring-1 ring-brand/60 active:cursor-grabbing"
+                        : "cursor-pointer hover:bg-surface-hover",
+                      isDragging && "opacity-40",
                     )}
                     style={{ height: cellH }}
                   >
-                    {/* 排序手柄：悬停浮现，拖拽=排序（不与 OLE 拖出冲突） */}
-                    <div
-                      draggable
-                      onDragStart={(e) => {
-                        e.dataTransfer.effectAllowed = "move";
-                        e.dataTransfer.setData("text/plain", `reorder:${item.id}`);
-                        setDragId(item.id);
-                      }}
-                      onDragEnd={() => {
-                        setDragId(null);
-                        setOverId(null);
-                      }}
-                      onMouseDown={(e) => e.stopPropagation()}
-                      title={t("files.reorderHint")}
-                      className="absolute -top-0.5 left-0 z-10 grid size-4 cursor-grab place-items-center rounded text-muted-foreground/0 transition-colors group-hover:text-muted-foreground/70 active:cursor-grabbing"
+                    <span
+                      className="grid place-items-center"
+                      style={{ width: Math.round(34 * scale), height: Math.round(34 * scale) }}
                     >
-                      <GripVertical className="size-3" />
-                    </div>
-
-                    <button
-                      type="button"
-                      title={t("files.dragOutHint")}
-                      onMouseDown={(e) => startDragOut(e, item.path, isLocal)}
-                      onClick={() => openItem(item.path, item.type)}
-                      className="flex h-full w-full flex-col items-center justify-center gap-1 rounded-lg p-1 text-center"
+                      <ItemIcon
+                        type={item.type}
+                        path={item.path}
+                        iconUrl={item.iconUrl}
+                        className="size-full"
+                      />
+                    </span>
+                    <span
+                      className="line-clamp-2 w-full break-all leading-tight text-foreground/85"
+                      style={{ fontSize: Math.max(9, Math.round(10 * scale)) }}
                     >
-                      <span
-                        className="grid place-items-center"
-                        style={{ width: Math.round(34 * scale), height: Math.round(34 * scale) }}
-                      >
-                        <ItemIcon
-                          type={item.type}
-                          path={item.path}
-                          iconUrl={item.iconUrl}
-                          className="size-full"
-                        />
-                      </span>
-                      <span
-                        className="line-clamp-2 w-full break-all leading-tight text-foreground/85"
-                        style={{ fontSize: Math.max(9, Math.round(10 * scale)) }}
-                      >
-                        {item.title}
-                      </span>
-                    </button>
+                      {item.title}
+                    </span>
                   </div>
                 );
               })}
+
+              {/* 落点竖线：指示插入位置 */}
+              {drop && (
+                <div
+                  className="pointer-events-none absolute z-20 w-0.5 rounded-full bg-brand shadow-[0_0_6px_var(--brand)]"
+                  style={{ left: drop.x, top: drop.y, height: drop.h }}
+                />
+              )}
             </div>
           )}
         </div>

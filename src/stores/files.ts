@@ -37,8 +37,8 @@ interface FilesState {
   addItems: (items: Omit<FileItem, "id" | "createdAt">[]) => void;
   updateItem: (id: string, patch: Partial<Omit<FileItem, "id" | "createdAt">>) => void;
   removeItem: (id: string) => void;
-  /** 栅栏内拖拽排序：把 dragged 移到 target 之前（同分类内） */
-  reorderItem: (draggedId: string, targetId: string) => void;
+  /** 栅栏内拖拽排序：把 itemId 移到 anchorId 之前（anchorId=null 表示移到自己分类末尾） */
+  moveItemBefore: (itemId: string, anchorId: string | null) => void;
 }
 
 function uid() {
@@ -101,18 +101,23 @@ export const useFiles = create<FilesState>()(
       removeItem: (id) =>
         set((s) => ({ items: s.items.filter((i) => i.id !== id) })),
 
-      reorderItem: (draggedId, targetId) =>
+      moveItemBefore: (itemId, anchorId) =>
         set((s) => {
-          if (draggedId === targetId) return s;
-          const items = [...s.items];
-          const from = items.findIndex((i) => i.id === draggedId);
-          const to = items.findIndex((i) => i.id === targetId);
-          if (from < 0 || to < 0) return s;
-          // 仅同分类内排序
-          if (items[from].categoryId !== items[to].categoryId) return s;
-          const [moved] = items.splice(from, 1);
-          const idx = items.findIndex((i) => i.id === targetId);
-          items.splice(idx, 0, moved);
+          if (itemId === anchorId) return s;
+          const moving = s.items.find((i) => i.id === itemId);
+          if (!moving) return s;
+          // 本分类条目序列内重排，再按原槽位回填（items 里各分类是交错的）
+          const group = s.items.filter((i) => i.categoryId === moving.categoryId);
+          const from = group.findIndex((i) => i.id === itemId);
+          if (from < 0) return s;
+          const [moved] = group.splice(from, 1);
+          const at = anchorId === null ? group.length : group.findIndex((i) => i.id === anchorId);
+          if (anchorId !== null && at < 0) return s;
+          group.splice(at, 0, moved);
+          let cursor = 0;
+          const items = s.items.map((i) =>
+            i.categoryId === moving.categoryId ? group[cursor++] : i,
+          );
           return { items };
         }),
     }),
