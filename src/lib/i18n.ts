@@ -111,6 +111,7 @@ const zh = {
     unpin: "取消置顶",
     reorderHint: "选中后拖动排序 · 拖出窗口=移出",
     itemHint: "单击选中 · 双击打开 · 选中后拖动排序",
+    renameHint: "拖动可移动 · 双击改名",
     newItem: "添加条目到 {{name}}",
     /* 右键菜单 */
     ctx: {
@@ -367,6 +368,7 @@ const en: typeof zh = {
     pin: "Pin on top",
     reorderHint: "Select then drag to reorder · drag out to remove",
     itemHint: "Click to select · double-click to open · drag to reorder",
+    renameHint: "Drag to move · double-click to rename",
     newItem: "Add item to {{name}}",
     /* Context menu */
     ctx: {

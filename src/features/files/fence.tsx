@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
+import { getCurrentWebviewWindow, getAllWebviewWindows } from "@tauri-apps/api/webviewWindow";
+import { cursorPosition, monitorFromPoint, currentMonitor } from "@tauri-apps/api/window";
+import { PhysicalPosition } from "@tauri-apps/api/dpi";
 import { Eye, EyeOff, X, Pin, PinOff } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -23,6 +25,8 @@ export function FenceWindow({ categoryId }: { categoryId: string }) {
 }
 
 const SCALE_MIN = 0.7;
+/** 吸附阈值（逻辑像素，按显示器缩放换算为物理像素） */
+const SNAP_TOLERANCE = 12;
 const SCALE_MAX = 1.6;
 const GAP = 6;
 
@@ -131,18 +135,98 @@ function FencePanel({ categoryId }: { categoryId: string }) {
     };
   }, [categoryId, setOpen]);
 
-  /* ── 几何持久化：移动/缩放后防抖写回 ── */
+  /* ── 几何持久化 + 拖拽吸附 ──
+     吸附在拖动结束时算一次：读光标所在显示器的工作区、其他栅栏窗口与自身矩形，
+     把 x/y 归到最近的对齐线。用 cursorPosition 而非事件的 screenX，
+     多显示器下坐标原点才正确（Tauri 用虚拟桌面坐标）。 */
   useEffect(() => {
     if (!win) return;
     let timer: ReturnType<typeof setTimeout> | null = null;
+    let settling = false;
+
+    const snap = async () => {
+      const [self, size, scale] = await Promise.all([
+        win.outerPosition(),
+        win.outerSize(),
+        win.scaleFactor(),
+      ]);
+      const cursor = await cursorPosition().catch(() => null);
+      const monitor = cursor
+        ? await monitorFromPoint(cursor.x, cursor.y).catch(() => null)
+        : await currentMonitor().catch(() => null);
+      if (!monitor) return;
+
+      // 显示器工作区（物理像素，已排除任务栏）
+      const wa = {
+        left: monitor.workArea.position.x,
+        top: monitor.workArea.position.y,
+        right: monitor.workArea.position.x + monitor.workArea.size.width,
+        bottom: monitor.workArea.position.y + monitor.workArea.size.height,
+      };
+      const w = size.width;
+      const h = size.height;
+      const G = Math.round(SNAP_TOLERANCE * scale);
+
+      // 其他栅栏窗口的矩形（位置 + 尺寸），用于互相吸附
+      const peers = (
+        await Promise.all(
+          (await getAllWebviewWindows())
+            .filter((x) => x.label !== win.label && x.label.startsWith("fence-"))
+            .map(async (x) => {
+              try {
+                const [p, s] = await Promise.all([x.outerPosition(), x.outerSize()]);
+                return { x: p.x, y: p.y, w: s.width, h: s.height };
+              } catch {
+                return null;
+              }
+            }),
+        )
+      ).filter((p): p is { x: number; y: number; w: number; h: number } => p !== null);
+
+      // 候选对齐线：工作区四边 + 中线，以及其他栅栏的四边 + 中线
+      const vLines = [wa.left, wa.right, Math.round((wa.left + wa.right) / 2)];
+      const hLines = [wa.top, wa.bottom, Math.round((wa.top + wa.bottom) / 2)];
+      for (const p of peers) {
+        vLines.push(p.x, p.x + p.w, Math.round(p.x + p.w / 2));
+        hLines.push(p.y, p.y + p.h, Math.round(p.y + p.h / 2));
+      }
+
+      // 自身每条参考边找最近的候选线，取位移最小且落在阈值内的那一条
+      const best = (edges: number[], lines: number[]) => {
+        let delta = 0;
+        let bestAbs = G + 1;
+        for (const e of edges) {
+          for (const l of lines) {
+            const d = l - e;
+            if (Math.abs(d) <= G && Math.abs(d) < bestAbs) {
+              bestAbs = Math.abs(d);
+              delta = d;
+            }
+          }
+        }
+        return bestAbs > G ? 0 : delta;
+      };
+
+      const dx = best([self.x, self.x + Math.round(w / 2), self.x + w], vLines);
+      const dy = best([self.y, self.y + Math.round(h / 2), self.y + h], hLines);
+      if (dx !== 0 || dy !== 0) {
+        settling = true;
+        await win.setPosition(new PhysicalPosition(self.x + dx, self.y + dy));
+      }
+    };
+
     const schedule = () => {
+      if (settling) return; // 吸附自身触发的 moved 事件不再递归
       if (timer) clearTimeout(timer);
       timer = setTimeout(async () => {
+        await snap().catch(() => undefined);
+        settling = false;
         const pos = await win.outerPosition();
         const size = await win.outerSize();
         setGeometry(categoryId, { x: pos.x, y: pos.y, w: size.width, h: size.height });
-      }, 500);
+      }, 300);
     };
+
     const u1 = win.onMoved(schedule);
     const u2 = win.onResized(schedule);
     return () => {
@@ -375,10 +459,10 @@ function FencePanel({ categoryId }: { categoryId: string }) {
           backdropFilter: "blur(2px)",
         }}
       >
-        {/* 迷你标题栏（空白区拖拽移动；双击名称 = 重命名） */}
+        {/* 迷你标题栏：整条均可拖动（deep 让子元素也成为拖拽区），双击名称才进入重命名 */}
         <div
-          data-tauri-drag-region
-          className="flex h-9 shrink-0 items-center gap-1.5 border-b border-border/60 px-3 select-none"
+          data-tauri-drag-region="deep"
+          className="flex h-9 shrink-0 cursor-default items-center gap-1.5 border-b border-border/60 px-3 select-none"
         >
           {renaming ? (
             <input
@@ -390,34 +474,38 @@ function FencePanel({ categoryId }: { categoryId: string }) {
                 if (e.key === "Enter") void commitRename();
                 if (e.key === "Escape") setRenaming(false);
               }}
+              data-tauri-drag-region="false"
               className="min-w-0 flex-1 rounded-md border border-border bg-card px-2 py-1 text-[12px] outline-none focus:border-brand/50"
             />
           ) : (
             <span
               onDoubleClick={startRename}
-              title={t("files.renameCategory")}
-              className="min-w-0 flex-1 cursor-text truncate text-[12px] font-semibold text-foreground/90"
+              title={t("files.renameHint")}
+              className="min-w-0 flex-1 cursor-default truncate text-[12px] font-semibold text-foreground/90"
             >
               {category?.name ?? "…"}
             </span>
           )}
-          <span className="shrink-0 text-[10px] text-muted-foreground">{items.length}</span>
-          <TitleBtn
-            title={pinned ? t("files.unpin") : t("files.pin")}
-            active={pinned}
-            onClick={() => setPinned(categoryId, !pinned)}
-          >
-            {pinned ? <Pin className="size-3.5" /> : <PinOff className="size-3.5" />}
-          </TitleBtn>
-          <TitleBtn
-            title={t("files.ghostToggle")}
-            onClick={() => setGhost(categoryId, !fence.ghost)}
-          >
-            {fence.ghost ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
-          </TitleBtn>
-          <TitleBtn danger title={t("titlebar.close")} onClick={() => void win?.close()}>
-            <X className="size-3.5" />
-          </TitleBtn>
+          {/* 计数与按钮区不参与拖动，避免点按钮时误拖窗口 */}
+          <span data-tauri-drag-region="false" className="flex shrink-0 items-center gap-1.5">
+            <span className="text-[10px] text-muted-foreground">{items.length}</span>
+            <TitleBtn
+              title={pinned ? t("files.unpin") : t("files.pin")}
+              active={pinned}
+              onClick={() => setPinned(categoryId, !pinned)}
+            >
+              {pinned ? <Pin className="size-3.5" /> : <PinOff className="size-3.5" />}
+            </TitleBtn>
+            <TitleBtn
+              title={t("files.ghostToggle")}
+              onClick={() => setGhost(categoryId, !fence.ghost)}
+            >
+              {fence.ghost ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
+            </TitleBtn>
+            <TitleBtn danger title={t("titlebar.close")} onClick={() => void win?.close()}>
+              <X className="size-3.5" />
+            </TitleBtn>
+          </span>
         </div>
 
         {/* 条目网格：空白处右键 = 新建/绑定目录；条目右键 = 打开/重命名/删除 */}
