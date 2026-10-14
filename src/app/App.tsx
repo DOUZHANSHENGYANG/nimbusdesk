@@ -8,6 +8,7 @@ import { HomePage } from "@/features/home/page";
 import { ProjectsPage } from "@/features/projects/page";
 import { PlansPage } from "@/features/plans/page";
 import { FilesPage } from "@/features/files/page";
+import { FeedsPage } from "@/features/feeds/page";
 import { SettingsPage } from "@/features/settings/page";
 
 /** 经典后台布局：标题栏 / 侧栏 / 顶栏 / 内容区 */
@@ -28,6 +29,7 @@ export default function App() {
                     <Route path="/projects" element={<ProjectsPage />} />
                     <Route path="/plans" element={<PlansPage />} />
                     <Route path="/files" element={<FilesPage />} />
+                    <Route path="/feeds" element={<FeedsPage />} />
                     <Route path="/settings" element={<SettingsPage />} />
                   </Routes>
                 </PageTransition>

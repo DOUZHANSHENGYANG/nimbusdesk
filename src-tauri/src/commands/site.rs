@@ -40,7 +40,8 @@ fn parse_meta(html: &str, base: &reqwest::Url, content_type: &str) -> SiteMeta {
     let lower = html.to_lowercase();
 
     // 非HTML响应（纯图标/二进制）：title 用主机名，favicon 即该 URL
-    if !content_type.contains("text/html") && !lower.contains("<html") && !lower.contains("<title") {
+    if !content_type.contains("text/html") && !lower.contains("<html") && !lower.contains("<title")
+    {
         return SiteMeta {
             title: None,
             description: None,
@@ -85,7 +86,10 @@ fn meta_content(lower: &str, html: &str, key: &str, value: &str) -> Option<Strin
         let end = start + end_rel;
         let tag = &lower[start..end];
         let raw = &html[start..end];
-        if attr_value(tag, key).map(|v| v.eq_ignore_ascii_case(value)).unwrap_or(false) {
+        if attr_value(tag, key)
+            .map(|v| v.eq_ignore_ascii_case(value))
+            .unwrap_or(false)
+        {
             if let Some(c) = attr_value(raw, "content") {
                 return Some(c);
             }
@@ -136,9 +140,8 @@ fn attr_value(tag_lower: &str, key: &str) -> Option<String> {
     while let Some(i) = tag_lower[from..].find(&needle) {
         let at = from + i;
         // 防误匹配：key 前必须是标签边界（< 或空白）
-        let boundary = at == 0
-            || tag_lower[..at]
-                .ends_with(|c: char| c == '<' || c.is_ascii_whitespace());
+        let boundary =
+            at == 0 || tag_lower[..at].ends_with(|c: char| c == '<' || c.is_ascii_whitespace());
         from = at + needle.len();
         if !boundary {
             continue;

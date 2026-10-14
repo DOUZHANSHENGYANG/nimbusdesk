@@ -8,8 +8,8 @@
 //! 所有命令均为 async + spawn_blocking：Tauri 2 同步命令跑在主线程，
 //! 阻塞 IO 会卡死 UI 事件循环。
 
-use serde::de::DeserializeOwned;
 use serde::Serialize;
+use serde::de::DeserializeOwned;
 use serde_json::Value;
 use std::fs;
 use std::io::Write;

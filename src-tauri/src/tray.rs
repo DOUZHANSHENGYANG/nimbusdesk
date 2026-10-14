@@ -2,9 +2,9 @@
 //! 菜单文案跟随 settings.json 的 lang（缺省 zh）。
 
 use crate::commands::data::resolve_data_dir;
+use tauri::Manager;
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri::Manager;
 
 fn read_lang() -> String {
     resolve_data_dir()
@@ -14,10 +14,11 @@ fn read_lang() -> String {
         .and_then(|v| v.get("state").and_then(|s| s.get("lang")).cloned())
         .or_else(|| {
             // zustand persist 也可能直接平铺（无 version 包裹）
-            resolve_data_dir().ok().and_then(|dir| {
-                std::fs::read_to_string(dir.join("settings.json")).ok()
-            }).and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
-            .and_then(|v| v.get("lang").cloned())
+            resolve_data_dir()
+                .ok()
+                .and_then(|dir| std::fs::read_to_string(dir.join("settings.json")).ok())
+                .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
+                .and_then(|v| v.get("lang").cloned())
         })
         .and_then(|v| v.as_str().map(|s| s.to_string()))
         .unwrap_or_else(|| "zh".into())

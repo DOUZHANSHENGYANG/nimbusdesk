@@ -29,22 +29,18 @@ pub async fn open_fence(
         let _ = win.set_focus();
         return Ok(());
     }
-    tauri::WebviewWindowBuilder::new(
-        &app,
-        &label,
-        tauri::WebviewUrl::App("index.html".into()),
-    )
-    .title(title)
-    .position(x as f64, y as f64)
-    .inner_size(w as f64, h as f64)
-    .decorations(false)
-    .transparent(true)
-    .shadow(false)
-    .always_on_bottom(true)
-    .skip_taskbar(true)
-    .visible(false)
-    .build()
-    .map_err(|e| e.to_string())?;
+    tauri::WebviewWindowBuilder::new(&app, &label, tauri::WebviewUrl::App("index.html".into()))
+        .title(title)
+        .position(x as f64, y as f64)
+        .inner_size(w as f64, h as f64)
+        .decorations(false)
+        .transparent(true)
+        .shadow(false)
+        .always_on_bottom(true)
+        .skip_taskbar(true)
+        .visible(false)
+        .build()
+        .map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -78,7 +74,11 @@ pub async fn pick_folder(app: AppHandle) -> Result<Option<String>, String> {
 pub async fn pick_file(app: AppHandle) -> Result<Option<String>, String> {
     use tauri_plugin_dialog::DialogExt;
     tauri::async_runtime::spawn_blocking(move || {
-        Ok(app.dialog().file().blocking_pick_file().map(|p| p.to_string()))
+        Ok(app
+            .dialog()
+            .file()
+            .blocking_pick_file()
+            .map(|p| p.to_string()))
     })
     .await
     .map_err(|e| format!("task join error: {e}"))?

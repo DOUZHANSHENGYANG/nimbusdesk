@@ -5,6 +5,7 @@ import {
   FolderKanban,
   CalendarCheck2,
   Folders,
+  Newspaper,
   PanelLeftClose,
   PanelLeftOpen,
 } from "lucide-react";
@@ -18,6 +19,7 @@ const NAV = [
   { to: "/projects", key: "nav.projects", icon: FolderKanban },
   { to: "/plans", key: "nav.plans", icon: CalendarCheck2 },
   { to: "/files", key: "nav.files", icon: Folders },
+  { to: "/feeds", key: "nav.feeds", icon: Newspaper },
 ] as const;
 
 /** 左侧导航：活跃胶囊指示器（GSAP 滑动） */

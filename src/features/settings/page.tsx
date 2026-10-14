@@ -2,11 +2,14 @@ import { useState } from "react";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
-import { FolderOpen, FolderInput, ExternalLink, Database, Palette, Info } from "lucide-react";
+import { FolderOpen, FolderInput, ExternalLink, Database, Palette, Info, Bot } from "lucide-react";
 import { useModal } from "@/components/shell/modal-host";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Button } from "@/components/motion/button/base";
 import { useSettings } from "@/stores/settings";
+import { useAiSettings } from "@/stores/ai";
 import { toggleThemeRadial, type ThemeMode } from "@/lib/theme";
 import { changeLang, type Lang } from "@/lib/i18n";
 import { flushAllStorage } from "@/lib/storage";
@@ -62,10 +65,77 @@ export function SettingsPage() {
       danger: false,
     });
 
+  const ai = useAiSettings();
+  const setAi = useAiSettings((s) => s.setAi);
+  const [aiDraft, setAiDraft] = useState<null | { llmBaseUrl: string; llmApiKey: string; llmModel: string; searchProvider: string; tavilyApiKey: string }>(null);
+  const [aiSaved, setAiSaved] = useState(false);
+  const aiCurrent = aiDraft ?? {
+    llmBaseUrl: ai.llmBaseUrl,
+    llmApiKey: ai.llmApiKey,
+    llmModel: ai.llmModel,
+    searchProvider: ai.searchProvider || "auto",
+    tavilyApiKey: ai.tavilyApiKey,
+  };
+  const updateAi = (patch: Partial<typeof aiCurrent>) => {
+    setAiDraft({ ...aiCurrent, ...patch });
+    setAiSaved(false);
+  };
+  const saveAi = () => {
+    setAi(aiCurrent);
+    setAiDraft(null);
+    setAiSaved(true);
+  };
+
   return (
     <div className="h-full overflow-y-auto">
       <div className="mx-auto flex w-full max-w-2xl flex-col gap-5 p-6 pb-10">
+        {/* ── AI（资讯） ─────────────────────── */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-[15px]">
+              <Bot className="size-4" />
+              {t("feeds.aiSection", "AI")}
+            </CardTitle>
+            <CardDescription>{t("feeds.aiDesc")}</CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-4">
+            <div className="space-y-1.5">
+              <Label className="text-xs">{t("feeds.searchBackend")}</Label>
+              <select
+                value={aiCurrent.searchProvider}
+                onChange={(e) => updateAi({ searchProvider: e.target.value })}
+                className="h-9 w-full rounded-md border border-input bg-transparent px-2 text-sm outline-none focus:ring-2 focus:ring-ring/40"
+              >
+                <option value="auto">{t("feeds.auto")}</option>
+                <option value="bing">{t("feeds.bing")}</option>
+                <option value="tavily">{t("feeds.tavily")}</option>
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">{t("feeds.llmEndpoint")}</Label>
+              <Input value={aiCurrent.llmBaseUrl} onChange={(e) => updateAi({ llmBaseUrl: e.target.value })} placeholder="http://127.0.0.1:7865/v1" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">{t("feeds.llmKey")}</Label>
+              <Input type="password" value={aiCurrent.llmApiKey} onChange={(e) => updateAi({ llmApiKey: e.target.value })} placeholder="sk-…" />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">{t("feeds.llmModel")}</Label>
+              <Input value={aiCurrent.llmModel} onChange={(e) => updateAi({ llmModel: e.target.value })} />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">{t("feeds.tavilyKey")}</Label>
+              <Input type="password" value={aiCurrent.tavilyApiKey} onChange={(e) => updateAi({ tavilyApiKey: e.target.value })} placeholder="tvly-…" />
+            </div>
+            <div className="flex items-center gap-3">
+              <Button size="sm" onClick={saveAi}>{t("feeds.saveAi")}</Button>
+              {aiSaved ? <span className="text-xs text-emerald-600">{t("feeds.aiSaved")}</span> : null}
+            </div>
+          </CardContent>
+        </Card>
+
         {/* ── 外观 ─────────────────────────── */}
+
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-[15px]">

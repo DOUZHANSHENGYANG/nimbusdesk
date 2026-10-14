@@ -3,23 +3,23 @@
 //! trait 签名对齐 windows 0.62 生成源码（GetData 返回 STGMEDIUM、
 //! QueryGetData/Next 返回 HRESULT、GiveFeedback 为安全 fn 等）。
 
-use windows::core::{implement, BOOL, Error, HRESULT, Result as WinResult};
 use windows::Win32::Foundation::{
-    DV_E_FORMATETC, DRAGDROP_S_CANCEL, DRAGDROP_S_DROP, DRAGDROP_S_USEDEFAULTCURSORS, E_NOTIMPL,
+    DRAGDROP_S_CANCEL, DRAGDROP_S_DROP, DRAGDROP_S_USEDEFAULTCURSORS, DV_E_FORMATETC, E_NOTIMPL,
     HGLOBAL, OLE_E_ADVISENOTSUPPORTED, POINT, S_FALSE,
 };
 use windows::Win32::System::Com::{
-    CoInitializeEx, FORMATETC, IAdviseSink, IDataObject, IDataObject_Impl, IEnumFORMATETC,
-    IEnumFORMATETC_Impl, IEnumSTATDATA, STGMEDIUM, STGMEDIUM_0, COINIT_APARTMENTTHREADED,
-    DVASPECT_CONTENT, TYMED_HGLOBAL,
+    COINIT_APARTMENTTHREADED, CoInitializeEx, DVASPECT_CONTENT, FORMATETC, IAdviseSink,
+    IDataObject, IDataObject_Impl, IEnumFORMATETC, IEnumFORMATETC_Impl, IEnumSTATDATA, STGMEDIUM,
+    STGMEDIUM_0, TYMED_HGLOBAL,
 };
-use windows::Win32::System::Memory::{GlobalAlloc, GlobalLock, GlobalUnlock, GMEM_MOVEABLE};
+use windows::Win32::System::Memory::{GMEM_MOVEABLE, GlobalAlloc, GlobalLock, GlobalUnlock};
 use windows::Win32::System::Ole::{
-    DoDragDrop, IDropSource, IDropSource_Impl, DROPEFFECT, DROPEFFECT_COPY, DROPEFFECT_LINK,
-    DROPEFFECT_MOVE,
+    DROPEFFECT, DROPEFFECT_COPY, DROPEFFECT_LINK, DROPEFFECT_MOVE, DoDragDrop, IDropSource,
+    IDropSource_Impl,
 };
 use windows::Win32::System::SystemServices::MODIFIERKEYS_FLAGS;
 use windows::Win32::UI::Shell::DROPFILES;
+use windows::core::{BOOL, Error, HRESULT, Result as WinResult, implement};
 
 const CF_HDROP: u16 = 15;
 
@@ -150,11 +150,7 @@ impl IEnumFORMATETC_Impl for FmtEnum_Impl {
         if !pceltfetched.is_null() {
             unsafe { *pceltfetched = fetched };
         }
-        if fetched == 1 {
-            HRESULT(0)
-        } else {
-            S_FALSE
-        }
+        if fetched == 1 { HRESULT(0) } else { S_FALSE }
     }
 
     fn Skip(&self, celt: u32) -> WinResult<()> {
