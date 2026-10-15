@@ -17,8 +17,7 @@ import type { ItemType } from "@/stores/files";
 import { inTauri, nativeIcon } from "@/lib/tauri";
 import { cn } from "@/lib/utils";
 
-
-/* ── 原生图标缓存（按路径，模块级；栅栏与文件页共享） ── */
+/* ── 原生图标缓存（按「路径 + 目标尺寸」，模块级；栅栏与文件页共享） ── */
 
 const nativeCache = new Map<string, string | null>();
 const pending = new Map<string, Promise<string | null>>();
@@ -28,50 +27,72 @@ function notify() {
   for (const fn of subscribers) fn();
 }
 
+/** 目标位图边长（物理像素）。取到 16 的整数倍，让缩小落在整数比例上 */
+function targetSize(cssSize: number): number {
+  const dpr = typeof window === "undefined" ? 1 : window.devicePixelRatio || 1;
+  const raw = cssSize * dpr;
+  return Math.max(16, Math.min(256, Math.ceil(raw / 16) * 16));
+}
+
 /**
  * 取 Windows 原生图标（资源管理器同款）。
- * 同一路径只请求一次，结果模块级缓存；取不到返回 null → 调用方回退 lucide 图标。
+ *
+ * 为什么要把目标尺寸传给 Rust、而不是拿 256px 让浏览器缩：
+ * 图标在界面上只有 20–34 CSS 像素，浏览器从 256 缩到 ~40 物理像素
+ * 是 6 倍以上的降采样，会丢掉细节显得发糊。Rust 侧做盒式滤波
+ * （预乘 alpha 平均）质量更好，也顺带把 data URL 从 ~200KB 降到几 KB。
+ *
+ * 同一「路径 + 尺寸」只请求一次，结果模块级缓存；
+ * 取不到返回 null → 调用方回退 lucide 图标。
  */
-export function useNativeIcon(path: string | undefined, enabled: boolean): string | null {
+export function useNativeIcon(
+  path: string | undefined,
+  enabled: boolean,
+  cssSize = 20,
+): string | null {
+  const size = targetSize(cssSize);
+  const key = path ? `${path}\u{1}${size}` : "";
+
   const [icon, setIcon] = useState<string | null>(() =>
-    path ? (nativeCache.get(path) ?? null) : null,
+    key ? (nativeCache.get(key) ?? null) : null,
   );
 
   useEffect(() => {
-    if (!path || !enabled) {
+    if (!key) {
       setIcon(null);
       return;
     }
-    if (nativeCache.has(path)) {
-      setIcon(nativeCache.get(path) ?? null);
+    if (nativeCache.has(key)) {
+      setIcon(nativeCache.get(key) ?? null);
       return;
     }
     let alive = true;
     const sub = () => {
-      if (alive) setIcon(nativeCache.get(path) ?? null);
+      if (alive) setIcon(nativeCache.get(key) ?? null);
     };
     subscribers.add(sub);
 
     const task =
-      pending.get(path) ??
-      nativeIcon(path)
+      pending.get(key) ??
+      nativeIcon(path as string, size)
         .catch(() => null)
         .then((v) => {
-          nativeCache.set(path, v);
-          pending.delete(path);
+          nativeCache.set(key, v);
+          pending.delete(key);
           notify();
           return v;
         });
-    pending.set(path, task);
+    pending.set(key, task);
     void task.then(() => sub());
 
     return () => {
       alive = false;
       subscribers.delete(sub);
     };
-  }, [path, enabled]);
+  }, [key, path, size, enabled]);
 
-  return icon;
+  // enabled=false（非 Tauri 环境或调用方显式关闭）时不使用原生图标
+  return enabled ? icon : null;
 }
 /** 扩展名 → 专属图标 + 颜色（默认图标兜底） */
 const EXT_MAP: Record<string, { Icon: LucideIcon; cls: string }> = {
@@ -144,6 +165,7 @@ export function ItemIcon({
   iconUrl,
   className,
   native = true,
+  size = 20,
 }: {
   type: ItemType;
   path: string;
@@ -151,10 +173,11 @@ export function ItemIcon({
   className?: string;
   /** 本地条目是否优先用 Windows 原生图标（默认是） */
   native?: boolean;
+  /** 显示尺寸（CSS 像素），用于按 DPR 取合适分辨率的原生图标 */
+  size?: number;
 }) {
   const [broken, setBroken] = useState(false);
-  const nativeUrl = useNativeIcon(type === "url" ? undefined : path, native && inTauri);
-
+  const nativeUrl = useNativeIcon(type === "url" ? undefined : path, native && inTauri, size);
   if (type === "url") {
     if (iconUrl && !broken) {
       return (

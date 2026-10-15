@@ -618,6 +618,7 @@ function FencePanel({ categoryId }: { categoryId: string }) {
                         type={item.type}
                         path={item.path}
                         iconUrl={item.iconUrl}
+                        size={Math.round(34 * scale)}
                         className="size-full"
                       />
                     </span>

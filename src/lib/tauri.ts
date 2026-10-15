@@ -117,14 +117,20 @@ export async function ensureDir(path: string): Promise<string> {
   return invoke<string>("ensure_dir", { path });
 }
 
-/** 取 Windows 原生图标（PNG data URL；无图标返回 null） */
-export async function nativeIcon(path: string): Promise<string | null> {
-  return invoke<string | null>("native_icon", { path });
+/**
+ * 取 Windows 原生图标（PNG data URL；无图标返回 null）。
+ *
+ * @param size 目标边长（物理像素 = CSS 尺寸 × devicePixelRatio）。
+ *   Rust 侧会从 jumbo 图像列表取图并做高质量缩小；
+ *   省略则用系统原始尺寸（通常 256，适合交给浏览器缩放）。
+ */
+export async function nativeIcon(path: string, size?: number): Promise<string | null> {
+  return invoke<string | null>("native_icon", { path, size: size ?? null });
 }
 
-/** 批量取原生图标（一次 IPC，栅栏一屏用） */
-export async function nativeIcons(paths: string[]): Promise<(string | null)[]> {
-  return invoke<(string | null)[]>("native_icons", { paths });
+/** 批量取原生图标（一次 IPC，栅栏一屏用）；size 含义同 nativeIcon */
+export async function nativeIcons(paths: string[], size?: number): Promise<(string | null)[]> {
+  return invoke<(string | null)[]>("native_icons", { paths, size: size ?? null });
 }
 export async function deleteEntry(path: string): Promise<void> {
   await invoke("delete_entry", { path });

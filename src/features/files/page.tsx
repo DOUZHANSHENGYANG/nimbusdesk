@@ -358,6 +358,7 @@ export function FilesPage() {
                       type={item.type}
                       path={item.path}
                       iconUrl={item.iconUrl}
+                      size={20}
                       className="size-5"
                     />
                     <p className="min-w-0 flex-1 break-all text-[13px] font-medium leading-5">
