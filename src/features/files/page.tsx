@@ -727,34 +727,47 @@ function ItemModal({
         </DialogHeader>
 
         <div className="flex flex-col gap-3">
-          {/* 属性（系统固有）：由来源决定，是所有条目的基础分类维度 */}
+          {/* 属性（系统固有）：由来源决定，创建后不可改 ——
+              磁盘上文件夹就是文件夹，改属性不成立。
+              编辑时只展示当前值（静态徽标），新建时才允许选择。 */}
           <Field label={t("files.attrLabel")} hint={t("files.attrHint")}>
-            <div className="relative flex rounded-xl border border-border bg-muted/40 p-1">
-              {TYPES.map((ty) => (
-                <button
-                  key={ty}
-                  type="button"
-                  onClick={() => setType(ty)}
-                  className="relative flex-1 rounded-lg py-1.5 text-[12px]"
-                >
-                  {type === ty && (
-                    <motion.span
-                      layoutId="item-type-pill"
-                      className="absolute inset-0 rounded-lg bg-card shadow-[var(--pr-shadow-1)] ring-1 ring-border"
-                      transition={{ type: "spring", stiffness: 550, damping: 42 }}
-                    />
-                  )}
-                  <span
-                    className={cn(
-                      "relative z-10",
-                      type === ty ? "font-semibold text-brand" : "text-muted-foreground hover:text-foreground",
-                    )}
+            {editing ? (
+              <div className="flex items-center gap-2 rounded-xl border border-border bg-muted/40 px-3 py-1.5">
+                <span className="rounded-md bg-card px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground ring-1 ring-border">
+                  {t("files.attrLocked")}
+                </span>
+                <span className="text-[12px] font-semibold text-foreground">
+                  {t(`files.type.${type}`)}
+                </span>
+              </div>
+            ) : (
+              <div className="relative flex rounded-xl border border-border bg-muted/40 p-1">
+                {TYPES.map((ty) => (
+                  <button
+                    key={ty}
+                    type="button"
+                    onClick={() => setType(ty)}
+                    className="relative flex-1 rounded-lg py-1.5 text-[12px]"
                   >
-                    {t(`files.type.${ty}`)}
-                  </span>
-                </button>
-              ))}
-            </div>
+                    {type === ty && (
+                      <motion.span
+                        layoutId="item-type-pill"
+                        className="absolute inset-0 rounded-lg bg-card shadow-[var(--pr-shadow-1)] ring-1 ring-border"
+                        transition={{ type: "spring", stiffness: 550, damping: 42 }}
+                      />
+                    )}
+                    <span
+                      className={cn(
+                        "relative z-10",
+                        type === ty ? "font-semibold text-brand" : "text-muted-foreground hover:text-foreground",
+                      )}
+                    >
+                      {t(`files.type.${ty}`)}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            )}
           </Field>
           <Field label={t("files.titleLabel")}>
             <input
