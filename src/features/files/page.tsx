@@ -35,7 +35,11 @@ import { copyText } from "@/lib/clipboard";
 import { motion } from "motion/react";
 import { ItemIcon } from "@/features/files/icons";
 import { useFileActions, type FileActions } from "@/features/files/actions";
-import { FileAreaContextMenu, CategoryContextMenu, ITEM_ATTR } from "@/features/files/menu";
+import { usePopupMenu } from "@/features/files/use-popup-menu";
+import { ITEM_ATTR } from "@/features/files/menu-model";
+
+/** 分类 chip 上的标记：右键时据此判断命中了哪个分类 */
+const CAT_ATTR = "data-cat-id";
 import {
   Dialog,
   DialogContent,
@@ -80,6 +84,8 @@ export function FilesPage() {
     editing: null,
   });
   const restored = useRef(new Set<string>());
+  /** 浮窗菜单触发的分类改名目标 */
+  const [renamingCategoryId, setRenamingCategoryId] = useState<string | null>(null);
 
   const actions = useFileActions();
 
@@ -199,11 +205,43 @@ export function FilesPage() {
     }
   };
 
+  const openMenu = usePopupMenu({
+    actions,
+    onToggleFence: (id) => {
+      const cat = categories.find((c) => c.id === id);
+      if (cat) void toggleFence(cat.id, cat.name);
+    },
+    onCategoryRename: (id) => setRenamingCategoryId(id),
+    onCategoryDelete: (id) => void onDeleteCategory(id),
+  });
+
+  /** 条目网格右键：命中条目 → 条目菜单；否则空白菜单 */
+  const onContextMenu = (e: React.MouseEvent) => {
+    e.preventDefault();
+    const el = (e.target as HTMLElement).closest(`[${ITEM_ATTR}]`);
+    const id = el?.getAttribute(ITEM_ATTR) ?? null;
+    const item = id ? items.find((i) => i.id === id) : undefined;
+    void openMenu(
+      item ? { kind: "item", item } : { kind: "blank", categoryId: selected },
+      { x: e.clientX, y: e.clientY },
+    );
+  };
+
+  /** 分类 rail 右键：命中 chip → 分类菜单；否则空白菜单 */
+  const onRailContextMenu = (e: React.MouseEvent) => {
+    const el = (e.target as HTMLElement).closest(`[${CAT_ATTR}]`);
+    const id = el?.getAttribute(CAT_ATTR) ?? null;
+    if (!id) return; // chip 之外的空白不接管，避免与页面其他区域冲突
+    e.preventDefault();
+    void openMenu({ kind: "category", categoryId: id }, { x: e.clientX, y: e.clientY });
+  };
+
   return (
     <div className="h-full overflow-y-auto">
       <div className="mx-auto flex w-full max-w-4xl flex-col gap-4 p-6 pb-10">
+        {/* 分类 chip 右键由该容器统一处理（浮窗菜单） */}
         {/* ── 分类 rail ── */}
-        <div className="flex flex-wrap items-center gap-1.5">
+        <div className="flex flex-wrap items-center gap-1.5" onContextMenu={onRailContextMenu}>
           <CategoryChip
             label={t("files.all")}
             count={items.length}
@@ -218,6 +256,7 @@ export function FilesPage() {
               count={items.filter((i) => i.categoryId === cat.id).length}
               active={selected === cat.id}
               fenceOn={fences[cat.id]?.open ?? false}
+              forceRename={renamingCategoryId === cat.id}
               actions={actions}
               onClick={() => setSelected(cat.id)}
               onToggleFence={() => void toggleFence(cat.id, cat.name)}
@@ -300,12 +339,12 @@ export function FilesPage() {
           </div>
         )}
 
-        {/* ── 条目网格（空白处右键 = 新建/绑定目录；条目右键 = 打开/重命名/删除） ── */}
-        <FileAreaContextMenu items={filtered} actions={actions} categoryId={selected}>
-          <div
-            ref={gridRef}
-            className="grid min-h-24 grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-2.5"
-          >
+        {/* ── 条目网格（右键菜单在独立浮窗渲染，可溢出窗口边界） ── */}
+        <div
+          ref={gridRef}
+          onContextMenu={onContextMenu}
+          className="grid min-h-24 grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-2.5"
+        >
             {filtered.map((item) => (
               <div
                 key={item.id}
@@ -331,19 +370,21 @@ export function FilesPage() {
                       {item.note}
                     </p>
                   )}
-                  <p className="mt-0.5 truncate text-[11px] text-muted-foreground/60" title={item.path}>
-                    {item.path}
-                  </p>
+              <p className="mt-0.5 truncate text-[11px] text-muted-foreground/60" title={item.path}>
+                {item.path}
+              </p>
 
-                  {item.tags.length > 0 && (
-                    <div className="mt-1.5 flex flex-wrap gap-1">
-                      {item.tags.map((tag) => (
-                        <span key={tag} className="rounded-full bg-brand/10 px-1.5 text-[10px] text-brand">
-                          #{tag}
-                        </span>
-                      ))}
-                    </div>
-                  )}
+              <div className="mt-1.5 flex flex-wrap items-center gap-1">
+                {/* 属性：系统固有维度，始终展示 */}
+                <span className="rounded-full border border-border px-1.5 text-[10px] text-muted-foreground">
+                  {t(`files.type.${item.type}`)}
+                </span>
+                {item.tags.map((tag) => (
+                  <span key={tag} className="rounded-full bg-brand/10 px-1.5 text-[10px] text-brand">
+                    #{tag}
+                  </span>
+                ))}
+              </div>
 
                   {/* 悬停操作 */}
                   <div className="absolute inset-x-2 top-2 flex justify-end gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
@@ -368,10 +409,10 @@ export function FilesPage() {
                       </CardAction>
                     )}
                     <CardAction
-                      title={t("files.renameItem")}
+                      title={t("files.editItem")}
                       onClick={(e) => {
                         e.stopPropagation();
-                        void actions.rename(item);
+                        setModal({ open: true, editing: item });
                       }}
                     >
                       <Pencil className="size-3.5" />
@@ -389,8 +430,7 @@ export function FilesPage() {
                   </div>
               </div>
             ))}
-          </div>
-        </FileAreaContextMenu>
+        </div>
 
         {filtered.length === 0 && (
           <p className="py-10 text-center text-[13px] text-muted-foreground">{t("files.empty")}</p>
@@ -416,6 +456,7 @@ function CategoryChip({
   active,
   fenceOn,
   actions,
+  forceRename,
   onClick,
   onToggleFence,
   onRenameConfirm,
@@ -428,6 +469,8 @@ function CategoryChip({
   active: boolean;
   fenceOn?: boolean;
   actions?: FileActions;
+  /** 由浮窗菜单触发的外来改名请求 */
+  forceRename?: boolean;
   onClick: () => void;
   onToggleFence?: () => void;
   onRenameConfirm?: (id: string, name: string) => Promise<boolean>;
@@ -446,6 +489,12 @@ function CategoryChip({
     requestAnimationFrame(() => inputRef.current?.select());
   };
 
+  // 浮窗菜单请求改名 → 进入编辑态
+  useEffect(() => {
+    if (forceRename) startRename();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [forceRename]);
+
   const commit = async () => {
     if (!renaming || !catId) return;
     const ok = await onRenameConfirm?.(catId, draft);
@@ -454,6 +503,7 @@ function CategoryChip({
 
   const chip = (
     <div
+      {...(catId ? { [CAT_ATTR]: catId } : {})}
       className={cn(
         "flex items-center gap-0.5 rounded-full border py-1 pl-3 pr-1 text-[12px] font-medium transition-colors",
         active
@@ -537,21 +587,6 @@ function CategoryChip({
     </div>
   );
 
-  // 分类 chip 右键菜单：新建 / 改名 / 栅栏 / 绑定目录 / 删除
-  if (catId && actions && onToggleFence && onDelete) {
-    return (
-      <CategoryContextMenu
-        categoryId={catId}
-        actions={actions}
-        onRename={startRename}
-        onDelete={onDelete}
-        onToggleFence={onToggleFence}
-        fenceOn={!!fenceOn}
-      >
-        {chip}
-      </CategoryContextMenu>
-    );
-  }
   return chip;
 }
 
@@ -692,34 +727,35 @@ function ItemModal({
         </DialogHeader>
 
         <div className="flex flex-col gap-3">
-          {/* 类型：滑块分段器 */}
-          <div className="relative flex rounded-xl border border-border bg-muted/40 p-1">
-            {TYPES.map((ty) => (
-              <button
-                key={ty}
-                type="button"
-                onClick={() => setType(ty)}
-                className="relative flex-1 rounded-lg py-1.5 text-[12px]"
-              >
-                {type === ty && (
-                  <motion.span
-                    layoutId="item-type-pill"
-                    className="absolute inset-0 rounded-lg bg-card shadow-[var(--pr-shadow-1)] ring-1 ring-border"
-                    transition={{ type: "spring", stiffness: 550, damping: 42 }}
-                  />
-                )}
-                <span
-                  className={cn(
-                    "relative z-10",
-                    type === ty ? "font-semibold text-brand" : "text-muted-foreground hover:text-foreground",
-                  )}
+          {/* 属性（系统固有）：由来源决定，是所有条目的基础分类维度 */}
+          <Field label={t("files.attrLabel")} hint={t("files.attrHint")}>
+            <div className="relative flex rounded-xl border border-border bg-muted/40 p-1">
+              {TYPES.map((ty) => (
+                <button
+                  key={ty}
+                  type="button"
+                  onClick={() => setType(ty)}
+                  className="relative flex-1 rounded-lg py-1.5 text-[12px]"
                 >
-                  {t(`files.type.${ty}`)}
-                </span>
-              </button>
-            ))}
-          </div>
-
+                  {type === ty && (
+                    <motion.span
+                      layoutId="item-type-pill"
+                      className="absolute inset-0 rounded-lg bg-card shadow-[var(--pr-shadow-1)] ring-1 ring-border"
+                      transition={{ type: "spring", stiffness: 550, damping: 42 }}
+                    />
+                  )}
+                  <span
+                    className={cn(
+                      "relative z-10",
+                      type === ty ? "font-semibold text-brand" : "text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    {t(`files.type.${ty}`)}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </Field>
           <Field label={t("files.titleLabel")}>
             <input
               autoFocus
@@ -791,13 +827,8 @@ function ItemModal({
             </div>
           </Field>
 
-          <Field label={t("files.tagsLabel")}>
-            <input
-              value={tagsText}
-              onChange={(e) => setTagsText(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && save()}
-              className="w-full rounded-lg border border-border bg-background px-3 py-2 text-[12px] outline-none focus:border-brand/50"
-            />
+          <Field label={t("files.tagsLabel")} hint={t("files.tagsHint")}>
+            <TagEditor value={tagsText} onChange={setTagsText} placeholder={t("files.tagsAdd")} />
           </Field>
         </div>
 
@@ -822,10 +853,91 @@ function ItemModal({
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+
+/**
+ * 标签编辑器：把逗号分隔串呈现为可逐个删除的 chip。
+ * 直接在输入框里编辑逗号串对用户不直观（看不到已有标签的边界）。
+ */
+function TagEditor({
+  value,
+  onChange,
+  placeholder,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  placeholder?: string;
+}) {
+  const [draft, setDraft] = useState("");
+  const tags = value
+    .split(/[,，]/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+
+  const commit = () => {
+    const clean = draft.trim().replace(/[,，]/g, "");
+    if (!clean || tags.includes(clean)) {
+      setDraft("");
+      return;
+    }
+    onChange([...tags, clean].join(", "));
+    setDraft("");
+  };
+
+  const removeAt = (i: number) => {
+    onChange(tags.filter((_, idx) => idx !== i).join(", "));
+  };
+
+  return (
+    <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-border bg-background px-2 py-1.5 focus-within:border-brand/50">
+      {tags.map((tag, i) => (
+        <span
+          key={`${tag}-${i}`}
+          className="flex items-center gap-1 rounded-full bg-brand/10 px-2 py-0.5 text-[11px] text-brand"
+        >
+          #{tag}
+          <button
+            type="button"
+            onClick={() => removeAt(i)}
+            title="×"
+            className="text-brand/60 transition-colors hover:text-brand"
+          >
+            <X className="size-3" />
+          </button>
+        </span>
+      ))}
+      <input
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === "," || e.key === "，") {
+            e.preventDefault();
+            commit();
+          } else if (e.key === "Backspace" && !draft && tags.length) {
+            removeAt(tags.length - 1);
+          }
+        }}
+        onBlur={commit}
+        placeholder={tags.length ? "" : placeholder}
+        className="min-w-24 flex-1 bg-transparent text-[12px] outline-none placeholder:text-muted-foreground/60"
+      />
+    </div>
+  );
+}
+function Field({
+  label,
+  hint,
+  children,
+}: {
+  label: string;
+  hint?: string;
+  children: React.ReactNode;
+}) {
   return (
     <div className="flex flex-col gap-1.5">
-      <span className="text-[12px] font-medium text-foreground/90">{label}</span>
+      <span className="text-[12px] font-medium text-foreground/90">
+        {label}
+        {hint && <span className="ml-1.5 font-normal text-muted-foreground/70">{hint}</span>}
+      </span>
       {children}
     </div>
   );

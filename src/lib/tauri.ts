@@ -135,6 +135,26 @@ export async function deleteEntries(paths: string[]): Promise<void> {
   await invoke("delete_entries", { paths });
 }
 
+/** 预创建右键菜单浮窗（保持隐藏）。必须先创建再发菜单数据，否则事件丢失 */
+export async function preparePopupMenu(): Promise<void> {
+  await invoke("prepare_popup_menu");
+}
+
+/** 显示右键菜单浮窗（坐标为逻辑/CSS 像素，Rust 侧换算物理像素并夹到工作区） */
+export async function showPopupMenu(
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+): Promise<void> {
+  await invoke("show_popup_menu", { x, y, w, h });
+}
+
+/** 隐藏右键菜单浮窗 */
+export async function hidePopupMenu(): Promise<void> {
+  await invoke("hide_popup_menu");
+}
+
 /** 是否运行在 Tauri 环境（浏览器 pnpm dev 时为 false） */
 export const inTauri =
   typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;

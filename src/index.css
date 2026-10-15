@@ -175,3 +175,11 @@ html.fence-root #root {
   background: transparent !important;
   overflow: hidden;
 }
+
+/* ── 菜单浮窗：完全透明、无滚动，菜单本身自带背景与阴影 ── */
+html.popup-root,
+html.popup-root body,
+html.popup-root #root {
+  background: transparent !important;
+  overflow: hidden;
+}

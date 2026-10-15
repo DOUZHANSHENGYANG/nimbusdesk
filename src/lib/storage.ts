@@ -1,20 +1,63 @@
 import type { StateStorage } from "zustand/middleware";
-import { readJson, writeJson } from "@/lib/tauri";
+import { emit, listen } from "@tauri-apps/api/event";
+import { readJson, writeJson, inTauri } from "@/lib/tauri";
 
 /**
  * Zustand persist 适配器：落到自定义数据目录的 JSON 文件。
  * 写入做 trailing 防抖，避免高频 setState 连续落盘。
+ *
+ * 跨窗口同步：栅栏是独立 WebView，各自有一份 store 内存副本。
+ * 任一窗口写盘后广播 key，其他窗口收到后重读该 key 并回灌 store，
+ * 否则会出现「主窗口改了分类名、栅栏还显示旧名」这类不同步。
  */
 
 const timers = new Map<string, ReturnType<typeof setTimeout>>();
 const pending = new Map<string, unknown>();
 const DEBOUNCE_MS = 250;
 
+/** 本窗口自己写入的 key → 时间戳，用于忽略自己发出的广播（防回声） */
+const selfWrites = new Map<string, number>();
+const ECHO_WINDOW_MS = 1500;
+
+const EV_STORAGE = "storage://changed";
+
+/** 收到其他窗口的写盘通知时调用（由各 store 注册回灌逻辑） */
+type SyncHandler = (key: string, value: unknown) => void;
+const handlers = new Set<SyncHandler>();
+
+/** 注册跨窗口同步回调；返回取消函数 */
+export function onStorageSynced(fn: SyncHandler): () => void {
+  handlers.add(fn);
+  return () => handlers.delete(fn);
+}
+
+if (inTauri) {
+  void listen<{ key: string }>(EV_STORAGE, async (e) => {
+    const { key } = e.payload;
+    // 自己刚写过的忽略，避免回灌覆盖本地更新的状态
+    const mine = selfWrites.get(key);
+    if (mine && Date.now() - mine < ECHO_WINDOW_MS) return;
+    try {
+      const value = await readJson<unknown>(key);
+      if (value == null) return;
+      for (const fn of handlers) fn(key, value);
+    } catch (err) {
+      console.error(`[storage] sync ${key}:`, err);
+    }
+  }).catch(() => undefined);
+}
+
 function flush(key: string) {
   const value = pending.get(key);
   if (value === undefined) return;
   pending.delete(key);
-  void writeJson(key, value).catch((e) => console.error(`[storage] write ${key}:`, e));
+  selfWrites.set(key, Date.now());
+  void writeJson(key, value)
+    .then(() => {
+      // 落盘成功后再广播，保证其他窗口读到的是新值
+      if (inTauri) void emit(EV_STORAGE, { key }).catch(() => undefined);
+    })
+    .catch((e) => console.error(`[storage] write ${key}:`, e));
 }
 
 export const tauriJsonStorage: StateStorage = {
@@ -51,8 +94,10 @@ export const tauriJsonStorage: StateStorage = {
     if (t) clearTimeout(t);
     timers.delete(name);
     pending.delete(name);
+    selfWrites.set(name, Date.now());
     try {
       await writeJson(name, null);
+      if (inTauri) void emit(EV_STORAGE, { key: name }).catch(() => undefined);
     } catch (e) {
       console.error(`[storage] remove ${name}:`, e);
     }

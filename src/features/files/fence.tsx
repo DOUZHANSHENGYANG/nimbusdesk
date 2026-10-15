@@ -10,7 +10,8 @@ import { useFiles, useFences, DEFAULT_FENCE, type FileItem } from "@/stores/file
 import { inTauri, probePaths, openPath, openUrl, dragOut, windowReady } from "@/lib/tauri";
 import { ItemIcon } from "@/features/files/icons";
 import { useFileActions } from "@/features/files/actions";
-import { FileAreaContextMenu, ITEM_ATTR } from "@/features/files/menu";
+import { usePopupMenu } from "@/features/files/use-popup-menu";
+import { ITEM_ATTR } from "@/features/files/menu-model";
 import { cn } from "@/lib/utils";
 
 const win = inTauri ? getCurrentWebviewWindow() : null;
@@ -72,6 +73,7 @@ function FencePanel({ categoryId }: { categoryId: string }) {
   const actions = useFileActions();
   /** 就地重命名的条目 id（与分类改名互不影响） */
   const [renameItemId, setRenameItemId] = useState<string | null>(null);
+
   const [itemDraft, setItemDraft] = useState("");
   const itemRenameRef = useRef<HTMLInputElement>(null);
 
@@ -114,6 +116,20 @@ function FencePanel({ categoryId }: { categoryId: string }) {
     await actions.rename(item, next);
   };
 
+
+  const openMenu = usePopupMenu({ actions, onRenameInline: beginItemRename });
+
+  /** 右键：命中条目 → 条目菜单；否则空白菜单（坐标为窗口内 CSS 像素） */
+  const onContextMenu = (e: React.MouseEvent) => {
+    e.preventDefault();
+    const el = (e.target as HTMLElement).closest(`[${ITEM_ATTR}]`);
+    const id = el?.getAttribute(ITEM_ATTR) ?? null;
+    const item = id ? items.find((i) => i.id === id) : undefined;
+    void openMenu(
+      item ? { kind: "item", item } : { kind: "blank", categoryId },
+      { x: e.clientX, y: e.clientY },
+    );
+  };
   const scale = fence.scale ?? 1;
   const pinned = fence.pinned ?? false;
 
@@ -235,6 +251,13 @@ function FencePanel({ categoryId }: { categoryId: string }) {
       void u2.then((fn) => fn());
     };
   }, [categoryId, setGeometry]);
+
+  /* ── 分类改名时同步窗口标题 ──
+     窗口标题属于 OS 层，不会随 store 变化自动更新。 */
+  useEffect(() => {
+    if (!win || !category?.name) return;
+    void win.setTitle(category.name).catch(() => undefined);
+  }, [category?.name]);
 
   /* ── 网格尺寸测量（自适应行列） ── */
   useEffect(() => {
@@ -536,21 +559,16 @@ function FencePanel({ categoryId }: { categoryId: string }) {
           </span>
         </div>
 
-        {/* 条目网格：空白处右键 = 新建/绑定目录；条目右键 = 打开/重命名/删除 */}
-        <FileAreaContextMenu
-          items={items}
-          actions={actions}
-          categoryId={categoryId}
-          onRenameInline={beginItemRename}
+        {/* 条目网格：右键菜单在独立浮窗渲染（可溢出栅栏窗口边界） */}
+        <div
+          ref={gridWrapRef}
+          onMouseDown={(e) => {
+            // 点空白处取消选中（条目上带 data-item 标记）
+            if (!(e.target as HTMLElement).closest("[data-item]")) setSelectedId(null);
+          }}
+          onContextMenu={onContextMenu}
+          className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-2"
         >
-          <div
-            ref={gridWrapRef}
-            onMouseDown={(e) => {
-              // 点空白处取消选中（条目上带 data-item 标记）
-              if (!(e.target as HTMLElement).closest("[data-item]")) setSelectedId(null);
-            }}
-            className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden p-2"
-          >
           {pageItems.length === 0 ? (
             <div className="grid h-full place-items-center px-4 text-center text-[11px] leading-relaxed text-muted-foreground">
               {t("files.fenceEmpty")}
@@ -638,8 +656,7 @@ function FencePanel({ categoryId }: { categoryId: string }) {
               )}
             </div>
           )}
-          </div>
-        </FileAreaContextMenu>
+        </div>
 
         {/* 翻页圆点 */}
         {pages > 1 && (
