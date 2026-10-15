@@ -5,8 +5,6 @@ import { toast } from "sonner";
 import {
   FolderOpen,
   FolderInput,
-  FolderTree,
-  FolderX,
   ExternalLink,
   Database,
   Palette,
@@ -123,21 +121,7 @@ function SystemSection() {
   const storeSetDataDir = useSettings((s) => s.setDataDir);
   const [migrating, setMigrating] = useState(false);
 
-  const filesRoot = useSettings((s) => s.filesRoot);
-  const setFilesRoot = useSettings((s) => s.setFilesRoot);
-
-  /** 选择文件根目录：分类会自动在其中建同名子目录 */
-  const chooseRoot = async () => {
-    const picked = await pickFolder();
-    if (!picked) return;
-    setFilesRoot(picked);
-    toast.success(t("files.rootBound", { dir: picked }));
-  };
-
-  const clearRoot = () => {
-    setFilesRoot(null);
-    toast.success(t("files.rootCleared"));
-  };
+  /** 切换主题：径向扩散动画 */
 
   const onTheme = (mode: ThemeMode, e: React.MouseEvent) => {
     if (mode === theme) return;
@@ -259,41 +243,6 @@ function SystemSection() {
         </CardContent>
       </Card>
 
-      {/* 文件根目录：所有分类的默认落盘位置 */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-[15px]">
-            <FolderTree className="size-4 text-brand" />
-            {t("settings.filesRoot")}
-          </CardTitle>
-          <CardDescription>{t("settings.filesRootHint")}</CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-3">
-          <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/40 px-3 py-2.5">
-            <code className="min-w-0 flex-1 truncate font-mono text-[12px] text-muted-foreground">
-              {filesRoot ?? t("settings.filesRootUnset")}
-            </code>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Button variant="secondary" size="sm" onClick={() => void chooseRoot()}>
-              <FolderInput className="size-4" />
-              {filesRoot ? t("files.ctx.changeRoot") : t("files.ctx.setRoot")}
-            </Button>
-            {filesRoot && (
-              <>
-                <Button variant="ghost" size="sm" onClick={() => void revealInExplorer(filesRoot)}>
-                  <FolderOpen className="size-4" />
-                  {t("settings.openDir")}
-                </Button>
-                <Button variant="ghost" size="sm" onClick={clearRoot}>
-                  <FolderX className="size-4" />
-                  {t("settings.filesRootClear")}
-                </Button>
-              </>
-            )}
-          </div>
-        </CardContent>
-      </Card>
     </>
   );
 }

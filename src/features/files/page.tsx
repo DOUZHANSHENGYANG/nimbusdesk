@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Plus,
   Search,
@@ -9,6 +9,7 @@ import {
   X,
   MoreHorizontal,
   FolderOpen,
+  FolderPlus,
   Copy,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -71,12 +72,14 @@ export function FilesPage() {
   const addCategory = useFiles((s) => s.addCategory);
   const renameCategory = useFiles((s) => s.renameCategory);
   const removeCategory = useFiles((s) => s.removeCategory);
+  const moveItemBefore = useFiles((s) => s.moveItemBefore);
   const fences = useFences((s) => s.fences);
   const setOpen = useFences((s) => s.setOpen);
   const filesHydrated = useFiles.persist.hasHydrated();
   const fencesHydrated = useFences.persist.hasHydrated();
 
   const [selected, setSelected] = useState<string | null>(null); // null = 全部
+  const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
   const [activeTags, setActiveTags] = useState<string[]>([]);
   const [modal, setModal] = useState<{ open: boolean; editing: FileItem | null }>({
@@ -143,6 +146,128 @@ export function FilesPage() {
     void p.catch(() => toast.error(t("files.openErr")));
   };
 
+  /* ── 条目拖拽排序 ──
+     与栅栏同一套手势语义：单击选中、双击打开、选中后拖动排序（落点竖线）。
+     区别是这里不涉及系统拖出（文件页是管理界面，不需要把条目拖到桌面）。 */
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [drop, setDrop] = useState<{ anchorId: string | null; x: number; y: number; h: number } | null>(
+    null,
+  );
+
+  /**
+   * 指针位置 → 插入位 + 竖线几何（相对网格容器）。
+   *
+   * 只在「同一分类」的卡片之间找落点：moveItemBefore 是分类内重排，
+   * 跨分类落点会被 store 拒绝。若不过滤，「全部」视图里把 A 拖到别的分类的
+   * 卡片上会显示落点线但松手后毫无变化 —— 比不显示更让人困惑。
+   */
+  const computeDrop = (cx: number, cy: number, movingCategoryId: string) => {
+    const grid = gridRef.current;
+    if (!grid || filtered.length === 0) return null;
+    const gr = grid.getBoundingClientRect();
+    const cards = [...grid.querySelectorAll<HTMLElement>("[data-card]")].filter(
+      (c) => c.getAttribute("data-cat") === movingCategoryId,
+    );
+    if (!cards.length) return null;
+
+    // 找到指针所在行：取垂直距离最近的一行
+    let best: HTMLElement | null = null;
+    let bestDist = Infinity;
+    for (const c of cards) {
+      const r = c.getBoundingClientRect();
+      const dy = cy < r.top ? r.top - cy : cy > r.bottom ? cy - r.bottom : 0;
+      if (dy < bestDist) {
+        bestDist = dy;
+        best = c;
+      }
+    }
+    if (!best) return null;
+    const br = best.getBoundingClientRect();
+
+    // 在同一行内按 x 决定插到该卡片前还是后
+    const sameRow = cards.filter((c) => {
+      const r = c.getBoundingClientRect();
+      return Math.abs(r.top - br.top) < r.height / 2;
+    });
+    let anchor: HTMLElement = best;
+    let atEnd = false;
+    for (const c of sameRow) {
+      const r = c.getBoundingClientRect();
+      if (cx >= r.left && cx <= r.right) {
+        anchor = c;
+        atEnd = cx > r.left + r.width / 2;
+        break;
+      }
+      if (cx > r.right) {
+        anchor = c;
+        atEnd = true;
+      }
+    }
+
+    const ar = anchor.getBoundingClientRect();
+    const id = anchor.getAttribute(ITEM_ATTR);
+    if (!id) return null;
+
+    // anchorId = 插到谁之前；插到行尾时用「下一个」条目作为锚点
+    let anchorId: string | null = id;
+    let x = (atEnd ? ar.right : ar.left) - gr.left;
+    if (atEnd) {
+      const idx = cards.indexOf(anchor);
+      const next = cards[idx + 1];
+      if (next && Math.abs(next.getBoundingClientRect().top - ar.top) < ar.height / 2) {
+        anchorId = next.getAttribute(ITEM_ATTR);
+        x = next.getBoundingClientRect().left - gr.left;
+      } else {
+        anchorId = null; // 行尾且无后继 → 移到末尾
+      }
+    }
+    return { anchorId, x, y: ar.top - gr.top, h: ar.height };
+  };
+
+  const startItemDrag = (e: React.PointerEvent, item: FileItem) => {
+    if (e.button !== 0) return;
+    // 悬停操作按钮上的按下不参与拖拽
+    if ((e.target as HTMLElement).closest("button")) return;
+    const el = e.currentTarget as HTMLElement;
+    const pointerId = e.pointerId;
+    const sx = e.clientX;
+    const sy = e.clientY;
+    let dragging = false;
+    let pending: typeof drop = null;
+
+    const cleanup = () => {
+      el.removeEventListener("pointermove", onMove);
+      el.removeEventListener("pointerup", onUp);
+      el.removeEventListener("pointercancel", onUp);
+      if (el.hasPointerCapture(pointerId)) el.releasePointerCapture(pointerId);
+    };
+
+    const onMove = (ev: PointerEvent) => {
+      if (!dragging) {
+        if (Math.hypot(ev.clientX - sx, ev.clientY - sy) < 5) return;
+        dragging = true;
+        setDragId(item.id);
+      }
+      pending = computeDrop(ev.clientX, ev.clientY, item.categoryId);
+      setDrop(pending);
+    };
+
+    const onUp = () => {
+      if (dragging && pending) {
+        moveItemBefore(item.id, pending.anchorId);
+      }
+      pending = null;
+      setDrop(null);
+      setDragId(null);
+      cleanup();
+    };
+
+    el.setPointerCapture(pointerId);
+    el.addEventListener("pointermove", onMove);
+    el.addEventListener("pointerup", onUp);
+    el.addEventListener("pointercancel", onUp);
+  };
+
   // 删除统一走 actions（本地文件进回收站，网址仅移出列表）
   const onDeleteItem = (item: FileItem) => void actions.remove(item);
 
@@ -189,6 +314,11 @@ export function FilesPage() {
   const onDeleteCategory = async (catId: string) => {
     const cat = categories.find((c) => c.id === catId);
     if (!cat) return;
+    // 子分类存在时不允许删除，避免连带删掉用户没意识到的东西
+    if (categories.some((c) => c.parentId === catId)) {
+      await alert({ title: t("files.categoryHasChildren") });
+      return;
+    }
     if (items.some((i) => i.categoryId === catId)) {
       await alert({ title: t("files.categoryHasItems") });
       return;
@@ -205,6 +335,45 @@ export function FilesPage() {
     }
   };
 
+  /** 顶级分类 / 子分类查询（单层：只查直接子级） */
+  const topCategories = useMemo(() => categories.filter((c) => !c.parentId), [categories]);
+  const childrenOf = useCallback(
+    (id: string) => categories.filter((c) => c.parentId === id),
+    [categories],
+  );
+  /** 该分类的条目数。子分类不并入父分类计数，避免「父分类里其实没东西」的误解 */
+  const countIn = useCallback(
+    (id: string) => items.filter((i) => i.categoryId === id).length,
+    [items],
+  );
+  const copyCategoryPaths = async (catId: string) => {
+    const paths = items.filter((i) => i.categoryId === catId).map((i) => i.path);
+    if (!paths.length) return;
+    if (await copyText(paths.join("\n"))) toast.success(t("files.copied"));
+  };
+
+  /** 新建子分类。单层约束：只允许挂在顶级分类下 */
+  const onAddSubCategory = async (parentId: string) => {
+    const parent = categories.find((c) => c.id === parentId);
+    if (!parent) return;
+    const name = await prompt({
+      title: t("files.subCategoryOf", { name: parent.name }),
+    });
+    if (!name?.trim()) return;
+    const clean = name.trim();
+    const dup = categories.some(
+      (c) =>
+        c.parentId === parentId && c.name.toLowerCase() === clean.toLowerCase(),
+    );
+    if (dup) {
+      await alert({ title: t("files.dupCategory") });
+      return;
+    }
+    const id = addCategory(clean, parentId);
+    setSelected(id);
+  };
+
+
   const openMenu = usePopupMenu({
     actions,
     onToggleFence: (id) => {
@@ -213,6 +382,7 @@ export function FilesPage() {
     },
     onCategoryRename: (id) => setRenamingCategoryId(id),
     onCategoryDelete: (id) => void onDeleteCategory(id),
+    onCategoryAddChild: (id) => void onAddSubCategory(id),
   });
 
   /** 条目网格右键：命中条目 → 条目菜单；否则空白菜单 */
@@ -241,36 +411,58 @@ export function FilesPage() {
       <div className="mx-auto flex w-full max-w-4xl flex-col gap-4 p-6 pb-10">
         {/* 分类 chip 右键由该容器统一处理（浮窗菜单） */}
         {/* ── 分类 rail ── */}
-        <div className="flex flex-wrap items-center gap-1.5" onContextMenu={onRailContextMenu}>
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2" onContextMenu={onRailContextMenu}>
           <CategoryChip
             label={t("files.all")}
             count={items.length}
             active={selected === null}
             onClick={() => setSelected(null)}
           />
-          {categories.map((cat) => (
-            <CategoryChip
-              key={cat.id}
-              catId={cat.id}
-              label={cat.name}
-              count={items.filter((i) => i.categoryId === cat.id).length}
-              active={selected === cat.id}
-              fenceOn={fences[cat.id]?.open ?? false}
-              forceRename={renamingCategoryId === cat.id}
-              actions={actions}
-              onClick={() => setSelected(cat.id)}
-              onToggleFence={() => void toggleFence(cat.id, cat.name)}
-              onRenameConfirm={onRenameConfirm}
-              onDelete={() => void onDeleteCategory(cat.id)}
-              onCopyPaths={async () => {
-                const paths = items
-                  .filter((i) => i.categoryId === cat.id)
-                  .map((i) => i.path);
-                if (!paths.length) return;
-                if (await copyText(paths.join("\n"))) toast.success(t("files.copied"));
-              }}
-            />
-          ))}
+          {/* 顶级分类；每个顶级分类后跟它的子分类（单层，缩进 + 前缀符区分） */}
+          {topCategories.map((cat) => {
+            const kids = childrenOf(cat.id);
+            return (
+              <span key={cat.id} className="flex flex-wrap items-center gap-1.5">
+                <CategoryChip
+                  catId={cat.id}
+                  label={cat.name}
+                  count={countIn(cat.id)}
+                  active={selected === cat.id}
+                  fenceOn={fences[cat.id]?.open ?? false}
+                  forceRename={renamingCategoryId === cat.id}
+                  actions={actions}
+                  onClick={() => setSelected(cat.id)}
+                  onToggleFence={() => void toggleFence(cat.id, cat.name)}
+                  onRenameConfirm={onRenameConfirm}
+                  onDelete={() => void onDeleteCategory(cat.id)}
+                  onAddChild={() => void onAddSubCategory(cat.id)}
+                  onCopyPaths={() => void copyCategoryPaths(cat.id)}
+                />
+                {kids.length > 0 && (
+                  <span className="flex flex-wrap items-center gap-1.5 border-l border-border/70 pl-2">
+                    {kids.map((kid) => (
+                      <CategoryChip
+                        key={kid.id}
+                        catId={kid.id}
+                        label={kid.name}
+                        count={countIn(kid.id)}
+                        active={selected === kid.id}
+                        fenceOn={fences[kid.id]?.open ?? false}
+                        forceRename={renamingCategoryId === kid.id}
+                        actions={actions}
+                        sub
+                        onClick={() => setSelected(kid.id)}
+                        onToggleFence={() => void toggleFence(kid.id, kid.name)}
+                        onRenameConfirm={onRenameConfirm}
+                        onDelete={() => void onDeleteCategory(kid.id)}
+                        onCopyPaths={() => void copyCategoryPaths(kid.id)}
+                      />
+                    ))}
+                  </span>
+                )}
+              </span>
+            );
+          })}
           <button
             type="button"
             onClick={() => void onAddCategory()}
@@ -343,15 +535,27 @@ export function FilesPage() {
         <div
           ref={gridRef}
           onContextMenu={onContextMenu}
-          className="grid min-h-24 grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-2.5"
+          onMouseDown={(e) => {
+            // 点空白处取消选中（卡片带 data-card 标记）
+            if (!(e.target as HTMLElement).closest("[data-card]")) setSelectedItemId(null);
+          }}
+          className="relative grid min-h-24 grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-2.5"
         >
             {filtered.map((item) => (
               <div
                 key={item.id}
                 {...{ [ITEM_ATTR]: item.id }}
                 data-card
-                onClick={() => openItem(item)}
-                className="group relative cursor-pointer rounded-xl border border-border bg-card p-3 shadow-[var(--pr-shadow-1)] transition-all duration-150 hover:-translate-y-0.5 hover:shadow-[var(--pr-shadow-2)]"
+                data-cat={item.categoryId}
+                onPointerDown={(e) => startItemDrag(e, item)}
+                onClick={() => setSelectedItemId(item.id)}
+                onDoubleClick={() => openItem(item)}
+                title={t("files.dblclickHint")}
+                className={cn(
+                  "group relative cursor-pointer rounded-xl border bg-card p-3 shadow-[var(--pr-shadow-1)] transition-all duration-150 hover:-translate-y-0.5 hover:shadow-[var(--pr-shadow-2)]",
+                  selectedItemId === item.id ? "border-brand ring-1 ring-brand/40" : "border-border",
+                  dragId === item.id && "opacity-40",
+                )}
               >
                   <div className="flex items-start gap-2">
                     <ItemIcon
@@ -431,6 +635,14 @@ export function FilesPage() {
                   </div>
               </div>
             ))}
+          {/* 拖拽落点竖线 */}
+          {drop && (
+            <span
+              aria-hidden
+              className="pointer-events-none absolute z-10 w-0.5 rounded-full bg-brand"
+              style={{ left: drop.x - 1, top: drop.y, height: drop.h }}
+            />
+          )}
         </div>
 
         {filtered.length === 0 && (
@@ -458,11 +670,13 @@ function CategoryChip({
   fenceOn,
   actions,
   forceRename,
+  sub,
   onClick,
   onToggleFence,
   onRenameConfirm,
   onDelete,
   onCopyPaths,
+  onAddChild,
 }: {
   catId?: string;
   label: string;
@@ -472,11 +686,15 @@ function CategoryChip({
   actions?: FileActions;
   /** 由浮窗菜单触发的外来改名请求 */
   forceRename?: boolean;
+  /** 子分类：用较弱的视觉重量区分层级 */
+  sub?: boolean;
   onClick: () => void;
   onToggleFence?: () => void;
   onRenameConfirm?: (id: string, name: string) => Promise<boolean>;
   onDelete?: () => void;
   onCopyPaths?: () => void;
+  /** 提供时显示「新建子分类」入口（仅顶级分类用） */
+  onAddChild?: () => void;
 }) {
   const { t } = useTranslation();
   const [renaming, setRenaming] = useState(false);
@@ -506,12 +724,14 @@ function CategoryChip({
     <div
       {...(catId ? { [CAT_ATTR]: catId } : {})}
       className={cn(
-        "flex items-center gap-0.5 rounded-full border py-1 pl-3 pr-1 text-[12px] font-medium transition-colors",
+        "flex items-center gap-0.5 rounded-full border py-1 text-[12px] font-medium transition-colors",
+        sub ? "pl-2 pr-1 text-[11px]" : "pl-3 pr-1",
         active
           ? "border-brand bg-brand/10 text-brand"
           : "border-border text-muted-foreground hover:text-foreground",
       )}
     >
+      {sub && <span className="text-muted-foreground/50">└</span>}
       {renaming ? (
         <input
           ref={inputRef}
@@ -569,6 +789,12 @@ function CategoryChip({
               <Pencil className="size-3.5" />
               {t("files.renameCategory")}
             </DropdownMenuItem>
+            {onAddChild && (
+              <DropdownMenuItem onClick={onAddChild}>
+                <FolderPlus className="size-3.5" />
+                {t("files.addSubCategory")}
+              </DropdownMenuItem>
+            )}
             <DropdownMenuItem onClick={() => void actions?.bindDir(catId)}>
               <FolderOpen className="size-3.5" />
               {boundDir ? t("files.ctx.changeDir") : t("files.ctx.bindDir")}

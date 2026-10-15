@@ -12,6 +12,8 @@ export interface FileCategory {
   createdAt: number;
   /** 绑定的真实磁盘目录：右键「新建文件/文件夹」在此目录中创建 */
   dir?: string;
+  /** 父分类 id。单层子分类：有父的分类不能再有子分类（由 UI 保证） */
+  parentId?: string;
 }
 
 export interface FileItem {
@@ -32,16 +34,19 @@ export interface FileItem {
 interface FilesState {
   categories: FileCategory[];
   items: FileItem[];
-  addCategory: (name: string) => string;
+  /** 新建分类；parentId 给定时建为子分类 */
+  addCategory: (name: string, parentId?: string) => string;
   renameCategory: (id: string, name: string) => void;
   removeCategory: (id: string) => void;
+  /** 把分类移到另一个父分类下（null = 提升为顶级） */
+  setCategoryParent: (id: string, parentId: string | null) => void;
   /** 绑定/更换分类的真实磁盘目录（null = 解绑） */
   setCategoryDir: (id: string, dir: string | null) => void;
   addItem: (item: Omit<FileItem, "id" | "createdAt">) => void;
   addItems: (items: Omit<FileItem, "id" | "createdAt">[]) => void;
   updateItem: (id: string, patch: Partial<Omit<FileItem, "id" | "createdAt">>) => void;
   removeItem: (id: string) => void;
-  /** 栅栏内拖拽排序：把 itemId 移到 anchorId 之前（anchorId=null 表示移到自己分类末尾） */
+  /** 拖拽排序：把 itemId 移到 anchorId 之前（anchorId=null 表示移到自己分类末尾） */
   moveItemBefore: (itemId: string, anchorId: string | null) => void;
 }
 
@@ -55,14 +60,18 @@ export const useFiles = create<FilesState>()(
       categories: [],
       items: [],
 
-      addCategory: (name) => {
+      addCategory: (name, parentId) => {
         const clean = name.trim();
-        // 同名防重：已存在（忽略大小写）直接返回既有 id
-        const dup = get().categories.find((c) => c.name.toLowerCase() === clean.toLowerCase());
+        // 同名防重：同一层级内已存在（忽略大小写）直接返回既有 id
+        const dup = get().categories.find(
+          (c) =>
+            c.name.toLowerCase() === clean.toLowerCase() &&
+            (c.parentId ?? null) === (parentId ?? null),
+        );
         if (dup) return dup.id;
         const id = uid();
         set((s) => ({
-          categories: [...s.categories, { id, name: clean, createdAt: Date.now() }],
+          categories: [...s.categories, { id, name: clean, createdAt: Date.now(), parentId }],
         }));
         return id;
       },
@@ -70,14 +79,35 @@ export const useFiles = create<FilesState>()(
       renameCategory: (id, name) => {
         const clean = name.trim();
         if (!clean) return;
+        // 同层级内防重
+        const self = get().categories.find((c) => c.id === id);
         const dup = get().categories.find(
-          (c) => c.id !== id && c.name.toLowerCase() === clean.toLowerCase(),
+          (c) =>
+            c.id !== id &&
+            c.name.toLowerCase() === clean.toLowerCase() &&
+            (c.parentId ?? null) === (self?.parentId ?? null),
         );
         if (dup) return;
         set((s) => ({
           categories: s.categories.map((c) => (c.id === id ? { ...c, name: clean } : c)),
         }));
       },
+
+      /**
+       * 改父分类。单层约束：不能把有子分类的分类挂到别人下面，
+       * 也不能挂到自己的子分类下（那会形成两级以上）。
+       */
+      setCategoryParent: (id, parentId) =>
+        set((s) => {
+          if (id === parentId) return s;
+          if (parentId && s.categories.some((c) => c.parentId === id)) return s;
+          if (parentId && s.categories.find((c) => c.id === parentId)?.parentId) return s;
+          return {
+            categories: s.categories.map((c) =>
+              c.id === id ? { ...c, parentId: parentId ?? undefined } : c,
+            ),
+          };
+        }),
 
       setCategoryDir: (id, dir) =>
         set((s) => ({
@@ -86,11 +116,16 @@ export const useFiles = create<FilesState>()(
           ),
         })),
 
+      // 删除分类时，其子分类一并删除（避免留下悬空的 parentId）
       removeCategory: (id) =>
-        set((s) => ({
-          categories: s.categories.filter((c) => c.id !== id),
-          items: s.items.filter((i) => i.categoryId !== id),
-        })),
+        set((s) => {
+          const kids = new Set(s.categories.filter((c) => c.parentId === id).map((c) => c.id));
+          const gone = new Set([id, ...kids]);
+          return {
+            categories: s.categories.filter((c) => !gone.has(c.id)),
+            items: s.items.filter((i) => !gone.has(i.categoryId)),
+          };
+        }),
 
       addItem: (item) => get().addItems([item]),
 

@@ -18,6 +18,35 @@ import {
 import { inTauri } from "@/lib/tauri";
 import { useSettings } from "@/stores/settings";
 
+/**
+ * 文件库根目录在数据目录下的固定子目录名。
+ *
+ * 刻意不本地化：它是磁盘上真实存在的目录名，若随界面语言变化，
+ * 切换语言后根路径就变了，之前建的分类文件夹会全部变成孤儿。
+ */
+const CATEGORIES_DIR = "categories";
+
+/** 拼接路径，保留首段原有的分隔符风格（Windows 反斜杠 / POSIX 斜杠） */
+function joinPath(base: string, name: string): string {
+  const sep = base.includes("\\") ? "\\" : "/";
+  return `${base.replace(/[\\/]+$/, "")}${sep}${name}`;
+}
+
+/**
+ * 分类的目录层级路径（不含根目录）。
+ * 单层子分类：有 parentId 的返回 [父名, 子名]，否则 [自身名]。
+ * 顺带防环：parentId 链异常时退化成 [自身名]，避免死循环。
+ */
+function categoryPath(
+  categoryId: string,
+  categories: { id: string; name: string; parentId?: string }[],
+): string[] {
+  const byId = new Map(categories.map((c) => [c.id, c]));
+  const self = byId.get(categoryId);
+  if (!self) return [];
+  const parent = self.parentId ? byId.get(self.parentId) : undefined;
+  return parent ? [parent.name, self.name] : [self.name];
+}
 /** Rust 侧错误码 → 可读文案（未命中则回落到原始字符串） */
 const ERR_KEYS: Record<string, string> = {
   "empty-name": "files.err.emptyName",
@@ -39,6 +68,7 @@ export function useFileActions() {
   const { confirm, prompt } = useModal();
   const filesRoot = useSettings((s) => s.filesRoot);
   const setFilesRoot = useSettings((s) => s.setFilesRoot);
+  const dataDir = useSettings((s) => s.dataDir);
 
   const categories = useFiles((s) => s.categories);
   const items = useFiles((s) => s.items);
@@ -99,17 +129,28 @@ export function useFileActions() {
   );
 
   /* ── 目录解析 ─────────────────────────────────────────
-     优先级：分类自带 dir → <全局根目录>/<分类名>（自动创建）
-     这样只要设一次根目录，所有分类都能直接新建，无需逐个绑定。 */
+     优先级：分类自带 dir → <根目录>/<父分类名>/<分类名>（自动创建）
+     根目录默认 = <数据目录>/categories（固定名，不随语言变），无需用户配置；
+     用户若显式选过根目录（filesRoot 覆盖）则用那个。 */
+
+  const defaultRoot = useMemo(
+    () => (dataDir ? joinPath(dataDir, CATEGORIES_DIR) : null),
+    [dataDir],
+  );
+  const effectiveRoot = filesRoot ?? defaultRoot;
 
   const resolveDir = useCallback(
     async (categoryId: string): Promise<string | null> => {
       const cat = categoryOf(categoryId);
       if (!cat) return null;
       if (cat.dir) return cat.dir;
-      if (!filesRoot) return null;
-      const sep = filesRoot.includes("\\") ? "\\" : "/";
-      const target = `${filesRoot.replace(/[\\/]+$/, "")}${sep}${cat.name}`;
+      if (!effectiveRoot) return null;
+      // 父分类绑定了目录 → 子分类建在父目录里面；
+      // 否则退到 <根>/<父名>/<子名>
+      const parent = cat.parentId ? categoryOf(cat.parentId) : undefined;
+      const base = parent?.dir ?? effectiveRoot;
+      const segs = parent?.dir ? [cat.name] : categoryPath(categoryId, categories);
+      const target = segs.reduce((acc, name) => joinPath(acc, name), base);
       try {
         return await ensureDirOnDisk(target);
       } catch (e) {
@@ -117,7 +158,7 @@ export function useFileActions() {
         return null;
       }
     },
-    [categoryOf, explain, filesRoot],
+    [categories, categoryOf, effectiveRoot, explain],
   );
 
   /** 选择一个全局根目录：所有分类的默认落盘位置 */
@@ -133,33 +174,21 @@ export function useFileActions() {
     toast.success(t("files.rootCleared"));
   }, [setFilesRoot, t]);
 
-  /** 解析可写目录；未配置根目录且分类未绑定时，引导选择根目录 */
+  /**
+   * 解析可写目录。
+   * 根目录现在总有默认值（<数据目录>/分类），所以不再需要引导用户选择；
+   * 仍可能失败的情形是数据目录尚未解析出来（启动早期），此时如实报错。
+   */
   const ensureDir = useCallback(
     async (categoryId: string): Promise<string | null> => {
       const ready = await resolveDir(categoryId);
       if (ready) return ready;
-      if (!filesRoot) {
-        const ok = await confirm({
-          title: t("files.rootTitle"),
-          description: t("files.rootHint"),
-          confirmText: t("files.rootPick"),
-        });
-        if (!ok) return null;
-        const picked = await pickFolder();
-        if (!picked) return null;
-        setFilesRoot(picked);
-        const sep = picked.includes("\\") ? "\\" : "/";
-        const cat = categoryOf(categoryId);
-        try {
-          return await ensureDirOnDisk(`${picked.replace(/[\\/]+$/, "")}${sep}${cat?.name ?? "files"}`);
-        } catch (e) {
-          toast.error(explain(e));
-          return null;
-        }
+      if (!effectiveRoot) {
+        toast.error(t("files.rootUnavailable"));
       }
       return null;
     },
-    [categoryOf, confirm, explain, filesRoot, resolveDir, setFilesRoot, t],
+    [effectiveRoot, resolveDir, t],
   );
 
   /**

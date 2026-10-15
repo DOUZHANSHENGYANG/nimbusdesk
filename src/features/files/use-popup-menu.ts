@@ -50,12 +50,14 @@ export function usePopupMenu({
   onToggleFence,
   onCategoryRename,
   onCategoryDelete,
+  onCategoryAddChild,
 }: {
   actions: FileActions;
   onRenameInline?: (item: FileItem) => void;
   onToggleFence?: (categoryId: string) => void;
   onCategoryRename?: (categoryId: string) => void;
   onCategoryDelete?: (categoryId: string) => void;
+  onCategoryAddChild?: (categoryId: string) => void;
 }) {
   const { t, i18n } = useTranslation();
   const theme = useSettings((s) => s.theme);
@@ -94,7 +96,7 @@ export function usePopupMenu({
       if (target.kind === "item") {
         nodes = buildItemMenu(t, target.item);
       } else if (target.kind === "category" && cat) {
-        nodes = buildCategoryMenu(t, cat, fences[cat.id]?.open ?? false);
+        nodes = buildCategoryMenu(t, cat, fences[cat.id]?.open ?? false, !cat.parentId);
       } else {
         nodes = buildBlankMenu(t, cat, !!filesRoot, categories.length > 0);
       }
@@ -182,6 +184,9 @@ export function usePopupMenu({
         break;
       case "renameCategory":
         if (categoryId) onCategoryRename?.(categoryId);
+        break;
+      case "newSubCategory":
+        if (categoryId) onCategoryAddChild?.(categoryId);
         break;
       case "deleteCategory":
         if (categoryId) onCategoryDelete?.(categoryId);
@@ -304,6 +309,8 @@ function buildCategoryMenu(
   t: T,
   cat: { id: string; dir?: string },
   fenceOn: boolean,
+  /** 是否顶级分类：只有顶级能再建子分类（单层约束） */
+  isTop: boolean,
 ): MenuNode[] {
   return [
     {
@@ -329,6 +336,16 @@ function buildCategoryMenu(
       label: t("files.renameCategory"),
       icon: "rename",
     },
+    ...(isTop
+      ? [
+          {
+            kind: "item" as const,
+            action: "newSubCategory",
+            label: t("files.addSubCategory"),
+            icon: "newFolder" as const,
+          },
+        ]
+      : []),
     {
       kind: "item",
       action: "toggleFence",
