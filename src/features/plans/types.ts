@@ -276,11 +276,22 @@ export function axisRange(
   const s = minutesOf(task.start);
   if (s == null) return null;
   const e = minutesOf(task.end);
+  // 合法区间原样返回，只夹终点（防越界）。起点不夹 —— 23:50–23:59 是合法范围，
+  // 挪动起点会悄悄改掉用户的数据。
   if (e != null && e > s) return { start: s, end: Math.min(e, DAY_END_MIN) };
-  return { start: s, end: Math.min(s + MIN_BLOCK_MIN, DAY_END_MIN) };
+  // 没有合法终点时才合成最短块，这时起点必须夹：23:59 起点的「+15 分钟」会得到
+  // {1439, 1439}，那样它在轴上算有块（会渲染出来），而 hasRange 判为无范围
+  // （永不会「进行中」）—— 两个视图对同一条数据给出矛盾结论。
+  const start = Math.min(s, DAY_END_MIN - MIN_BLOCK_MIN);
+  return { start, end: start + MIN_BLOCK_MIN };
 }
 
-/** 时间轴纵向范围：默认 08:00–22:00，被任务撑开后取整到小时 */
+/**
+ * 时间轴纵向范围：默认 08:00–22:00，被任务撑开后取整到小时。
+ *
+ * 时间轴视图已改用固定的全天轴，不再需要这个函数；它保留给需要
+ * 「按内容裁出紧凑区间」的调用方（例如未来做缩略图 / 概览条）。
+ */
 export function axisBounds(tasks: Pick<PlanTask, "start" | "end">[]): {
   from: number;
   to: number;
@@ -375,15 +386,18 @@ export function packLanes(
 }
 
 /**
- * 规范化区间：吸附到 SNAP_MIN、保证 end > start、夹在 [0, DAY_END_MIN]。
+ * 规范化区间：吸附到 `step`、保证 end > start、夹在 [0, DAY_END_MIN]。
  * 落盘前统一走一遍，避免出现 end === start（hasRange 会判为无范围，
  * 块就消失到未定时区去了）或 "23:60" 这类非法值。
+ *
+ * `step` 让键盘的 1 分钟微调不被 5 分钟吸附吃掉 —— 否则 Ctrl+↑ 算出的
+ * 1 分钟位移会在吸附时被抹回原值，看起来完全没有反应。
  */
-export function normalizeRange(span: { start: number; end: number }): {
-  start: number;
-  end: number;
-} {
-  const start = clampMinute(snapMinute(span.start), 0, DAY_END_MIN - MIN_BLOCK_MIN);
-  const end = clampMinute(snapMinute(span.end), start + MIN_BLOCK_MIN, DAY_END_MIN);
+export function normalizeRange(
+  span: { start: number; end: number },
+  step: number = SNAP_MIN,
+): { start: number; end: number } {
+  const start = clampMinute(snapMinute(span.start, step), 0, DAY_END_MIN - MIN_BLOCK_MIN);
+  const end = clampMinute(snapMinute(span.end, step), start + MIN_BLOCK_MIN, DAY_END_MIN);
   return { start, end };
 }

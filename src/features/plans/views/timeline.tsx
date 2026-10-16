@@ -21,6 +21,7 @@ import {
 import { useDayTasks, useNow, usePlans } from "@/features/plans/store";
 import { StatusButton, doneTitleStyle } from "@/features/plans/views/shared";
 import { cn } from "@/lib/utils";
+import { capturePointer, releasePointer } from "@/lib/touch";
 
 /**
  * 时间轴视图：全天纵向坐标轴 + 可拖拽时间块。
@@ -123,26 +124,25 @@ export function TimelineView({ date }: { date: string }) {
   const dragging = drag != null;
   const active = drag?.next ?? null;
   const assigning = drag?.mode === "assign" && active != null;
-
   /**
-   * 初次进入 / 换日期时滚到当天最早任务所在的小时。
+   * 进入视图 / 换日期 / 首次拿到任务数据时，滚到当天最早任务所在的小时。
    *
-   * 依赖里必须带 tasks.length：本页在 store 尚未 hydrate 时就会挂载，
-   * 那一刻 tasks 是空数组、axisBounds 返回默认 08:00；等 hydrate 完成、
-   * 任务出现后若不重跑，视口就停在 08:00 而不是最早任务处。
+   * 为什么不能只在 [date] 上跑：本视图可能是首次挂载时 tasks 尚未 hydrate
+   * （空数组），那时轴按默认 08:00 定位；等任务出现若不重跑，视口就停错地方。
+   * 也不能无条件跟着 tasks 跑：拖动落盘会让 tasks 换新引用，视口会在拖动中跳走。
    *
-   * 用长度而不是 tasks 本身：拖动落盘会让 tasks 换新引用但长度不变，
-   * 那时不该把视口拽走（拖动中视口跳动会让块在光标下漂移）。
-   * 代价是「任务数不变但时间整体改变」时不会重新定位 —— 可以接受。
+   * 所以用「已定位过的日期」做门控：同一日期只自动定位一次，
+   * 之后视口完全交给用户（滚轮 / 拖动时都不再被抢）。
    */
+  const scrolledForDateRef = useRef<string | null>(null);
   useEffect(() => {
     const el = scrollRef.current;
+    // 轴还没进 DOM（tasks 为空时组件早退）就先不定，等它渲染出来再说
     if (!el) return;
-    const anchor = Math.max(axisBounds(tasks).from - 30, 0);
-    el.scrollTop = anchor * PX_PER_MIN;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [date, tasks.length]);
-
+    if (scrolledForDateRef.current === date) return;
+    scrolledForDateRef.current = date;
+    el.scrollTop = Math.max(axisBounds(tasks).from - 30, 0) * PX_PER_MIN;
+  }, [date, tasks]);
   /* ── 坐标换算 ──────────────────────────────────────── */
 
   /**
@@ -161,9 +161,17 @@ export function TimelineView({ date }: { date: string }) {
   const minuteAt = (clientY: number): number =>
     clampMinute(snapMinute(rawMinuteAt(clientY)), 0, DAY_END_MIN);
 
-  /** 指针在轴上方（未定时搁板所在的那一带） */
+  /**
+   * 指针是否在滚动视口的可见区域上方 —— 也就是未定时搁板所在的那一带。
+   *
+   * 基准必须是滚动容器的顶边，不是轨道的顶边：轨道有 1440px 高、装在滚动容器里，
+   * 其 rect.top 是内容坐标上的顶边。初始化滚动后 scrollTop 通常非 0，
+   * 于是 rect.top 会跑到可见区上方几百像素，`clientY < rect.top` 恒为 false ——
+   * 结果「拖到上方 = 清除时间」失效，而且搁板卡片上 1px 的手抖会被当成
+   * 「已经拖到轴上」，用滚动偏移量当时间静默写盘。
+   */
   const isAboveAxis = (clientY: number): boolean => {
-    const el = trackRef.current;
+    const el = scrollRef.current;
     if (!el) return false;
     return clientY < el.getBoundingClientRect().top;
   };
@@ -177,9 +185,16 @@ export function TimelineView({ date }: { date: string }) {
 
   /* ── 提交 ──────────────────────────────────────────── */
 
-  const commit = (id: string, span: Span) => {
-    const n = normalizeRange(span);
+  /**
+   * 写回 store。`step` 决定吸附粒度：拖动用 SNAP_MIN，键盘的 1 分钟微调传 1。
+   *
+   * 返回规范化后的区间，让调用方能拿它跟原值比较来决定「是否真的需要写盘」——
+   * 未吸附的预览值（1px 抖动就变）直接比较会误判成「动过」，写进去却是同一个时间。
+   */
+  const commit = (id: string, span: Span, step: number = SNAP_MIN): Span => {
+    const n = normalizeRange(span, step);
     updateTask(date, id, { start: fmtMinutes(n.start), end: fmtMinutes(n.end) });
+    return n;
   };
 
   const clearTime = (id: string) => updateTask(date, id, { start: undefined, end: undefined });
@@ -193,7 +208,7 @@ export function TimelineView({ date }: { date: string }) {
     e.stopPropagation();
     const span = axisRange(task);
     if (!span) return;
-    e.currentTarget.setPointerCapture(e.pointerId);
+    capturePointer(e.currentTarget, e.pointerId);
     setSelected(task.id);
     setDrag({
       id: task.id,
@@ -209,7 +224,7 @@ export function TimelineView({ date }: { date: string }) {
     if (e.button !== 0) return;
     e.preventDefault();
     e.stopPropagation();
-    e.currentTarget.setPointerCapture(e.pointerId);
+    capturePointer(e.currentTarget, e.pointerId);
     setSelected(task.id);
     setDrag({
       id: task.id,
@@ -227,12 +242,12 @@ export function TimelineView({ date }: { date: string }) {
     if (drag.mode === "assign") {
       // 还没拖进轴的范围 → 没有预览
       if (isAboveAxis(e.clientY)) {
-        if (drag.next) setDrag({ ...drag, next: null });
+        setDrag((d) => (d?.next ? { ...d, next: null } : d));
         return;
       }
-      // 指针落在块中间，块围绕指针左右展开
+      // 指针落在块中间，块围绕指针上下展开
       const start = clampMinute(minuteAt(e.clientY) - ASSIGN_MIN / 2, 0, DAY_END_MIN - ASSIGN_MIN);
-      setDrag({ ...drag, next: { start, end: start + ASSIGN_MIN } });
+      setDrag((d) => (d ? { ...d, next: { start, end: start + ASSIGN_MIN } } : d));
       return;
     }
 
@@ -240,14 +255,20 @@ export function TimelineView({ date }: { date: string }) {
     // 只对整体平移开放：拖边缘时向上越过轴顶是「把开始时间往前挪」的正常操作，
     // 不该被理解成删除时间 —— 那种误判会直接丢掉用户的数据。
     if (drag.mode === "move" && (inShelf(e.clientY) || isAboveAxis(e.clientY))) {
-      if (!drag.clearing) setDrag({ ...drag, next: null, clearing: true });
+      setDrag((d) => (d ? { ...d, next: null, clearing: true } : d));
       return;
     }
 
     const next =
       drag.mode === "move"
         ? // 整体平移：位移取未吸附值之差，块原有的非整点偏移得以保留
-          shiftRange(drag.origin.start, drag.origin.end, rawMinuteAt(e.clientY) - drag.grab, 0, DAY_END_MIN)
+          shiftRange(
+            drag.origin.start,
+            drag.origin.end,
+            rawMinuteAt(e.clientY) - drag.grab,
+            0,
+            DAY_END_MIN,
+          )
         : // 拖边缘：绝对吸附到 5 分钟格，与时间选择器的粒度一致
           dragEdge(
             drag.origin.start,
@@ -257,23 +278,24 @@ export function TimelineView({ date }: { date: string }) {
             0,
             DAY_END_MIN,
           );
-    setDrag({ ...drag, next, clearing: false });
+    setDrag((d) => (d ? { ...d, next, clearing: false } : d));
   };
 
   const onDragUp = (e: React.PointerEvent<HTMLElement>) => {
     if (!drag) return;
-    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
-      e.currentTarget.releasePointerCapture(e.pointerId);
-    }
+    releasePointer(e.currentTarget, e.pointerId);
     // 原地点击（没真的拖动）不写盘：否则一次误点就触发一次无意义的持久化与跨窗口广播。
-    // 注意是「任一端变了」——用 && 会让「只拖起点」或「只拖终点」被判成没动而丢掉这次修改。
-    const moved =
-      drag.next != null &&
-      (drag.next.start !== drag.origin.start || drag.next.end !== drag.origin.end);
-    if (drag.clearing) clearTime(drag.id);
-    // assign 的 origin 是占位值，不能用它判断「有没有动」
-    else if (drag.mode === "assign" ? drag.next != null : moved && drag.next) {
-      commit(drag.id, drag.next!);
+    //
+    // 比较的是「规范化之后」的值：move 的预览用的是未吸附分钟数，1px 抖动就会让它
+    // 与原值不等，直接比较会白写一次盘 —— 而吸附后得到的其实是同一个时间。
+    if (drag.clearing) {
+      clearTime(drag.id);
+    } else if (drag.next) {
+      const raw = drag.next;
+      const n = normalizeRange(raw);
+      const unchanged = n.start === drag.origin.start && n.end === drag.origin.end;
+      // assign 的 origin 是占位值，不能用它判断「有没有动」
+      if (drag.mode === "assign" || !unchanged) commit(drag.id, raw);
     }
     setDrag(null);
   };
@@ -288,7 +310,12 @@ export function TimelineView({ date }: { date: string }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [drag]);
 
-  /** 键盘微调：↑↓ 平移，Shift+↑↓ 改终点，Alt+↑↓ 改起点，Ctrl 步长 1 分钟 */
+  /**
+   * 键盘微调：↑↓ 平移，Shift+↑↓ 改终点，Alt+↑↓ 改起点，Ctrl 步长 1 分钟。
+   *
+   * 步长 1 分钟时必须把同一个粒度传给 commit，否则 normalizeRange 的 5 分钟
+   * 吸附会把这一步位移抹回原值 —— 按键看起来完全没反应。
+   */
   const onBlockKey = (e: React.KeyboardEvent, task: PlanTask) => {
     const step = e.ctrlKey || e.metaKey ? 1 : SNAP_MIN;
     const dir = e.key === "ArrowUp" ? -step : e.key === "ArrowDown" ? step : 0;
@@ -297,11 +324,11 @@ export function TimelineView({ date }: { date: string }) {
     if (!span) return;
     e.preventDefault();
     const next = e.altKey
-      ? dragEdge(span.start, span.end, "start", snapMinute(span.start + dir), 0, DAY_END_MIN)
+      ? dragEdge(span.start, span.end, "start", span.start + dir, 0, DAY_END_MIN)
       : e.shiftKey
-        ? dragEdge(span.start, span.end, "end", snapMinute(span.end + dir), 0, DAY_END_MIN)
+        ? dragEdge(span.start, span.end, "end", span.end + dir, 0, DAY_END_MIN)
         : shiftRange(span.start, span.end, dir, 0, DAY_END_MIN);
-    commit(task.id, next);
+    commit(task.id, next, step);
   };
 
   /* ── 展示 ──────────────────────────────────────────── */
@@ -499,6 +526,27 @@ export function TimelineView({ date }: { date: string }) {
                 </div>
               )}
 
+              {/*
+                assign 预览块：拖入时被拖的任务还在 untimed 里（没有 start），
+                下面的 timed.map 不会渲染它，所以这里单独画一个落点预览。
+                没有它，指针进轴后用户看不到块会落在哪。
+              */}
+              {assigning && active && (
+                <div
+                  className="pointer-events-none absolute z-20 rounded-lg border border-brand border-dashed bg-brand/10"
+                  style={{
+                    top: active.start * PX_PER_MIN + 1,
+                    height: Math.max(active.end - active.start, MIN_BLOCK_PX),
+                    left: 3,
+                    right: 5,
+                  }}
+                >
+                  <p className="truncate px-2 pt-0.5 font-mono text-[10px] tabular-nums text-brand">
+                    {fmtMinutes(active.start)} – {fmtMinutes(active.end)}
+                  </p>
+                </div>
+              )}
+
               {/* 时间块 */}
               {timed.map(({ task, span }) => {
                 const d = drag?.id === task.id ? drag : null;
@@ -524,10 +572,13 @@ export function TimelineView({ date }: { date: string }) {
                     onPointerCancel={onDragUp}
                     onKeyDown={(e) => onBlockKey(e, task)}
                     className={cn(
-                      "group absolute z-10 cursor-grab overflow-hidden rounded-lg border transition-shadow active:cursor-grabbing focus:outline-none",
+                      // touch-action-none：块长在纵向滚动容器里，触摸屏上若用默认的
+                      // auto，「纵向滑动滚动」会被当成拖动块、把划过的任务重排
+                      "group absolute cursor-grab touch-none overflow-hidden rounded-lg border transition-shadow active:cursor-grabbing focus:outline-none",
+                      // 拖动中的块浮到最上层：同 z 值按 DOM 顺序绘制，否则拖到后面的块上会被压住
+                      d ? "z-30 shadow-[var(--pr-shadow-2)]" : "z-10",
                       STATUS_BOX[status],
                       selected === task.id && "ring-1 ring-brand/50",
-                      d && "shadow-[var(--pr-shadow-2)]",
                       d?.clearing && "border-dashed opacity-40",
                     )}
                     style={{
@@ -578,42 +629,42 @@ export function TimelineView({ date }: { date: string }) {
                         )}
                       </div>
                     </div>
-
-                    {/* 清除时间（拖回未定时区的等价快捷方式） */}
+                    {/*
+                      清除时间（拖回未定时区的等价快捷方式）。
+                      z-20 必须高于上下边缘热区的 z-10：否则按钮上 1/3 会落进
+                      「上边缘 = 改起点」的命中区，点它会改开始时间而不是清除。
+                    */}
                     {!compact && (
                       <button
                         type="button"
                         title={t("plans.clearTime")}
                         onPointerDown={(e) => e.stopPropagation()}
                         onClick={() => clearTime(task.id)}
-                        className="absolute top-0.5 right-0.5 hidden size-4 place-items-center rounded text-muted-foreground/70 group-hover:grid hover:bg-muted hover:text-foreground"
+                        className="absolute top-0.5 right-0.5 z-20 hidden size-4 place-items-center rounded text-muted-foreground/70 group-hover:grid hover:bg-muted hover:text-foreground"
                       >
                         <RotateCcw className="size-3" />
                       </button>
                     )}
 
-                    {/* 上边缘 = 改起点 */}
+                    {/*
+                      上下边缘热区。只挂 pointerdown —— move/up 交给块体统一处理：
+                      两者都挂的话，边缘拖动时 pointerup 会在 span 上派发后冒泡到块体，
+                      两个 onDragUp 读到同一份（尚未更新的）drag，提交与清除各执行两次。
+                    */}
                     <span
                       role="separator"
                       aria-label={t("plans.timeStart")}
                       onPointerDown={(e) => beginBlockDrag(e, task, "start")}
-                      onPointerMove={onDragMove}
-                      onPointerUp={onDragUp}
-                      onPointerCancel={onDragUp}
                       className="absolute inset-x-0 top-0 z-10 cursor-ns-resize"
                       style={{ height: edgeH }}
                     >
                       <span className="absolute inset-x-3 top-[2px] hidden h-[2px] rounded-full bg-brand/70 group-hover:block" />
                     </span>
 
-                    {/* 下边缘 = 改终点 */}
                     <span
                       role="separator"
                       aria-label={t("plans.timeEnd")}
                       onPointerDown={(e) => beginBlockDrag(e, task, "end")}
-                      onPointerMove={onDragMove}
-                      onPointerUp={onDragUp}
-                      onPointerCancel={onDragUp}
                       className="absolute inset-x-0 bottom-0 z-10 cursor-ns-resize"
                       style={{ height: edgeH }}
                     >
