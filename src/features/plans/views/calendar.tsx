@@ -49,8 +49,9 @@ export function CalendarView({ date, onPick }: { date: string; onPick: (date: st
     setMonthAnchor({ y: d.getFullYear(), m: d.getMonth() });
   };
 
+  /* 日历在大屏下会被拉得很扁，限制宽度并居中，保持单元格比例 */
   return (
-    <div>
+    <div className="mx-auto w-full max-w-2xl">
       {/* 月导航 */}
       <div className="mb-3 flex items-center justify-between">
         <button

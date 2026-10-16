@@ -563,9 +563,13 @@ export function FilesPage() {
                       size={20}
                       className="size-5"
                     />
-                    <p className="min-w-0 flex-1 break-all text-[13px] font-medium leading-5">
-                      {item.title}
+                    <p
+                      className="min-w-0 flex-1 break-all text-[13px] font-medium leading-5"
+                      title={item.type === "url" ? item.title : item.path}
+                    >
+                      {item.type === "url" ? item.path : item.title}
                     </p>
+
                   </div>
 
                   {item.note && (
@@ -573,9 +577,6 @@ export function FilesPage() {
                       {item.note}
                     </p>
                   )}
-              <p className="mt-0.5 truncate text-[11px] text-muted-foreground/60" title={item.path}>
-                {item.path}
-              </p>
 
               <div className="mt-1.5 flex flex-wrap items-center gap-1">
                 {/* 属性：系统固有维度，始终展示 */}
@@ -942,7 +943,7 @@ function ItemModal({
           {/* 属性（系统固有）：由来源决定，创建后不可改 ——
               磁盘上文件夹就是文件夹，改属性不成立。
               编辑时只展示当前值（静态徽标），新建时才允许选择。 */}
-          <Field label={t("files.attrLabel")} hint={t("files.attrHint")}>
+          <Field label={t("files.attrLabel")}>
             {editing ? (
               <div className="flex items-center gap-2 rounded-xl border border-border bg-muted/40 px-3 py-1.5">
                 <span className="rounded-md bg-card px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground ring-1 ring-border">
@@ -991,7 +992,7 @@ function ItemModal({
             />
           </Field>
 
-          <Field label={fetchingMeta ? t("files.fetching") : t("files.pathLabel")}>
+          <Field label={fetchingMeta ? t("files.fetching") : isLocal ? t("files.pathLabel") : t("files.urlLabel")}>
             {isLocal ? (
               /* 本地路径：系统选择器 + 只读回显 */
               <div className="flex items-center gap-1.5">

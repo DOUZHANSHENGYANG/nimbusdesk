@@ -53,7 +53,7 @@ export function OutlineView({ date }: { date: string }) {
   return (
     <div className="flex flex-col" ref={listRef}>
       {/* 顶部快速添加（Todoist 式） */}
-      <div className="mb-2 flex items-center gap-2 rounded-xl border border-border bg-card px-3 py-2.5 transition-colors focus-within:border-brand/60 focus-within:shadow-[var(--pr-shadow-glow)]">
+      <div className="mb-3 flex items-center gap-2.5 rounded-xl border border-border bg-card px-3.5 py-2.5 transition-colors focus-within:border-brand/60 focus-within:shadow-[var(--pr-shadow-glow)]">
         <Plus className="size-4 shrink-0 text-brand" strokeWidth={2.4} />
         <input
           value={input}
@@ -227,12 +227,12 @@ function TaskRow({ date, task, depth }: { date: string; task: PlanTask; depth: n
             </div>
           </div>
         ) : (
-          <>
+          <div className="flex min-w-0 flex-1 flex-col gap-0.5">
             <button
               type="button"
               onClick={startEdit}
               title={t("plans.editTip")}
-              className="min-w-0 flex-1 truncate text-left text-[13px] leading-5"
+              className="min-w-0 text-left text-[13px] leading-5"
             >
               <span style={doneTitleStyle(task.status === "done")}>
                 {task.title}
@@ -252,25 +252,22 @@ function TaskRow({ date, task, depth }: { date: string; task: PlanTask; depth: n
               )}
             </button>
 
-            {/* 时间 / 备注：固定右侧，保证一行 */}
+            {/* 时间 / 备注：另起一行，避免与标题争宽度 */}
             {(task.time || task.note) && (
-              <div className="flex max-w-[45%] shrink-0 items-center gap-1.5">
-                {task.note && (
-                  <span
-                    className="min-w-0 truncate text-[11px] text-muted-foreground/70"
-                    title={task.note}
-                  >
-                    ≡ {task.note}
+              <div className="flex min-w-0 items-center gap-2">
+                {task.time && (
+                  <span className="shrink-0 font-mono text-[11px] text-muted-foreground/80">
+                    {task.time}
                   </span>
                 )}
-                {task.time && (
-                  <span className="shrink-0 rounded-md bg-muted px-1.5 py-px font-mono text-[11px] text-muted-foreground">
-                    {task.time}
+                {task.note && (
+                  <span className="min-w-0 truncate text-[11px] text-muted-foreground/70" title={task.note}>
+                    {task.note}
                   </span>
                 )}
               </div>
             )}
-          </>
+          </div>
         )}
 
         {/* 悬停操作 */}

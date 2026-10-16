@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight, Archive } from "lucide-react";
+import { CalendarDays, ChevronLeft, ChevronRight, Archive } from "lucide-react";
+import { motion } from "motion/react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import {
@@ -96,64 +97,78 @@ export function PlansPage() {
 
   return (
     <div className="h-full overflow-y-auto">
-      <div className="mx-auto flex w-full max-w-3xl flex-col gap-4 p-6 pb-10">
-        {/* ── 头部：日期导航 + 进度 + 归档 ── */}
+      <div className="mx-auto flex w-full max-w-6xl flex-col gap-5 p-6 pb-10">
+        {/* ── 工具栏：日期导航 + 进度 + 归档 ── */}
         <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={() => setDate(addDays(date, -1))}
-            className="grid size-7 place-items-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
-          >
-            <ChevronLeft className="size-4" />
-          </button>
+          {/* 日期步进器：图标与日期同处一个圆角容器，避免散落的小方块 */}
+          <div className="flex items-center gap-0.5 rounded-xl border border-border bg-card p-0.5">
+            <button
+              type="button"
+              onClick={() => setDate(addDays(date, -1))}
+              title={t("plans.prevDay")}
+              className="grid size-7 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            >
+              <ChevronLeft className="size-4" />
+            </button>
 
-          <button
-            type="button"
-            onClick={() => setDate(todayStr())}
-            className={cn(
-              "flex items-center gap-2 rounded-lg px-2.5 py-1 text-[14px] font-semibold transition-colors",
-              isToday ? "text-brand" : "hover:bg-muted",
-            )}
-          >
-            {dateLabel}
-            {isToday && (
-              <span className="rounded-full bg-brand/10 px-1.5 py-0.5 text-[10px] font-bold">
-                {t("plans.today")}
+            <button
+              type="button"
+              onClick={() => setDate(todayStr())}
+              title={t("plans.backToToday")}
+              className="flex items-center gap-2 rounded-lg px-2.5 py-1 text-[13px] font-semibold transition-colors hover:bg-muted"
+            >
+              <CalendarDays className={cn("size-3.5", isToday ? "text-brand" : "text-muted-foreground")} />
+              <span className={isToday ? "text-brand" : "text-foreground"}>{dateLabel}</span>
+              {isToday && (
+                <span className="rounded-full bg-brand/10 px-1.5 py-0.5 text-[10px] font-bold text-brand">
+                  {t("plans.today")}
+                </span>
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setDate(addDays(date, 1))}
+              title={t("plans.nextDay")}
+              className="grid size-7 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            >
+              <ChevronRight className="size-4" />
+            </button>
+          </div>
+
+          {/* 进度：数字 + 细进度条，比纯文字徽章更有信息量 */}
+          {progress.total > 0 && (
+            <div className="flex items-center gap-2 rounded-xl border border-border bg-card px-2.5 py-1.5">
+              <span
+                className={cn(
+                  "text-[11px] font-semibold tabular-nums",
+                  progress.done === progress.total ? "text-success" : "text-muted-foreground",
+                )}
+              >
+                {progress.done === progress.total
+                  ? t("plans.planDone")
+                  : t("plans.progress", progress)}
               </span>
-            )}
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setDate(addDays(date, 1))}
-            className="grid size-7 place-items-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
-          >
-            <ChevronRight className="size-4" />
-          </button>
+              <span className="h-1.5 w-16 overflow-hidden rounded-full bg-muted">
+                <span
+                  className={cn(
+                    "block h-full rounded-full transition-[width] duration-300",
+                    progress.done === progress.total ? "bg-success" : "bg-brand",
+                  )}
+                  style={{ width: `${Math.round((progress.done / progress.total) * 100)}%` }}
+                />
+              </span>
+            </div>
+          )}
 
           <div className="flex-1" />
-
-          {progress.total > 0 && (
-            <span
-              className={cn(
-                "rounded-full px-2.5 py-1 text-[11px] font-semibold",
-                progress.done === progress.total
-                  ? "bg-success/15 text-success"
-                  : "bg-muted text-muted-foreground",
-              )}
-            >
-              {progress.done === progress.total
-                ? t("plans.planDone")
-                : t("plans.progress", progress)}
-            </span>
-          )}
 
           {!isArchivedDay && (
             <button
               type="button"
               onClick={() => void onArchiveDay()}
               title={t("plans.archiveDay")}
-              className="flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[12px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+              className="flex items-center gap-1.5 rounded-xl border border-border bg-card px-2.5 py-1.5 text-[12px] text-muted-foreground transition-colors hover:border-brand/40 hover:text-brand"
             >
               <Archive className="size-3.5" />
               {t("plans.archiveDay")}
@@ -161,21 +176,30 @@ export function PlansPage() {
           )}
         </div>
 
-        {/* ── 视图切换 pills ── */}
-        <div className="flex items-center gap-1 rounded-xl border border-border bg-muted/40 p-1">
+        {/* ── 视图切换：滑动 pill（与条目属性选择器同一动效语言） ── */}
+        <div className="flex w-fit items-center gap-0.5 rounded-xl border border-border bg-muted/40 p-1">
           {VIEW_KEYS.map((key) => (
             <button
               key={key}
               type="button"
               onClick={() => switchView(key)}
-              className={cn(
-                "flex-1 rounded-lg px-3 py-1.5 text-[12px] font-medium transition-colors duration-150",
-                view === key
-                  ? "bg-background text-foreground shadow-[var(--pr-shadow-1)]"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
+              className="relative rounded-lg px-3.5 py-1.5 text-[12px] font-medium"
             >
-              {t(`plans.views.${key}`)}
+              {view === key && (
+                <motion.span
+                  layoutId="plans-view-pill"
+                  className="absolute inset-0 rounded-lg bg-card shadow-[var(--pr-shadow-1)] ring-1 ring-border"
+                  transition={{ type: "spring", stiffness: 550, damping: 42 }}
+                />
+              )}
+              <span
+                className={cn(
+                  "relative z-10",
+                  view === key ? "text-foreground" : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {t(`plans.views.${key}`)}
+              </span>
             </button>
           ))}
         </div>
