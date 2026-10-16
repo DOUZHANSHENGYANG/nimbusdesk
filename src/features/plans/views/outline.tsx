@@ -1,4 +1,4 @@
-import { Fragment, useRef, useState } from "react";
+import { Fragment, useCallback, useRef, useState } from "react";
 import { Check, ChevronRight, Pencil, Plus, Trash2, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import {
@@ -22,6 +22,7 @@ import { TimeRangePicker } from "@/features/plans/views/time-range";
 import { useModal } from "@/components/shell/modal-host";
 import { gsap, useGSAP } from "@/lib/gsap";
 import { cn } from "@/lib/utils";
+import { useDismiss } from "@/lib/hooks/use-dismiss";
 
 /** 每层缩进（树形引导线间距） */
 const INDENT = 20;
@@ -136,6 +137,20 @@ function TaskRow({ date, task, depth }: { date: string; task: PlanTask; depth: n
     note: "",
   });
   const [childInput, setChildInput] = useState("");
+  /**
+   * 编辑态的边界：整行都算「里面」。
+   *
+   * 用户的心智是「点到别的任务/空白处才离开编辑」，所以点这一行的复选框、
+   * 展开箭头时不该把编辑关掉 —— 边界因此是行而不是编辑框本身。
+   */
+  const rowRef = useRef<HTMLDivElement>(null);
+
+  /**
+   * 让 saveEdit 保持稳定引用（useDismiss 要求回调稳定，否则每次渲染都重绑监听）。
+   * draft 通过 ref 读取最新值，这样回调不必依赖 draft。
+   */
+  const draftRef = useRef(draft);
+  draftRef.current = draft;
 
   const startEdit = () => {
     setDraft({
@@ -144,20 +159,59 @@ function TaskRow({ date, task, depth }: { date: string; task: PlanTask; depth: n
       end: task.end,
       note: task.note ?? "",
     });
+    // 关掉「添加子任务」输入框：它在编辑边界（本行 div）之外，
+    // 留着的话点它会先触发「保存并关闭编辑」，与用户心智不符；
+    // 而且编辑态下 + 按钮本来就是隐藏的，它不该同时可见。
+    setAdding(false);
     setEditing(true);
   };
 
-  const saveEdit = () => {
-    const title = draft.title.trim();
-    if (!title) return;
+  /**
+   * 保存并退出。
+   *
+   * 标题是必填项：为空时不写标题（保持原值），但**备注与时间的改动照存** ——
+   * 整包丢弃会让用户已经改好的备注凭空消失，而界面只显示标题没变，
+   * 用户根本不知道自己的备注被吞了。
+   */
+  const saveEdit = useCallback(() => {
+    const d = draftRef.current;
+    const title = d.title.trim();
     updateTask(date, task.id, {
-      title,
-      start: draft.start,
-      end: draft.end,
-      note: draft.note.trim() || undefined,
+      ...(title ? { title } : {}),
+      start: d.start,
+      end: d.end,
+      note: d.note.trim() || undefined,
     });
     setEditing(false);
-  };
+  }, [date, task.id, updateTask]);
+
+  const cancelEdit = useCallback(() => setEditing(false), []);
+
+  /*
+   * 点到本行之外 → 自动保存并关闭。
+   *
+   * escape: false —— Escape 由输入框自己处理成「取消」（不保存），
+   * 若让 useDismiss 也管 Escape，两个回调会同时触发，语义互相矛盾。
+   *
+   * behavior: "consume" —— 必须吞掉这次 click。
+   * 编辑框比收起后的行高，pointerdown 触发保存关闭后 React 立刻重渲染，
+   * 下方所有行会整体上移；此时 pointerup/click 落在屏幕同一坐标，
+   * 命中的已经是**另一行**的控件（复选框、甚至删除按钮）。不吞掉就会误触。
+   * 代价是「点另一行的标题开始编辑它」需要点两下 —— 与主流内联编辑器一致。
+   *
+   * ignore 必须稳定（useDismiss 的 effect 依赖它，内联箭头函数会让监听器
+   * 每次渲染都重绑）：时间选择器的弹层是 portal 到 body 的，
+   * 点它选时间时在 DOM 上属于「行外」，不排除的话一选时间就把编辑关掉了。
+   */
+  const ignorePopover = useCallback(
+    (target: Element) => Boolean(target.closest('[data-slot="popover-content"]')),
+    [],
+  );
+  useDismiss(editing, saveEdit, rowRef, {
+    escape: false,
+    behavior: "consume",
+    ignore: ignorePopover,
+  });
 
   const addChild = () => {
     const v = childInput.trim();
@@ -179,8 +233,9 @@ function TaskRow({ date, task, depth }: { date: string; task: PlanTask; depth: n
 
   return (
     <div data-row>
-      {/* 任务行 */}
+      {/* 任务行（编辑态边界：点子任务行/别处都算「外面」→ 自动保存关闭） */}
       <div
+        ref={rowRef}
         className={cn(
           "group flex min-h-10 items-center gap-2 rounded-lg py-1 pr-1 transition-colors hover:bg-surface-hover",
           // 进行中：左侧一条品牌色标记，扫一眼就能看到当前该做什么
@@ -235,7 +290,7 @@ function TaskRow({ date, task, depth }: { date: string; task: PlanTask; depth: n
               </button>
               <button
                 type="button"
-                onClick={() => setEditing(false)}
+                onClick={cancelEdit}
                 title={t("common.cancel")}
                 aria-label={t("common.cancel")}
                 className="grid size-6 shrink-0 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
