@@ -28,7 +28,9 @@ export type MenuIconKey =
   | "unbindDir"
   | "root"
   | "fence"
-  | "fenceOff";
+  | "fenceOff"
+  | "moveTo"
+  | "category";
 
 export interface MenuItemNode {
   kind: "item";

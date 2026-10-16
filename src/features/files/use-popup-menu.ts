@@ -64,6 +64,7 @@ export function usePopupMenu({
   const filesRoot = useSettings((s) => s.filesRoot);
   const categories = useFiles((s) => s.categories);
   const fences = useFences((s) => s.fences);
+  const updateItem = useFiles((s) => s.updateItem);
 
   /** 当前打开的菜单目标：动作执行时用它还原上下文 */
   const targetRef = useRef<Target | null>(null);
@@ -94,7 +95,16 @@ export function usePopupMenu({
 
       let nodes: MenuNode[];
       if (target.kind === "item") {
-        nodes = buildItemMenu(t, target.item);
+        // 「移动到分类」：排除条目当前所在分类（移到自己等于没动）
+        const moves = categories
+          .filter((c) => c.id !== target.item.categoryId)
+          .map((c) => {
+            const parent = c.parentId ? categories.find((p) => p.id === c.parentId) : undefined;
+            // 单层子分类用「父 / 子」把层级写进标签本身 ——
+            // 浮窗只有一列菜单，靠缩进表达层级在窄菜单里看不清。
+            return { id: c.id, label: parent ? `${parent.name} / ${c.name}` : c.name };
+          });
+        nodes = buildItemMenu(t, target.item, moves);
       } else if (target.kind === "category" && cat) {
         nodes = buildCategoryMenu(t, cat, fences[cat.id]?.open ?? false, !cat.parentId);
       } else {
@@ -154,6 +164,12 @@ export function usePopupMenu({
         case "rename":
           if (onRenameInline) onRenameInline(item);
           else void actions.rename(item);
+          break;
+        case "moveToCategory":
+          // 只改条目的 categoryId：磁盘上的文件原地不动。
+          // 这是分类（库里的归属）与属性（磁盘上的真实类型）的关键区别 ——
+          // 属性是系统固有的，分类是用户的组织方式，可以自由改。
+          if (a.value) updateItem(item.id, { categoryId: a.value });
           break;
         case "copy":
           void actions.copyPath(item);
@@ -220,7 +236,12 @@ export function usePopupMenu({
 
 type T = (key: string, opts?: Record<string, unknown>) => string;
 
-function buildItemMenu(t: T, item: FileItem): MenuNode[] {
+function buildItemMenu(
+  t: T,
+  item: FileItem,
+  /** 可移动到的分类（含层级标签）；为空则不显示「移动到分类」 */
+  moves: { id: string; label: string }[],
+): MenuNode[] {
   const isUrl = item.type === "url";
   return [
     { kind: "item", action: "open", label: t("files.ctx.open"), icon: "open" },
@@ -237,6 +258,23 @@ function buildItemMenu(t: T, item: FileItem): MenuNode[] {
     { kind: "sep" },
     { kind: "item", action: "rename", label: t("files.ctx.rename"), icon: "rename", shortcut: "F2" },
     { kind: "item", action: "copy", label: t("files.copyPath"), icon: "copy", shortcut: "Ctrl+C" },
+    ...(moves.length
+      ? [
+          { kind: "sep" as const },
+          {
+            kind: "sub" as const,
+            label: t("files.ctx.moveTo"),
+            icon: "moveTo" as const,
+            items: moves.map((m) => ({
+              kind: "item" as const,
+              action: "moveToCategory",
+              value: m.id,
+              label: m.label,
+              icon: "category" as const,
+            })),
+          },
+        ]
+      : []),
     { kind: "sep" },
     {
       kind: "item",

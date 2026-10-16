@@ -17,6 +17,7 @@ import {
   FileCode,
   FileImage,
   FileArchive,
+  ArrowRightLeft,
   type LucideIcon,
 } from "lucide-react";
 import { Providers } from "@/app/providers";
@@ -54,6 +55,8 @@ const ICONS: IconMap = {
   root: FolderOpen,
   fence: Monitor,
   fenceOff: MonitorOff,
+  moveTo: ArrowRightLeft,
+  category: Folder,
 };
 
 /**

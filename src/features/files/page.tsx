@@ -129,6 +129,14 @@ export function FilesPage() {
       );
   }, [scoped, activeTags, search]);
 
+  /** 分类显示名（子分类带父名前缀）；找不到时回退空串 */
+  const categoryLabelOf = (categoryId: string): string => {
+    const cat = categories.find((c) => c.id === categoryId);
+    if (!cat) return "";
+    const parent = cat.parentId ? categories.find((p) => p.id === cat.parentId) : undefined;
+    return parent ? `${parent.name} / ${cat.name}` : cat.name;
+  };
+
   const gridRef = useRef<HTMLDivElement>(null);
   useGSAP(
     () => {
@@ -550,7 +558,7 @@ export function FilesPage() {
                 onDoubleClick={() => openItem(item)}
                 title={t("files.dblclickHint")}
                 className={cn(
-                  "group relative cursor-pointer rounded-xl border bg-card p-3 shadow-[var(--pr-shadow-1)] transition-all duration-150 hover:-translate-y-0.5 hover:shadow-[var(--pr-shadow-2)]",
+                  "group relative flex cursor-pointer flex-col rounded-xl border bg-card p-3 shadow-[var(--pr-shadow-1)] transition-all duration-150 hover:-translate-y-0.5 hover:shadow-[var(--pr-shadow-2)]",
                   selectedItemId === item.id ? "border-brand ring-1 ring-brand/40" : "border-border",
                   dragId === item.id && "opacity-40",
                 )}
@@ -578,11 +586,25 @@ export function FilesPage() {
                     </p>
                   )}
 
-              <div className="mt-1.5 flex flex-wrap items-center gap-1">
+              {/*
+                徽标行 mt-auto 钉在卡片底部。
+                卡片是 grid item，同一行会被拉伸到等高；若徽标紧跟内容，
+                标题折 2 行的卡片就会把徽标推低，同行卡片的「属性」不在一条水平线上。
+              */}
+              <div className="mt-auto flex flex-wrap items-center gap-1 pt-1.5">
                 {/* 属性：系统固有维度，始终展示 */}
                 <span className="rounded-full border border-border px-1.5 text-[10px] text-muted-foreground">
                   {t(`files.type.${item.type}`)}
                 </span>
+                {/*
+                  在「全部」视图里显示所属分类：这里是唯一能一眼看出
+                  「哪些条目还没归好类」的地方，也是移动后确认结果的地方。
+                */}
+                {!selected && (
+                  <span className="max-w-full truncate rounded-full bg-muted px-1.5 text-[10px] text-muted-foreground/80">
+                    {categoryLabelOf(item.categoryId)}
+                  </span>
+                )}
                 {item.tags.map((tag) => (
                   <span key={tag} className="rounded-full bg-brand/10 px-1.5 text-[10px] text-brand">
                     #{tag}
@@ -1033,23 +1055,37 @@ function ItemModal({
             />
           </Field>
 
-          <Field label={t("files.categoryLabel")}>
+          {/*
+            分类（可改）。与上面的「属性」刻意分开展示：
+            属性 = 磁盘上的真实类型，创建后锁定；
+            分类 = 库里的归属，随时可以移到别的分类。
+          */}
+          <Field label={t("files.categoryLabel")} hint={t("files.categoryHint")}>
             <div className="flex flex-wrap gap-1.5">
-              {categories.map((cat) => (
-                <button
-                  key={cat.id}
-                  type="button"
-                  onClick={() => setCategoryId(cat.id)}
-                  className={cn(
-                    "rounded-full border px-2.5 py-1 text-[12px] transition-colors",
-                    categoryId === cat.id
-                      ? "border-brand bg-brand/10 text-brand"
-                      : "border-border text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  {cat.name}
-                </button>
-              ))}
+              {categories.map((cat) => {
+                const parent = cat.parentId
+                  ? categories.find((p) => p.id === cat.parentId)
+                  : undefined;
+                return (
+                  <button
+                    key={cat.id}
+                    type="button"
+                    onClick={() => setCategoryId(cat.id)}
+                    className={cn(
+                      "rounded-full border px-2.5 py-1 text-[12px] transition-colors",
+                      categoryId === cat.id
+                        ? "border-brand bg-brand/10 text-brand"
+                        : "border-border text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    {/* 子分类把父名一起写出来：单看名字分不清同名子分类属于谁 */}
+                    {parent && (
+                      <span className="text-muted-foreground/60">{parent.name} / </span>
+                    )}
+                    {cat.name}
+                  </button>
+                );
+              })}
             </div>
           </Field>
 
