@@ -247,49 +247,52 @@ function TaskRow({ date, task, depth }: { date: string; task: PlanTask; depth: n
           </div>
         ) : (
           <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-            <button
-              type="button"
-              onClick={startEdit}
-              title={t("plans.editTip")}
-              className="min-w-0 text-left text-[13px] leading-5"
-            >
-              <span style={doneTitleStyle(task.done)}>
-                {task.title}
-              </span>
-              {/* 父任务进度徽章 */}
-              {sub.total > 0 && (
-                <span
-                  className={cn(
-                    "ml-2 inline-block rounded-full px-1.5 py-px align-middle text-[10px] font-semibold",
-                    sub.done === sub.total
-                      ? "bg-success/15 text-success"
-                      : "bg-brand/10 text-brand",
-                  )}
-                >
-                  {sub.done}/{sub.total}
+            {/* 第一行：标题靠左、时间靠右（标题过长换行时时间仍停在首行） */}
+            <div className="flex min-w-0 items-start gap-2">
+              <button
+                type="button"
+                onClick={startEdit}
+                title={t("plans.editTip")}
+                className="min-w-0 flex-1 text-left text-[13px] leading-5"
+              >
+                <span style={doneTitleStyle(task.done)}>
+                  {task.title}
                 </span>
-              )}
-              {status === "doing" && (
-                <span className="ml-2 inline-block rounded-full bg-brand px-1.5 py-px align-middle text-[10px] font-semibold text-white">
-                  {t("plans.status.doing")}
-                </span>
-              )}
-            </button>
+                {/* 父任务进度徽章 */}
+                {sub.total > 0 && (
+                  <span
+                    className={cn(
+                      "ml-2 inline-block rounded-full px-1.5 py-px align-middle text-[10px] font-semibold",
+                      sub.done === sub.total
+                        ? "bg-success/15 text-success"
+                        : "bg-brand/10 text-brand",
+                    )}
+                  >
+                    {sub.done}/{sub.total}
+                  </span>
+                )}
+                {status === "doing" && (
+                  <span className="ml-2 inline-block rounded-full bg-brand px-1.5 py-px align-middle text-[10px] font-semibold text-white">
+                    {t("plans.status.doing")}
+                  </span>
+                )}
+              </button>
 
-            {/* 时间范围 / 备注：另起一行，避免与标题争宽度 */}
-            {(range || task.note) && (
-              <div className="flex min-w-0 items-center gap-2">
-                {range && (
-                  <span className="shrink-0 font-mono text-[11px] text-muted-foreground/80">
-                    {range}
-                  </span>
-                )}
-                {task.note && (
-                  <span className="min-w-0 truncate text-[11px] text-muted-foreground/70" title={task.note}>
-                    {task.note}
-                  </span>
-                )}
-              </div>
+              {range && (
+                <span className="shrink-0 font-mono text-[11px] leading-5 text-muted-foreground/80">
+                  {range}
+                </span>
+              )}
+            </div>
+
+            {/* 备注：独占一行 */}
+            {task.note && (
+              <span
+                className="min-w-0 truncate text-[11px] text-muted-foreground/70"
+                title={task.note}
+              >
+                {task.note}
+              </span>
             )}
           </div>
         )}

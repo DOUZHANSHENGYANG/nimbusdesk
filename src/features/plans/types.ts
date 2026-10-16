@@ -30,8 +30,15 @@ export type PlanTaskPatch = Partial<Pick<PlanTask, "title" | "note" | "start" | 
 
 /* ── 时间 ─────────────────────────────────────────────── */
 
-const HHMM_RE = /^([01]\d|2[0-3]):([0-5]\d)$/;
+/**
+ * 时间轴纵向范围：默认 08:00 – 22:00。
+ * 只用于布局与夹取，从不写进任务；实际范围由 axisBounds() 按任务撑开
+ * （更早的开始 / 更晚的结束），两端再各留一点松弛。
+ */
+export const AXIS_DEFAULT_FROM = 8 * 60;
+export const AXIS_DEFAULT_TO = 22 * 60;
 
+const HHMM_RE = /^([01]\d|2[0-3]):([0-5]\d)$/;
 /** "HH:mm" → 当日分钟数；非法或空返回 null */
 export function minutesOf(hhmm?: string): number | null {
   if (!hhmm) return null;
@@ -234,4 +241,149 @@ export function monthBounds(year: number, month: number): { from: string; to: st
     from: fmtDate(new Date(year, month, 1)),
     to: fmtDate(new Date(year, month + 1, 0)),
   };
+}
+/* ── 时间轴几何（timeline 视图用；纯函数，便于断言） ──── */
+
+/** 当日最后一个可表示的分钟（23:59）。注意 "24:00" 不是合法 HH:mm，落盘前必须夹到这里 */
+export const DAY_END_MIN = 23 * 60 + 59;
+
+/** 拖动吸附粒度（分钟） */
+export const SNAP_MIN = 5;
+
+/** 时间块最短持续时长（分钟） */
+export const MIN_BLOCK_MIN = 15;
+
+
+/** 吸附到最近的粒度格 */
+export function snapMinute(m: number, step: number = SNAP_MIN): number {
+  return Math.round(m / step) * step;
+}
+
+/** 夹在 [lo, hi] 内 */
+export function clampMinute(m: number, lo: number, hi: number): number {
+  return Math.min(Math.max(m, lo), hi);
+}
+
+/**
+ * 任务在时间轴上的显示区间（分钟）。
+ * - 有合法范围 → 用范围
+ * - 只有起点 → 给 MIN_BLOCK_MIN 的可见高度，否则会塌成一条看不见的线
+ * - 没有起点 → null（归入未定时搁板）
+ */
+export function axisRange(
+  task: Pick<PlanTask, "start" | "end">,
+): { start: number; end: number } | null {
+  const s = minutesOf(task.start);
+  if (s == null) return null;
+  const e = minutesOf(task.end);
+  if (e != null && e > s) return { start: s, end: Math.min(e, DAY_END_MIN) };
+  return { start: s, end: Math.min(s + MIN_BLOCK_MIN, DAY_END_MIN) };
+}
+
+/** 时间轴纵向范围：默认 08:00–22:00，被任务撑开后取整到小时 */
+export function axisBounds(tasks: Pick<PlanTask, "start" | "end">[]): {
+  from: number;
+  to: number;
+} {
+  let from = AXIS_DEFAULT_FROM;
+  let to = AXIS_DEFAULT_TO;
+  for (const task of tasks) {
+    const r = axisRange(task);
+    if (!r) continue;
+    from = Math.min(from, Math.floor(r.start / 60) * 60);
+    to = Math.max(to, Math.ceil(r.end / 60) * 60);
+  }
+  return { from, to: Math.max(to, from + 60) };
+}
+
+/** 整体平移（保持时长），结果夹在 [lo, hi] 内 */
+export function shiftRange(
+  start: number,
+  end: number,
+  delta: number,
+  lo: number,
+  hi: number,
+): { start: number; end: number } {
+  const dur = end - start;
+  const s = clampMinute(start + delta, lo, Math.max(hi - dur, lo));
+  return { start: s, end: s + dur };
+}
+
+/** 拖某一端：另一端固定，最短 MIN_BLOCK_MIN */
+export function dragEdge(
+  start: number,
+  end: number,
+  edge: "start" | "end",
+  target: number,
+  lo: number,
+  hi: number,
+): { start: number; end: number } {
+  if (edge === "start") {
+    return { start: clampMinute(target, lo, Math.max(end - MIN_BLOCK_MIN, lo)), end };
+  }
+  return { start, end: clampMinute(target, Math.max(start + MIN_BLOCK_MIN, lo), hi) };
+}
+
+export interface LaneInfo {
+  /** 第几条轨道（0 起） */
+  lane: number;
+  /** 所在重叠簇的总轨道数（算宽度用） */
+  lanes: number;
+}
+
+/**
+ * 重叠任务分轨道（日历类应用的标准贪心布局）。
+ *
+ * 按开始时间排序，逐个塞进第一条已空闲的轨道；出现不重叠的间隔就结算当前
+ * 重叠簇的轨道数 —— 按「簇」而不是「整天」算宽度，才不会因为一天里任意
+ * 两处重叠就把所有任务都压窄。
+ */
+export function packLanes(
+  blocks: { id: string; start: number; end: number }[],
+): Map<string, LaneInfo> {
+  const sorted = [...blocks].sort(
+    (a, b) => a.start - b.start || a.end - b.end || a.id.localeCompare(b.id),
+  );
+  const out = new Map<string, LaneInfo>();
+  let cluster: { id: string; lane: number }[] = [];
+  let laneEnds: number[] = [];
+  let clusterEnd = Number.NEGATIVE_INFINITY;
+
+  const flush = () => {
+    if (!cluster.length) return;
+    const lanes = laneEnds.length;
+    for (const c of cluster) out.set(c.id, { lane: c.lane, lanes });
+    cluster = [];
+    laneEnds = [];
+    clusterEnd = Number.NEGATIVE_INFINITY;
+  };
+
+  for (const b of sorted) {
+    if (cluster.length && b.start >= clusterEnd) flush();
+    let lane = laneEnds.findIndex((e) => e <= b.start);
+    if (lane === -1) {
+      lane = laneEnds.length;
+      laneEnds.push(b.end);
+    } else {
+      laneEnds[lane] = b.end;
+    }
+    cluster.push({ id: b.id, lane });
+    clusterEnd = Math.max(clusterEnd, b.end);
+  }
+  flush();
+  return out;
+}
+
+/**
+ * 规范化区间：吸附到 SNAP_MIN、保证 end > start、夹在 [0, DAY_END_MIN]。
+ * 落盘前统一走一遍，避免出现 end === start（hasRange 会判为无范围，
+ * 块就消失到未定时区去了）或 "23:60" 这类非法值。
+ */
+export function normalizeRange(span: { start: number; end: number }): {
+  start: number;
+  end: number;
+} {
+  const start = clampMinute(snapMinute(span.start), 0, DAY_END_MIN - MIN_BLOCK_MIN);
+  const end = clampMinute(snapMinute(span.end), start + MIN_BLOCK_MIN, DAY_END_MIN);
+  return { start, end };
 }
