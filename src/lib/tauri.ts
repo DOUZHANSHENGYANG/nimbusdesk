@@ -40,6 +40,32 @@ export async function openFence(
   await invoke("open_fence", { categoryId, title, x: Math.round(geo.x), y: Math.round(geo.y), w: Math.round(geo.w), h: Math.round(geo.h) });
 }
 
+/** 打开/聚焦某日的桌面待办纸片窗口 */
+export async function openTodoPaper(
+  date: string,
+  title: string,
+  geo: { x: number; y: number; w: number; h: number },
+): Promise<void> {
+  await invoke("open_todo_paper", {
+    date,
+    title,
+    x: Math.round(geo.x),
+    y: Math.round(geo.y),
+    w: Math.round(geo.w),
+    h: Math.round(geo.h),
+  });
+}
+
+/** 关闭某日的待办纸片窗口 */
+export async function closeTodoPaper(date: string): Promise<void> {
+  await invoke("close_todo_paper", { date });
+}
+
+/** 当前已打开的待办纸片日期列表 */
+export async function listTodoPapers(): Promise<string[]> {
+  return invoke<string[]>("list_todo_papers");
+}
+
 /** 关闭某分类的栅栏窗口 */
 export async function closeFence(categoryId: string): Promise<void> {
   await invoke("close_fence", { categoryId });

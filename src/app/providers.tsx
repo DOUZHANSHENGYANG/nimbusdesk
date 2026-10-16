@@ -7,6 +7,8 @@ import { onStorageSynced } from "@/lib/storage";
 import { isPopupWindow } from "@/features/files/popup";
 import { useSettings } from "@/stores/settings";
 import { useFiles, useFences } from "@/stores/files";
+import { paperGeometryFor, usePapers } from "@/stores/papers";
+import { openTodoPaper } from "@/lib/tauri";
 import { ModalProvider } from "@/components/shell/modal-host";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/sonner";
@@ -29,6 +31,7 @@ export function Providers({ children }: { children: ReactNode }) {
         <TooltipProvider delayDuration={300}>
           <StorageSync />
           <SettingsSync />
+          <PaperRestore />
           <ReminderLoop />
           {children}
           <Toaster position="bottom-right" />
@@ -36,6 +39,48 @@ export function Providers({ children }: { children: ReactNode }) {
       </ModalProvider>
     </I18nextProvider>
   );
+}
+
+/**
+ * 启动时恢复桌面待办纸片。
+ *
+ * 放在全局 Provider 而不是计划页：纸片是常驻桌面的部件，
+ * 用户上次开着它、这次打开应用停在主页，纸片也应该回来 ——
+ * 要求「先进一次计划页」才恢复，会让人以为纸片丢了。
+ *
+ * 必须等 persist **水合完成**再读，不能只等 setTimeout(0)：
+ * 存储是异步的（走 Tauri IPC 读 JSON），宏任务早就跑完了、数据还没回来，
+ * 结果读到空 papers、一个窗口都不恢复 —— 而且不报错，看起来就像功能没生效。
+ * （这一点与本项目其它地方不同：settings 的启动逻辑刻意不依赖水合，
+ *   因为那里只需要「默认值可用」；而这里必须拿到磁盘上的真实记录。）
+ */
+function PaperRestore() {
+  useEffect(() => {
+    const restore = () => {
+      const { papers } = usePapers.getState();
+      for (const [date, st] of Object.entries(papers)) {
+        if (!st.open) continue;
+        // 标题只在 Alt+Tab 里可见；用日期串而非空串，避免任务栏出现无名窗口
+        void openTodoPaper(date, date, paperGeometryFor(date)).catch(() => undefined);
+      }
+    };
+
+    /*
+     * 刻意**不用** useRef 一次性门控（SettingsSync 那种写法）。
+     *
+     * StrictMode 会 effect → cleanup → effect 跑两遍：门控在第一次就把标志置了，
+     * 第二次直接 return，于是「取消订阅后不再重新订阅」，水合完成时回调早被摘掉，
+     * 纸片永远不恢复 —— 而且不报错。
+     * 这里改为「已水合就立刻执行，否则订阅并在 cleanup 里退订」，
+     * 重复执行也安全：openTodoPaper 对已存在的窗口是聚焦而不是新建。
+     */
+    if (usePapers.persist.hasHydrated()) {
+      restore();
+      return;
+    }
+    return usePapers.persist.onFinishHydration(restore);
+  }, []);
+  return null;
 }
 
 /**

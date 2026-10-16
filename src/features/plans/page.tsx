@@ -1,10 +1,13 @@
-import { useEffect, useRef, useState } from "react";
-import { CalendarDays, ChevronLeft, ChevronRight, Archive } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { CalendarDays, ChevronLeft, ChevronRight, Archive, Undo2, Redo2, MonitorUp } from "lucide-react";
 import { motion } from "motion/react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { addDays, dayProgress, parseDate, todayStr } from "@/features/plans/types";
 import { useDayTasks, usePlans, usePlansArchive, archiveDay, autoArchivePastDays } from "@/features/plans/store";
+import { canRedo, canUndo, redoLabel, undoLabel } from "@/features/plans/history";
+import { openTodoPaper, closeTodoPaper, inTauri } from "@/lib/tauri";
+import { paperGeometryFor, usePapers } from "@/stores/papers";
 import { OutlineView } from "@/features/plans/views/outline";
 import { KanbanView } from "@/features/plans/views/kanban";
 import { TimelineView } from "@/features/plans/views/timeline";
@@ -115,6 +118,88 @@ export function PlansPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  /*
+   * Ctrl+Z / Ctrl+Y（含 Ctrl+Shift+Z）。
+   *
+   * 与视图快捷键相反，这个**必须**在输入框里也让行吗？——不让行：
+   * 在任务标题输入框里按 Ctrl+Z，用户期望的是「撤销我刚打的字」，
+   * 那是浏览器原生行为；我们不该抢。所以这里同样跳过可编辑元素。
+   *
+   * 但有一个例外：编辑态里点「确认」之后焦点已离开输入框，
+   * 此时 Ctrl+Z 应该撤销那次提交 —— 这正好由「焦点不在输入框」自然满足。
+   */
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey)) return;
+      const key = e.key.toLowerCase();
+      if (key !== "z" && key !== "y") return;
+      // Ctrl+Y 与 Ctrl+Shift+Z 都是重做（Windows / macOS 两套习惯）
+      const isRedo = key === "y" || (key === "z" && e.shiftKey);
+      const el = e.target as HTMLElement | null;
+      if (el?.isContentEditable) return;
+      const tag = el?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+
+      e.preventDefault();
+      const st = usePlans.getState();
+      if (isRedo) {
+        if (!canRedo(st.history)) {
+          toast.message(t("plans.nothingToRedo"));
+          return;
+        }
+        const label = redoLabel(st.history);
+        if (st.redo() && label) toast.success(t("plans.redone", { label: t(label) }));
+      } else {
+        if (!canUndo(st.history)) {
+          toast.message(t("plans.nothingToUndo"));
+          return;
+        }
+        const label = undoLabel(st.history);
+        if (st.undo() && label) toast.success(t("plans.undone", { label: t(label) }));
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [t]);
+
+  /* 订阅历史栈：按钮可用状态与提示文案都从这里来 */
+  const history = usePlans((s) => s.history);
+  const undo = usePlans((s) => s.undo);
+  const redo = usePlans((s) => s.redo);
+
+  const onUndo = useCallback(() => {
+    const label = undoLabel(history);
+    if (undo() && label) toast.success(t("plans.undone", { label: t(label) }));
+  }, [history, t, undo]);
+
+  const onRedo = useCallback(() => {
+    const label = redoLabel(history);
+    if (redo() && label) toast.success(t("plans.redone", { label: t(label) }));
+  }, [history, redo, t]);
+
+  /* ── 待办纸片：把这一天放到桌面上 ─────────────────── */
+
+  /** 「开着」是一个持久化的意图（papers[date].open），不是「窗口此刻存在」——
+      后者在应用启动前为假，会让纸片无法在重启后自动回来 */
+  const paperOn = usePapers((s) => s.papers[date]?.open) ?? false;
+  const setPaperOpen = usePapers((s) => s.setOpen);
+
+  const onTogglePaper = async () => {
+    if (!inTauri) {
+      toast.error(t("files.err.unsupported"));
+      return;
+    }
+    if (paperOn) {
+      setPaperOpen(date, false);
+      await closeTodoPaper(date).catch(() => undefined);
+      return;
+    }
+    // 标题用本地化日期：Windows 任务栏/Alt+Tab 里看到的是这个串
+    setPaperOpen(date, true);
+    await openTodoPaper(date, dateLabel, paperGeometryFor(date)).catch(() => undefined);
+    toast.success(t("plans.paperOpened"));
+  };
+
   const onArchiveDay = async () => {
     if (tasks.length === 0) return;
     const ok = await confirm({
@@ -193,6 +278,55 @@ export function PlansPage() {
           )}
 
           <div className="flex-1" />
+
+          {/* 撤销 / 重做：无历史时禁用而不是隐藏 —— 按钮位置固定，肌肉记忆才管用 */}
+          <div className="flex items-center gap-0.5 rounded-xl border border-border bg-card p-0.5">
+            <button
+              type="button"
+              onClick={onUndo}
+              disabled={!canUndo(history)}
+              title={
+                canUndo(history)
+                  ? `${t("plans.undoAction")}：${t(undoLabel(history) ?? "")}`
+                  : t("plans.nothingToUndo")
+              }
+              aria-label={t("plans.undoAction")}
+              className="grid size-7 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-35"
+            >
+              <Undo2 className="size-4" />
+            </button>
+            <button
+              type="button"
+              onClick={onRedo}
+              disabled={!canRedo(history)}
+              title={
+                canRedo(history)
+                  ? `${t("plans.redoAction")}：${t(redoLabel(history) ?? "")}`
+                  : t("plans.nothingToRedo")
+              }
+              aria-label={t("plans.redoAction")}
+              className="grid size-7 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:pointer-events-none disabled:opacity-35"
+            >
+              <Redo2 className="size-4" />
+            </button>
+          </div>
+
+          {!isArchivedDay && (
+            <button
+              type="button"
+              onClick={() => void onTogglePaper()}
+              title={t("plans.paperOpenHint")}
+              className={cn(
+                "flex items-center gap-1.5 rounded-xl border px-2.5 py-1.5 text-[12px] transition-colors",
+                paperOn
+                  ? "border-brand/40 bg-brand/10 text-brand"
+                  : "border-border bg-card text-muted-foreground hover:border-brand/40 hover:text-brand",
+              )}
+            >
+              <MonitorUp className="size-3.5" />
+              {paperOn ? t("plans.paperClose") : t("plans.paperOpen")}
+            </button>
+          )}
 
           {!isArchivedDay && (
             <button

@@ -54,6 +54,63 @@ pub async fn close_fence(app: AppHandle, category_id: String) -> Result<(), Stri
     Ok(())
 }
 
+/// 打开某日的桌面待办纸片窗口；已存在则聚焦。
+///
+/// 与 open_fence 共用同一套窗口参数（无边框/透明/置底/不进任务栏）。
+/// 之所以是独立命令而不是给 open_fence 加参数：两者有各自的 label 前缀与
+/// 默认行为（纸片默认贴左、栅栏默认居中），把差异塞进一个命令会让
+/// 「栅栏」和「纸片」在类型上消失，调用方只能靠字符串区分。
+#[tauri::command]
+pub async fn open_todo_paper(
+    app: AppHandle,
+    date: String,
+    title: String,
+    x: i32,
+    y: i32,
+    w: i32,
+    h: i32,
+) -> Result<(), String> {
+    let label = format!("todo-{date}");
+    if let Some(win) = app.get_webview_window(&label) {
+        let _ = win.show();
+        let _ = win.set_focus();
+        return Ok(());
+    }
+    tauri::WebviewWindowBuilder::new(&app, &label, tauri::WebviewUrl::App("index.html".into()))
+        .title(title)
+        .position(x as f64, y as f64)
+        .inner_size(w as f64, h as f64)
+        .decorations(false)
+        .transparent(true)
+        .shadow(false)
+        .always_on_bottom(true)
+        .skip_taskbar(true)
+        .visible(false)
+        .build()
+        .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// 关闭某日的待办纸片窗口（不存在则忽略）。
+#[tauri::command]
+pub async fn close_todo_paper(app: AppHandle, date: String) -> Result<(), String> {
+    let label = format!("todo-{date}");
+    if let Some(win) = app.get_webview_window(&label) {
+        let _ = win.close();
+    }
+    Ok(())
+}
+
+/// 当前已打开的待办纸片日期列表（启动时恢复用）。
+#[tauri::command]
+pub async fn list_todo_papers(app: AppHandle) -> Result<Vec<String>, String> {
+    Ok(app
+        .webview_windows()
+        .keys()
+        .filter_map(|label| label.strip_prefix("todo-").map(|s| s.to_string()))
+        .collect())
+}
+
 /// 弹出菜单窗口的 label（全局唯一，复用一个窗口，避免反复创建 WebView）。
 const POPUP_LABEL: &str = "popup-menu";
 

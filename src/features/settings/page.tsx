@@ -9,21 +9,7 @@ import {
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
-import {
-  FolderOpen,
-  FolderInput,
-  ExternalLink,
-  Database,
-  Palette,
-  Info,
-  Bot,
-  SlidersHorizontal,
-  ArrowLeft,
-  Download,
-  Upload,
-  Bell,
-  TriangleAlert,
-} from "lucide-react";
+import { FolderOpen, FolderInput, ExternalLink, Database, Palette, Info, Bot, SlidersHorizontal, ArrowLeft, Download, Upload, Bell, TriangleAlert, ListChecks } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useModal } from "@/components/shell/modal-host";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -256,8 +242,93 @@ function SystemSection() {
       </Card>
 
       <ReminderCard />
+      <CompletionCard />
       <BackupCard />
     </>
+  );
+}
+
+/* ── 系统：完成后的行为 ─────────────────────────────────── */
+
+/*
+ * 两个开关刻意不对称：
+ *   置底 = 纯显示、随时可逆 → 默认开
+ *   移除 = 真删数据          → 默认关
+ * 默认值只在「用户不会因此丢东西」时才替用户决定。
+ */
+function CompletionCard() {
+  const { t } = useTranslation();
+  const autoSortDone = useSettings((s) => s.autoSortDone);
+  const autoClearDone = useSettings((s) => s.autoClearDone);
+  const setAutoSortDone = useSettings((s) => s.setAutoSortDone);
+  const setAutoClearDone = useSettings((s) => s.setAutoClearDone);
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-[15px]">
+          <ListChecks className="size-4 text-brand" />
+          {t("settings.completion")}
+        </CardTitle>
+        <CardDescription>{t("settings.completionHint")}</CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-4">
+        <label className="flex cursor-pointer items-center justify-between gap-3">
+          <span className="text-[13px] font-medium text-foreground/90">
+            {t("plans.autoSortDone")}
+          </span>
+          <Switch checked={autoSortDone} onChange={setAutoSortDone} label={t("plans.autoSortDone")} />
+        </label>
+        <label className="flex cursor-pointer items-center justify-between gap-3">
+          <span className="flex flex-col gap-0.5">
+            <span className="text-[13px] font-medium text-foreground/90">
+              {t("plans.autoClearDone")}
+            </span>
+            {/* 破坏性行为必须写明后果，否则用户勾了才发现东西没了 */}
+            <span className="text-[11px] text-muted-foreground">
+              {t("settings.completionClearHint")}
+            </span>
+          </span>
+          <Switch
+            checked={autoClearDone}
+            onChange={setAutoClearDone}
+            label={t("plans.autoClearDone")}
+          />
+        </label>
+      </CardContent>
+    </Card>
+  );
+}
+
+/** 开关：与提醒卡片同一套视觉（h-6 w-11 + 白色滑块） */
+function Switch({
+  checked,
+  onChange,
+  label,
+}: {
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
+      onClick={() => onChange(!checked)}
+      className={cn(
+        "relative h-6 w-11 shrink-0 rounded-full transition-colors duration-200",
+        checked ? "bg-brand" : "bg-muted-foreground/30",
+      )}
+    >
+      <span
+        className={cn(
+          "absolute top-0.5 size-5 rounded-full bg-white shadow transition-transform duration-200",
+          checked ? "translate-x-5.5" : "translate-x-0.5",
+        )}
+      />
+    </button>
   );
 }
 

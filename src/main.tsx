@@ -4,10 +4,18 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import App from "@/app/App";
 import { FenceWindow } from "@/features/files/fence";
 import { MenuPopupWindow } from "@/features/files/menu-popup";
+import { TodoPaperWindow } from "@/features/plans/views/paper";
 import { POPUP_LABEL } from "@/features/files/popup";
 import "@/index.css";
 
-/** 按窗口 label 分流：fence-* 桌面栅栏 / popup-menu 右键菜单浮窗 / main 主应用 */
+/**
+ * 按窗口 label 分流：fence-* 文件栅栏 / todo-* 待办纸片 /
+ * popup-menu 右键菜单浮窗 / main 主应用。
+ *
+ * 注意 todo- 的匹配必须放在 main 兜底之前，且前缀不与 fence- 重叠 ——
+ * label 是唯一的路由依据，前缀撞了就会把纸片当成主应用渲染
+ * （表现为纸片窗口里出现整个侧栏）。
+ */
 const windowLabel = (() => {
   try {
     return getCurrentWebviewWindow().label;
@@ -23,6 +31,9 @@ if (windowLabel === POPUP_LABEL) {
 } else if (windowLabel.startsWith("fence-")) {
   document.documentElement.classList.add("fence-root");
   root = <FenceWindow categoryId={windowLabel.slice("fence-".length)} />;
+} else if (windowLabel.startsWith("todo-")) {
+  document.documentElement.classList.add("fence-root");
+  root = <TodoPaperWindow date={windowLabel.slice("todo-".length)} />;
 } else {
   root = <App />;
 }

@@ -4,9 +4,12 @@ import { useTranslation } from "react-i18next";
 import {
   childrenOf,
   rangeLabel,
+  shouldSplitPaste,
+  splitPastedLines,
   statusOf,
   subtreeProgress,
   type PlanTask,
+  type TaskLink,
 } from "@/features/plans/types";
 import { doneTitleStyle } from "@/features/plans/views/shared";
 
@@ -23,6 +26,8 @@ import { useModal } from "@/components/shell/modal-host";
 import { gsap, useGSAP } from "@/lib/gsap";
 import { cn } from "@/lib/utils";
 import { useDismiss } from "@/lib/hooks/use-dismiss";
+import { TaskLinkBadge, TaskLinkPicker } from "@/features/plans/views/task-link";
+import { toast } from "sonner";
 
 /** 每层缩进（树形引导线间距） */
 const INDENT = 20;
@@ -32,6 +37,7 @@ export function OutlineView({ date }: { date: string }) {
   const { t } = useTranslation();
   const tasks = useDayTasks(date);
   const addTask = usePlans((s) => s.addTask);
+  const addTasks = usePlans((s) => s.addTasks);
   const roots = sortDoneLast(childrenOf(tasks, null));
   const listRef = useRef<HTMLDivElement>(null);
   const [input, setInput] = useState("");
@@ -46,9 +52,23 @@ export function OutlineView({ date }: { date: string }) {
     { dependencies: [date, tasks.length], scope: listRef },
   );
 
+  /*
+   * 提交：含换行时走批量拆分。
+   * 单行输入（绝大多数情况）仍走 addTask —— 两条路径各自保持简单，
+   * 不为了「统一」把常见情况也塞进批量逻辑（那会多一次数组分配）。
+   */
   const submit = () => {
     const v = input.trim();
     if (!v) return;
+    if (shouldSplitPaste(v)) {
+      const lines = splitPastedLines(v);
+      if (lines.length > 1) {
+        addTasks(date, null, lines);
+        toast.success(t("plans.pasteSplit", { count: lines.length }));
+        setInput("");
+        return;
+      }
+    }
     addTask(date, null, v);
     setInput("");
   };
@@ -121,6 +141,7 @@ function TaskRow({ date, task, depth }: { date: string; task: PlanTask; depth: n
   const tasks = useDayTasks(date);
   const now = useNow();
   const addTask = usePlans((s) => s.addTask);
+  const addTasks = usePlans((s) => s.addTasks);
   const updateTask = usePlans((s) => s.updateTask);
   const removeTask = usePlans((s) => s.removeTask);
   const toggleDone = usePlans((s) => s.toggleDone);
@@ -132,7 +153,13 @@ function TaskRow({ date, task, depth }: { date: string; task: PlanTask; depth: n
   const [open, setOpen] = useState(true);
   const [editing, setEditing] = useState(false);
   const [adding, setAdding] = useState(false);
-  const [draft, setDraft] = useState<{ title: string; start?: string; end?: string; note: string }>({
+  const [draft, setDraft] = useState<{
+    title: string;
+    start?: string;
+    end?: string;
+    note: string;
+    link?: TaskLink;
+  }>({
     title: "",
     note: "",
   });
@@ -158,6 +185,7 @@ function TaskRow({ date, task, depth }: { date: string; task: PlanTask; depth: n
       start: task.start,
       end: task.end,
       note: task.note ?? "",
+      link: task.link,
     });
     // 关掉「添加子任务」输入框：它在编辑边界（本行 div）之外，
     // 留着的话点它会先触发「保存并关闭编辑」，与用户心智不符；
@@ -181,6 +209,9 @@ function TaskRow({ date, task, depth }: { date: string; task: PlanTask; depth: n
       start: d.start,
       end: d.end,
       note: d.note.trim() || undefined,
+      // 显式写 undefined（而不是省略）才能把关联删掉：
+      // 省略这个键等于「不改」，用户点了移除却发现还在
+      link: d.link,
     });
     setEditing(false);
   }, [date, task.id, updateTask]);
@@ -216,6 +247,15 @@ function TaskRow({ date, task, depth }: { date: string; task: PlanTask; depth: n
   const addChild = () => {
     const v = childInput.trim();
     if (!v) return;
+    if (shouldSplitPaste(v)) {
+      const lines = splitPastedLines(v);
+      if (lines.length > 1) {
+        addTasks(date, task.id, lines);
+        toast.success(t("plans.pasteSplit", { count: lines.length }));
+        setChildInput("");
+        return;
+      }
+    }
     addTask(date, task.id, v);
     setChildInput("");
   };
@@ -273,6 +313,10 @@ function TaskRow({ date, task, depth }: { date: string; task: PlanTask; depth: n
                 }}
                 className="min-w-0 flex-1 bg-transparent text-[13px] font-medium outline-none"
                 placeholder={t("plans.titleLabel")}
+              />
+              <TaskLinkPicker
+                link={draft.link}
+                onChange={(link) => setDraft({ ...draft, link })}
               />
               <TimeRangePicker
                 start={draft.start}
@@ -341,6 +385,12 @@ function TaskRow({ date, task, depth }: { date: string; task: PlanTask; depth: n
                   <span className="ml-2 inline-block rounded-full bg-brand px-1.5 py-px align-middle text-[10px] font-semibold text-white">
                     {t("plans.status.doing")}
                   </span>
+                )}
+                {task.link && (
+                  <TaskLinkBadge
+                    link={task.link}
+                    onRemove={() => updateTask(date, task.id, { link: undefined })}
+                  />
                 )}
               </button>
 

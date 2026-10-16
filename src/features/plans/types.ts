@@ -24,6 +24,48 @@ export interface PlanTask {
    * 同 id 冲突时保留较新的一份。不做展示，不参与排序。
    */
   updatedAt: number;
+  /**
+   * 关联的本地文件/文件夹/网址，点击直达。
+   *
+   * 与文件条目（FileItem.type）刻意用同一套三态，这样「绑定」的语义在整个
+   * 应用里只有一种解释：路径是真实的、由系统默认程序打开。
+   * 缺失 = 未关联（不写空对象，JSON 里干脆不带这个键）。
+   */
+  link?: TaskLink;
+}
+
+/** 关联类型，与 FileItem.type 对齐 */
+export type TaskLinkType = "folder" | "file" | "url";
+
+export interface TaskLink {
+  type: TaskLinkType;
+  /** 绝对路径或完整 URL */
+  path: string;
+  /** 自定展示名。缺省时由 linkTitle() 从 path 推导 */
+  title?: string;
+}
+
+/**
+ * 关联的展示名。
+ *
+ * 优先用自定标题；否则取路径末段。URL 走 hostname+path 而不是整串 ——
+ * 完整 URL 常常长到把任务标题挤没，而任务标题才是这一行的主体。
+ */
+export function linkTitle(link: TaskLink): string {
+  const custom = link.title?.trim();
+  if (custom) return custom;
+  if (link.type === "url") {
+    try {
+      const u = new URL(link.path);
+      const host = u.hostname.replace(/^www\./, "");
+      const rest = u.pathname === "/" ? "" : u.pathname;
+      return `${host}${rest}`;
+    } catch {
+      return link.path;
+    }
+  }
+  const seg = link.path.split(/[\\/]/).filter(Boolean).pop();
+  return seg ?? link.path;
 }
 
 export interface ArchivedDay {
@@ -31,7 +73,7 @@ export interface ArchivedDay {
   tasks: PlanTask[];
 }
 
-export type PlanTaskPatch = Partial<Pick<PlanTask, "title" | "note" | "start" | "end" | "done">>;
+export type PlanTaskPatch = Partial<Pick<PlanTask, "title" | "note" | "start" | "end" | "done" | "link">>;
 
 /* ── 时间 ─────────────────────────────────────────────── */
 
@@ -405,4 +447,88 @@ export function normalizeRange(
   const start = clampMinute(snapMinute(span.start, step), 0, DAY_END_MIN - MIN_BLOCK_MIN);
   const end = clampMinute(snapMinute(span.end, step), start + MIN_BLOCK_MIN, DAY_END_MIN);
   return { start, end };
+}
+
+/* ── 多行粘贴拆分（A2） ───────────────────────────────── */
+
+/**
+ * 把一段文本拆成多条任务标题。
+ *
+ * 存在的理由：从聊天记录/邮件/网页里一次复制 10 行待办，粘进输入框后
+ * 如果原样变成一条任务，用户必须手工拆 10 次 —— 这是待办应用里最常见的
+ * 一次「反人类」操作。
+ *
+ * 拆分规则（刻意保守，宁可少拆也不误拆）：
+ *   - 按换行拆（\r\n / \n / \r 都算）
+ *   - 逐行 trim；空行丢弃
+ *   - 剥掉行首的项目符号（- * • · ▢ ☐ 数字. 数字) ），它们是「复制来源的格式」，
+ *     不是任务内容
+ *   - 单行输入（没有换行）返回 **1 条**，调用方据此走原有的「一条」路径，
+ *     不会因为多经过一次拆分就产生任何行为差异
+ *
+ * 只返回标题数组，不去重、不改写内容 —— 去重会让用户「明明粘了 10 行
+ * 却只出现 7 条」而无从判断，这类静默丢弃比重复更糟。
+ */
+export function splitPastedLines(text: string): string[] {
+  return text
+    .split(/\r\n|\n|\r/)
+    .map((line) => stripListMarker(line).trim())
+    .filter((line) => line.length > 0);
+}
+
+/** 行首项目符号 / 有序列表序号 */
+function stripListMarker(line: string): string {
+  return line.replace(
+    /^\s*(?:[-*+•·▢☐▣□]|\d+[.)])\s+/,
+    "",
+  );
+}
+
+/** 是否值得走拆分路径（含换行且有内容）。单行文本交给原路径，避免无谓分支 */
+export function shouldSplitPaste(text: string): boolean {
+  return /\r|\n/.test(text) && splitPastedLines(text).length > 0;
+}
+
+/* ── 完成项排序（A3） ─────────────────────────────────── */
+
+/**
+ * 把已完成项移到末尾（稳定排序：各自的相对顺序不变）。
+ *
+ * 与「自动清除」的区别：这个只影响**显示**，数据一条不删 ——
+ * 取消勾选后会回到原来的相对位置，用户不会有「我的东西哪去了」的惊慌。
+ * 因此它默认开启、无需确认；自动清除是破坏性的，必须显式开启。
+ */
+export function withDoneLast(tasks: PlanTask[]): PlanTask[] {
+  const active = tasks.filter((t) => !t.done);
+  const done = tasks.filter((t) => t.done);
+  return [...active, ...done];
+}
+
+/**
+ * 全树按「完成沉底」重排：每一层的兄弟节点各自置底，子树跟着父节点走。
+ *
+ * 不能只对顶层数组排序 —— 那样子任务会脱离父任务，树结构就断了。
+ * 这里按 parentId 分组递归重建，保证输出仍是同一棵树。
+ */
+export function withDoneLastTree(tasks: PlanTask[]): PlanTask[] {
+  const byParent = new Map<string | null, PlanTask[]>();
+  for (const t of tasks) {
+    const key = t.parentId;
+    const arr = byParent.get(key);
+    if (arr) arr.push(t);
+    else byParent.set(key, [t]);
+  }
+  const out: PlanTask[] = [];
+  const walk = (parentId: string | null) => {
+    const kids = withDoneLast(byParent.get(parentId) ?? []);
+    for (const k of kids) {
+      out.push(k);
+      walk(k.id);
+    }
+  };
+  walk(null);
+  // 兜底：父节点缺失的孤儿任务（数据异常）不能被合成过程吞掉
+  const seen = new Set(out.map((t) => t.id));
+  for (const t of tasks) if (!seen.has(t.id)) out.push(t);
+  return out;
 }
