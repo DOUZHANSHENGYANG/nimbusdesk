@@ -1,5 +1,5 @@
 import { Fragment, useRef, useState } from "react";
-import { ChevronRight, Pencil, Plus, Trash2, X } from "lucide-react";
+import { Check, ChevronRight, Pencil, Plus, Trash2, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import {
   childrenOf,
@@ -206,7 +206,12 @@ function TaskRow({ date, task, depth }: { date: string; task: PlanTask; depth: n
         {/* 标题 / 编辑态 */}
         {editing ? (
           <div className="flex min-w-0 flex-1 flex-col gap-2 rounded-lg border border-border bg-card p-2.5">
-            {/* 第一行：标题靠左、时间靠右（与展示态同一套版式） */}
+            {/*
+              一行放三个表单：标题（弹性）+ 时间 + 备注（弹性）。
+              标题一般不会太长，而编辑态是「一次只编一条」，横向空间够用；
+              把三者摆在一行能让整块变矮，也不用来回移动视线。
+              确认 / 取消都是图标按钮，视觉重量一致。
+            */}
             <div className="flex min-w-0 items-center gap-2">
               <input
                 autoFocus
@@ -224,34 +229,33 @@ function TaskRow({ date, task, depth }: { date: string; task: PlanTask; depth: n
                 end={draft.end}
                 onChange={({ start, end }) => setDraft({ ...draft, start, end })}
               />
-            </div>
-
-            {/* 备注：独占一行 */}
-            <input
-              value={draft.note}
-              onChange={(e) => setDraft({ ...draft, note: e.target.value })}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") saveEdit();
-                if (e.key === "Escape") setEditing(false);
-              }}
-              placeholder={t("plans.noteLabel")}
-              className="w-full bg-transparent text-[12px] text-muted-foreground outline-none placeholder:text-muted-foreground/50"
-            />
-
-            <div className="flex items-center justify-end gap-1.5">
+              <input
+                value={draft.note}
+                onChange={(e) => setDraft({ ...draft, note: e.target.value })}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") saveEdit();
+                  if (e.key === "Escape") setEditing(false);
+                }}
+                placeholder={t("plans.noteLabel")}
+                className="min-w-0 flex-1 bg-transparent text-[12px] text-muted-foreground outline-none placeholder:text-muted-foreground/50"
+              />
               <button
                 type="button"
                 onClick={saveEdit}
-                className="rounded-md bg-brand px-2.5 py-1 text-[12px] font-medium text-white transition-colors hover:bg-brand-strong"
+                title={t("common.confirm")}
+                aria-label={t("common.confirm")}
+                className="grid size-6 shrink-0 place-items-center rounded-md text-brand transition-colors hover:bg-brand/10"
               >
-                {t("common.confirm")}
+                <Check className="size-4" strokeWidth={2.6} />
               </button>
               <button
                 type="button"
                 onClick={() => setEditing(false)}
-                className="grid size-6 place-items-center rounded-md text-muted-foreground hover:bg-muted"
+                title={t("common.cancel")}
+                aria-label={t("common.cancel")}
+                className="grid size-6 shrink-0 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
               >
-                <X className="size-3.5" />
+                <X className="size-4" />
               </button>
             </div>
           </div>
