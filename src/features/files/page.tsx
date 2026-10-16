@@ -9,7 +9,6 @@ import {
   X,
   MoreHorizontal,
   FolderOpen,
-  FolderPlus,
   Copy,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -435,7 +434,6 @@ export function FilesPage() {
                   onToggleFence={() => void toggleFence(cat.id, cat.name)}
                   onRenameConfirm={onRenameConfirm}
                   onDelete={() => void onDeleteCategory(cat.id)}
-                  onAddChild={() => void onAddSubCategory(cat.id)}
                   onCopyPaths={() => void copyCategoryPaths(cat.id)}
                 />
                 {kids.length > 0 && (
@@ -676,7 +674,6 @@ function CategoryChip({
   onRenameConfirm,
   onDelete,
   onCopyPaths,
-  onAddChild,
 }: {
   catId?: string;
   label: string;
@@ -693,8 +690,6 @@ function CategoryChip({
   onRenameConfirm?: (id: string, name: string) => Promise<boolean>;
   onDelete?: () => void;
   onCopyPaths?: () => void;
-  /** 提供时显示「新建子分类」入口（仅顶级分类用） */
-  onAddChild?: () => void;
 }) {
   const { t } = useTranslation();
   const [renaming, setRenaming] = useState(false);
@@ -788,16 +783,6 @@ function CategoryChip({
             <DropdownMenuItem onClick={startRename}>
               <Pencil className="size-3.5" />
               {t("files.renameCategory")}
-            </DropdownMenuItem>
-            {onAddChild && (
-              <DropdownMenuItem onClick={onAddChild}>
-                <FolderPlus className="size-3.5" />
-                {t("files.addSubCategory")}
-              </DropdownMenuItem>
-            )}
-            <DropdownMenuItem onClick={() => void actions?.bindDir(catId)}>
-              <FolderOpen className="size-3.5" />
-              {boundDir ? t("files.ctx.changeDir") : t("files.ctx.bindDir")}
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => onCopyPaths?.()}>
               <Copy className="size-3.5" />
