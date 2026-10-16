@@ -4,7 +4,6 @@ import { RotateCcw } from "lucide-react";
 import {
   DAY_END_MIN,
   SNAP_MIN,
-  axisBounds,
   axisRange,
   clampMinute,
   dragEdge,
@@ -24,28 +23,37 @@ import { cn } from "@/lib/utils";
 import { capturePointer, releasePointer } from "@/lib/touch";
 
 /**
- * 时间轴视图：全天纵向坐标轴 + 可拖拽时间块。
+ * 时间轴视图：08:00 起的纵向坐标轴 + 可拖拽时间块。
  *
- * 轴是固定的 00:00–24:00（24 小时 × 60px = 1440px），装在一个内部滚动容器里，
- * 进入时自动滚到当天最早任务所在的小时。
+ * 轴只覆盖 08:00–24:00（16 小时），因为一天里真正被安排的事情几乎都在这段，
+ * 画满 00:00–24:00 会让轴高到放不下、还得滚动才能看全。
  *
- * 为什么不做成「按任务撑开的紧凑轴」：那样一旦想把任务拖到 22:00 之后，
- * 就必须让轴在拖动过程中长高，而轴一变，指针→分钟的映射就跟着变，
- * 块会在光标下漂移、来回振荡。固定轴让映射恒定，也顺手解决了
- * 「时间只能落在 08:00–22:00 之间」这个功能缺口 —— 时间应当能放到一天中的任何位置。
+ * 轴的上方（也就是「8 点之前」）就是未定时任务的放置区：
+ * 没有时间的任务需要一个明确的位置，把它放在轴的起点之上，
+ * 语义就是「还没排进今天」—— 同时也充当「把块拖出轴 = 清除时间」的落点。
  *
- * 交互（与栅栏、文件页的「单击选中 / 拖动移动」保持一致）：
+ * 交互（与栅栏、文件页的「单击选中 / 拖动移动」一致）：
  * - 拖块体 → 整体平移（保持时长）
  * - 拖块的上/下边缘 → 只动起点 / 只动终点（最短 15 分钟）
  * - 把未定时卡片拖到轴上 → 设定时间（默认 1 小时）
- * - 把轴上的块拖到未定时区 → 清除时间（块上也有 ✕ 按钮）
+ * - 把轴上的块拖到轴上方 → 清除时间（块上也有 ✕ 按钮）
  * - ↑↓ 平移、Shift+↑↓ 改终点、Alt+↑↓ 改起点、按住 Ctrl 步长 1 分钟
  *
  * 拖动过程只更新本地预览，松手才写一次 store —— 避免每像素一次落盘与跨窗口广播。
  */
 
-/** 每小时像素高度（24 小时 = 1440px） */
-const PX_PER_HOUR = 60;
+/**
+ * 轴的默认起点：08:00。轴只画这段之后的时段 —— 一天里真正被安排的事情
+ * 几乎都在 8 点后，画满 00:00–24:00 会让轴高到放不下。
+ *
+ * 但当天若有更早的任务（TimeRangePicker 允许设 07:00），轴会自动向上扩到
+ * 那一小时，否则那些块会渲染在负偏移处、被容器裁掉，看不见也点不到。
+ */
+const AXIS_DEFAULT_FROM = 8 * 60;
+/** 轴的终点：24:00。用 1440 而不是 1439 只是为了让刻度收尾整齐，从不写进任务 */
+const AXIS_TO = 24 * 60;
+/** 每小时像素高度。16 小时 × 44px ≈ 700px，一屏能放下 */
+const PX_PER_HOUR = 44;
 const PX_PER_MIN = PX_PER_HOUR / 60;
 /** 左侧时间刻度栏宽度 */
 const GUTTER = 56;
@@ -53,7 +61,7 @@ const GUTTER = 56;
 const EDGE_MAX = 7;
 /** 拖入时新建块的默认时长（分钟） */
 const ASSIGN_MIN = 60;
-/** 块的最小可见高度：15 分钟的块只有 15px，再矮就连标题都放不下 */
+/** 块的最小可见高度 */
 const MIN_BLOCK_PX = 18;
 
 type Span = { start: number; end: number };
@@ -67,7 +75,7 @@ interface DragState {
   origin: Span;
   /** 按下时指针所在的分钟数（未吸附），move 用它算位移以保留非整点偏移 */
   grab: number;
-  /** 预览区间；null = 当前不在轴上（assign 尚未进入） */
+  /** 预览区间；null = 当前不在轴上 */
   next: Span | null;
   /** 预览为「松手即清除时间」 */
   clearing: boolean;
@@ -98,7 +106,7 @@ export function TimelineView({ date }: { date: string }) {
   const [drag, setDrag] = useState<DragState | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
 
-  /** 有时间 → 块；没时间 → 未定时搁板 */
+  /** 有时间 → 块；没时间 → 未定时区（轴上方） */
   const { timed, untimed } = useMemo(() => {
     const timed: { task: PlanTask; span: Span }[] = [];
     const untimed: PlanTask[] = [];
@@ -109,40 +117,60 @@ export function TimelineView({ date }: { date: string }) {
     }
     return { timed, untimed };
   }, [tasks]);
-
   const lanes = useMemo(
     () =>
       packLanes(timed.map(({ task, span }) => ({ id: task.id, start: span.start, end: span.end }))),
     [timed],
   );
 
-  const ticks = useMemo(() => Array.from({ length: 25 }, (_, h) => h * 60), []);
-  const height = 24 * PX_PER_HOUR;
+  /**
+   * 轴起点：默认 08:00，当天有更早的任务就向上扩到那一小时。
+   *
+   * 向上扩是必要的：时间选择器允许设 07:00，若轴固定从 08:00 开始，
+   * 那种块会渲染在负偏移处、被容器裁掉 —— 看不见也点不到。
+   */
+  const axisFrom = useMemo(() => {
+    const earliest = timed.reduce<number | null>(
+      (min, { span }) => (min == null || span.start < min ? span.start : min),
+      null,
+    );
+    if (earliest == null) return AXIS_DEFAULT_FROM;
+    return Math.min(AXIS_DEFAULT_FROM, Math.floor(earliest / 60) * 60);
+  }, [timed]);
+
+  const ticks = useMemo(() => {
+    const out: number[] = [];
+    for (let m = axisFrom; m <= AXIS_TO; m += 60) out.push(m);
+    return out;
+  }, [axisFrom]);
+  const height = ((AXIS_TO - axisFrom) / 60) * PX_PER_HOUR;
 
   const nowMin = now.getHours() * 60 + now.getMinutes();
-  const showNow = date === todayStr();
+  const showNow = date === todayStr() && nowMin >= axisFrom && nowMin <= AXIS_TO;
+
   const dragging = drag != null;
   const active = drag?.next ?? null;
   const assigning = drag?.mode === "assign" && active != null;
+
   /**
-   * 进入视图 / 换日期 / 首次拿到任务数据时，滚到当天最早任务所在的小时。
+   * 进入视图 / 换日期时滚到当天最早任务处。
    *
-   * 为什么不能只在 [date] 上跑：本视图可能是首次挂载时 tasks 尚未 hydrate
-   * （空数组），那时轴按默认 08:00 定位；等任务出现若不重跑，视口就停错地方。
-   * 也不能无条件跟着 tasks 跑：拖动落盘会让 tasks 换新引用，视口会在拖动中跳走。
-   *
-   * 所以用「已定位过的日期」做门控：同一日期只自动定位一次，
-   * 之后视口完全交给用户（滚轮 / 拖动时都不再被抢）。
+   * 用「已定位过的日期」做门控：同一日期只自动定位一次。
+   * 若跟着 tasks 引用跑，拖动落盘会让视口在拖动中跳走（块随之在光标下漂移）。
    */
   const scrolledForDateRef = useRef<string | null>(null);
   useEffect(() => {
     const el = scrollRef.current;
-    // 轴还没进 DOM（tasks 为空时组件早退）就先不定，等它渲染出来再说
     if (!el) return;
     if (scrolledForDateRef.current === date) return;
     scrolledForDateRef.current = date;
-    el.scrollTop = Math.max(axisBounds(tasks).from - 30, 0) * PX_PER_MIN;
-  }, [date, tasks]);
+    const first = timed.reduce<number | null>(
+      (min, { span }) => (min == null || span.start < min ? span.start : min),
+      null,
+    );
+    el.scrollTop = Math.max((first ?? axisFrom) - axisFrom - 30, 0) * PX_PER_MIN;
+  }, [date, timed]);
+
   /* ── 坐标换算 ──────────────────────────────────────── */
 
   /**
@@ -153,22 +181,21 @@ export function TimelineView({ date }: { date: string }) {
    */
   const rawMinuteAt = (clientY: number): number => {
     const el = trackRef.current;
-    if (!el) return 0;
-    return (clientY - el.getBoundingClientRect().top) / PX_PER_MIN;
+    if (!el) return axisFrom;
+    return axisFrom + (clientY - el.getBoundingClientRect().top) / PX_PER_MIN;
   };
 
-  /** 指针所在的分钟数（吸附到 SNAP_MIN，夹在一天内） */
+  /** 指针所在的分钟数（吸附到 SNAP_MIN，夹在轴上范围内） */
   const minuteAt = (clientY: number): number =>
-    clampMinute(snapMinute(rawMinuteAt(clientY)), 0, DAY_END_MIN);
+    clampMinute(snapMinute(rawMinuteAt(clientY)), axisFrom, DAY_END_MIN);
 
   /**
-   * 指针是否在滚动视口的可见区域上方 —— 也就是未定时搁板所在的那一带。
+   * 指针是否在轴的上方 —— 也就是「8 点之前」那块未定时区。
    *
-   * 基准必须是滚动容器的顶边，不是轨道的顶边：轨道有 1440px 高、装在滚动容器里，
-   * 其 rect.top 是内容坐标上的顶边。初始化滚动后 scrollTop 通常非 0，
-   * 于是 rect.top 会跑到可见区上方几百像素，`clientY < rect.top` 恒为 false ——
-   * 结果「拖到上方 = 清除时间」失效，而且搁板卡片上 1px 的手抖会被当成
-   * 「已经拖到轴上」，用滚动偏移量当时间静默写盘。
+   * 基准必须是滚动容器的可见顶边，不是轨道的顶边：轨道装在滚动容器里，
+   * 初始化滚动后 scrollTop 通常非 0，轨道的 rect.top 会跑到可见区上方，
+   * 用它判断会恒为 false（曾因此让「拖到上方清除时间」失效、
+   * 且搁板卡片上 1px 手抖被误判成拖进了轴里）。
    */
   const isAboveAxis = (clientY: number): boolean => {
     const el = scrollRef.current;
@@ -187,9 +214,7 @@ export function TimelineView({ date }: { date: string }) {
 
   /**
    * 写回 store。`step` 决定吸附粒度：拖动用 SNAP_MIN，键盘的 1 分钟微调传 1。
-   *
-   * 返回规范化后的区间，让调用方能拿它跟原值比较来决定「是否真的需要写盘」——
-   * 未吸附的预览值（1px 抖动就变）直接比较会误判成「动过」，写进去却是同一个时间。
+   * 返回规范化后的区间，供调用方判断「是否真的需要写盘」。
    */
   const commit = (id: string, span: Span, step: number = SNAP_MIN): Span => {
     const n = normalizeRange(span, step);
@@ -229,7 +254,7 @@ export function TimelineView({ date }: { date: string }) {
     setDrag({
       id: task.id,
       mode: "assign",
-      origin: { start: 0, end: ASSIGN_MIN },
+      origin: { start: axisFrom, end: axisFrom + ASSIGN_MIN },
       grab: 0,
       next: null,
       clearing: false,
@@ -246,12 +271,12 @@ export function TimelineView({ date }: { date: string }) {
         return;
       }
       // 指针落在块中间，块围绕指针上下展开
-      const start = clampMinute(minuteAt(e.clientY) - ASSIGN_MIN / 2, 0, DAY_END_MIN - ASSIGN_MIN);
+      const start = clampMinute(minuteAt(e.clientY) - ASSIGN_MIN / 2, axisFrom, DAY_END_MIN - ASSIGN_MIN);
       setDrag((d) => (d ? { ...d, next: { start, end: start + ASSIGN_MIN } } : d));
       return;
     }
 
-    // 拖到未定时区 → 松手即清除时间。
+    // 拖到轴上方 → 松手即清除时间。
     // 只对整体平移开放：拖边缘时向上越过轴顶是「把开始时间往前挪」的正常操作，
     // 不该被理解成删除时间 —— 那种误判会直接丢掉用户的数据。
     if (drag.mode === "move" && (inShelf(e.clientY) || isAboveAxis(e.clientY))) {
@@ -262,32 +287,18 @@ export function TimelineView({ date }: { date: string }) {
     const next =
       drag.mode === "move"
         ? // 整体平移：位移取未吸附值之差，块原有的非整点偏移得以保留
-          shiftRange(
-            drag.origin.start,
-            drag.origin.end,
-            rawMinuteAt(e.clientY) - drag.grab,
-            0,
-            DAY_END_MIN,
-          )
+          shiftRange(drag.origin.start, drag.origin.end, rawMinuteAt(e.clientY) - drag.grab, axisFrom, DAY_END_MIN)
         : // 拖边缘：绝对吸附到 5 分钟格，与时间选择器的粒度一致
-          dragEdge(
-            drag.origin.start,
-            drag.origin.end,
-            drag.mode,
-            minuteAt(e.clientY),
-            0,
-            DAY_END_MIN,
-          );
+          dragEdge(drag.origin.start, drag.origin.end, drag.mode, minuteAt(e.clientY), axisFrom, DAY_END_MIN);
     setDrag((d) => (d ? { ...d, next, clearing: false } : d));
   };
 
   const onDragUp = (e: React.PointerEvent<HTMLElement>) => {
     if (!drag) return;
     releasePointer(e.currentTarget, e.pointerId);
-    // 原地点击（没真的拖动）不写盘：否则一次误点就触发一次无意义的持久化与跨窗口广播。
-    //
-    // 比较的是「规范化之后」的值：move 的预览用的是未吸附分钟数，1px 抖动就会让它
-    // 与原值不等，直接比较会白写一次盘 —— 而吸附后得到的其实是同一个时间。
+    // 原地点击（没真的拖动）不写盘。
+    // 比较的是「规范化之后」的值：move 的预览用未吸附分钟数，1px 抖动就让它与原值不等，
+    // 直接比较会白写一次盘 —— 而吸附后得到的其实是同一个时间。
     if (drag.clearing) {
       clearTime(drag.id);
     } else if (drag.next) {
@@ -324,10 +335,10 @@ export function TimelineView({ date }: { date: string }) {
     if (!span) return;
     e.preventDefault();
     const next = e.altKey
-      ? dragEdge(span.start, span.end, "start", span.start + dir, 0, DAY_END_MIN)
+      ? dragEdge(span.start, span.end, "start", span.start + dir, axisFrom, DAY_END_MIN)
       : e.shiftKey
-        ? dragEdge(span.start, span.end, "end", span.end + dir, 0, DAY_END_MIN)
-        : shiftRange(span.start, span.end, dir, 0, DAY_END_MIN);
+        ? dragEdge(span.start, span.end, "end", span.end + dir, axisFrom, DAY_END_MIN)
+        : shiftRange(span.start, span.end, dir, axisFrom, DAY_END_MIN);
     commit(task.id, next, step);
   };
 
@@ -375,95 +386,94 @@ export function TimelineView({ date }: { date: string }) {
 
         <div className="flex-1" />
 
-        {showNow && (
-          <span className="font-mono text-[11px] tabular-nums text-muted-foreground/70">
-            {t("plans.timelineNow")} {fmtMinutes(nowMin)}
-          </span>
-        )}
+        <span className="text-[11px] text-muted-foreground/70">
+          {t("plans.timelineUntimedCount", { count: untimed.length })}
+        </span>
       </div>
 
       {/*
-        ── 未定时区（时间轴上方） ──
-        始终渲染，不按内容/拖动状态增减。
-        若它在拖动开始时才出现，坐标轴会被整体下移，块就在光标下跳位了 ——
-        而块的位置正是靠 rect.top 换算出来的。几何必须恒定。
-        它同时是「拖走 = 清除时间」的放置目标，常驻也让它更容易被发现。
+        ── 坐标轴（08:00–24:00），顶部那条虚线带就是「8 点之前」 ──
+        未定时任务与轴共用一个框：轴只画 8 点之后的时段，
+        8 点前那一段空出来放「还没排进今天」的任务。
+        这样「拖到轴上方 = 清除时间」与「把任务放到 8 点前」是同一块区域，
+        不需要再单独一个搁板框，也省下一整块纵向空间。
       */}
-      <div
-        ref={shelfRef}
-        className={cn(
-          "flex min-h-[3.25rem] items-stretch gap-3 rounded-xl border border-dashed p-2 transition-colors",
-          drag?.clearing
-            ? "border-destructive/60 bg-destructive/5"
-            : drag?.mode === "assign"
-              ? "border-brand/50 bg-brand/[0.04]"
-              : "border-border bg-muted/30",
-        )}
-      >
-        <div
-          className="flex shrink-0 flex-col items-end justify-center gap-0.5 pr-1 text-right"
-          style={{ width: GUTTER - 8 }}
-        >
-          <span className="text-[10px] font-semibold text-muted-foreground">
-            {t("plans.untimed")}
-          </span>
-          <span className="font-mono text-[10px] tabular-nums text-muted-foreground/60">
-            {untimed.length}
-          </span>
-        </div>
-
-        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
-          {untimed.length === 0 && (
-            <span className="text-[11px] text-muted-foreground/60">
-              {t("plans.timelineShelfEmpty")}
-            </span>
-          )}
-          {untimed.map((task) => {
-            const status = statusOf(task, date, now);
-            const isDragging = drag?.id === task.id;
-            return (
-              <div
-                key={task.id}
-                onPointerDown={(e) => beginShelfDrag(e, task)}
-                onPointerMove={onDragMove}
-                onPointerUp={onDragUp}
-                onPointerCancel={onDragUp}
-                className={cn(
-                  "flex max-w-[15rem] cursor-grab items-center gap-1.5 rounded-lg border bg-card px-2 py-1 transition-shadow active:cursor-grabbing",
-                  isDragging
-                    ? "border-brand opacity-40"
-                    : selected === task.id
-                      ? "border-brand/60 shadow-[var(--pr-shadow-1)]"
-                      : "border-border hover:border-brand/40",
-                )}
-                title={t("plans.timelineShelfHint")}
-              >
-                <span onPointerDown={(e) => e.stopPropagation()}>
-                  <StatusButton
-                    status={status}
-                    onToggle={() => toggleDone(date, task.id)}
-                    className="size-5"
-                  />
-                </span>
-                <span className="min-w-0 truncate text-[11px]" style={doneTitleStyle(task.done)}>
-                  {task.title}
-                </span>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* ── 坐标轴（固定全天，内部滚动） ── */}
       <div
         className={cn(
           "overflow-hidden rounded-xl border bg-card transition-colors",
           assigning ? "border-brand/60" : "border-border",
         )}
       >
+        {/* 8 点之前：未定时任务区 */}
+        <div
+          ref={shelfRef}
+          className={cn(
+            "flex min-h-[2.75rem] items-stretch gap-3 border-b border-dashed p-2 transition-colors",
+            drag?.clearing
+              ? "border-destructive/60 bg-destructive/5"
+              : drag?.mode === "assign"
+                ? "border-brand/50 bg-brand/[0.04]"
+                : "border-border bg-muted/30",
+          )}
+        >
+          <div
+            className="flex shrink-0 flex-col items-end justify-center gap-0.5 pr-1 text-right"
+            style={{ width: GUTTER - 8 }}
+          >
+            <span className="text-[10px] font-semibold text-muted-foreground">
+              {t("plans.beforeEight")}
+            </span>
+            <span className="font-mono text-[10px] tabular-nums text-muted-foreground/60">
+              {untimed.length}
+            </span>
+          </div>
+
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
+            {untimed.length === 0 && (
+              <span className="text-[11px] text-muted-foreground/60">
+                {t("plans.timelineShelfEmpty")}
+              </span>
+            )}
+            {untimed.map((task) => {
+              const status = statusOf(task, date, now);
+              const isDragging = drag?.id === task.id;
+              return (
+                <div
+                  key={task.id}
+                  onPointerDown={(e) => beginShelfDrag(e, task)}
+                  onPointerMove={onDragMove}
+                  onPointerUp={onDragUp}
+                  onPointerCancel={onDragUp}
+                  className={cn(
+                    "flex max-w-[15rem] cursor-grab touch-none items-center gap-1.5 rounded-lg border bg-card px-2 py-1 transition-shadow active:cursor-grabbing",
+                    isDragging
+                      ? "border-brand opacity-40"
+                      : selected === task.id
+                        ? "border-brand/60 shadow-[var(--pr-shadow-1)]"
+                        : "border-border hover:border-brand/40",
+                  )}
+                  title={t("plans.timelineShelfHint")}
+                >
+                  <span onPointerDown={(e) => e.stopPropagation()}>
+                    <StatusButton
+                      status={status}
+                      onToggle={() => toggleDone(date, task.id)}
+                      className="size-5"
+                    />
+                  </span>
+                  <span className="min-w-0 truncate text-[11px]" style={doneTitleStyle(task.done)}>
+                    {task.title}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* 时间轨道 */}
         <div
           ref={scrollRef}
-          className="relative h-[calc(100vh-22rem)] max-h-[40rem] min-h-[22rem] overflow-y-auto overscroll-contain"
+          className="relative max-h-[30rem] min-h-[15rem] overflow-y-auto overscroll-contain"
         >
           <div className="flex" style={{ height }}>
             {/* 刻度栏 */}
@@ -476,7 +486,7 @@ export function TimelineView({ date }: { date: string }) {
                     // 24:00 只是轴的收尾，不标数字（它不是一天中的某个时刻）
                     i === ticks.length - 1 ? "hidden" : "text-muted-foreground",
                   )}
-                  style={{ top: m * PX_PER_MIN }}
+                  style={{ top: (m - axisFrom) * PX_PER_MIN }}
                 >
                   {fmtMinutes(m)}
                 </span>
@@ -484,7 +494,7 @@ export function TimelineView({ date }: { date: string }) {
               {showNow && (
                 <span
                   className="absolute right-2.5 -translate-y-1/2 font-mono text-[10px] font-semibold tabular-nums text-destructive"
-                  style={{ top: nowMin * PX_PER_MIN }}
+                  style={{ top: (nowMin - axisFrom) * PX_PER_MIN }}
                 >
                   {fmtMinutes(nowMin)}
                 </span>
@@ -502,7 +512,7 @@ export function TimelineView({ date }: { date: string }) {
                 <div
                   key={m}
                   className="pointer-events-none absolute inset-x-0 border-t border-border/70"
-                  style={{ top: m * PX_PER_MIN }}
+                  style={{ top: (m - axisFrom) * PX_PER_MIN }}
                 />
               ))}
               {/* 半点线（略淡） */}
@@ -510,7 +520,7 @@ export function TimelineView({ date }: { date: string }) {
                 <div
                   key={`half-${m}`}
                   className="pointer-events-none absolute inset-x-0 border-t border-dashed border-border/40"
-                  style={{ top: (m + 30) * PX_PER_MIN }}
+                  style={{ top: (m + 30 - axisFrom) * PX_PER_MIN }}
                 />
               ))}
 
@@ -518,7 +528,7 @@ export function TimelineView({ date }: { date: string }) {
               {showNow && (
                 <div
                   className="pointer-events-none absolute inset-x-0 z-20 border-t border-destructive/80"
-                  style={{ top: nowMin * PX_PER_MIN }}
+                  style={{ top: (nowMin - axisFrom) * PX_PER_MIN }}
                 >
                   <span className="absolute -top-2 right-0 rounded bg-destructive px-1 text-[9px] font-semibold text-white">
                     {t("plans.timelineNow")}
@@ -529,14 +539,13 @@ export function TimelineView({ date }: { date: string }) {
               {/*
                 assign 预览块：拖入时被拖的任务还在 untimed 里（没有 start），
                 下面的 timed.map 不会渲染它，所以这里单独画一个落点预览。
-                没有它，指针进轴后用户看不到块会落在哪。
               */}
               {assigning && active && (
                 <div
                   className="pointer-events-none absolute z-20 rounded-lg border border-brand border-dashed bg-brand/10"
                   style={{
-                    top: active.start * PX_PER_MIN + 1,
-                    height: Math.max(active.end - active.start, MIN_BLOCK_PX),
+                    top: (active.start - axisFrom) * PX_PER_MIN + 1,
+                    height: Math.max((active.end - active.start) * PX_PER_MIN, MIN_BLOCK_PX),
                     left: 3,
                     right: 5,
                   }}
@@ -556,8 +565,8 @@ export function TimelineView({ date }: { date: string }) {
                 const laneW = 100 / info.lanes;
 
                 const blockH = Math.max((preview.end - preview.start) * PX_PER_MIN - 2, MIN_BLOCK_PX);
-                const compact = blockH < 30;
-                const tall = blockH >= 48;
+                const compact = blockH < 28;
+                const tall = blockH >= 44;
                 const mins = preview.end - preview.start;
                 // 矮块的上下热区要跟着缩小，否则 18px 的块会被两边吃掉、无处可拖
                 const edgeH = Math.min(EDGE_MAX, Math.max(3, Math.floor(blockH / 3)));
@@ -572,8 +581,8 @@ export function TimelineView({ date }: { date: string }) {
                     onPointerCancel={onDragUp}
                     onKeyDown={(e) => onBlockKey(e, task)}
                     className={cn(
-                      // touch-action-none：块长在纵向滚动容器里，触摸屏上若用默认的
-                      // auto，「纵向滑动滚动」会被当成拖动块、把划过的任务重排
+                      // touch-none：块长在纵向滚动容器里，触摸屏上若用默认 auto，
+                      // 「纵向滑动滚动」会被当成拖动块、把划过的任务重排
                       "group absolute cursor-grab touch-none overflow-hidden rounded-lg border transition-shadow active:cursor-grabbing focus:outline-none",
                       // 拖动中的块浮到最上层：同 z 值按 DOM 顺序绘制，否则拖到后面的块上会被压住
                       d ? "z-30 shadow-[var(--pr-shadow-2)]" : "z-10",
@@ -582,7 +591,7 @@ export function TimelineView({ date }: { date: string }) {
                       d?.clearing && "border-dashed opacity-40",
                     )}
                     style={{
-                      top: preview.start * PX_PER_MIN + 1,
+                      top: (preview.start - axisFrom) * PX_PER_MIN + 1,
                       height: blockH,
                       left: `calc(${info.lane * laneW}% + 3px)`,
                       width: `calc(${laneW}% - 5px)`,
@@ -629,8 +638,9 @@ export function TimelineView({ date }: { date: string }) {
                         )}
                       </div>
                     </div>
+
                     {/*
-                      清除时间（拖回未定时区的等价快捷方式）。
+                      清除时间（拖到轴上方 = 未定时区的等价快捷方式）。
                       z-20 必须高于上下边缘热区的 z-10：否则按钮上 1/3 会落进
                       「上边缘 = 改起点」的命中区，点它会改开始时间而不是清除。
                     */}

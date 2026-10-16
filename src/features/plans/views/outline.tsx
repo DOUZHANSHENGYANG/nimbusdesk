@@ -206,29 +206,39 @@ function TaskRow({ date, task, depth }: { date: string; task: PlanTask; depth: n
         {/* 标题 / 编辑态 */}
         {editing ? (
           <div className="flex min-w-0 flex-1 flex-col gap-2 rounded-lg border border-border bg-card p-2.5">
-            <input
-              autoFocus
-              value={draft.title}
-              onChange={(e) => setDraft({ ...draft, title: e.target.value })}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") saveEdit();
-                if (e.key === "Escape") setEditing(false);
-              }}
-              className="w-full bg-transparent text-[13px] font-medium outline-none"
-              placeholder={t("plans.titleLabel")}
-            />
-            <div className="flex flex-wrap items-center gap-2">
+            {/* 第一行：标题靠左、时间靠右（与展示态同一套版式） */}
+            <div className="flex min-w-0 items-center gap-2">
+              <input
+                autoFocus
+                value={draft.title}
+                onChange={(e) => setDraft({ ...draft, title: e.target.value })}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") saveEdit();
+                  if (e.key === "Escape") setEditing(false);
+                }}
+                className="min-w-0 flex-1 bg-transparent text-[13px] font-medium outline-none"
+                placeholder={t("plans.titleLabel")}
+              />
               <TimeRangePicker
                 start={draft.start}
                 end={draft.end}
                 onChange={({ start, end }) => setDraft({ ...draft, start, end })}
               />
-              <input
-                value={draft.note}
-                onChange={(e) => setDraft({ ...draft, note: e.target.value })}
-                placeholder={t("plans.noteLabel")}
-                className="min-w-0 flex-1 bg-transparent text-[12px] text-muted-foreground outline-none placeholder:text-muted-foreground/50"
-              />
+            </div>
+
+            {/* 备注：独占一行 */}
+            <input
+              value={draft.note}
+              onChange={(e) => setDraft({ ...draft, note: e.target.value })}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") saveEdit();
+                if (e.key === "Escape") setEditing(false);
+              }}
+              placeholder={t("plans.noteLabel")}
+              className="w-full bg-transparent text-[12px] text-muted-foreground outline-none placeholder:text-muted-foreground/50"
+            />
+
+            <div className="flex items-center justify-end gap-1.5">
               <button
                 type="button"
                 onClick={saveEdit}
