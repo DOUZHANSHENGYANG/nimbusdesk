@@ -1,4 +1,11 @@
 import { useRef, useState } from "react";
+import { useReminderSettings } from "@/stores/reminders";
+import { advanceLabel } from "@/features/plans/reminder";
+import {
+  requestNotificationPermission,
+  notificationPermission,
+  sendNotification,
+} from "@/lib/notify";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -12,6 +19,10 @@ import {
   Bot,
   SlidersHorizontal,
   ArrowLeft,
+  Download,
+  Upload,
+  Bell,
+  TriangleAlert,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useModal } from "@/components/shell/modal-host";
@@ -25,6 +36,7 @@ import { toggleThemeRadial, type ThemeMode } from "@/lib/theme";
 import { changeLang, type Lang } from "@/lib/i18n";
 import { flushAllStorage } from "@/lib/storage";
 import { setDataDir as invokeSetDataDir, pickFolder, revealInExplorer } from "@/lib/tauri";
+import { exportBackup, importBackup } from "@/features/settings/backup";
 import { gsap, useGSAP } from "@/lib/gsap";
 import { cn } from "@/lib/utils";
 
@@ -243,7 +255,229 @@ function SystemSection() {
         </CardContent>
       </Card>
 
+      <ReminderCard />
+      <BackupCard />
     </>
+  );
+}
+
+/* ── 系统：任务提醒 ───────────────────────────────────── */
+
+function ReminderCard() {
+  const { t } = useTranslation();
+  const enabled = useReminderSettings((s) => s.enabled);
+  const advance = useReminderSettings((s) => s.advance);
+  const setEnabled = useReminderSettings((s) => s.setEnabled);
+  const setAdvance = useReminderSettings((s) => s.setAdvance);
+  const clearNotified = useReminderSettings((s) => s.clearNotified);
+  const [denied, setDenied] = useState(false);
+
+  /** 开启提醒时顺带申请系统通知权限；被拒就如实说明 */
+  const onToggle = async () => {
+    if (enabled) {
+      setEnabled(false);
+      return;
+    }
+    const state = await requestNotificationPermission();
+    if (state === "denied") {
+      setDenied(true);
+      return;
+    }
+    setDenied(false);
+    setEnabled(true);
+  };
+
+  const onTest = async () => {
+    const ok = await sendNotification(t("settings.reminder"), t("settings.reminderTestSent"));
+    if (ok) toast.success(t("settings.reminderTestSent"));
+    else {
+      const state = await notificationPermission();
+      if (state === "denied") setDenied(true);
+      toast.error(t("common.error"));
+    }
+  };
+
+  /** 改设置后清空去重集合：否则「改成提前 30 分钟」不会让已通知过的任务再提醒 */
+  const onAdvance = (v: number) => {
+    setAdvance(v);
+    clearNotified();
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-[15px]">
+          <Bell className="size-4 text-brand" />
+          {t("settings.reminder")}
+        </CardTitle>
+        <CardDescription>{t("settings.reminderHint")}</CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-4">
+        <label className="flex cursor-pointer items-center justify-between gap-3">
+          <span className="text-[13px] font-medium text-foreground/90">
+            {t("settings.reminderEnable")}
+          </span>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={enabled}
+            onClick={() => void onToggle()}
+            className={cn(
+              "relative h-6 w-11 shrink-0 rounded-full transition-colors duration-200",
+              enabled ? "bg-brand" : "bg-muted-foreground/30",
+            )}
+          >
+            <span
+              className={cn(
+                "absolute top-0.5 size-5 rounded-full bg-white shadow transition-transform duration-200",
+                enabled ? "translate-x-5.5" : "translate-x-0.5",
+              )}
+            />
+          </button>
+        </label>
+
+        <Field label={t("settings.reminderAdvance")}>
+          <div className="flex flex-wrap gap-2">
+            {[0, 5, 10, 15, 30, 60].map((m) => (
+              <button
+                key={m}
+                type="button"
+                onClick={() => onAdvance(m)}
+                className={cn(
+                  "h-8 rounded-full border px-3 text-[12px] font-medium transition-colors duration-150",
+                  advance === m
+                    ? "border-brand bg-brand/10 text-brand"
+                    : "border-border text-muted-foreground hover:bg-surface-hover hover:text-foreground",
+                )}
+              >
+                {advanceLabel(m, t)}
+              </button>
+            ))}
+          </div>
+        </Field>
+
+        {denied && (
+          <p className="flex items-start gap-2 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-[12px] text-destructive">
+            <TriangleAlert className="mt-px size-3.5 shrink-0" />
+            {t("settings.reminderDenied")}
+          </p>
+        )}
+
+        <div>
+          <Button variant="secondary" size="sm" onClick={() => void onTest()}>
+            <Bell className="size-4" />
+            {t("settings.reminderTest")}
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+/* ── 系统：备份与恢复 ─────────────────────────────────── */
+
+function BackupCard() {
+  const { t } = useTranslation();
+  const { confirm } = useModal();
+  const [includeDirs, setIncludeDirs] = useState(true);
+  const [overwriteSettings, setOverwriteSettings] = useState(false);
+  const [busy, setBusy] = useState<"export" | "import" | null>(null);
+
+  const onExport = async () => {
+    setBusy("export");
+    try {
+      const res = await exportBackup({ includeDirs });
+      if (res) toast.success(t("settings.backupExported", { path: res.path }));
+    } catch (e) {
+      toast.error(String(e));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const onImport = async () => {
+    const ok = await confirm({
+      title: t("settings.backupConfirmTitle"),
+      description: t("settings.backupConfirmDesc"),
+      danger: false,
+    });
+    if (!ok) return;
+    setBusy("import");
+    try {
+      const res = await importBackup({ overwriteSettings });
+      if (res) {
+        const { added, updated, skipped } = res.stats;
+        toast.success(t("settings.backupDone", { added, updated, skipped }));
+      }
+    } catch (e) {
+      // 解析失败给出明确原因（选错文件 vs 文件损坏）
+      toast.error(`${t("settings.backupBadFile")}: ${String(e)}`);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-[15px]">
+          <Database className="size-4 text-brand" />
+          {t("settings.backup")}
+        </CardTitle>
+        <CardDescription>{t("settings.backupHint")}</CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-4">
+        <label className="flex cursor-pointer items-start gap-2.5">
+          <input
+            type="checkbox"
+            checked={includeDirs}
+            onChange={(e) => setIncludeDirs(e.target.checked)}
+            className="mt-0.5 size-4 accent-[var(--brand)]"
+          />
+          <span className="flex flex-col gap-0.5">
+            <span className="text-[13px] font-medium text-foreground/90">
+              {t("settings.backupIncludeFiles")}
+            </span>
+            <span className="text-[11px] text-muted-foreground">
+              {t("settings.backupIncludeFilesHint")}
+            </span>
+          </span>
+        </label>
+
+        <label className="flex cursor-pointer items-start gap-2.5">
+          <input
+            type="checkbox"
+            checked={overwriteSettings}
+            onChange={(e) => setOverwriteSettings(e.target.checked)}
+            className="mt-0.5 size-4 accent-[var(--brand)]"
+          />
+          <span className="flex flex-col gap-0.5">
+            <span className="text-[13px] font-medium text-foreground/90">
+              {t("settings.backupOverwriteSettings")}
+            </span>
+            <span className="text-[11px] text-muted-foreground">
+              {t("settings.backupOverwriteSettingsHint")}
+            </span>
+          </span>
+        </label>
+
+        <div className="flex flex-wrap gap-2">
+          <Button size="sm" disabled={busy !== null} onClick={() => void onExport()}>
+            <Download className="size-4" />
+            {busy === "export" ? t("settings.backupExporting") : t("settings.backupExport")}
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={busy !== null}
+            onClick={() => void onImport()}
+          >
+            <Upload className="size-4" />
+            {busy === "import" ? t("settings.backupImporting") : t("settings.backupImport")}
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 

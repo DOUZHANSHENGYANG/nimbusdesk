@@ -1,5 +1,6 @@
 use tauri::Manager;
 
+mod atomic;
 mod commands;
 mod tray;
 
@@ -7,11 +8,17 @@ mod tray;
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_http::init())
-        .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             commands::data::get_data_dir,
             commands::data::set_data_dir,
+            commands::backup::pick_backup_save_path,
+            commands::backup::pick_backup_open_path,
+            commands::backup::write_backup,
+            commands::backup::read_backup,
+            commands::backup::scan_dir_tree,
+            commands::backup::restore_dir_tree,
             commands::data::read_json,
             commands::data::write_json,
             commands::sys::window_ready,

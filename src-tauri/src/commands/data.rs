@@ -8,6 +8,7 @@
 //! 所有命令均为 async + spawn_blocking：Tauri 2 同步命令跑在主线程，
 //! 阻塞 IO 会卡死 UI 事件循环。
 
+use crate::atomic::{read_file_with_fallback, write_file_atomic};
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
@@ -112,36 +113,27 @@ fn data_file(key: &str) -> Result<PathBuf, String> {
     Ok(dir.join(format!("{key}.json")))
 }
 
+/// 读取 JSON。主文件不存在返回 `None`；主文件损坏/丢失时回退 `.bak` 自愈。
 fn read_file<T: DeserializeOwned>(path: &Path) -> Result<Option<T>, String> {
-    match fs::read_to_string(path) {
-        Ok(content) => {
-            if content.trim().is_empty() {
-                return Ok(None);
-            }
-            serde_json::from_str(&content)
-                .map(Some)
-                .map_err(|e| format!("parse {}: {e}", path.display()))
-        }
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
-        Err(e) => Err(e.to_string()),
+    let text = match read_file_with_fallback(&path.to_string_lossy()) {
+        Ok(s) => s,
+        // 主文件与 .bak 都不存在 → 该 key 还没写过，不是错误
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(e) => return Err(e.to_string()),
+    };
+    if text.trim().is_empty() {
+        return Ok(None);
     }
+    serde_json::from_str(&text)
+        .map(Some)
+        .map_err(|e| format!("parse {}: {e}", path.display()))
 }
 
+/// 原子写 JSON：tmp → fsync → .bak → rename（见 `crate::atomic`）。
 fn write_file<T: Serialize + ?Sized>(path: &Path, value: &T) -> Result<(), String> {
-    if let Some(parent) = path.parent() {
-        ensure_dir(parent)?;
-    }
-    let tmp = path.with_extension("json.tmp");
     let content = serde_json::to_string_pretty(value).map_err(|e| e.to_string())?;
-    fs::write(&tmp, content).map_err(|e| e.to_string())?;
-    // Windows 上 rename 覆盖已存在目标 OK；失败兜底 copy+remove
-    if fs::rename(&tmp, path).is_err() {
-        fs::copy(&tmp, path).map_err(|e| e.to_string())?;
-        let _ = fs::remove_file(&tmp);
-    }
-    Ok(())
+    write_file_atomic(&path.to_string_lossy(), content.as_bytes()).map_err(|e| e.to_string())
 }
-
 fn blocking_get_data_dir() -> Result<String, String> {
     resolve_data_dir().map(|p| p.display().to_string())
 }

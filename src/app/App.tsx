@@ -1,6 +1,7 @@
 import { HashRouter, Route, Routes, useLocation } from "react-router-dom";
 import { Providers } from "@/app/providers";
 import { Titlebar } from "@/components/shell/titlebar";
+import { StorageAlert } from "@/components/shell/storage-alert";
 import { Sidebar } from "@/components/shell/sidebar";
 import { Topbar } from "@/components/shell/topbar";
 import { PageTransition } from "@/components/shell/page-transition";
@@ -19,6 +20,9 @@ function Shell() {
   return (
     <div className="flex h-full flex-col overflow-hidden">
       <Titlebar />
+      {/* 落盘失败告警：挂在标题栏下方、所有布局之上 —— 它是应用级状态，
+          设置页（standalone）也必须能看到 */}
+      <StorageAlert />
       <div className="flex min-h-0 flex-1">
         {!standalone && <Sidebar />}
         <div className="flex min-w-0 flex-1 flex-col">

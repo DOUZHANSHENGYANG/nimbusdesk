@@ -14,6 +14,8 @@ export interface FileCategory {
   dir?: string;
   /** 父分类 id。单层子分类：有父的分类不能再有子分类（由 UI 保证） */
   parentId?: string;
+  /** 最后修改时间 —— 仅供备份合并判断「同 id 谁更新」 */
+  updatedAt?: number;
 }
 
 export interface FileItem {
@@ -29,6 +31,8 @@ export interface FileItem {
   /** 描述（网站 SEO description 或手动备注） */
   note?: string;
   createdAt: number;
+  /** 最后修改时间 —— 仅供备份合并判断「同 id 谁更新」 */
+  updatedAt?: number;
 }
 
 interface FilesState {
@@ -71,7 +75,10 @@ export const useFiles = create<FilesState>()(
         if (dup) return dup.id;
         const id = uid();
         set((s) => ({
-          categories: [...s.categories, { id, name: clean, createdAt: Date.now(), parentId }],
+          categories: [
+            ...s.categories,
+            { id, name: clean, createdAt: Date.now(), updatedAt: Date.now(), parentId },
+          ],
         }));
         return id;
       },
@@ -89,7 +96,9 @@ export const useFiles = create<FilesState>()(
         );
         if (dup) return;
         set((s) => ({
-          categories: s.categories.map((c) => (c.id === id ? { ...c, name: clean } : c)),
+          categories: s.categories.map((c) =>
+            c.id === id ? { ...c, name: clean, updatedAt: Date.now() } : c,
+          ),
         }));
       },
 
@@ -104,7 +113,9 @@ export const useFiles = create<FilesState>()(
           if (parentId && s.categories.find((c) => c.id === parentId)?.parentId) return s;
           return {
             categories: s.categories.map((c) =>
-              c.id === id ? { ...c, parentId: parentId ?? undefined } : c,
+              c.id === id
+                ? { ...c, parentId: parentId ?? undefined, updatedAt: Date.now() }
+                : c,
             ),
           };
         }),
@@ -112,7 +123,9 @@ export const useFiles = create<FilesState>()(
       setCategoryDir: (id, dir) =>
         set((s) => ({
           categories: s.categories.map((c) =>
-            c.id === id ? { ...c, dir: dir?.trim() || undefined } : c,
+            c.id === id
+              ? { ...c, dir: dir?.trim() || undefined, updatedAt: Date.now() }
+              : c,
           ),
         })),
 
@@ -132,17 +145,21 @@ export const useFiles = create<FilesState>()(
       addItems: (items) =>
         set((s) => {
           const existing = new Set(s.items.map((i) => `${i.categoryId}|${i.path}`));
+          const now = Date.now();
           const fresh = items
             .filter((i) => !existing.has(`${i.categoryId}|${i.path}`))
-            .map((i) => ({ ...i, id: uid(), createdAt: Date.now() }));
+            .map((i) => ({ ...i, id: uid(), createdAt: now, updatedAt: now }));
           if (fresh.length === 0) return s;
           return { items: [...s.items, ...fresh] };
         }),
 
       updateItem: (id, patch) =>
         set((s) => ({
-          items: s.items.map((i) => (i.id === id ? { ...i, ...patch } : i)),
+          items: s.items.map((i) =>
+            i.id === id ? { ...i, ...patch, updatedAt: Date.now() } : i,
+          ),
         })),
+
 
       removeItem: (id) =>
         set((s) => ({ items: s.items.filter((i) => i.id !== id) })),
@@ -167,7 +184,29 @@ export const useFiles = create<FilesState>()(
           return { items };
         }),
     }),
-    { name: "files", storage: createJSONStorage(() => tauriJsonStorage), version: 1 },
+    {
+      name: "files",
+      storage: createJSONStorage(() => tauriJsonStorage),
+      version: 2,
+      /**
+       * v1 → v2：补 `updatedAt`（备份合并要「同 id 比时间新者胜」）。
+       *
+       * 用 `createdAt` 兜底而不是 `Date.now()` —— 后者会让全部历史条目
+       * 在同一次启动里「一起变新」，之后从备份恢复时把所有旧版本都判成过时。
+       */
+      migrate: (persisted, version) => {
+        const state = persisted as
+          | { categories?: { createdAt?: number; updatedAt?: number }[]; items?: { createdAt?: number; updatedAt?: number }[] }
+          | undefined;
+        if (!state || version >= 2) return persisted as never;
+        const stamp = <T extends { createdAt?: number; updatedAt?: number }>(x: T): T =>
+          x.updatedAt ? x : { ...x, updatedAt: x.createdAt ?? Date.now() };
+        return {
+          categories: (state.categories ?? []).map(stamp),
+          items: (state.items ?? []).map(stamp),
+        } as never;
+      },
+    },
   ),
 );
 

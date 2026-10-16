@@ -1,6 +1,7 @@
 import type { StateStorage } from "zustand/middleware";
 import { emit, listen } from "@tauri-apps/api/event";
 import { readJson, writeJson, inTauri } from "@/lib/tauri";
+import { useStorageHealth, type StorageProblem } from "@/stores/storage-health";
 
 /**
  * Zustand persist 适配器：落到自定义数据目录的 JSON 文件。
@@ -47,6 +48,11 @@ if (inTauri) {
   }).catch(() => undefined);
 }
 
+/** 把失败收进 storageHealth（唯一出口），UI 顶部据此渲染告警条 */
+function reportFailure(problem: StorageProblem, key: string, e: unknown) {
+  useStorageHealth.getState().report(problem, key, e instanceof Error ? e.message : String(e));
+}
+
 function flush(key: string) {
   const value = pending.get(key);
   if (value === undefined) return;
@@ -54,20 +60,23 @@ function flush(key: string) {
   selfWrites.set(key, Date.now());
   void writeJson(key, value)
     .then(() => {
+      // 该 key 恢复正常 → 撤掉它的告警（只撤自己，别的 key 还在失败就留着）
+      useStorageHealth.getState().clear(key);
       // 落盘成功后再广播，保证其他窗口读到的是新值
       if (inTauri) void emit(EV_STORAGE, { key }).catch(() => undefined);
     })
-    .catch((e) => console.error(`[storage] write ${key}:`, e));
+    .catch((e) => reportFailure("write", key, e));
 }
 
 export const tauriJsonStorage: StateStorage = {
   async getItem(name) {
+    // 读失败也不能静默：读不回来 = 界面数据全丢了，用户必须知道
     try {
       return await readJson<unknown>(name).then((v) =>
         v == null ? null : JSON.stringify(v),
       );
     } catch (e) {
-      console.error(`[storage] read ${name}:`, e);
+      reportFailure("unavailable", name, e);
       return null;
     }
   },
@@ -97,9 +106,10 @@ export const tauriJsonStorage: StateStorage = {
     selfWrites.set(name, Date.now());
     try {
       await writeJson(name, null);
+      useStorageHealth.getState().clear(name);
       if (inTauri) void emit(EV_STORAGE, { key: name }).catch(() => undefined);
     } catch (e) {
-      console.error(`[storage] remove ${name}:`, e);
+      reportFailure("remove", name, e);
     }
   },
 };

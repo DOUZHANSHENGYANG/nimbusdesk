@@ -10,6 +10,16 @@ import { useFiles, useFences } from "@/stores/files";
 import { ModalProvider } from "@/components/shell/modal-host";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/sonner";
+import { useReminderLoop } from "@/features/plans/reminder";
+
+/**
+ * 提醒调度包装：`useReminderLoop` 是 hook，不能直接当组件渲染。
+ * 只在主窗口跑 —— Providers 仅被 App 使用，栅栏/菜单浮窗走各自入口。
+ */
+function ReminderLoop() {
+  useReminderLoop();
+  return null;
+}
 
 /** 全局 Provider 组合 + 设置同步（主题/语言/数据目录/防白闪显示） */
 export function Providers({ children }: { children: ReactNode }) {
@@ -19,6 +29,7 @@ export function Providers({ children }: { children: ReactNode }) {
         <TooltipProvider delayDuration={300}>
           <StorageSync />
           <SettingsSync />
+          <ReminderLoop />
           {children}
           <Toaster position="bottom-right" />
         </TooltipProvider>

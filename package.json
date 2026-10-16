@@ -7,7 +7,10 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "check:i18n": "node scripts/check-i18n.mjs",
+    "check:rust": "cargo test --manifest-path src-tauri/Cargo.toml --lib",
+    "verify": "npm run check:i18n && tsc --noEmit && npm run check:rust"
   },
   "dependencies": {
     "@floating-ui/dom": "^1.8.0",
@@ -16,6 +19,7 @@
     "@tauri-apps/api": "^2",
     "@tauri-apps/plugin-dialog": "^2.8.1",
     "@tauri-apps/plugin-http": "~2.8.2",
+    "@tauri-apps/plugin-notification": "^2.7.0",
     "@tauri-apps/plugin-opener": "^2",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

@@ -1,3 +1,4 @@
+pub mod backup;
 pub mod data;
 pub mod dragdrop;
 pub mod fileops;

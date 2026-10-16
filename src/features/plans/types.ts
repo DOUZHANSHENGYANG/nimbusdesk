@@ -19,6 +19,11 @@ export interface PlanTask {
    */
   done: boolean;
   createdAt: number;
+  /**
+   * 最后修改时间。**只有备份合并（backup.ts）在用它**：
+   * 同 id 冲突时保留较新的一份。不做展示，不参与排序。
+   */
+  updatedAt: number;
 }
 
 export interface ArchivedDay {

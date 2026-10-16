@@ -161,6 +161,43 @@ export async function hidePopupMenu(): Promise<void> {
   await invoke("hide_popup_menu");
 }
 
+/* ── 备份 / 恢复 ──────────────────────────────────────── */
+
+/** 弹出「另存为」选备份路径（取消返回 null） */
+export async function pickBackupSavePath(defaultName: string): Promise<string | null> {
+  return invoke<string | null>("pick_backup_save_path", { defaultName });
+}
+
+/** 弹出「打开」选备份文件（取消返回 null） */
+export async function pickBackupOpenPath(): Promise<string | null> {
+  return invoke<string | null>("pick_backup_open_path");
+}
+
+export interface BackupExport {
+  path: string;
+  bytes: number;
+}
+
+/** 原子写出备份文件 */
+export async function writeBackup(path: string, content: string): Promise<BackupExport> {
+  return invoke<BackupExport>("write_backup", { path, content });
+}
+
+/** 读入备份文件原文（上限 64MB） */
+export async function readBackup(path: string): Promise<string> {
+  return invoke<string>("read_backup", { path });
+}
+
+/** 扫描目录，返回相对路径列表（只含目录） */
+export async function scanDirTree(root: string): Promise<string[]> {
+  return invoke<string[]>("scan_dir_tree", { root });
+}
+
+/** 按相对路径重建目录，返回新建数量 */
+export async function restoreDirTree(root: string, dirs: string[]): Promise<number> {
+  return invoke<number>("restore_dir_tree", { root, dirs });
+}
+
 /** 是否运行在 Tauri 环境（浏览器 pnpm dev 时为 false） */
 export const inTauri =
   typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
