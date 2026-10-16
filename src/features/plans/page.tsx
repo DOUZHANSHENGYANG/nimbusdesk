@@ -3,24 +3,26 @@ import { CalendarDays, ChevronLeft, ChevronRight, Archive } from "lucide-react";
 import { motion } from "motion/react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
-import {
-  addDays,
-  dayProgress,
-  parseDate,
-  todayStr,
-} from "@/features/plans/types";
+import { addDays, dayProgress, parseDate, todayStr } from "@/features/plans/types";
 import { useDayTasks, usePlans, usePlansArchive, archiveDay, autoArchivePastDays } from "@/features/plans/store";
 import { OutlineView } from "@/features/plans/views/outline";
 import { KanbanView } from "@/features/plans/views/kanban";
 import { TimelineView } from "@/features/plans/views/timeline";
 import { CalendarView } from "@/features/plans/views/calendar";
 import { ArchiveView } from "@/features/plans/views/archive";
+import { StatsView } from "@/features/plans/views/stats";
 import { useModal } from "@/components/shell/modal-host";
+import { useSettings } from "@/stores/settings";
 import { gsap, useGSAP } from "@/lib/gsap";
 import { cn } from "@/lib/utils";
 
-type ViewKey = "outline" | "timeline" | "kanban" | "calendar" | "archive";
-const VIEW_KEYS: ViewKey[] = ["outline", "timeline", "kanban", "calendar", "archive"];
+/**
+ * 视图键。顺序即 pill 顺序，也是 `1`–`6` 快捷键的顺序。
+ * 用 `as const` 数组而不是 union 字面量，是为了让快捷键能从同一份顺序里取键 ——
+ * 两处各写一份列表，加视图时必然漏改一处。
+ */
+export const VIEW_KEYS = ["outline", "timeline", "kanban", "calendar", "stats", "archive"] as const;
+export type ViewKey = (typeof VIEW_KEYS)[number];
 
 /** persist 水合完成（响应式） */
 function useStoreHydrated(store: typeof usePlans | typeof usePlansArchive): boolean {
@@ -35,12 +37,14 @@ function useStoreHydrated(store: typeof usePlans | typeof usePlansArchive): bool
   return h;
 }
 
-/** 计划管理：日期导航 + 五视图切换 + 自动/手动归档 */
+/** 计划管理：日期导航 + 六视图切换（`1`–`6` 快捷键）+ 自动/手动归档 */
 export function PlansPage() {
   const { t, i18n } = useTranslation();
   const { confirm } = useModal();
   const [date, setDate] = useState(todayStr());
-  const [view, setView] = useState<ViewKey>("outline");
+  // 视图选择持久化：刷新/切页回来仍停在原视图（存 settings.json）
+  const view = useSettings((s) => s.plansView);
+  const setView = useSettings((s) => s.setPlansView);
   const [viewTick, setViewTick] = useState(0); // 视图切换动画 key
 
   const plansHydrated = useStoreHydrated(usePlans);
@@ -83,6 +87,33 @@ export function PlansPage() {
     setView(v);
     setViewTick((n) => n + 1);
   };
+
+  /**
+   * `1`–`6` 切视图。
+   *
+   * 三处必须让行，否则会吞掉用户正在输入的字符：
+   * - 焦点在 input / textarea / contentEditable（编辑任务、备注、新建框）
+   * - 按了修饰键（Ctrl+1 是别的语义，不该被我们劫持）
+   * - 视图键来自同一份 `VIEW_KEYS`，加视图时快捷键自动跟上
+   */
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      const el = e.target as HTMLElement | null;
+      if (el?.isContentEditable) return;
+      const tag = el?.tagName;
+      if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+
+      const n = Number(e.key);
+      if (!Number.isInteger(n) || n < 1 || n > VIEW_KEYS.length) return;
+      e.preventDefault();
+      switchView(VIEW_KEYS[n - 1]);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // switchView 依赖 setView/setViewTick，二者都稳定；不必进依赖数组
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const onArchiveDay = async () => {
     if (tasks.length === 0) return;
@@ -220,6 +251,7 @@ export function PlansPage() {
               }}
             />
           )}
+          {view === "stats" && <StatsView date={date} />}
           {view === "archive" && (
             <ArchiveView
               onRestore={(d) => {
