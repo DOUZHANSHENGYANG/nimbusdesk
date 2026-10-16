@@ -206,12 +206,7 @@ function TaskRow({ date, task, depth }: { date: string; task: PlanTask; depth: n
         {/* 标题 / 编辑态 */}
         {editing ? (
           <div className="flex min-w-0 flex-1 flex-col gap-2 rounded-lg border border-border bg-card p-2.5">
-            {/*
-              一行放三个表单：标题（弹性）+ 时间 + 备注（弹性）。
-              标题一般不会太长，而编辑态是「一次只编一条」，横向空间够用；
-              把三者摆在一行能让整块变矮，也不用来回移动视线。
-              确认 / 取消都是图标按钮，视觉重量一致。
-            */}
+            {/* 第一行：标题（弹性）+ 时间 + 确认/取消（图标按钮，视觉重量一致） */}
             <div className="flex min-w-0 items-center gap-2">
               <input
                 autoFocus
@@ -228,16 +223,6 @@ function TaskRow({ date, task, depth }: { date: string; task: PlanTask; depth: n
                 start={draft.start}
                 end={draft.end}
                 onChange={({ start, end }) => setDraft({ ...draft, start, end })}
-              />
-              <input
-                value={draft.note}
-                onChange={(e) => setDraft({ ...draft, note: e.target.value })}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") saveEdit();
-                  if (e.key === "Escape") setEditing(false);
-                }}
-                placeholder={t("plans.noteLabel")}
-                className="min-w-0 flex-1 bg-transparent text-[12px] text-muted-foreground outline-none placeholder:text-muted-foreground/50"
               />
               <button
                 type="button"
@@ -258,6 +243,18 @@ function TaskRow({ date, task, depth }: { date: string; task: PlanTask; depth: n
                 <X className="size-4" />
               </button>
             </div>
+
+            {/* 第二行：备注独占一行，给足横向空间 */}
+            <input
+              value={draft.note}
+              onChange={(e) => setDraft({ ...draft, note: e.target.value })}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") saveEdit();
+                if (e.key === "Escape") setEditing(false);
+              }}
+              placeholder={t("plans.noteLabel")}
+              className="w-full bg-transparent text-[12px] text-muted-foreground outline-none placeholder:text-muted-foreground/50"
+            />
           </div>
         ) : (
           <div className="flex min-w-0 flex-1 flex-col gap-0.5">
