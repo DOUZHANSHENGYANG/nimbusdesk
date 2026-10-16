@@ -6,16 +6,25 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
-  /* 字体 */
-  --font-sans: "Geist Variable", "Segoe UI", "Microsoft YaHei UI", "PingFang SC",
-    "Noto Sans SC", sans-serif;
+  /*
+   * 字体
+   * 首选 Geist Variable：它是随包分发的可变字重无衬线，字形比例最接近 SF Pro，
+   * 且不会因为目标机器没装某字体而回退成 Arial。
+   * Segoe UI Variable / 微软雅黑 UI 作为中文与旧系统的回退。
+   */
+  --font-sans: "Geist Variable", "Segoe UI Variable Text", "Segoe UI",
+    "Microsoft YaHei UI", "PingFang SC", "Noto Sans SC", sans-serif;
   --font-heading: var(--font-sans);
+  /*
+   * 等宽：Cascadia Mono 是 Win11 自带，Consolas 从 Vista 起就有 ——
+   * 不列 Geist Mono / SF Mono，本机既没装也没随包分发，写了只是误导。
+   */
+  --font-mono: "Cascadia Mono", "Consolas", "Microsoft YaHei UI", monospace;
 
   /* shadcn 语义色映射 */
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
-  --color-card-foreground: var(--card-foreground);
   --color-popover: var(--popover);
   --color-popover-foreground: var(--popover-foreground);
   --color-primary: var(--primary);
@@ -52,6 +61,20 @@
   --color-brand: var(--pr-brand-500);
   --color-brand-strong: var(--pr-brand-600);
   --color-brand-soft: var(--pr-brand-200);
+
+  /*
+   * 文件类型标识色。暴露成 tailwind color 之后组件里写 `text-file-pdf` 即可，
+   * 两套主题的明度差异由 token 层负责 —— 组件不需要知道当前是明是暗。
+   */
+  --color-file-pdf: var(--pr-file-pdf);
+  --color-file-slide: var(--pr-file-slide);
+  --color-file-archive: var(--pr-file-archive);
+  --color-file-sheet: var(--pr-file-sheet);
+  --color-file-video: var(--pr-file-video);
+  --color-file-image: var(--pr-file-image);
+  --color-file-doc: var(--pr-file-doc);
+  --color-file-audio: var(--pr-file-audio);
+  --color-file-misc: var(--pr-file-misc);
 
   /* 圆角 */
   --radius-sm: calc(var(--pr-radius-sm) - 2px);
@@ -94,7 +117,7 @@ textarea {
 }
 
 ::selection {
-  background: oklch(0.60 0.21 277 / 0.30);
+  background: var(--selection);
 }
 
 /* 滚动条 */

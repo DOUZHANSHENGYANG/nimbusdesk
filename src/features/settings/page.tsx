@@ -552,7 +552,7 @@ function AiSection() {
         </div>
         <div className="flex items-center gap-3">
           <Button size="sm" onClick={saveAi}>{t("feeds.saveAi")}</Button>
-          {aiSaved ? <span className="text-xs text-emerald-600">{t("feeds.aiSaved")}</span> : null}
+          {aiSaved ? <span className="text-xs text-success">{t("feeds.aiSaved")}</span> : null}
         </div>
       </CardContent>
     </Card>
@@ -626,24 +626,24 @@ function ThemePreview({
         "relative h-16 w-28 overflow-hidden rounded-xl border-2 transition-colors duration-150",
         selected ? "border-brand" : "border-border hover:border-muted-foreground/40",
       )}
-      style={{ background: mode === "light" ? "#f4f4f6" : "#141419" }}
+      style={{ background: mode === "light" ? "#f3f4f6" : "#07090c" }}
     >
       <span
         className="absolute top-2 left-2 h-1.5 w-10 rounded-full"
-        style={{ background: mode === "light" ? "#c9c9d1" : "#33333d" }}
+        style={{ background: mode === "light" ? "#d0d3d6" : "#2c2f34" }}
       />
       <span
         className="absolute top-6 left-2 h-1.5 w-16 rounded-full"
-        style={{ background: mode === "light" ? "#dcdce2" : "#23232b" }}
+        style={{ background: mode === "light" ? "#dee0e2" : "#161a1e" }}
       />
       <span
         className="absolute right-2 bottom-2 size-5 rounded-md"
-        style={{ background: "oklch(0.60 0.21 277)" }}
+        style={{ background: "var(--pr-brand-500)" }}
       />
       <span
         className={cn(
           "absolute bottom-1.5 left-2 text-[11px] font-semibold",
-          mode === "light" ? "text-neutral-600" : "text-neutral-300",
+          mode === "light" ? "text-foreground/70" : "text-foreground/70",
         )}
       >
         {label}

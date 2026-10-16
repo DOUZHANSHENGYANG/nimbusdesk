@@ -1,0 +1,531 @@
+<!doctype html>
+<html lang="zh" data-theme="dark">
+  <head>
+    <meta charset="utf-8" />
+    <title>NimbusDesk · 雾蓝石墨 设计系统</title>
+    <style>
+      /* ── 直接从 src/styles/tokens.css 复制（保持同步）── */
+      :root {
+        color-scheme: light;
+        --pr-brand-50: oklch(0.975 0.012 248);
+        --pr-brand-100: oklch(0.945 0.028 248);
+        --pr-brand-200: oklch(0.885 0.055 248);
+        --pr-brand-300: oklch(0.815 0.085 248);
+        --pr-brand-400: oklch(0.735 0.108 248);
+        --pr-brand-500: oklch(0.655 0.128 248);
+        --pr-brand-600: oklch(0.548 0.138 248);
+        --pr-brand-700: oklch(0.47 0.128 248);
+        --pr-brand-800: oklch(0.395 0.104 248);
+        --pr-brand-900: oklch(0.32 0.077 248);
+        --pr-brand-950: oklch(0.238 0.054 248);
+        --pr-gray-0: oklch(1 0 0);
+        --pr-gray-25: oklch(0.985 0.0015 255);
+        --pr-gray-50: oklch(0.968 0.0025 255);
+        --pr-gray-100: oklch(0.938 0.0035 255);
+        --pr-gray-150: oklch(0.905 0.004 255);
+        --pr-gray-200: oklch(0.865 0.005 255);
+        --pr-gray-300: oklch(0.765 0.006 255);
+        --pr-gray-400: oklch(0.645 0.007 255);
+        --pr-gray-500: oklch(0.535 0.008 255);
+        --pr-gray-600: oklch(0.45 0.009 255);
+        --pr-gray-700: oklch(0.36 0.01 255);
+        --pr-gray-750: oklch(0.305 0.01 255);
+        --pr-gray-800: oklch(0.255 0.01 255);
+        --pr-gray-850: oklch(0.215 0.01 255);
+        --pr-gray-900: oklch(0.18 0.009 255);
+        --pr-gray-925: oklch(0.158 0.008 255);
+        --pr-gray-950: oklch(0.138 0.007 255);
+        --pr-gray-975: oklch(0.118 0.006 255);
+        --pr-gray-1000: oklch(0.1 0.005 255);
+        --pr-red-600: oklch(0.53 0.2 25);
+        --pr-red-400: oklch(0.72 0.18 25);
+        --pr-green-600: oklch(0.535 0.15 155);
+        --pr-green-400: oklch(0.75 0.16 155);
+        --pr-amber-600: oklch(0.53 0.12 60);
+        --pr-amber-400: oklch(0.82 0.13 80);
+        --pr-blue-600: oklch(0.55 0.14 240);
+        --pr-blue-400: oklch(0.72 0.13 240);
+        --pr-file-pdf: oklch(0.52 0.15 20);
+        --pr-file-slide: oklch(0.52 0.15 49);
+        --pr-file-archive: oklch(0.52 0.15 78);
+        --pr-file-sheet: oklch(0.52 0.15 107);
+        --pr-file-video: oklch(0.52 0.15 136);
+        --pr-file-image: oklch(0.52 0.15 194);
+        --pr-file-doc: oklch(0.52 0.15 165);
+        --pr-file-audio: oklch(0.52 0.15 350);
+        --pr-file-misc: oklch(0.47 0.012 255);
+        --pr-radius-xs: 6px;
+        --pr-radius-sm: 8px;
+        --pr-radius-md: 12px;
+        --pr-radius-lg: 16px;
+        --pr-radius-xl: 22px;
+        --pr-shadow-glow: 0 0 0 1px oklch(0.548 0.138 248 / 0.28),
+          0 0 20px oklch(0.548 0.138 248 / 0.24);
+
+        --background: var(--pr-gray-50);
+        --foreground: var(--pr-gray-800);
+        --card: var(--pr-gray-0);
+        --card-foreground: var(--pr-gray-800);
+        --primary: var(--pr-brand-600);
+        --primary-foreground: var(--pr-gray-0);
+        --secondary: var(--pr-gray-100);
+        --secondary-foreground: var(--pr-gray-700);
+        --muted: var(--pr-gray-100);
+        --muted-foreground: var(--pr-gray-500);
+        --accent: var(--pr-brand-50);
+        --accent-foreground: var(--pr-brand-700);
+        --destructive: var(--pr-red-600);
+        --success: var(--pr-green-600);
+        --warning: var(--pr-amber-600);
+        --info: var(--pr-blue-600);
+        --border: var(--pr-gray-150);
+        --sidebar: var(--pr-gray-100);
+        --sidebar-foreground: var(--pr-gray-600);
+        --surface-hover: oklch(0.548 0.138 248 / 0.055);
+        --selection: oklch(0.548 0.138 248 / 0.24);
+      }
+
+      html[data-theme="dark"] {
+        color-scheme: dark;
+        --background: var(--pr-gray-950);
+        --foreground: var(--pr-gray-50);
+        --card: var(--pr-gray-900);
+        --card-foreground: var(--pr-gray-50);
+        --primary: var(--pr-brand-600);
+        --primary-foreground: var(--pr-gray-0);
+        --secondary: var(--pr-gray-850);
+        --secondary-foreground: var(--pr-gray-100);
+        --muted: var(--pr-gray-850);
+        --muted-foreground: var(--pr-gray-400);
+        --accent: oklch(0.655 0.128 248 / 0.16);
+        --accent-foreground: var(--pr-brand-200);
+        --destructive: var(--pr-red-400);
+        --success: var(--pr-green-400);
+        --warning: var(--pr-amber-400);
+        --info: var(--pr-blue-400);
+        --border: oklch(1 0 0 / 0.09);
+        --sidebar: var(--pr-gray-975);
+        --sidebar-foreground: var(--pr-gray-300);
+        --surface-hover: oklch(0.735 0.108 248 / 0.075);
+        --selection: oklch(0.735 0.108 248 / 0.3);
+        --pr-file-pdf: oklch(0.74 0.145 20);
+        --pr-file-slide: oklch(0.74 0.145 49);
+        --pr-file-archive: oklch(0.74 0.145 78);
+        --pr-file-sheet: oklch(0.74 0.145 107);
+        --pr-file-video: oklch(0.74 0.145 136);
+        --pr-file-image: oklch(0.74 0.145 194);
+        --pr-file-doc: oklch(0.74 0.145 165);
+        --pr-file-audio: oklch(0.74 0.145 350);
+        --pr-file-misc: oklch(0.7 0.012 255);
+      }
+
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        padding: 40px 32px;
+        background: var(--background);
+        color: var(--foreground);
+        font-family: "Geist Variable", "Segoe UI Variable Text", "Segoe UI",
+          "Microsoft YaHei UI", sans-serif;
+        font-size: 14px;
+        line-height: 1.55;
+        -webkit-font-smoothing: antialiased;
+        transition: background 300ms, color 300ms;
+      }
+      h1 { font-size: 22px; font-weight: 600; margin: 0 0 4px; letter-spacing: -0.01em; }
+      h2 {
+        font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase;
+        color: var(--muted-foreground); margin: 40px 0 14px;
+      }
+      .sub { color: var(--muted-foreground); font-size: 13px; margin: 0 0 28px; }
+      .wrap { max-width: 1120px; margin: 0 auto; }
+
+      /* 主题切换：双击标题 */
+      h1 { cursor: pointer; user-select: none; }
+      .hint {
+        display: inline-block; margin-left: 8px; padding: 2px 8px; border-radius: 999px;
+        background: var(--accent); color: var(--accent-foreground);
+        font-size: 11px; font-weight: 600; vertical-align: middle;
+      }
+
+      .swatches { display: flex; flex-wrap: wrap; gap: 6px; }
+      .sw {
+        width: 76px; height: 56px; border-radius: 10px; position: relative;
+        border: 1px solid var(--border); overflow: hidden;
+      }
+      .sw span {
+        position: absolute; bottom: 3px; left: 5px; font-size: 9px; font-weight: 600;
+        font-family: "Cascadia Mono", Consolas, monospace;
+      }
+      .sw-dark span { color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,.5); }
+      .sw-light span { color: #000; text-shadow: 0 1px 2px rgba(255,255,255,.6); }
+
+      .grid { display: grid; gap: 14px; }
+      .g3 { grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); }
+      .g4 { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+
+      .card {
+        background: var(--card); color: var(--card-foreground);
+        border: 1px solid var(--border); border-radius: var(--pr-radius-lg);
+        padding: 18px; transition: background 300ms, border-color 300ms;
+      }
+      .card h3 { margin: 0 0 10px; font-size: 13px; font-weight: 600; }
+
+      .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+
+      .btn {
+        height: 40px; padding: 0 20px; border-radius: 999px; border: 1px solid transparent;
+        font-size: 14px; font-weight: 500; cursor: pointer; display: inline-flex;
+        align-items: center; gap: 8px; transition: all 180ms cubic-bezier(.34,1.42,.64,1);
+      }
+      .btn:active { transform: scale(.96); }
+      .btn-primary { background: var(--primary); color: var(--primary-foreground); }
+      .btn-primary:hover { filter: brightness(1.1); }
+      .btn-secondary { background: var(--secondary); color: var(--secondary-foreground); }
+      .btn-ghost { background: transparent; color: var(--primary); }
+      .btn-ghost:hover { background: var(--accent); }
+      .btn-outline { background: transparent; border-color: var(--border); color: var(--foreground); }
+      .btn-sm { height: 32px; padding: 0 14px; font-size: 12px; }
+
+      .input {
+        height: 40px; width: 100%; padding: 0 12px; font-size: 14px;
+        background: var(--card); color: var(--foreground);
+        border: 1px solid var(--border); border-radius: var(--pr-radius-sm);
+        outline: none; transition: box-shadow 180ms, border-color 180ms;
+      }
+      .input:focus { border-color: var(--primary); box-shadow: var(--pr-shadow-glow); }
+      .input::placeholder { color: var(--muted-foreground); }
+
+      .sw-toast {
+        display: flex; align-items: center; justify-content: space-between;
+        width: 44px; height: 26px; border-radius: 999px; padding: 0 3px;
+        background: var(--muted-foreground); cursor: pointer; transition: background 220ms;
+      }
+      .sw-toast.on { background: var(--primary); }
+      .sw-toast i {
+        display: block; width: 20px; height: 20px; border-radius: 50%; background: #fff;
+        box-shadow: 0 1px 3px rgba(0,0,0,.3);
+        transition: transform 220ms cubic-bezier(.34,1.42,.64,1);
+      }
+      .sw-toast.on i { transform: translateX(18px); }
+
+      .badge {
+        display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 9px;
+        border-radius: 999px; font-size: 11px; font-weight: 600;
+      }
+      .b-done { background: var(--primary); color: var(--primary-foreground); }
+      .b-doing { background: var(--accent); color: var(--accent-foreground); }
+      .b-todo { background: var(--muted); color: var(--muted-foreground); }
+      .b-ok { background: color-mix(in oklch, var(--success) 16%, transparent); color: var(--success); }
+      .b-warn { background: color-mix(in oklch, var(--warning) 18%, transparent); color: var(--warning); }
+      .b-err { background: color-mix(in oklch, var(--destructive) 16%, transparent); color: var(--destructive); }
+
+      table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+      th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--border); }
+      th { color: var(--muted-foreground); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
+      td.mono, .mono { font-family: "Cascadia Mono", Consolas, monospace; font-size: 12px; }
+      .pass { color: var(--success); font-weight: 600; }
+
+      .files { display: flex; flex-direction: column; gap: 2px; }
+      .file {
+        display: flex; align-items: center; gap: 10px; padding: 7px 9px;
+        border-radius: var(--pr-radius-sm); cursor: default;
+      }
+      .file:hover { background: var(--surface-hover); }
+      .file em { color: var(--muted-foreground); font-style: normal; font-size: 11px; margin-left: auto; }
+      .file .dot { width: 14px; height: 14px; border-radius: 4px; flex: none; }
+
+      .sidebar-demo {
+        display: flex; gap: 0; border-radius: var(--pr-radius-lg); overflow: hidden;
+        border: 1px solid var(--border);
+      }
+      .sidebar-demo nav {
+        width: 190px; background: var(--sidebar); color: var(--sidebar-foreground);
+        padding: 10px; display: flex; flex-direction: column; gap: 2px;
+      }
+      .sidebar-demo nav a {
+        display: flex; align-items: center; gap: 10px; padding: 8px 10px;
+        border-radius: var(--pr-radius-sm); color: inherit; text-decoration: none; font-size: 13px;
+      }
+      .sidebar-demo nav a.on { background: var(--accent); color: var(--accent-foreground); font-weight: 600; }
+      .sidebar-demo nav a:not(.on):hover { background: var(--surface-hover); }
+      .sidebar-demo .main { flex: 1; background: var(--background); padding: 16px; }
+      .sidebar-demo .main .card { padding: 14px; }
+      .bar { height: 6px; border-radius: 999px; background: var(--muted); overflow: hidden; }
+      .bar i { display: block; height: 100%; background: var(--primary); border-radius: 999px; }
+
+      .type-row { display: flex; align-items: baseline; gap: 14px; padding: 7px 0; border-bottom: 1px solid var(--border); }
+      .type-row b { min-width: 118px; color: var(--muted-foreground); font-size: 11px; font-weight: 600; }
+
+      ::selection { background: var(--selection); }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <h1 id="title">
+        NimbusDesk · 雾蓝石墨<span class="hint">双击标题切换明暗</span>
+      </h1>
+      <p class="sub">
+        Azure Slate 设计系统 — 天青蓝 H=248 品牌色 + 冷中性石墨（饱和 ≤0.01）。<br />
+        全部 45 项对比度经 WCAG AA 验证（正文 ≥4.5:1、图形 ≥3:1）。
+      </p>
+
+      <h2>品牌色阶 · 天青蓝</h2>
+      <div class="swatches" id="brand"></div>
+
+      <h2>中性石墨</h2>
+      <div class="swatches" id="gray"></div>
+
+      <h2>语义色 · 浅/深两档</h2>
+      <div class="swatches" id="status"></div>
+
+      <h2>文件类型标识色</h2>
+      <div class="swatches" id="files"></div>
+
+      <h2>组件预览</h2>
+      <div class="grid g3">
+        <div class="card">
+          <h3>按钮</h3>
+          <div class="row">
+            <button class="btn btn-primary">主要操作</button>
+            <button class="btn btn-secondary">次要</button>
+          </div>
+          <div class="row" style="margin-top: 10px">
+            <button class="btn btn-outline btn-sm">描边</button>
+            <button class="btn btn-ghost btn-sm">纯文字</button>
+            <button class="btn btn-sm" style="background: color-mix(in oklch, var(--destructive) 14%, transparent); color: var(--destructive)">删除</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>输入框（聚焦态）</h3>
+          <input class="input" placeholder="输入后回车添加…" />
+          <input class="input" style="margin-top: 10px; border-color: var(--primary); box-shadow: var(--pr-shadow-glow)" value="已聚焦" />
+        </div>
+
+        <div class="card">
+          <h3>开关 / 状态徽标</h3>
+          <div class="row">
+            <div class="sw-toast on" id="sw1"><i></i></div>
+            <div class="sw-toast" id="sw2"><i></i></div>
+          </div>
+          <div class="row" style="margin-top: 12px">
+            <span class="badge b-done">已完成</span>
+            <span class="badge b-doing">进行中</span>
+            <span class="badge b-todo">待办</span>
+          </div>
+          <div class="row" style="margin-top: 8px">
+            <span class="badge b-ok">成功</span>
+            <span class="badge b-warn">警告</span>
+            <span class="badge b-err">危险</span>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>文件类型图标</h3>
+          <div class="files" id="filelist"></div>
+        </div>
+
+        <div class="card">
+          <h3>进度</h3>
+          <div style="display: flex; flex-direction: column; gap: 10px">
+            <div class="bar"><i style="width: 72%"></i></div>
+            <div class="bar"><i style="width: 38%; background: var(--success)"></i></div>
+            <div class="bar"><i style="width: 100%; background: var(--warning)"></i></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>排版尺度</h3>
+          <div class="type-row"><b>标题 22 / 600</b><span style="font-size: 22px; font-weight: 600">今日计划</span></div>
+          <div class="type-row"><b>小标题 15 / 600</b><span style="font-size: 15px; font-weight: 600">数据与存储</span></div>
+          <div class="type-row"><b>正文 14 / 400</b><span>任务标题与说明文字</span></div>
+          <div class="type-row"><b>次要 12 / 400</b><span style="font-size: 12px; color: var(--muted-foreground)">辅助说明、时间戳</span></div>
+          <div class="type-row" style="border: none"><b>等宽 12</b><span class="mono">2026-03-10 09:00 – 11:30</span></div>
+        </div>
+      </div>
+
+      <h2>布局预览 · 侧栏 + 主区</h2>
+      <div class="sidebar-demo">
+        <nav>
+          <a class="on">▦ 主页</a>
+          <a>▤ 项目管理</a>
+          <a>▥ 计划管理</a>
+          <a>▧ 文件管理</a>
+          <a>▨ 资讯</a>
+          <a style="margin-top: auto">⚙ 设置</a>
+        </nav>
+        <div class="main">
+          <div class="card">
+            <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px">
+              <b style="font-size: 15px">今日计划</b>
+              <span class="badge b-doing">3/8 已完成</span>
+            </div>
+            <div class="bar" style="margin-bottom: 14px"><i style="width: 37%"></i></div>
+            <div style="display: flex; flex-direction: column; gap: 6px">
+              <div class="file"><span class="dot" style="background: var(--pr-brand-500)"></span>梳理配色 token 层级<span style="margin-left: auto" class="mono" >09:00 – 11:30</span></div>
+              <div class="file"><span class="dot" style="background: var(--pr-gray-300)"></span>写对比度校验脚本<span style="margin-left: auto" class="mono">14:00 – 15:00</span></div>
+              <div class="file"><span class="dot" style="background: var(--pr-gray-300)"></span>文件类型图标收敛到 token</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <h2>对比度实测（WCAG）</h2>
+      <div class="card" style="padding: 6px 14px">
+        <table id="ct"></table>
+      </div>
+
+      <p class="sub" style="margin-top: 28px">
+        字号说明：正文 14px、次要 12px、标题 15–22px；圆角 6 / 8 / 12 / 16 / 22；
+        间距走 4pt 栅格。
+      </p>
+    </div>
+
+<script>
+  /*
+   * 预览页脚本：把 token 渲染成色卡 + 现场算一遍对比度。
+   *
+   * 这里是"查看器"，不是设计系统的实现 —— 真正的取值以 src/styles/tokens.css 为准，
+   * 一致性由 scripts/check-contrast.mjs（直接解析该 CSS）保证。
+   */
+  try {
+    const G = {
+      0: "oklch(1 0 0)", 25: "oklch(0.985 0.0015 255)", 50: "oklch(0.968 0.0025 255)",
+      100: "oklch(0.938 0.0035 255)", 150: "oklch(0.905 0.004 255)", 200: "oklch(0.865 0.005 255)",
+      300: "oklch(0.765 0.006 255)", 400: "oklch(0.645 0.007 255)", 500: "oklch(0.535 0.008 255)",
+      600: "oklch(0.45 0.009 255)", 700: "oklch(0.36 0.01 255)", 750: "oklch(0.305 0.01 255)",
+      800: "oklch(0.255 0.01 255)", 850: "oklch(0.215 0.01 255)", 900: "oklch(0.18 0.009 255)",
+      925: "oklch(0.158 0.008 255)", 950: "oklch(0.138 0.007 255)", 975: "oklch(0.118 0.006 255)",
+      1000: "oklch(0.1 0.005 255)",
+    };
+    const B = {
+      50: "oklch(0.975 0.012 248)", 100: "oklch(0.945 0.028 248)", 200: "oklch(0.885 0.055 248)",
+      300: "oklch(0.815 0.085 248)", 400: "oklch(0.735 0.108 248)", 500: "oklch(0.655 0.128 248)",
+      600: "oklch(0.548 0.138 248)", 700: "oklch(0.47 0.128 248)", 800: "oklch(0.395 0.104 248)",
+      900: "oklch(0.32 0.077 248)", 950: "oklch(0.238 0.054 248)",
+    };
+
+    function swatch(el, label, color, whiteText) {
+      const d = document.createElement("div");
+      d.className = "sw " + (whiteText ? "sw-dark" : "sw-light");
+      d.style.background = color;
+      d.style.color = whiteText ? "#fff" : "#000";
+      d.innerHTML = "<span>" + label + "</span>";
+      el.appendChild(d);
+    }
+
+    for (const [k, v] of Object.entries(B)) {
+      swatch(document.getElementById("brand"), k, v, Number(k) >= 500);
+    }
+    for (const [k, v] of Object.entries(G)) {
+      swatch(document.getElementById("gray"), k, v, Number(k) >= 500);
+    }
+
+    const st = [
+      ["red-600", "oklch(0.53 0.2 25)"], ["red-400", "oklch(0.72 0.18 25)"],
+      ["green-600", "oklch(0.535 0.15 155)"], ["green-400", "oklch(0.75 0.16 155)"],
+      ["amber-600", "oklch(0.53 0.12 60)"], ["amber-400", "oklch(0.82 0.13 80)"],
+      ["blue-600", "oklch(0.55 0.14 240)"], ["blue-400", "oklch(0.72 0.13 240)"],
+    ];
+    for (const [n, v] of st) {
+      swatch(document.getElementById("status"), n, v, n.endsWith("600"));
+    }
+
+    const FT = [["pdf", 20], ["slide", 49], ["archive", 78], ["sheet", 107],
+      ["video", 136], ["doc", 165], ["image", 194], ["audio", 350], ["misc", null]];
+    const filesEl = document.getElementById("files");
+    function paintFiles(dark) {
+      filesEl.innerHTML = "";
+      for (const [n, h] of FT) {
+        const v = h === null
+          ? "oklch(" + (dark ? "0.7 0.012" : "0.47 0.012") + " 255)"
+          : "oklch(" + (dark ? "0.74 0.145" : "0.52 0.15") + " " + h + ")";
+        swatch(filesEl, n, v, dark);
+      }
+    }
+    paintFiles(true);
+
+    // 文件列表：展示图标色在行内的实际观感
+    const LIST = [["设计稿.pdf", "pdf", "▤"], ["季度汇报.pptx", "slide", "▥"],
+      ["归档.zip", "archive", "▣"], ["账目.xlsx", "sheet", "▦"],
+      ["会议录像.mp4", "video", "▷"], ["截图.png", "image", "▨"],
+      ["会议纪要.docx", "doc", "▤"], ["录音.m4a", "audio", "♫"],
+      ["build.rs", "misc", "◇"]];
+    const listEl = document.getElementById("filelist");
+    for (const [name, key, glyph] of LIST) {
+      const d = document.createElement("div");
+      d.className = "file";
+      d.innerHTML = '<span style="color: var(--pr-file-' + key +
+        '); font-size: 15px; width: 16px; text-align: center">' + glyph + "</span>" +
+        name + "<em>" + key + "</em>";
+      listEl.appendChild(d);
+    }
+
+    /* ── 现场算对比度，展示口径 ────────────────────────── */
+    function oklchToLinearSrgb(L, C, H) {
+      H = (H * Math.PI) / 180;
+      const a = C * Math.cos(H), b = C * Math.sin(H);
+      const l_ = L + 0.3963377774 * a + 0.2158037573 * b;
+      const m_ = L - 0.1055613458 * a - 0.0638541728 * b;
+      const s_ = L - 0.0894841775 * a - 1.291485548 * b;
+      return [
+        4.0767416621 * l_ ** 3 - 3.3077115913 * m_ ** 3 + 0.2309699292 * s_ ** 3,
+        -1.2684380046 * l_ ** 3 + 2.6097574011 * m_ ** 3 - 0.3413193965 * s_ ** 3,
+        -0.0041960863 * l_ ** 3 - 0.7034186147 * m_ ** 3 + 1.707614701 * s_ ** 3,
+      ];
+    }
+    const cl = (v) => Math.min(1, Math.max(0, v));
+    function lum(L, C, H) {
+      const rgb = oklchToLinearSrgb(L, C, H).map(cl);
+      return 0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2];
+    }
+    function cr(f, b) {
+      const a = lum(f[0], f[1], f[2]);
+      const c = lum(b[0], b[1], b[2]);
+      const hi = Math.max(a, c), lo = Math.min(a, c);
+      return (hi + 0.05) / (lo + 0.05);
+    }
+    const ROWS = [
+      ["浅色·正文 on 页面底", [0.255, 0.01, 255], [0.968, 0.0025, 255], 4.5],
+      ["浅色·次要文字 on 卡片", [0.535, 0.008, 255], [1, 0, 0], 4.5],
+      ["浅色·主按钮白字", [1, 0, 0], [0.548, 0.138, 248], 4.5],
+      ["浅色·危险色", [0.53, 0.2, 25], [1, 0, 0], 4.5],
+      ["浅色·成功色", [0.535, 0.15, 155], [1, 0, 0], 4.5],
+      ["深色·正文 on 卡片", [0.968, 0.0025, 255], [0.18, 0.009, 255], 4.5],
+      ["深色·次要文字 on 卡片", [0.645, 0.007, 255], [0.18, 0.009, 255], 4.5],
+      ["深色·主按钮白字", [1, 0, 0], [0.548, 0.138, 248], 4.5],
+      ["深色·危险色", [0.72, 0.18, 25], [0.18, 0.009, 255], 4.5],
+      ["深色·成功色", [0.75, 0.16, 155], [0.18, 0.009, 255], 4.5],
+    ];
+    document.getElementById("ct").innerHTML =
+      "<tr><th>场景</th><th>对比度</th><th>要求</th><th></th></tr>" +
+      ROWS.map(function (r) {
+        const v = cr(r[1], r[2]);
+        const ok = v >= r[3];
+        return "<tr><td>" + r[0] + '</td><td class="mono">' + v.toFixed(2) +
+          ":1</td><td class=\"mono\">≥" + r[3] + '</td><td class="' +
+          (ok ? "pass" : "") + '">' + (ok ? "通过" : "未达标") + "</td></tr>";
+      }).join("");
+
+    document.getElementById("title").addEventListener("dblclick", function () {
+      const next = document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark";
+      document.documentElement.setAttribute("data-theme", next);
+      paintFiles(next === "dark");
+    });
+    ["sw1", "sw2"].forEach(function (id) {
+      document.getElementById(id).addEventListener("click", function (e) {
+        e.currentTarget.classList.toggle("on");
+      });
+    });
+  } catch (err) {
+    // 让脚本错误直接可见，而不是留一堆空容器在那儿
+    document.body.insertAdjacentHTML(
+      "afterbegin",
+      '<pre style="background:#c51d28;color:#fff;padding:14px;border-radius:10px;font-size:13px">预览脚本出错：' +
+        String(err && err.stack || err) + "</pre>",
+    );
+  }
+</script>
+  </body>
+</html>

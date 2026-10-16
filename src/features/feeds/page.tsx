@@ -64,7 +64,7 @@ export function FeedsPage() {
                     activeId === FAVORITES_ID ? "bg-accent font-medium" : "hover:bg-accent/60",
                   )}
                 >
-                  <Star className="size-4 text-amber-500" />
+                  <Star className="size-4 text-warning" />
                   {t("feeds.favorites")}
                   {favCount > 0 && (
                     <Badge variant="secondary" className="ml-auto px-1.5">
@@ -308,7 +308,7 @@ function FlowView() {
             <Button
               variant="outline"
               onClick={() => toggleFav(selected, name)}
-              className={cn(isFav && "border-amber-400 text-amber-600 dark:text-amber-400")}
+              className={cn(isFav && "border-warning/60 text-warning")}
             >
               <Star className={cn("size-4", isFav && "fill-current")} />
               {isFav ? t("feeds.saved") : t("feeds.save")}

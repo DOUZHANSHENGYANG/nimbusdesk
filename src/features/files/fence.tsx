@@ -701,7 +701,7 @@ function TitleBtn({
       className={cn(
         "grid size-5 shrink-0 place-items-center rounded transition-colors",
         danger
-          ? "text-muted-foreground hover:bg-red-500 hover:text-white"
+          ? "text-muted-foreground hover:bg-[var(--close-hover-bg)] hover:text-[var(--close-hover-fg)]"
           : active
             ? "text-brand"
             : "text-muted-foreground hover:bg-muted hover:text-foreground",

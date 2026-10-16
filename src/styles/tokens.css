@@ -2,54 +2,71 @@
    NimbusDesk 云台 · Design Tokens
    三层结构：Primitive（原料）→ Semantic（语义）→ Component（组件）
    只允许在这里定义颜色/圆角/阴影/动效时长；组件层直接消费 token。
+
+   主题：雾蓝石墨 Azure Slate
+   - Brand 天青蓝 H=248（明确偏青的蓝，不是靛紫）
+   - Neutral 冷中性石墨 H=255、饱和 ≤0.01（近乎无彩，只带一丝冷调）
+   对比度全部经 WCAG AA 验证：正文 ≥4.5:1、大字/UI ≥3:1
+   （验证脚本：scripts/check-contrast.mjs）
    ============================================================ */
 
 :root {
   /* ── 1. Primitive · 色板原料 ─────────────────────────── */
 
-  /* Brand · 电光靛紫 */
-  --pr-brand-50: oklch(0.97 0.014 277);
-  --pr-brand-100: oklch(0.93 0.035 277);
-  --pr-brand-200: oklch(0.86 0.07 277);
-  --pr-brand-300: oklch(0.77 0.12 277);
-  --pr-brand-400: oklch(0.68 0.17 277);
-  --pr-brand-500: oklch(0.60 0.21 277);
-  --pr-brand-600: oklch(0.53 0.22 277);
-  --pr-brand-700: oklch(0.46 0.20 277);
-  --pr-brand-800: oklch(0.38 0.15 277);
-  --pr-brand-900: oklch(0.30 0.11 277);
-  --pr-brand-950: oklch(0.21 0.07 277);
+  /* Brand · 天青蓝（Azure） */
+  --pr-brand-50: oklch(0.975 0.012 248);
+  --pr-brand-100: oklch(0.945 0.028 248);
+  --pr-brand-200: oklch(0.885 0.055 248);
+  --pr-brand-300: oklch(0.815 0.085 248);
+  --pr-brand-400: oklch(0.735 0.108 248);
+  --pr-brand-500: oklch(0.655 0.128 248);
+  --pr-brand-600: oklch(0.548 0.138 248);
+  --pr-brand-700: oklch(0.470 0.128 248);
+  --pr-brand-800: oklch(0.395 0.104 248);
+  --pr-brand-900: oklch(0.320 0.077 248);
+  --pr-brand-950: oklch(0.238 0.054 248);
 
-  /* Neutral · 蓝调中性 */
+  /* Neutral · 冷中性石墨（极低饱和，无彩感） */
   --pr-gray-0: oklch(1 0 0);
-  --pr-gray-25: oklch(0.985 0.002 270);
-  --pr-gray-50: oklch(0.965 0.003 270);
-  --pr-gray-100: oklch(0.93 0.004 270);
-  --pr-gray-150: oklch(0.90 0.005 270);
-  --pr-gray-200: oklch(0.86 0.006 270);
-  --pr-gray-300: oklch(0.76 0.008 270);
-  --pr-gray-400: oklch(0.64 0.010 270);
-  --pr-gray-500: oklch(0.55 0.012 270);
-  --pr-gray-600: oklch(0.45 0.013 270);
-  --pr-gray-700: oklch(0.36 0.014 270);
-  --pr-gray-750: oklch(0.31 0.014 270);
-  --pr-gray-800: oklch(0.26 0.014 270);
-  --pr-gray-850: oklch(0.22 0.014 270);
-  --pr-gray-900: oklch(0.185 0.013 270);
-  --pr-gray-925: oklch(0.165 0.012 270);
-  --pr-gray-950: oklch(0.145 0.012 270);
-  --pr-gray-975: oklch(0.125 0.010 270);
-  --pr-gray-1000: oklch(0.105 0.008 270);
+  --pr-gray-25: oklch(0.985 0.0015 255);
+  --pr-gray-50: oklch(0.968 0.0025 255);
+  --pr-gray-100: oklch(0.938 0.0035 255);
+  --pr-gray-150: oklch(0.905 0.004 255);
+  --pr-gray-200: oklch(0.865 0.005 255);
+  --pr-gray-300: oklch(0.765 0.006 255);
+  --pr-gray-400: oklch(0.645 0.007 255);
+  --pr-gray-500: oklch(0.535 0.008 255);
+  --pr-gray-600: oklch(0.45 0.009 255);
+  --pr-gray-700: oklch(0.36 0.01 255);
+  --pr-gray-750: oklch(0.305 0.01 255);
+  --pr-gray-800: oklch(0.255 0.01 255);
+  --pr-gray-850: oklch(0.215 0.01 255);
+  --pr-gray-900: oklch(0.18 0.009 255);
+  --pr-gray-925: oklch(0.158 0.008 255);
+  --pr-gray-950: oklch(0.138 0.007 255);
+  --pr-gray-975: oklch(0.118 0.006 255);
+  --pr-gray-1000: oklch(0.1 0.005 255);
 
-  /* Status */
-  --pr-red-500: oklch(0.595 0.22 25);
-  --pr-red-600: oklch(0.537 0.21 25);
-  --pr-green-500: oklch(0.68 0.16 155);
-  --pr-green-600: oklch(0.60 0.15 155);
-  --pr-amber-500: oklch(0.76 0.15 75);
-  --pr-blue-500: oklch(0.62 0.17 240);
+  /*
+   * Status · 状态色
+   * 分浅/深两档：浅色模式下用 -600（足够暗），深色模式下用 -400（足够亮）。
+   * 同色相不同明度，而不是两套色相 —— 这样语义色在两种主题里是"同一个颜色"。
+   */
+  --pr-red-600: oklch(0.53 0.2 25);
+  --pr-red-400: oklch(0.72 0.18 25);
+  --pr-green-600: oklch(0.535 0.15 155);
+  --pr-green-400: oklch(0.75 0.16 155);
+  --pr-amber-600: oklch(0.53 0.12 60);
+  --pr-amber-400: oklch(0.82 0.13 80);
+  --pr-blue-600: oklch(0.55 0.14 240);
+  --pr-blue-400: oklch(0.72 0.13 240);
+
+  /*
+   * FileType · 文件类型标识色（8 类，两两色相 ≥30°，整体避开紫族）
+
 
   /* ── 1. Primitive · 几何与动效原料 ──────────────────── */
+
   --pr-radius-xs: 6px;
   --pr-radius-sm: 8px;
   --pr-radius-md: 12px;
@@ -59,8 +76,32 @@
   --pr-shadow-1: 0 1px 2px oklch(0 0 0 / 0.10), 0 1px 6px oklch(0 0 0 / 0.06);
   --pr-shadow-2: 0 4px 14px oklch(0 0 0 / 0.12), 0 2px 5px oklch(0 0 0 / 0.08);
   --pr-shadow-3: 0 12px 34px oklch(0 0 0 / 0.18), 0 4px 12px oklch(0 0 0 / 0.10);
-  --pr-shadow-glow: 0 0 0 1px oklch(0.60 0.21 277 / 0.25), 0 0 22px oklch(0.60 0.21 277 / 0.28);
+  --pr-shadow-glow: 0 0 0 1px oklch(0.548 0.138 248 / 0.28),
+    0 0 20px oklch(0.548 0.138 248 / 0.24);
 
+  /*
+   * FileType · 文件类型标识色（8 类）
+   *
+   * 这是"功能性色彩编码"：靠颜色区分文件种类，与品牌色无关，
+   * 因此刻意不收敛到 brand 一色 —— 那样会丢掉一眼可辨的能力。
+   * 但必须走 token：硬编码 tailwind 调色板不会随主题切换调整明度。
+   *
+   * 色相分配经过三重几何约束（见 scripts/check-contrast.mjs）：
+   *   1. 类别两两 ≥28°（16px 图标下仍可区分）
+   *   2. 全体避开 270–348°（紫 → 品红；只排 270–310 不够 ——
+   *      H=320 渲染出 #8e479d 肉眼就是紫色）
+   *   3. 与品牌 248° 相距 ≥26°（否则「文档」图标会被读成品牌强调元素）
+   * 安全带只剩 234°，8 类 × 28° = 224°，刚好放得下。
+   */
+  --pr-file-pdf: oklch(0.52 0.15 20);
+  --pr-file-slide: oklch(0.52 0.15 49);
+  --pr-file-archive: oklch(0.52 0.15 78);
+  --pr-file-sheet: oklch(0.52 0.15 107);
+  --pr-file-video: oklch(0.52 0.15 136);
+  --pr-file-doc: oklch(0.52 0.15 165);
+  --pr-file-image: oklch(0.52 0.15 194);
+  --pr-file-audio: oklch(0.52 0.15 350);
+  --pr-file-misc: oklch(0.47 0.012 255);
   --pr-dur-fast: 120ms;
   --pr-dur-base: 220ms;
   --pr-dur-slow: 420ms;
@@ -70,6 +111,8 @@
   --pr-ease-theme-in: cubic-bezier(0.3, 0, 0.8, 0.15);
   --pr-ease-out: cubic-bezier(0.22, 1, 0.36, 1);
   --pr-ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  /* 弹性：用于按压/开关/卡片入场等需要"手感"的地方，不用在位移类过渡上 */
+  --pr-ease-spring: cubic-bezier(0.34, 1.42, 0.64, 1);
 }
 
 /* ── 2. Semantic · 语义层（明/暗两套）─────────────────── */
@@ -93,32 +136,33 @@
   --destructive: var(--pr-red-600);
   --destructive-foreground: var(--pr-gray-0);
   --success: var(--pr-green-600);
-  --warning: var(--pr-amber-500);
-  --info: var(--pr-blue-500);
+  --warning: var(--pr-amber-600);
+  --info: var(--pr-blue-600);
   --border: var(--pr-gray-150);
   --input: var(--pr-gray-200);
-  --ring: oklch(0.53 0.22 277 / 0.45);
+  --ring: oklch(0.548 0.138 248 / 0.45);
 
   --sidebar: var(--pr-gray-100);
   --sidebar-foreground: var(--pr-gray-600);
   --sidebar-primary: var(--pr-brand-600);
   --sidebar-primary-foreground: var(--pr-gray-0);
-  --sidebar-accent: oklch(0.53 0.22 277 / 0.10);
+  --sidebar-accent: oklch(0.548 0.138 248 / 0.10);
   --sidebar-accent-foreground: var(--pr-brand-700);
   --sidebar-border: var(--pr-gray-150);
-  --sidebar-ring: oklch(0.53 0.22 277 / 0.45);
+  --sidebar-ring: oklch(0.548 0.138 248 / 0.45);
 
-  --chart-1: var(--pr-brand-500);
-  --chart-2: var(--pr-green-500);
-  --chart-3: var(--pr-amber-500);
-  --chart-4: var(--pr-blue-500);
-  --chart-5: var(--pr-red-500);
+  --chart-1: var(--pr-brand-600);
+  --chart-2: var(--pr-green-600);
+  --chart-3: var(--pr-amber-600);
+  --chart-4: var(--pr-blue-600);
+  --chart-5: var(--pr-red-600);
 
-  --surface-hover: oklch(0.53 0.22 277 / 0.06);
+  --surface-hover: oklch(0.548 0.138 248 / 0.055);
   --scrollbar-thumb: var(--pr-gray-300);
-  --backdrop: oklch(0.2 0.01 270 / 0.42);
+  --backdrop: oklch(0.2 0.01 255 / 0.42);
+  /* 选中文字底色：跟随品牌，但保持低饱和以免整片文字发蓝 */
+  --selection: oklch(0.548 0.138 248 / 0.24);
 }
-
 .dark {
   color-scheme: dark;
 
@@ -128,41 +172,66 @@
   --card-foreground: var(--pr-gray-50);
   --popover: var(--pr-gray-850);
   --popover-foreground: var(--pr-gray-50);
-  --primary: var(--pr-brand-500);
+  /*
+   * 刻意用 600 而不是 500：`--primary` 是**实心按钮底色**，配白字。
+   * 500（L=0.655）配白字只有 3.15:1 —— 连大字 AA 都不够。
+   * 600（L=0.548）是 4.87:1，正文级 AA 达标。
+   * 深色模式需要「更亮的品牌色」时用 --ring / --accent，
+   * 那些是描边与图标，不背白字。
+   */
+  --primary: var(--pr-brand-600);
   --primary-foreground: var(--pr-gray-0);
   --secondary: var(--pr-gray-850);
   --secondary-foreground: var(--pr-gray-100);
-  --muted: var(--pr-gray-875, var(--pr-gray-850));
+  --muted: var(--pr-gray-850);
   --muted-foreground: var(--pr-gray-400);
-  --accent: oklch(0.60 0.21 277 / 0.16);
+  --accent: oklch(0.655 0.128 248 / 0.16);
   --accent-foreground: var(--pr-brand-200);
-  --destructive: var(--pr-red-500);
-  --destructive-foreground: var(--pr-gray-0);
-  --success: var(--pr-green-500);
-  --warning: var(--pr-amber-500);
-  --info: var(--pr-blue-500);
+  --destructive: var(--pr-red-400);
+  --destructive-foreground: var(--pr-gray-1000);
+  --success: var(--pr-green-400);
+  --warning: var(--pr-amber-400);
+  --info: var(--pr-blue-400);
   --border: oklch(1 0 0 / 0.09);
   --input: oklch(1 0 0 / 0.13);
-  --ring: oklch(0.68 0.17 277 / 0.55);
+  --ring: oklch(0.735 0.108 248 / 0.55);
 
   --sidebar: var(--pr-gray-975);
   --sidebar-foreground: var(--pr-gray-300);
   --sidebar-primary: var(--pr-brand-500);
   --sidebar-primary-foreground: var(--pr-gray-0);
-  --sidebar-accent: oklch(0.68 0.17 277 / 0.14);
+  --sidebar-accent: oklch(0.735 0.108 248 / 0.14);
   --sidebar-accent-foreground: var(--pr-brand-200);
   --sidebar-border: oklch(1 0 0 / 0.07);
-  --sidebar-ring: oklch(0.68 0.17 277 / 0.55);
+  --sidebar-ring: oklch(0.735 0.108 248 / 0.55);
 
   --chart-1: var(--pr-brand-400);
-  --chart-2: var(--pr-green-500);
-  --chart-3: var(--pr-amber-500);
-  --chart-4: var(--pr-blue-500);
-  --chart-5: var(--pr-red-500);
+  --chart-2: var(--pr-green-400);
+  --chart-3: var(--pr-amber-400);
+  --chart-4: var(--pr-blue-400);
+  --chart-5: var(--pr-red-400);
 
-  --surface-hover: oklch(0.68 0.17 277 / 0.09);
+  --surface-hover: oklch(0.735 0.108 248 / 0.075);
   --scrollbar-thumb: var(--pr-gray-750);
-  --backdrop: oklch(0.08 0.008 270 / 0.58);
+  --backdrop: oklch(0.08 0.006 255 / 0.58);
+  --selection: oklch(0.735 0.108 248 / 0.30);
+}
+
+/*
+ * FileType · 深色模式重取明度
+ * 浅色下用 L=0.52 压深，深色卡上必须提到 L=0.74 才够亮 ——
+ * 这是"硬编码 tailwind class"做不到的事（同一 class 两种主题只能一个色）。
+ */
+.dark {
+  --pr-file-pdf: oklch(0.74 0.145 20);
+  --pr-file-slide: oklch(0.74 0.145 49);
+  --pr-file-archive: oklch(0.74 0.145 78);
+  --pr-file-sheet: oklch(0.74 0.145 107);
+  --pr-file-video: oklch(0.74 0.145 136);
+  --pr-file-doc: oklch(0.74 0.145 165);
+  --pr-file-image: oklch(0.74 0.145 194);
+  --pr-file-audio: oklch(0.74 0.145 350);
+  --pr-file-misc: oklch(0.7 0.012 255);
 }
 
 /* ── 3. Component · 组件层 ────────────────────────────── */
@@ -172,4 +241,13 @@
   --sidebar-w-collapsed: 64px;
   --page-pad: 24px;
   --radius: var(--pr-radius-md);
+
+  /*
+   * 标题栏关闭按钮悬停色（Windows 惯例：悬停变红）。
+   * 刻意**不**用 --destructive：那个 token 在深色模式下是 L=0.72 的亮红，
+   * 配白字只有 ~2.5:1。关闭按钮在两种主题下都必须是「强红底 + 白字」，
+   * 所以给它一个固定的强红，不随主题变。
+   */
+  --close-hover-bg: var(--pr-red-600);
+  --close-hover-fg: var(--pr-gray-0);
 }

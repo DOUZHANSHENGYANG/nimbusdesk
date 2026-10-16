@@ -172,7 +172,7 @@ function TitlebarButton({
       className={cn(
         "flex w-12 items-center justify-center text-sidebar-foreground/80 transition-colors duration-150",
         danger
-          ? "hover:bg-red-500 hover:text-white active:bg-red-600"
+          ? "hover:bg-[var(--close-hover-bg)] hover:text-[var(--close-hover-fg)]"
           : "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground active:opacity-70",
       )}
     >

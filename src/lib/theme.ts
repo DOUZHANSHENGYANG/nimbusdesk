@@ -7,7 +7,7 @@ export function applyTheme(mode: ThemeMode) {
   document.documentElement.classList.toggle("dark", mode === "dark");
   document
     .querySelector('meta[name="theme-color"]')
-    ?.setAttribute("content", mode === "dark" ? "#101014" : "#f6f6f8");
+    ?.setAttribute("content", mode === "dark" ? "#07090c" : "#f3f4f6");
 }
 
 let switching = false;
@@ -106,5 +106,5 @@ function themeBg(mode: ThemeMode): string {
   root.classList.toggle("dark", mode === "dark");
   const bg = getComputedStyle(root).backgroundColor;
   root.classList.toggle("dark", wasDark);
-  return bg || (mode === "dark" ? "#101014" : "#f6f6f8");
+  return bg || (mode === "dark" ? "#07090c" : "#f3f4f6");
 }
