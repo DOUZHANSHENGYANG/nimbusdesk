@@ -68,14 +68,20 @@ export function doneTitleStyle(done: boolean): React.CSSProperties | undefined {
     : undefined;
 }
 
-/** 只读树（归档浏览/预览用）。date 用于推导「进行中」 */
-export function ReadOnlyTree({ tasks, date, parentId = null, depth = 0 }: {
+/**
+ * 只读树（归档浏览/预览用）。
+ * - date 用于推导「进行中」
+ * - only 给定时只渲染这些 id 的子树（归档关键词筛选用），
+ *   未给定则渲染整棵树
+ */
+export function ReadOnlyTree({ tasks, date, only, parentId = null, depth = 0 }: {
   tasks: PlanTask[];
   date: string;
+  only?: Set<string>;
   parentId?: string | null;
   depth?: number;
 }) {
-  const kids = childrenOf(tasks, parentId);
+  const kids = childrenOf(tasks, parentId).filter((t) => !only || only.has(t.id));
   if (kids.length === 0) return null;
   return (
     <div className="flex flex-col">
@@ -104,7 +110,7 @@ export function ReadOnlyTree({ tasks, date, parentId = null, depth = 0 }: {
             )}
 
           </div>
-          <ReadOnlyTree tasks={tasks} date={date} parentId={task.id} depth={depth + 1} />
+          <ReadOnlyTree tasks={tasks} date={date} only={only} parentId={task.id} depth={depth + 1} />
         </div>
       ))}
     </div>

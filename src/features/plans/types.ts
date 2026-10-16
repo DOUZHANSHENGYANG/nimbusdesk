@@ -159,3 +159,79 @@ export function parseDate(dateStr: string): Date {
   const [y, m, d] = dateStr.split("-").map(Number);
   return new Date(y, m - 1, d);
 }
+
+/* ── 日期区间（归档筛选等用） ─────────────────────────── */
+
+export interface DateRange {
+  /** 起（含），YYYY-MM-DD；null = 不限 */
+  from: string | null;
+  /** 止（含），YYYY-MM-DD；null = 不限 */
+  to: string | null;
+}
+
+/** 日期是否落在区间内（两端都含）。字符串比较即可 —— YYYY-MM-DD 字典序 = 时间序 */
+export function inRange(date: string, range: DateRange): boolean {
+  if (range.from && date < range.from) return false;
+  if (range.to && date > range.to) return false;
+  return true;
+}
+
+/** 区间天数（含两端）；任一端为空返回 null */
+export function rangeDays(range: DateRange): number | null {
+  if (!range.from || !range.to) return null;
+  const ms = parseDate(range.to).getTime() - parseDate(range.from).getTime();
+  return Math.round(ms / 86_400_000) + 1;
+}
+
+/** 相对今天的常用区间。周一为一周起点（与日历视图一致） */
+export function presetRange(
+  preset: "today" | "week" | "month" | "last7" | "last30",
+  now: Date = new Date(),
+): DateRange {
+  const base = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const shift = (d: Date, delta: number) =>
+    new Date(d.getFullYear(), d.getMonth(), d.getDate() + delta);
+
+  switch (preset) {
+    case "today":
+      return { from: fmtDate(base), to: fmtDate(base) };
+    case "week": {
+      const offset = (base.getDay() + 6) % 7; // 周一为首
+      const mon = shift(base, -offset);
+      return { from: fmtDate(mon), to: fmtDate(shift(mon, 6)) };
+    }
+    case "month": {
+      const first = new Date(base.getFullYear(), base.getMonth(), 1);
+      const last = new Date(base.getFullYear(), base.getMonth() + 1, 0);
+      return { from: fmtDate(first), to: fmtDate(last) };
+    }
+    case "last7":
+      return { from: fmtDate(shift(base, -6)), to: fmtDate(base) };
+    case "last30":
+      return { from: fmtDate(shift(base, -29)), to: fmtDate(base) };
+  }
+}
+
+/** 某月的日历网格（42 格，周一为首），格内含是否属于本月 */
+export function monthGrid(
+  year: number,
+  month: number,
+): { date: string; inMonth: boolean }[] {
+  const first = new Date(year, month, 1);
+  const startOffset = (first.getDay() + 6) % 7;
+  const start = new Date(year, month, 1 - startOffset);
+  const cells: { date: string; inMonth: boolean }[] = [];
+  for (let i = 0; i < 42; i++) {
+    const d = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i);
+    cells.push({ date: fmtDate(d), inMonth: d.getMonth() === month });
+  }
+  return cells;
+}
+
+/** 该月第一天 / 最后一天的 YYYY-MM-DD */
+export function monthBounds(year: number, month: number): { from: string; to: string } {
+  return {
+    from: fmtDate(new Date(year, month, 1)),
+    to: fmtDate(new Date(year, month + 1, 0)),
+  };
+}

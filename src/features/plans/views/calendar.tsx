@@ -3,7 +3,7 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import {
   dayProgress,
-  fmtDate,
+  monthGrid,
   parseDate,
   statusOf,
   todayStr,
@@ -13,7 +13,6 @@ import { useNow, usePlans, usePlansArchive } from "@/features/plans/store";
 import { cn } from "@/lib/utils";
 
 export type CalendarNav = { onPick: (date: string) => void };
-
 /** 每个日期格最多列几条任务名，超出显示 +N */
 const MAX_CHIPS = 3;
 
@@ -30,17 +29,7 @@ export function CalendarView({ date, onPick }: { date: string; onPick: (date: st
     return { y: d.getFullYear(), m: d.getMonth() };
   });
 
-  const grid = useMemo(() => {
-    const first = new Date(monthAnchor.y, monthAnchor.m, 1);
-    const startOffset = (first.getDay() + 6) % 7; // 周一为首
-    const start = new Date(monthAnchor.y, monthAnchor.m, 1 - startOffset);
-    const cells: { date: string; inMonth: boolean }[] = [];
-    for (let i = 0; i < 42; i++) {
-      const d = new Date(start.getFullYear(), start.getMonth(), start.getDate() + i);
-      cells.push({ date: fmtDate(d), inMonth: d.getMonth() === monthAnchor.m });
-    }
-    return cells;
-  }, [monthAnchor]);
+  const grid = useMemo(() => monthGrid(monthAnchor.y, monthAnchor.m), [monthAnchor]);
 
   const weekdayLabels = useMemo(() => {
     const fmt = new Intl.DateTimeFormat(i18n.language === "en" ? "en-US" : "zh-CN", {
