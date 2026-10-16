@@ -626,25 +626,38 @@ function ThemePreview({
         "relative h-16 w-28 overflow-hidden rounded-xl border-2 transition-colors duration-150",
         selected ? "border-brand" : "border-border hover:border-muted-foreground/40",
       )}
-      style={{ background: mode === "light" ? "#f3f4f6" : "#07090c" }}
+      /*
+       * 缩略图要显示**目标**主题。var(--pr-gray-*) 只在 :root 定义、.dark
+       * 从不覆盖，所以这些原料色是「主题无关」的常量 —— 可以安全地用来画
+       * 两种缩略图，而且永远与 tokens.css 同步（不必在这里抄一份 hex）。
+       */
+      style={{
+        background: mode === "light" ? "var(--pr-gray-50)" : "var(--pr-gray-950)",
+      }}
     >
       <span
         className="absolute top-2 left-2 h-1.5 w-10 rounded-full"
-        style={{ background: mode === "light" ? "#d0d3d6" : "#2c2f34" }}
+        style={{
+          background: mode === "light" ? "var(--pr-gray-150)" : "var(--pr-gray-750)",
+        }}
       />
       <span
         className="absolute top-6 left-2 h-1.5 w-16 rounded-full"
-        style={{ background: mode === "light" ? "#dee0e2" : "#161a1e" }}
+        style={{
+          background: mode === "light" ? "var(--pr-gray-200)" : "var(--pr-gray-850)",
+        }}
       />
       <span
         className="absolute right-2 bottom-2 size-5 rounded-md"
         style={{ background: "var(--pr-brand-500)" }}
       />
+      /* 标签色不能跟着**当前**主题走：当前是深色时 text-foreground 会变浅，
+         两种缩略图的字色就一样了。按缩略图代表的主题取固定灰。 */
       <span
-        className={cn(
-          "absolute bottom-1.5 left-2 text-[11px] font-semibold",
-          mode === "light" ? "text-foreground/70" : "text-foreground/70",
-        )}
+        className="absolute bottom-1.5 left-2 text-[11px] font-semibold"
+        style={{
+          color: mode === "light" ? "var(--pr-gray-600)" : "var(--pr-gray-300)",
+        }}
       >
         {label}
       </span>

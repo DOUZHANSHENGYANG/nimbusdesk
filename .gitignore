@@ -33,3 +33,6 @@ data.dir
 
 # 临时任务规格
 .thinkrail/
+
+# 预览页漂移校验的临时产物（脚本生成后立即读走，不该入库）
+design-preview.html.check

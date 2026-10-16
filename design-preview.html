@@ -2,281 +2,519 @@
 <html lang="zh" data-theme="dark">
   <head>
     <meta charset="utf-8" />
-    <title>NimbusDesk · 雾蓝石墨 设计系统</title>
+    <title>NimbusDesk · 石墨天青 设计系统</title>
     <style>
-      /* ── 直接从 src/styles/tokens.css 复制（保持同步）── */
-      :root {
-        color-scheme: light;
-        --pr-brand-50: oklch(0.975 0.012 248);
-        --pr-brand-100: oklch(0.945 0.028 248);
-        --pr-brand-200: oklch(0.885 0.055 248);
-        --pr-brand-300: oklch(0.815 0.085 248);
-        --pr-brand-400: oklch(0.735 0.108 248);
-        --pr-brand-500: oklch(0.655 0.128 248);
-        --pr-brand-600: oklch(0.548 0.138 248);
-        --pr-brand-700: oklch(0.47 0.128 248);
-        --pr-brand-800: oklch(0.395 0.104 248);
-        --pr-brand-900: oklch(0.32 0.077 248);
-        --pr-brand-950: oklch(0.238 0.054 248);
-        --pr-gray-0: oklch(1 0 0);
-        --pr-gray-25: oklch(0.985 0.0015 255);
-        --pr-gray-50: oklch(0.968 0.0025 255);
-        --pr-gray-100: oklch(0.938 0.0035 255);
-        --pr-gray-150: oklch(0.905 0.004 255);
-        --pr-gray-200: oklch(0.865 0.005 255);
-        --pr-gray-300: oklch(0.765 0.006 255);
-        --pr-gray-400: oklch(0.645 0.007 255);
-        --pr-gray-500: oklch(0.535 0.008 255);
-        --pr-gray-600: oklch(0.45 0.009 255);
-        --pr-gray-700: oklch(0.36 0.01 255);
-        --pr-gray-750: oklch(0.305 0.01 255);
-        --pr-gray-800: oklch(0.255 0.01 255);
-        --pr-gray-850: oklch(0.215 0.01 255);
-        --pr-gray-900: oklch(0.18 0.009 255);
-        --pr-gray-925: oklch(0.158 0.008 255);
-        --pr-gray-950: oklch(0.138 0.007 255);
-        --pr-gray-975: oklch(0.118 0.006 255);
-        --pr-gray-1000: oklch(0.1 0.005 255);
-        --pr-red-600: oklch(0.53 0.2 25);
-        --pr-red-400: oklch(0.72 0.18 25);
-        --pr-green-600: oklch(0.535 0.15 155);
-        --pr-green-400: oklch(0.75 0.16 155);
-        --pr-amber-600: oklch(0.53 0.12 60);
-        --pr-amber-400: oklch(0.82 0.13 80);
-        --pr-blue-600: oklch(0.55 0.14 240);
-        --pr-blue-400: oklch(0.72 0.13 240);
-        --pr-file-pdf: oklch(0.52 0.15 20);
-        --pr-file-slide: oklch(0.52 0.15 49);
-        --pr-file-archive: oklch(0.52 0.15 78);
-        --pr-file-sheet: oklch(0.52 0.15 107);
-        --pr-file-video: oklch(0.52 0.15 136);
-        --pr-file-image: oklch(0.52 0.15 194);
-        --pr-file-doc: oklch(0.52 0.15 165);
-        --pr-file-audio: oklch(0.52 0.15 350);
-        --pr-file-misc: oklch(0.47 0.012 255);
-        --pr-radius-xs: 6px;
-        --pr-radius-sm: 8px;
-        --pr-radius-md: 12px;
-        --pr-radius-lg: 16px;
-        --pr-radius-xl: 22px;
-        --pr-shadow-glow: 0 0 0 1px oklch(0.548 0.138 248 / 0.28),
-          0 0 20px oklch(0.548 0.138 248 / 0.24);
+/* ══════════════════════════════════════════════════════════════
+   本段由 scripts/build-preview.mjs 从 src/styles/tokens.css 生成。
+   不要手工编辑 —— 改动会在下次生成时被覆盖，请改 tokens.css。
+   ══════════════════════════════════════════════════════════════ */
+/* ============================================================
+   NimbusDesk 云台 · Design Tokens
+   三层结构：Primitive（原料）→ Semantic（语义）→ Component（组件）
+   只允许在这里定义颜色/圆角/阴影/动效/字阶；组件层直接消费 token。
 
-        --background: var(--pr-gray-50);
-        --foreground: var(--pr-gray-800);
-        --card: var(--pr-gray-0);
-        --card-foreground: var(--pr-gray-800);
-        --primary: var(--pr-brand-600);
-        --primary-foreground: var(--pr-gray-0);
-        --secondary: var(--pr-gray-100);
-        --secondary-foreground: var(--pr-gray-700);
-        --muted: var(--pr-gray-100);
-        --muted-foreground: var(--pr-gray-500);
-        --accent: var(--pr-brand-50);
-        --accent-foreground: var(--pr-brand-700);
-        --destructive: var(--pr-red-600);
-        --success: var(--pr-green-600);
-        --warning: var(--pr-amber-600);
-        --info: var(--pr-blue-600);
-        --border: var(--pr-gray-150);
-        --sidebar: var(--pr-gray-100);
-        --sidebar-foreground: var(--pr-gray-600);
-        --surface-hover: oklch(0.548 0.138 248 / 0.055);
-        --selection: oklch(0.548 0.138 248 / 0.24);
-      }
+   主题：石墨天青 Graphite Azure
+   - Neutral **真无彩**（C=0）。上一版用 H=255、C≤0.01 自称「冷中性」，
+     但 OKLCH H=255 已经贴着蓝轴 —— 渲染出来 gray-50 是 #f3f4f6，
+     反算色相 264.5°，而 sRGB 纯蓝 #0000ff 是 264.1°。也就是说
+     「灰阶」实际在喝蓝色，深色底又偏 285°（紫）。这就是残留 AI 味的来源。
+     现在一律 C=0，灰就是灰。
+   - Brand 天青蓝 H=252。明确偏青的蓝，与靛紫（H≈277）无关。
+   - FileType 色按**渲染后 sRGB 色相**分配，落在 352°→186° 单一弧上。
+     （旧版按 OKLCH 色相校验，漏掉了 audio@350 渲染成 327° —— 肉眼就是紫。）
 
-      html[data-theme="dark"] {
-        color-scheme: dark;
-        --background: var(--pr-gray-950);
-        --foreground: var(--pr-gray-50);
-        --card: var(--pr-gray-900);
-        --card-foreground: var(--pr-gray-50);
-        --primary: var(--pr-brand-600);
-        --primary-foreground: var(--pr-gray-0);
-        --secondary: var(--pr-gray-850);
-        --secondary-foreground: var(--pr-gray-100);
-        --muted: var(--pr-gray-850);
-        --muted-foreground: var(--pr-gray-400);
-        --accent: oklch(0.655 0.128 248 / 0.16);
-        --accent-foreground: var(--pr-brand-200);
-        --destructive: var(--pr-red-400);
-        --success: var(--pr-green-400);
-        --warning: var(--pr-amber-400);
-        --info: var(--pr-blue-400);
-        --border: oklch(1 0 0 / 0.09);
-        --sidebar: var(--pr-gray-975);
-        --sidebar-foreground: var(--pr-gray-300);
-        --surface-hover: oklch(0.735 0.108 248 / 0.075);
-        --selection: oklch(0.735 0.108 248 / 0.3);
-        --pr-file-pdf: oklch(0.74 0.145 20);
-        --pr-file-slide: oklch(0.74 0.145 49);
-        --pr-file-archive: oklch(0.74 0.145 78);
-        --pr-file-sheet: oklch(0.74 0.145 107);
-        --pr-file-video: oklch(0.74 0.145 136);
-        --pr-file-image: oklch(0.74 0.145 194);
-        --pr-file-doc: oklch(0.74 0.145 165);
-        --pr-file-audio: oklch(0.74 0.145 350);
-        --pr-file-misc: oklch(0.7 0.012 255);
-      }
+   对比度全部经 WCAG AA 验证：正文 ≥4.5:1、大字/UI ≥3:1
+   （验证脚本：scripts/check-contrast.mjs）
+   ============================================================ */
 
-      * { box-sizing: border-box; }
-      body {
-        margin: 0;
-        padding: 40px 32px;
-        background: var(--background);
-        color: var(--foreground);
-        font-family: "Geist Variable", "Segoe UI Variable Text", "Segoe UI",
-          "Microsoft YaHei UI", sans-serif;
-        font-size: 14px;
-        line-height: 1.55;
-        -webkit-font-smoothing: antialiased;
-        transition: background 300ms, color 300ms;
-      }
-      h1 { font-size: 22px; font-weight: 600; margin: 0 0 4px; letter-spacing: -0.01em; }
-      h2 {
-        font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase;
-        color: var(--muted-foreground); margin: 40px 0 14px;
-      }
-      .sub { color: var(--muted-foreground); font-size: 13px; margin: 0 0 28px; }
-      .wrap { max-width: 1120px; margin: 0 auto; }
+:root {
+  /* ── 1. Primitive · 色板原料 ─────────────────────────── */
 
-      /* 主题切换：双击标题 */
-      h1 { cursor: pointer; user-select: none; }
-      .hint {
-        display: inline-block; margin-left: 8px; padding: 2px 8px; border-radius: 999px;
-        background: var(--accent); color: var(--accent-foreground);
-        font-size: 11px; font-weight: 600; vertical-align: middle;
-      }
+  /* Brand · 天青蓝（Azure） */
+  --pr-brand-50: oklch(0.972 0.014 252);
+  --pr-brand-100: oklch(0.942 0.03 252);
+  --pr-brand-200: oklch(0.884 0.058 252);
+  --pr-brand-300: oklch(0.812 0.09 252);
+  --pr-brand-400: oklch(0.722 0.128 252);
+  --pr-brand-500: oklch(0.638 0.162 252);
+  --pr-brand-600: oklch(0.552 0.172 252);
+  --pr-brand-700: oklch(0.472 0.152 252);
+  --pr-brand-800: oklch(0.398 0.122 252);
+  --pr-brand-900: oklch(0.332 0.094 252);
+  --pr-brand-950: oklch(0.242 0.064 252);
 
-      .swatches { display: flex; flex-wrap: wrap; gap: 6px; }
-      .sw {
-        width: 76px; height: 56px; border-radius: 10px; position: relative;
-        border: 1px solid var(--border); overflow: hidden;
-      }
-      .sw span {
-        position: absolute; bottom: 3px; left: 5px; font-size: 9px; font-weight: 600;
-        font-family: "Cascadia Mono", Consolas, monospace;
-      }
-      .sw-dark span { color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,.5); }
-      .sw-light span { color: #000; text-shadow: 0 1px 2px rgba(255,255,255,.6); }
+  /*
+   * Neutral · 石灰（真无彩 C=0）
+   *
+   * 为什么必须是 0 而不是「很小的数」：C 再小，只要 H 定在蓝轴附近，
+   * 大面积铺开后仍然读得出冷调偏蓝；而深色档若落到 H≈285 就成了紫。
+   * C=0 时色相无意义，任何屏/任何主题都不会泛出彩调 —— 这是唯一
+   * 能保证「灰就是灰」的写法。
+   */
+  --pr-gray-0: oklch(1 0 0);
+  --pr-gray-25: oklch(0.986 0 0);
+  --pr-gray-50: oklch(0.968 0 0);
+  --pr-gray-100: oklch(0.938 0 0);
+  --pr-gray-150: oklch(0.905 0 0);
+  --pr-gray-200: oklch(0.862 0 0);
+  --pr-gray-300: oklch(0.762 0 0);
+  --pr-gray-400: oklch(0.642 0 0);
+  --pr-gray-500: oklch(0.5 0 0);
+  --pr-gray-600: oklch(0.452 0 0);
+  --pr-gray-700: oklch(0.368 0 0);
+  --pr-gray-750: oklch(0.318 0 0);
+  --pr-gray-800: oklch(0.268 0 0);
+  --pr-gray-850: oklch(0.228 0 0);
+  --pr-gray-900: oklch(0.196 0 0);
+  --pr-gray-925: oklch(0.176 0 0);
+  --pr-gray-950: oklch(0.155 0 0);
+  --pr-gray-975: oklch(0.132 0 0);
+  --pr-gray-1000: oklch(0.112 0 0);
 
-      .grid { display: grid; gap: 14px; }
-      .g3 { grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); }
-      .g4 { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
+  /*
+   * Status · 状态色
+   * 分浅/深两档：浅色模式下用 -600（足够暗），深色模式下用 -400（足够亮）。
+   * 同色相不同明度，而不是两套色相 —— 这样语义色在两种主题里是「同一个颜色」。
+   * info 定在 H=225 而非 240：240 渲染出来与品牌蓝太近，语义就糊了。
+   */
+  --pr-red-600: oklch(0.53 0.2 25);
+  --pr-red-400: oklch(0.72 0.18 25);
+  --pr-green-600: oklch(0.535 0.15 155);
+  --pr-green-400: oklch(0.75 0.16 155);
+  --pr-amber-600: oklch(0.53 0.12 60);
+  --pr-amber-400: oklch(0.82 0.13 80);
+  --pr-blue-600: oklch(0.54 0.14 225);
+  --pr-blue-400: oklch(0.72 0.13 225);
 
-      .card {
-        background: var(--card); color: var(--card-foreground);
-        border: 1px solid var(--border); border-radius: var(--pr-radius-lg);
-        padding: 18px; transition: background 300ms, border-color 300ms;
-      }
-      .card h3 { margin: 0 0 10px; font-size: 13px; font-weight: 600; }
+  /*
+   * FileType · 文件类型标识色（8 类）
+   *
+   * 这是「功能性色彩编码」：靠颜色区分文件种类，与品牌色无关，
+   * 因此刻意不收敛到 brand 一色 —— 那样会丢掉一眼可辨的能力。
+   *
+   * 分配规则（全部在**渲染后 sRGB 色相**空间里做，见 scripts/check-contrast.mjs）：
+   *   1. 禁止区 265–350°（紫 → 品红）。旧版把 audio 写 oklch H=350 看着安全，
+   *      渲染出来是 327°，人眼判定就是紫 —— 校验必须看渲染色相。
+   *   2. 与品牌（渲染 207°）留 ≥20° 且不落品牌↔紫区的蓝紫带，
+   *      否则图标会被读成品牌强调元素。
+   *   3. 于是可用安全带只剩 352°→186°（194°），8 类均分 → 24.3°/类。
+   *   4. 语义尽量贴合惯例：PDF=红、演示=橙、压缩=琥珀、表格=绿（Excel 心智）。
+   *
+   * 注释里的 H 是**渲染后**色相，不是 oklch 的第三个参数。
+   */
+  --pr-file-pdf: oklch(0.52 0.13 14.2); /* #a64451  H=352° */
+  --pr-file-slide: oklch(0.52 0.13 40.05); /* #a54a28  H= 16° */
+  --pr-file-archive: oklch(0.52 0.13 82.5); /* #8d5f00  H= 40° */
+  --pr-file-sheet: oklch(0.52 0.13 114.7); /* #687000  H= 65° */
+  --pr-file-video: oklch(0.52 0.13 131.25); /* #4d7718  H= 87° */
+  --pr-file-doc: oklch(0.52 0.13 141.25); /* #387b2e  H=113° */
+  --pr-file-image: oklch(0.52 0.13 149.65); /* #1e7d3d  H=140° */
+  --pr-file-audio: oklch(0.52 0.13 167); /* #007f59  H=162° */
+  --pr-file-misc: oklch(0.47 0 0); /* 无彩：没有类型就没有色相 */
 
-      .row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+  /* ── 1b. Primitive · 几何 / 字阶 / 间距 / 动效 ─────────── */
 
-      .btn {
-        height: 40px; padding: 0 20px; border-radius: 999px; border: 1px solid transparent;
-        font-size: 14px; font-weight: 500; cursor: pointer; display: inline-flex;
-        align-items: center; gap: 8px; transition: all 180ms cubic-bezier(.34,1.42,.64,1);
-      }
-      .btn:active { transform: scale(.96); }
-      .btn-primary { background: var(--primary); color: var(--primary-foreground); }
-      .btn-primary:hover { filter: brightness(1.1); }
-      .btn-secondary { background: var(--secondary); color: var(--secondary-foreground); }
-      .btn-ghost { background: transparent; color: var(--primary); }
-      .btn-ghost:hover { background: var(--accent); }
-      .btn-outline { background: transparent; border-color: var(--border); color: var(--foreground); }
-      .btn-sm { height: 32px; padding: 0 14px; font-size: 12px; }
+  /*
+   * 圆角：桌面密度比移动端紧一档。
+   * 卡片 12px（不是 16）、控件 8px —— 1440+ 宽屏上大圆角显得松散。
+   */
+  --pr-radius-xs: 4px;
+  --pr-radius-sm: 6px;
+  --pr-radius-md: 8px;
+  --pr-radius-lg: 12px;
+  --pr-radius-xl: 16px;
+  --pr-radius-full: 999px;
 
-      .input {
-        height: 40px; width: 100%; padding: 0 12px; font-size: 14px;
-        background: var(--card); color: var(--foreground);
-        border: 1px solid var(--border); border-radius: var(--pr-radius-sm);
-        outline: none; transition: box-shadow 180ms, border-color 180ms;
-      }
-      .input:focus { border-color: var(--primary); box-shadow: var(--pr-shadow-glow); }
-      .input::placeholder { color: var(--muted-foreground); }
+  /*
+   * 阴影：浅色用「短距 + 低透明度」双层；深色档在 .dark 里另行削弱，
+   * 因为大范围模糊阴影在深色底上根本看不见，只会拖慢合成。
+   */
+  --pr-shadow-1: 0 1px 2px oklch(0 0 0 / 0.06), 0 1px 3px oklch(0 0 0 / 0.04);
+  --pr-shadow-2: 0 2px 5px oklch(0 0 0 / 0.07), 0 4px 12px oklch(0 0 0 / 0.06);
+  --pr-shadow-3: 0 6px 18px oklch(0 0 0 / 0.1), 0 12px 32px oklch(0 0 0 / 0.08);
+  --pr-shadow-glow: 0 0 0 1px oklch(0.552 0.172 252 / 0.3),
+    0 0 18px oklch(0.552 0.172 252 / 0.22);
 
-      .sw-toast {
-        display: flex; align-items: center; justify-content: space-between;
-        width: 44px; height: 26px; border-radius: 999px; padding: 0 3px;
-        background: var(--muted-foreground); cursor: pointer; transition: background 220ms;
-      }
-      .sw-toast.on { background: var(--primary); }
-      .sw-toast i {
-        display: block; width: 20px; height: 20px; border-radius: 50%; background: #fff;
-        box-shadow: 0 1px 3px rgba(0,0,0,.3);
-        transition: transform 220ms cubic-bezier(.34,1.42,.64,1);
-      }
-      .sw-toast.on i { transform: translateX(18px); }
+  /*
+   * 字阶：桌面尺度。比 tailwind 默认小一档 ——
+   * 默认 text-sm 是 14px，在 1440+ 宽屏的密集列表里偏大，行数会被挤掉。
+   * 行高与字号在同一处定义 —— 分开写必然在两处漂移。
+   */
+  --pr-text-2xs: 10px;
+  --pr-text-xs: 11px;
+  --pr-text-sm: 12px;
+  --pr-text-base: 13px;
+  --pr-text-md: 14px;
+  --pr-text-lg: 16px;
+  --pr-text-xl: 19px;
+  --pr-text-2xl: 23px;
+  --pr-text-3xl: 28px;
 
-      .badge {
-        display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 9px;
-        border-radius: 999px; font-size: 11px; font-weight: 600;
-      }
-      .b-done { background: var(--primary); color: var(--primary-foreground); }
-      .b-doing { background: var(--accent); color: var(--accent-foreground); }
-      .b-todo { background: var(--muted); color: var(--muted-foreground); }
-      .b-ok { background: color-mix(in oklch, var(--success) 16%, transparent); color: var(--success); }
-      .b-warn { background: color-mix(in oklch, var(--warning) 18%, transparent); color: var(--warning); }
-      .b-err { background: color-mix(in oklch, var(--destructive) 16%, transparent); color: var(--destructive); }
+  --pr-leading-tight: 1.25;
+  --pr-leading-snug: 1.4;
+  --pr-leading-normal: 1.55;
+  --pr-leading-relaxed: 1.7;
 
-      table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
-      th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--border); }
-      th { color: var(--muted-foreground); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
-      td.mono, .mono { font-family: "Cascadia Mono", Consolas, monospace; font-size: 12px; }
-      .pass { color: var(--success); font-weight: 600; }
+  --pr-weight-normal: 400;
+  --pr-weight-medium: 500;
+  --pr-weight-semibold: 600;
+  --pr-weight-bold: 700;
 
-      .files { display: flex; flex-direction: column; gap: 2px; }
-      .file {
-        display: flex; align-items: center; gap: 10px; padding: 7px 9px;
-        border-radius: var(--pr-radius-sm); cursor: default;
-      }
-      .file:hover { background: var(--surface-hover); }
-      .file em { color: var(--muted-foreground); font-style: normal; font-size: 11px; margin-left: auto; }
-      .file .dot { width: 14px; height: 14px; border-radius: 4px; flex: none; }
+  /* 字距：大字号收紧，小字号放开 —— 补偿光学尺寸 */
+  --pr-tracking-tight: -0.012em;
+  --pr-tracking-normal: 0;
+  --pr-tracking-wide: 0.01em;
 
-      .sidebar-demo {
-        display: flex; gap: 0; border-radius: var(--pr-radius-lg); overflow: hidden;
-        border: 1px solid var(--border);
-      }
-      .sidebar-demo nav {
-        width: 190px; background: var(--sidebar); color: var(--sidebar-foreground);
-        padding: 10px; display: flex; flex-direction: column; gap: 2px;
-      }
-      .sidebar-demo nav a {
-        display: flex; align-items: center; gap: 10px; padding: 8px 10px;
-        border-radius: var(--pr-radius-sm); color: inherit; text-decoration: none; font-size: 13px;
-      }
-      .sidebar-demo nav a.on { background: var(--accent); color: var(--accent-foreground); font-weight: 600; }
-      .sidebar-demo nav a:not(.on):hover { background: var(--surface-hover); }
-      .sidebar-demo .main { flex: 1; background: var(--background); padding: 16px; }
-      .sidebar-demo .main .card { padding: 14px; }
-      .bar { height: 6px; border-radius: 999px; background: var(--muted); overflow: hidden; }
-      .bar i { display: block; height: 100%; background: var(--primary); border-radius: 999px; }
+  /* 间距：4pt 栅格 */
+  --pr-space-1: 4px;
+  --pr-space-2: 8px;
+  --pr-space-3: 12px;
+  --pr-space-4: 16px;
+  --pr-space-5: 20px;
+  --pr-space-6: 24px;
+  --pr-space-8: 32px;
+  --pr-space-10: 40px;
+  --pr-space-12: 48px;
 
-      .type-row { display: flex; align-items: baseline; gap: 14px; padding: 7px 0; border-bottom: 1px solid var(--border); }
-      .type-row b { min-width: 118px; color: var(--muted-foreground); font-size: 11px; font-weight: 600; }
+  /* 控件高度：桌面紧凑密度 */
+  --pr-h-xs: 22px;
+  --pr-h-sm: 28px;
+  --pr-h-md: 32px;
+  --pr-h-lg: 38px;
+  --pr-h-xl: 46px;
 
-      ::selection { background: var(--selection); }
+  --pr-dur-fast: 120ms;
+  --pr-dur-base: 200ms;
+  --pr-dur-slow: 380ms;
+  --pr-dur-theme-out: 560ms;
+  --pr-dur-theme-in: 480ms;
+  --pr-ease-theme-out: cubic-bezier(0.05, 0.7, 0.1, 1);
+  --pr-ease-theme-in: cubic-bezier(0.3, 0, 0.8, 0.15);
+  --pr-ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --pr-ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+  --pr-ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  /* 弹性：用于按压/开关/卡片入场等需要「手感」的地方，不用在位移类过渡上 */
+  --pr-ease-spring: cubic-bezier(0.34, 1.42, 0.64, 1);
+}
+
+/* ── 2. Semantic · 语义层（浅色）─────────────────────── */
+:root {
+  color-scheme: light;
+
+  --background: var(--pr-gray-50);
+  --foreground: var(--pr-gray-800);
+  --card: var(--pr-gray-0);
+  --card-foreground: var(--pr-gray-800);
+  --popover: var(--pr-gray-0);
+  --popover-foreground: var(--pr-gray-800);
+  --primary: var(--pr-brand-600);
+  --primary-foreground: var(--pr-gray-0);
+  --secondary: var(--pr-gray-100);
+  --secondary-foreground: var(--pr-gray-700);
+  --muted: var(--pr-gray-100);
+  /*
+   * gray-500 取 L=0.50（不是 0.532）：次要文字也会落在 muted/secondary
+   * 底色上（下拉项、标签），0.532 在 gray-100 上只有 4.36:1，差一点。
+   */
+  --muted-foreground: var(--pr-gray-500);
+  --accent: var(--pr-brand-50);
+  --accent-foreground: var(--pr-brand-700);
+  --destructive: var(--pr-red-600);
+  --destructive-foreground: var(--pr-gray-0);
+  --success: var(--pr-green-600);
+  --warning: var(--pr-amber-600);
+  --info: var(--pr-blue-600);
+  --border: var(--pr-gray-150);
+  --input: var(--pr-gray-200);
+  --ring: oklch(0.552 0.172 252 / 0.4);
+
+  --sidebar: var(--pr-gray-100);
+  --sidebar-foreground: var(--pr-gray-600);
+  --sidebar-primary: var(--pr-brand-600);
+  --sidebar-primary-foreground: var(--pr-gray-0);
+  --sidebar-accent: oklch(0.552 0.172 252 / 0.1);
+  --sidebar-accent-foreground: var(--pr-brand-700);
+  --sidebar-border: var(--pr-gray-150);
+  --sidebar-ring: oklch(0.552 0.172 252 / 0.4);
+
+  --chart-1: var(--pr-brand-600);
+  --chart-2: var(--pr-green-600);
+  --chart-3: var(--pr-amber-600);
+  --chart-4: var(--pr-blue-600);
+  --chart-5: var(--pr-red-600);
+
+  --surface-hover: oklch(0.552 0.172 252 / 0.05);
+  --surface-active: oklch(0.552 0.172 252 / 0.09);
+  --scrollbar-thumb: var(--pr-gray-300);
+  --backdrop: oklch(0.2 0 0 / 0.4);
+  /* 选中文字底色：跟随品牌，但保持低饱和以免整片文字发蓝 */
+  --selection: oklch(0.552 0.172 252 / 0.22);
+}
+
+/* ── 2b. Semantic · 语义层（深色）────────────────────── */
+html[data-theme="dark"] {
+  color-scheme: dark;
+
+  --background: var(--pr-gray-950);
+  --foreground: var(--pr-gray-50);
+  --card: var(--pr-gray-900);
+  --card-foreground: var(--pr-gray-50);
+  --popover: var(--pr-gray-850);
+  --popover-foreground: var(--pr-gray-50);
+  /*
+   * 刻意用 600 而不是 500：`--primary` 是**实心按钮底色**，配白字。
+   * 500（L=0.638）配白字不足 4.5:1 —— 连大字 AA 都够不上。
+   * 600（L=0.552）是 4.83:1，正文级 AA 达标。
+   * 深色模式需要「更亮的品牌色」时用 --ring / --accent，
+   * 那些是描边与图标，不背白字。
+   */
+  --primary: var(--pr-brand-600);
+  --primary-foreground: var(--pr-gray-0);
+  --secondary: var(--pr-gray-850);
+  --secondary-foreground: var(--pr-gray-100);
+  --muted: var(--pr-gray-850);
+  /* gray-600 在 gray-850 上只有 4.30:1 —— 必须提到 400 档 */
+  --muted-foreground: var(--pr-gray-400);
+  --accent: oklch(0.638 0.162 252 / 0.16);
+  --accent-foreground: var(--pr-brand-200);
+  --destructive: var(--pr-red-400);
+  --destructive-foreground: var(--pr-gray-1000);
+  --success: var(--pr-green-400);
+  --warning: var(--pr-amber-400);
+  --info: var(--pr-blue-400);
+  --border: oklch(1 0 0 / 0.09);
+  --input: oklch(1 0 0 / 0.13);
+  --ring: oklch(0.722 0.128 252 / 0.55);
+
+  --sidebar: var(--pr-gray-975);
+  --sidebar-foreground: var(--pr-gray-300);
+  --sidebar-primary: var(--pr-brand-500);
+  --sidebar-primary-foreground: var(--pr-gray-0);
+  --sidebar-accent: oklch(0.722 0.128 252 / 0.14);
+  --sidebar-accent-foreground: var(--pr-brand-200);
+  --sidebar-border: oklch(1 0 0 / 0.07);
+  --sidebar-ring: oklch(0.722 0.128 252 / 0.55);
+
+  --chart-1: var(--pr-brand-400);
+  --chart-2: var(--pr-green-400);
+  --chart-3: var(--pr-amber-400);
+  --chart-4: var(--pr-blue-400);
+  --chart-5: var(--pr-red-400);
+
+  --surface-hover: oklch(0.722 0.128 252 / 0.08);
+  --surface-active: oklch(0.722 0.128 252 / 0.14);
+  --scrollbar-thumb: var(--pr-gray-750);
+  --backdrop: oklch(0.08 0 0 / 0.56);
+  --selection: oklch(0.722 0.128 252 / 0.3);
+
+  /* 深色底上大范围阴影不可见，只保留极短距的一层 */
+  --pr-shadow-1: 0 1px 2px oklch(0 0 0 / 0.4);
+  --pr-shadow-2: 0 2px 6px oklch(0 0 0 / 0.45);
+  --pr-shadow-3: 0 8px 24px oklch(0 0 0 / 0.5);
+}
+
+/*
+ * FileType · 深色模式重取明度
+ *
+ * 浅色下用 L=0.52 压深，深色卡上必须提到 L=0.70 才够亮。深色档不是简单提亮：
+ * 明度变化会同时改变**渲染后色相**（doc/image 在深色下会被压近），
+ * 所以两组色相是联合求解出来的，不是同一份数字套两次。
+ * 实测：浅色与深色的类别两两最小间距均为 22.2°。见 scripts/check-contrast.mjs。
+ */
+html[data-theme="dark"] {
+  --pr-file-pdf: oklch(0.7 0.135 14.2);
+  --pr-file-slide: oklch(0.7 0.135 40.05);
+  --pr-file-archive: oklch(0.7 0.135 82.5);
+  --pr-file-sheet: oklch(0.7 0.135 114.7);
+  --pr-file-video: oklch(0.7 0.135 131.25);
+  --pr-file-doc: oklch(0.7 0.135 141.25);
+  --pr-file-image: oklch(0.7 0.135 149.65);
+  --pr-file-audio: oklch(0.7 0.135 167);
+  --pr-file-misc: oklch(0.7 0 0);
+}
+
+/* ── 3. Component · 组件层 ────────────────────────────── */
+:root {
+  --titlebar-h: 40px;
+  --sidebar-w: 224px;
+  --sidebar-w-collapsed: 60px;
+  --page-pad: 20px;
+  --radius: var(--pr-radius-md);
+
+  /*
+   * 标题栏关闭按钮悬停色（Windows 惯例：悬停变红）。
+   * 刻意**不**用 --destructive：那个 token 在深色模式下是 L=0.72 的亮红，
+   * 配白字只有 ~2.5:1。关闭按钮在两种主题下都必须是「强红底 + 白字」，
+   * 所以给它一个固定的强红，不随主题变。
+   */
+  --close-hover-bg: var(--pr-red-600);
+  --close-hover-fg: var(--pr-gray-0);
+}
+
+
+/* ── 以下是预览页自身的排版，不属于设计系统 ── */
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  padding: 40px 32px;
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans, "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", sans-serif);
+  font-size: var(--pr-text-md);
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  transition: background 300ms, color 300ms;
+}
+h1 { font-size: var(--pr-text-2xl); font-weight: 600; margin: 0 0 4px; letter-spacing: -0.012em; cursor: pointer; user-select: none; }
+h2 {
+  font-size: var(--pr-text-sm); font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--muted-foreground); margin: 40px 0 14px;
+}
+.sub { color: var(--muted-foreground); font-size: var(--pr-text-base); margin: 0 0 28px; }
+.wrap { max-width: 1140px; margin: 0 auto; }
+.hint {
+  display: inline-block; margin-left: 8px; padding: 2px 8px; border-radius: var(--pr-radius-full);
+  background: var(--accent); color: var(--accent-foreground);
+  font-size: var(--pr-text-xs); font-weight: 600; vertical-align: middle;
+}
+
+.swatches { display: flex; flex-wrap: wrap; gap: 6px; }
+.sw {
+  width: 78px; height: 58px; border-radius: var(--pr-radius-md); position: relative;
+  border: 1px solid var(--border); overflow: hidden;
+}
+.sw span {
+  position: absolute; bottom: 3px; left: 5px; font-size: 9px; font-weight: 600;
+  font-family: "Cascadia Mono", Consolas, monospace;
+}
+.sw b {
+  position: absolute; top: 3px; right: 5px; font-size: 8px; font-weight: 500;
+  font-family: "Cascadia Mono", Consolas, monospace; opacity: .85;
+}
+.sw-dark span, .sw-dark b { color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,.5); }
+.sw-light span, .sw-light b { color: #000; text-shadow: 0 1px 2px rgba(255,255,255,.6); }
+
+.grid { display: grid; gap: 14px; }
+.g3 { grid-template-columns: repeat(auto-fill, minmax(310px, 1fr)); }
+
+.card {
+  background: var(--card); color: var(--card-foreground);
+  border: 1px solid var(--border); border-radius: var(--pr-radius-lg);
+  padding: 18px; transition: background 300ms, border-color 300ms;
+  box-shadow: var(--pr-shadow-1);
+}
+.card h3 { margin: 0 0 12px; font-size: var(--pr-text-md); font-weight: 600; }
+
+.row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+
+.btn {
+  height: var(--pr-h-lg); padding: 0 18px; border-radius: var(--pr-radius-md);
+  border: 1px solid transparent; font-size: var(--pr-text-md); font-weight: 500;
+  cursor: pointer; display: inline-flex; align-items: center; gap: 8px;
+  transition: all 180ms var(--pr-ease-spring);
+}
+.btn:active { transform: scale(.97); }
+.btn-primary { background: var(--primary); color: var(--primary-foreground); }
+.btn-primary:hover { filter: brightness(1.08); }
+.btn-secondary { background: var(--secondary); color: var(--secondary-foreground); }
+.btn-secondary:hover { background: var(--surface-hover); }
+.btn-ghost { background: transparent; color: var(--primary); }
+.btn-ghost:hover { background: var(--accent); }
+.btn-outline { background: transparent; border-color: var(--border); color: var(--foreground); }
+.btn-outline:hover { border-color: var(--muted-foreground); }
+.btn-sm { height: var(--pr-h-md); padding: 0 12px; font-size: var(--pr-text-sm); }
+
+.input {
+  height: var(--pr-h-lg); width: 100%; padding: 0 12px; font-size: var(--pr-text-md);
+  background: var(--card); color: var(--foreground);
+  border: 1px solid var(--input); border-radius: var(--pr-radius-sm);
+  outline: none; transition: box-shadow 180ms, border-color 180ms;
+}
+.input:focus { border-color: var(--primary); box-shadow: var(--pr-shadow-glow); }
+.input::placeholder { color: var(--muted-foreground); }
+
+.sw-toast {
+  display: flex; align-items: center; width: 44px; height: 26px; border-radius: var(--pr-radius-full);
+  padding: 0 3px; background: var(--muted-foreground); cursor: pointer; transition: background 220ms;
+}
+.sw-toast.on { background: var(--primary); }
+.sw-toast i {
+  display: block; width: 20px; height: 20px; border-radius: 50%; background: #fff;
+  box-shadow: 0 1px 3px rgba(0,0,0,.3);
+  transition: transform 220ms var(--pr-ease-spring);
+}
+.sw-toast.on i { transform: translateX(18px); }
+
+.badge {
+  display: inline-flex; align-items: center; gap: 4px; height: 22px; padding: 0 9px;
+  border-radius: var(--pr-radius-full); font-size: var(--pr-text-xs); font-weight: 600;
+}
+.b-done { background: var(--primary); color: var(--primary-foreground); }
+.b-doing { background: var(--accent); color: var(--accent-foreground); }
+.b-todo { background: var(--muted); color: var(--muted-foreground); }
+.b-ok { background: color-mix(in oklch, var(--success) 16%, transparent); color: var(--success); }
+.b-warn { background: color-mix(in oklch, var(--warning) 18%, transparent); color: var(--warning); }
+.b-err { background: color-mix(in oklch, var(--destructive) 16%, transparent); color: var(--destructive); }
+
+table { width: 100%; border-collapse: collapse; font-size: var(--pr-text-sm); }
+th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--border); }
+th { color: var(--muted-foreground); font-weight: 600; font-size: var(--pr-text-xs); text-transform: uppercase; letter-spacing: .05em; }
+td.mono, .mono { font-family: "Cascadia Mono", Consolas, monospace; font-size: var(--pr-text-sm); }
+.pass { color: var(--success); font-weight: 600; }
+.fail { color: var(--destructive); font-weight: 600; }
+
+.files { display: flex; flex-direction: column; gap: 2px; }
+.file {
+  display: flex; align-items: center; gap: 10px; padding: 7px 9px;
+  border-radius: var(--pr-radius-sm); cursor: default; font-size: var(--pr-text-md);
+}
+.file:hover { background: var(--surface-hover); }
+.file em { color: var(--muted-foreground); font-style: normal; font-size: var(--pr-text-xs); margin-left: auto; }
+.file .dot { width: 14px; height: 14px; border-radius: 4px; flex: none; }
+
+.sidebar-demo { display: flex; border-radius: var(--pr-radius-lg); overflow: hidden; border: 1px solid var(--border); }
+.sidebar-demo nav {
+  width: 196px; background: var(--sidebar); color: var(--sidebar-foreground);
+  padding: 10px; display: flex; flex-direction: column; gap: 2px;
+}
+.sidebar-demo nav a {
+  display: flex; align-items: center; gap: 10px; padding: 8px 10px;
+  border-radius: var(--pr-radius-sm); color: inherit; text-decoration: none; font-size: var(--pr-text-md);
+}
+.sidebar-demo nav a.on { background: var(--sidebar-accent); color: var(--sidebar-accent-foreground); font-weight: 600; }
+.sidebar-demo nav a:not(.on):hover { background: var(--surface-hover); }
+.sidebar-demo .main { flex: 1; background: var(--background); padding: 16px; }
+.bar { height: 6px; border-radius: var(--pr-radius-full); background: var(--muted); overflow: hidden; }
+.bar i { display: block; height: 100%; background: var(--primary); border-radius: var(--pr-radius-full); }
+
+.type-row { display: flex; align-items: baseline; gap: 14px; padding: 6px 0; border-bottom: 1px solid var(--border); }
+.type-row b { min-width: 132px; color: var(--muted-foreground); font-size: var(--pr-text-xs); font-weight: 600; }
+.type-row:last-child { border-bottom: none; }
+
+.radius-row { display: flex; gap: 12px; align-items: flex-end; }
+.radius-box { background: var(--accent); border: 1px solid var(--primary); }
+
+::selection { background: var(--selection); }
     </style>
   </head>
   <body>
     <div class="wrap">
       <h1 id="title">
-        NimbusDesk · 雾蓝石墨<span class="hint">双击标题切换明暗</span>
+        NimbusDesk · 石墨天青<span class="hint">双击标题切换明暗</span>
       </h1>
       <p class="sub">
-        Azure Slate 设计系统 — 天青蓝 H=248 品牌色 + 冷中性石墨（饱和 ≤0.01）。<br />
-        全部 45 项对比度经 WCAG AA 验证（正文 ≥4.5:1、图形 ≥3:1）。
+        品牌天青蓝 H=252（渲染 H≈207°）+ 真无彩中性灰（C=0，色相无意义）。<br />
+        文件类型色按<b>渲染后 sRGB 色相</b>分配，落在 352°→186° 单一弧上，265–350° 紫区完全为空。<br />
+        色卡标注的「渲染 H」是浏览器实际渲染出的 sRGB 色相 —— 这才是肉眼判定的依据。
       </p>
 
       <h2>品牌色阶 · 天青蓝</h2>
       <div class="swatches" id="brand"></div>
 
-      <h2>中性石墨</h2>
+      <h2>中性灰 · 真无彩（C=0）</h2>
       <div class="swatches" id="gray"></div>
 
-      <h2>语义色 · 浅/深两档</h2>
+      <h2>状态色 · 浅/深两档</h2>
       <div class="swatches" id="status"></div>
 
       <h2>文件类型标识色</h2>
@@ -298,13 +536,13 @@
         </div>
 
         <div class="card">
-          <h3>输入框（聚焦态）</h3>
+          <h3>输入框</h3>
           <input class="input" placeholder="输入后回车添加…" />
           <input class="input" style="margin-top: 10px; border-color: var(--primary); box-shadow: var(--pr-shadow-glow)" value="已聚焦" />
         </div>
 
         <div class="card">
-          <h3>开关 / 状态徽标</h3>
+          <h3>开关 / 徽标</h3>
           <div class="row">
             <div class="sw-toast on" id="sw1"><i></i></div>
             <div class="sw-toast" id="sw2"><i></i></div>
@@ -336,12 +574,29 @@
         </div>
 
         <div class="card">
+          <h3>圆角尺度</h3>
+          <div class="radius-row">
+            <div class="radius-box" style="width: 46px; height: 46px; border-radius: var(--pr-radius-xs)"></div>
+            <div class="radius-box" style="width: 46px; height: 46px; border-radius: var(--pr-radius-sm)"></div>
+            <div class="radius-box" style="width: 46px; height: 46px; border-radius: var(--pr-radius-md)"></div>
+            <div class="radius-box" style="width: 46px; height: 46px; border-radius: var(--pr-radius-lg)"></div>
+            <div class="radius-box" style="width: 46px; height: 46px; border-radius: var(--pr-radius-xl)"></div>
+            <div class="radius-box" style="width: 46px; height: 46px; border-radius: var(--pr-radius-full)"></div>
+          </div>
+          <p class="sub" style="margin: 12px 0 0; font-size: var(--pr-text-sm)">
+            xs / sm / md / lg / xl / full —— 桌面密度比移动端紧一档，卡片用 lg(12) 不用 16。
+          </p>
+        </div>
+
+        <div class="card">
           <h3>排版尺度</h3>
-          <div class="type-row"><b>标题 22 / 600</b><span style="font-size: 22px; font-weight: 600">今日计划</span></div>
-          <div class="type-row"><b>小标题 15 / 600</b><span style="font-size: 15px; font-weight: 600">数据与存储</span></div>
-          <div class="type-row"><b>正文 14 / 400</b><span>任务标题与说明文字</span></div>
-          <div class="type-row"><b>次要 12 / 400</b><span style="font-size: 12px; color: var(--muted-foreground)">辅助说明、时间戳</span></div>
-          <div class="type-row" style="border: none"><b>等宽 12</b><span class="mono">2026-03-10 09:00 – 11:30</span></div>
+          <div class="type-row"><b>2xl · 23 / 600</b><span style="font-size: var(--pr-text-2xl); font-weight: 600">今日计划</span></div>
+          <div class="type-row"><b>xl · 19 / 600</b><span style="font-size: var(--pr-text-xl); font-weight: 600">数据与存储</span></div>
+          <div class="type-row"><b>lg · 16 / 600</b><span style="font-size: var(--pr-text-lg); font-weight: 600">文件管理</span></div>
+          <div class="type-row"><b>md · 14 / 400</b><span>任务标题与说明文字</span></div>
+          <div class="type-row"><b>base · 13 / 400</b><span style="font-size: var(--pr-text-base)">密集列表正文</span></div>
+          <div class="type-row"><b>sm · 12 / 400</b><span style="font-size: var(--pr-text-sm); color: var(--muted-foreground)">辅助说明、时间戳</span></div>
+          <div class="type-row"><b>等宽 12</b><span class="mono">2026-03-10 09:00 – 11:30</span></div>
         </div>
       </div>
 
@@ -358,12 +613,12 @@
         <div class="main">
           <div class="card">
             <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px">
-              <b style="font-size: 15px">今日计划</b>
+              <b style="font-size: var(--pr-text-lg)">今日计划</b>
               <span class="badge b-doing">3/8 已完成</span>
             </div>
             <div class="bar" style="margin-bottom: 14px"><i style="width: 37%"></i></div>
             <div style="display: flex; flex-direction: column; gap: 6px">
-              <div class="file"><span class="dot" style="background: var(--pr-brand-500)"></span>梳理配色 token 层级<span style="margin-left: auto" class="mono" >09:00 – 11:30</span></div>
+              <div class="file"><span class="dot" style="background: var(--pr-brand-500)"></span>梳理配色 token 层级<span style="margin-left: auto" class="mono">09:00 – 11:30</span></div>
               <div class="file"><span class="dot" style="background: var(--pr-gray-300)"></span>写对比度校验脚本<span style="margin-left: auto" class="mono">14:00 – 15:00</span></div>
               <div class="file"><span class="dot" style="background: var(--pr-gray-300)"></span>文件类型图标收敛到 token</div>
             </div>
@@ -371,100 +626,36 @@
         </div>
       </div>
 
-      <h2>对比度实测（WCAG）</h2>
+      <h2>对比度实测（现场计算，非抄写）</h2>
       <div class="card" style="padding: 6px 14px">
         <table id="ct"></table>
       </div>
 
-      <p class="sub" style="margin-top: 28px">
-        字号说明：正文 14px、次要 12px、标题 15–22px；圆角 6 / 8 / 12 / 16 / 22；
-        间距走 4pt 栅格。
-      </p>
+      <h2>色相几何</h2>
+      <div class="card" style="padding: 6px 14px">
+        <table id="hue"></table>
+      </div>
     </div>
 
 <script>
   /*
-   * 预览页脚本：把 token 渲染成色卡 + 现场算一遍对比度。
-   *
-   * 这里是"查看器"，不是设计系统的实现 —— 真正的取值以 src/styles/tokens.css 为准，
-   * 一致性由 scripts/check-contrast.mjs（直接解析该 CSS）保证。
+   * 预览页是「查看器」：所有数值都从计算样式读，不在此处复制任何 token。
+   * 唯一硬编码的是「哪些变量要展示」以及断言口径。
+   * 一致性由这份现场计算 + scripts/check-contrast.mjs 共同保证。
    */
-  try {
-    const G = {
-      0: "oklch(1 0 0)", 25: "oklch(0.985 0.0015 255)", 50: "oklch(0.968 0.0025 255)",
-      100: "oklch(0.938 0.0035 255)", 150: "oklch(0.905 0.004 255)", 200: "oklch(0.865 0.005 255)",
-      300: "oklch(0.765 0.006 255)", 400: "oklch(0.645 0.007 255)", 500: "oklch(0.535 0.008 255)",
-      600: "oklch(0.45 0.009 255)", 700: "oklch(0.36 0.01 255)", 750: "oklch(0.305 0.01 255)",
-      800: "oklch(0.255 0.01 255)", 850: "oklch(0.215 0.01 255)", 900: "oklch(0.18 0.009 255)",
-      925: "oklch(0.158 0.008 255)", 950: "oklch(0.138 0.007 255)", 975: "oklch(0.118 0.006 255)",
-      1000: "oklch(0.1 0.005 255)",
-    };
-    const B = {
-      50: "oklch(0.975 0.012 248)", 100: "oklch(0.945 0.028 248)", 200: "oklch(0.885 0.055 248)",
-      300: "oklch(0.815 0.085 248)", 400: "oklch(0.735 0.108 248)", 500: "oklch(0.655 0.128 248)",
-      600: "oklch(0.548 0.138 248)", 700: "oklch(0.47 0.128 248)", 800: "oklch(0.395 0.104 248)",
-      900: "oklch(0.32 0.077 248)", 950: "oklch(0.238 0.054 248)",
-    };
+  (function () {
+    const root = document.documentElement;
 
-    function swatch(el, label, color, whiteText) {
-      const d = document.createElement("div");
-      d.className = "sw " + (whiteText ? "sw-dark" : "sw-light");
-      d.style.background = color;
-      d.style.color = whiteText ? "#fff" : "#000";
-      d.innerHTML = "<span>" + label + "</span>";
-      el.appendChild(d);
+    function vars() {
+      const cs = getComputedStyle(root);
+      return (name) => cs.getPropertyValue(name).trim();
     }
 
-    for (const [k, v] of Object.entries(B)) {
-      swatch(document.getElementById("brand"), k, v, Number(k) >= 500);
-    }
-    for (const [k, v] of Object.entries(G)) {
-      swatch(document.getElementById("gray"), k, v, Number(k) >= 500);
-    }
-
-    const st = [
-      ["red-600", "oklch(0.53 0.2 25)"], ["red-400", "oklch(0.72 0.18 25)"],
-      ["green-600", "oklch(0.535 0.15 155)"], ["green-400", "oklch(0.75 0.16 155)"],
-      ["amber-600", "oklch(0.53 0.12 60)"], ["amber-400", "oklch(0.82 0.13 80)"],
-      ["blue-600", "oklch(0.55 0.14 240)"], ["blue-400", "oklch(0.72 0.13 240)"],
-    ];
-    for (const [n, v] of st) {
-      swatch(document.getElementById("status"), n, v, n.endsWith("600"));
-    }
-
-    const FT = [["pdf", 20], ["slide", 49], ["archive", 78], ["sheet", 107],
-      ["video", 136], ["doc", 165], ["image", 194], ["audio", 350], ["misc", null]];
-    const filesEl = document.getElementById("files");
-    function paintFiles(dark) {
-      filesEl.innerHTML = "";
-      for (const [n, h] of FT) {
-        const v = h === null
-          ? "oklch(" + (dark ? "0.7 0.012" : "0.47 0.012") + " 255)"
-          : "oklch(" + (dark ? "0.74 0.145" : "0.52 0.15") + " " + h + ")";
-        swatch(filesEl, n, v, dark);
-      }
-    }
-    paintFiles(true);
-
-    // 文件列表：展示图标色在行内的实际观感
-    const LIST = [["设计稿.pdf", "pdf", "▤"], ["季度汇报.pptx", "slide", "▥"],
-      ["归档.zip", "archive", "▣"], ["账目.xlsx", "sheet", "▦"],
-      ["会议录像.mp4", "video", "▷"], ["截图.png", "image", "▨"],
-      ["会议纪要.docx", "doc", "▤"], ["录音.m4a", "audio", "♫"],
-      ["build.rs", "misc", "◇"]];
-    const listEl = document.getElementById("filelist");
-    for (const [name, key, glyph] of LIST) {
-      const d = document.createElement("div");
-      d.className = "file";
-      d.innerHTML = '<span style="color: var(--pr-file-' + key +
-        '); font-size: 15px; width: 16px; text-align: center">' + glyph + "</span>" +
-        name + "<em>" + key + "</em>";
-      listEl.appendChild(d);
-    }
-
-    /* ── 现场算对比度，展示口径 ────────────────────────── */
-    function oklchToLinearSrgb(L, C, H) {
-      H = (H * Math.PI) / 180;
+    /* ── OKLCH → sRGB（用于算渲染色相与对比度）── */
+    function toLinear(str) {
+      const m = /oklch\(\s*([\d.]+)\s+([\d.]+)\s+([\d.]+)\s*(?:\/\s*([\d.]+))?\s*\)/.exec(str);
+      if (!m) return null;
+      const L = +m[1], C = +m[2], H = (+m[3] * Math.PI) / 180;
       const a = C * Math.cos(H), b = C * Math.sin(H);
       const l_ = L + 0.3963377774 * a + 0.2158037573 * b;
       const m_ = L - 0.1055613458 * a - 0.0638541728 * b;
@@ -476,56 +667,254 @@
       ];
     }
     const cl = (v) => Math.min(1, Math.max(0, v));
-    function lum(L, C, H) {
-      const rgb = oklchToLinearSrgb(L, C, H).map(cl);
-      return 0.2126 * rgb[0] + 0.7152 * rgb[1] + 0.0722 * rgb[2];
+    const enc = (x) => (x <= 0.0031308 ? 12.92 * x : 1.055 * Math.pow(x, 1 / 2.4) - 0.055);
+    const hex = (lin) => "#" + lin.map(enc).map(cl).map((v) => Math.round(v * 255).toString(16).padStart(2, "0")).join("");
+    const lum = (lin) => { const c = lin.map(cl); return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]; };
+
+    /* 渲染后色相：人眼看到的色相，与 oklch 第三参数并不相等 */
+    function renderedHue(lin) {
+      const [r, g, b] = lin.map(enc).map(cl);
+      const mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn;
+      if (d < 1e-9) return -1; // 无彩
+      const h = mx === r ? 60 * (((g - b) / d) % 6) : mx === g ? 60 * ((b - r) / d + 2) : 60 * ((r - g) / d + 4);
+      return (h + 360) % 360;
     }
-    function cr(f, b) {
-      const a = lum(f[0], f[1], f[2]);
-      const c = lum(b[0], b[1], b[2]);
-      const hi = Math.max(a, c), lo = Math.min(a, c);
+
+    const v = vars();
+
+    /* ── 色卡 ── */
+    function swatch(parent, label, cssValue, extra) {
+      const lin = toLinear(cssValue);
+      const d = document.createElement("div");
+      const isDarkColor = lin ? lum(lin) < 0.35 : false;
+      d.className = "sw " + (isDarkColor ? "sw-dark" : "sw-light");
+      d.style.background = cssValue;
+      const hue = lin ? renderedHue(lin) : -1;
+      d.innerHTML =
+        "<span>" + label + "</span>" +
+        (extra || (lin ? "<b>" + (hue < 0 ? "无彩" : hue.toFixed(0) + "°") + "</b>" : ""));
+      parent.appendChild(d);
+    }
+
+    const BRAND = [50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950];
+    const GRAY = [0, 25, 50, 100, 150, 200, 300, 400, 500, 600, 700, 750, 800, 850, 900, 925, 950, 975, 1000];
+
+    function build() {
+      /* 品牌与灰阶是主题无关原料，直接读 */
+      const bEl = document.getElementById("brand");
+      const gEl = document.getElementById("gray");
+      const sEl = document.getElementById("status");
+      const fEl = document.getElementById("files");
+      bEl.innerHTML = gEl.innerHTML = sEl.innerHTML = "";
+      BRAND.forEach((k) => swatch(bEl, "--pr-brand-" + k, v("--pr-brand-" + k)));
+      GRAY.forEach((k) => swatch(gEl, "--pr-gray-" + k, v("--pr-gray-" + k)));
+      [["red", 600], ["red", 400], ["green", 600], ["green", 400],
+       ["amber", 600], ["amber", 400], ["blue", 600], ["blue", 400],
+      ].forEach(([n, k]) => swatch(sEl, "--pr-" + n + "-" + k, v("--pr-" + n + "-" + k)));
+      FILE_KEYS.forEach((k) => swatch(fEl, k, v("--pr-file-" + k), "<b>H</b>"));
+      paintFiles();
+      buildList();
+    }
+
+    /* ── 文件类型：额外标注渲染色相 ── */
+    const FILE_KEYS = ["pdf", "slide", "archive", "sheet", "video", "doc", "image", "audio", "misc"];
+    function paintFiles() {
+      const fEl = document.getElementById("files");
+      fEl.innerHTML = "";
+      FILE_KEYS.forEach((k) => {
+        const css = v("--pr-file-" + k);
+        const lin = toLinear(css);
+        const d = document.createElement("div");
+        const dark = lin ? lum(lin) < 0.35 : false;
+        d.className = "sw " + (dark ? "sw-dark" : "sw-light");
+        const hue = lin ? renderedHue(lin) : -1;
+        d.style.background = css;
+        d.innerHTML = "<span>" + k + "</span><b>" + (hue < 0 ? "无彩" : hue.toFixed(0) + "°") + "</b>";
+        fEl.appendChild(d);
+      });
+    }
+
+    const LIST = [
+      ["设计稿.pdf", "pdf", "▤"], ["季度汇报.pptx", "slide", "▥"],
+      ["归档.zip", "archive", "▣"], ["账目.xlsx", "sheet", "▦"],
+      ["会议录像.mp4", "video", "▷"], ["截图.png", "image", "▨"],
+      ["会议纪要.docx", "doc", "▤"], ["录音.m4a", "audio", "♫"],
+      ["build.rs", "misc", "◇"],
+    ];
+    function buildList() {
+      const listEl = document.getElementById("filelist");
+      listEl.innerHTML = "";
+      LIST.forEach(([name, key, glyph]) => {
+        const d = document.createElement("div");
+        d.className = "file";
+        d.innerHTML =
+          '<span style="color: var(--pr-file-' + key + '); font-size: 15px; width: 16px; text-align: center">' +
+          glyph + "</span>" + name + "<em>" + key + "</em>";
+        listEl.appendChild(d);
+      });
+    }
+
+    /* ── 对比度断言（现场算）── */
+    const CASES = [
+      ["浅色·正文 on 页面底", "--foreground", "--background", 4.5],
+      ["浅色·正文 on 卡片", "--card-foreground", "--card", 4.5],
+      ["浅色·次要文字 on 页面底", "--muted-foreground", "--background", 4.5],
+      ["浅色·次要文字 on 卡片", "--muted-foreground", "--card", 4.5],
+      ["浅色·次要文字 on muted 底", "--muted-foreground", "--muted", 4.5],
+      ["浅色·主按钮文字", "--primary-foreground", "--primary", 4.5],
+      ["浅色·强调文字 on 强调底", "--accent-foreground", "--accent", 4.5],
+      ["浅色·侧栏文字", "--sidebar-foreground", "--sidebar", 4.5],
+      ["浅色·危险色 on 卡片", "--destructive", "--card", 4.5],
+      ["浅色·成功色 on 卡片", "--success", "--card", 4.5],
+      ["浅色·警告色 on 卡片", "--warning", "--card", 4.5],
+      ["浅色·信息色 on 卡片", "--info", "--card", 4.5],
+      ["深色·正文 on 页面底", "--foreground", "--background", 4.5],
+      ["深色·正文 on 卡片", "--card-foreground", "--card", 4.5],
+      ["深色·次要文字 on 页面底", "--muted-foreground", "--background", 4.5],
+      ["深色·次要文字 on muted 底", "--muted-foreground", "--muted", 4.5],
+      ["深色·主按钮文字", "--primary-foreground", "--primary", 4.5],
+      ["深色·强调文字 on 卡片", "--accent-foreground", "--card", 4.5],
+      ["深色·侧栏文字", "--sidebar-foreground", "--sidebar", 4.5],
+      ["深色·危险色 on 卡片", "--destructive", "--card", 4.5],
+      ["深色·成功色 on 卡片", "--success", "--card", 4.5],
+      ["深色·警告色 on 卡片", "--warning", "--card", 4.5],
+      ["深色·信息色 on 卡片", "--info", "--card", 4.5],
+    ];
+
+    /**
+     * 把 oklch(... / alpha) 按 alpha 复合到底色上，返回复合后的 [L,C,H]。
+     * 不复合就会把半透明的 --accent 当成不透明来算，得出 2.41:1 这种假失败
+     * ——它实际是把 16% 的品牌色当成了 100%。只在 OKLab 的 L/C 上插值，
+     * 对对比度的影响 <1%。
+     */
+    function composite(fgStr, bgStr) {
+      const fg = toLinear(fgStr);
+      const bg = toLinear(bgStr);
+      const m = /oklch\(\s*[\d.]+\s+[\d.]+\s+[\d.]+\s*\/\s*([\d.]+)\s*\)/.exec(fgStr);
+      if (!fg || !m) return fg;
+      const alpha = +m[1];
+      if (alpha >= 1) return fg;
+      // 用 L/C/H 三通道插值（比线性 sRGB 插值更接近浏览器在 OKLab 的行为）
+      const bgP = /oklch\(\s*([\d.]+)\s+([\d.]+)\s+([\d.]+)/.exec(bgStr);
+      if (!bgP) return fg;
+      const L = +bgP[1] * (1 - alpha) + toLinFromStr(fgStr, 0) * alpha;
+      const C = +bgP[2] * (1 - alpha) + toLinFromStr(fgStr, 1) * alpha;
+      const H = +bgP[3];
+      return toLinear("oklch(" + L + " " + C + " " + H + ")");
+    }
+    function toLinFromStr(str, idx) {
+      const m = /oklch\(\s*([\d.]+)\s+([\d.]+)/.exec(str);
+      return m ? +m[idx + 1] : 0;
+    }
+
+    function contrast(fgCss, bgCss) {
+      const fg = composite(fgCss, bgCss), bg = toLinear(bgCss);
+      if (!fg || !bg) return null;
+      const a = lum(fg), b = lum(bg);
+      const hi = Math.max(a, b), lo = Math.min(a, b);
       return (hi + 0.05) / (lo + 0.05);
     }
-    const ROWS = [
-      ["浅色·正文 on 页面底", [0.255, 0.01, 255], [0.968, 0.0025, 255], 4.5],
-      ["浅色·次要文字 on 卡片", [0.535, 0.008, 255], [1, 0, 0], 4.5],
-      ["浅色·主按钮白字", [1, 0, 0], [0.548, 0.138, 248], 4.5],
-      ["浅色·危险色", [0.53, 0.2, 25], [1, 0, 0], 4.5],
-      ["浅色·成功色", [0.535, 0.15, 155], [1, 0, 0], 4.5],
-      ["深色·正文 on 卡片", [0.968, 0.0025, 255], [0.18, 0.009, 255], 4.5],
-      ["深色·次要文字 on 卡片", [0.645, 0.007, 255], [0.18, 0.009, 255], 4.5],
-      ["深色·主按钮白字", [1, 0, 0], [0.548, 0.138, 248], 4.5],
-      ["深色·危险色", [0.72, 0.18, 25], [0.18, 0.009, 255], 4.5],
-      ["深色·成功色", [0.75, 0.16, 155], [0.18, 0.009, 255], 4.5],
-    ];
-    document.getElementById("ct").innerHTML =
-      "<tr><th>场景</th><th>对比度</th><th>要求</th><th></th></tr>" +
-      ROWS.map(function (r) {
-        const v = cr(r[1], r[2]);
-        const ok = v >= r[3];
-        return "<tr><td>" + r[0] + '</td><td class="mono">' + v.toFixed(2) +
-          ":1</td><td class=\"mono\">≥" + r[3] + '</td><td class="' +
-          (ok ? "pass" : "") + '">' + (ok ? "通过" : "未达标") + "</td></tr>";
-      }).join("");
+
+    /*
+     * 按指定主题读变量：临时切 data-theme，读完还原。
+     * 必须这样做 —— 否则浅色行会读到深色值：第一版就出现过「浅色·强调文字」
+     * 显示 2.41:1 的假失败，其实是把 --accent 的 16% alpha 当不透明算的，
+     * 而且读的是当前（深色）主题。
+     */
+    function withTheme(mode, fn) {
+      const prev = root.getAttribute("data-theme");
+      root.setAttribute("data-theme", mode);
+      const cs = getComputedStyle(root);
+      const read = (name) => cs.getPropertyValue(name).trim();
+      try {
+        return fn(read);
+      } finally {
+        root.setAttribute("data-theme", prev || "dark");
+      }
+    }
+
+    function buildContrast() {
+      const rows = CASES.map(([d, f, b, need]) => {
+        const mode = /^深色/.test(d) ? "dark" : "light";
+        return withTheme(mode, (read) => [d, read(f), read(b), need]);
+      });
+      document.getElementById("ct").innerHTML =
+        "<tr><th>场景</th><th>前景 → 背景</th><th>对比度</th><th>要求</th><th>结果</th></tr>" +
+        rows.map(([d, f, b, need]) => {
+          const c = contrast(f, b);
+          const ok = c !== null && c >= need;
+          return (
+            "<tr><td>" + d + '</td><td class="mono" style="font-size:10px">' + hexOf(f) + " → " + hexOf(b) +
+            '</td><td class="mono">' + (c === null ? "—" : c.toFixed(2) + ":1") +
+            '</td><td class="mono">≥' + need + '</td><td class="' + (ok ? "pass" : "fail") + '">' +
+            (c === null ? "解析失败" : ok ? "通过" : "未达标") + "</td></tr>"
+          );
+        }).join("");
+    }
+
+    /** 把任意 oklch 串（含 alpha）显示成 hex，便于肉眼核对 */
+    function hexOf(str) {
+      const lin = toLinear(str);
+      if (!lin) return "—";
+      const m = /oklch\(\s*[\d.]+\s+[\d.]+\s+[\d.]+\s*\/\s*([\d.]+)\s*\)/.exec(str);
+      return hex(lin) + (m ? " α" + m[1] : "");
+    }
+
+    /* ── 色相几何检查（现场算）── */
+    function buildHue() {
+      const brandHue = renderedHue(toLinear(v("--pr-brand-600")));
+      const PLO = 265, PHI = 350;
+      const rows = FILE_KEYS.filter((k) => k !== "misc").map((k) => {
+        const lin = toLinear(v("--pr-file-" + k));
+        const h = renderedHue(lin);
+        const gap = (a, b) => { const d = Math.abs(a - b) % 360; return Math.min(d, 360 - d); };
+        const inPurple = h >= PLO && h <= PHI;
+        const nearBrand = gap(h, brandHue) < 20;
+        return [k, h, hex(lin), inPurple, nearBrand];
+      });
+      let minSep = 999, pair = "";
+      for (let i = 0; i < rows.length; i++) {
+        for (let j = i + 1; j < rows.length; j++) {
+          const g = Math.min(d, 360 - d);
+          const d = Math.abs(rows[i][1] - rows[j][1]) % 360;
+          const g = Math.min(d, 360 - d);
+          if (g < minSep) { minSep = g; pair = rows[i][0] + "×" + rows[j][0]; }
+        }
+      }
+      const bad = rows.filter((r) => r[3] || r[4]).length;
+      document.getElementById("hue").innerHTML =
+        "<tr><th>类型</th><th>渲染色相</th><th>色值</th><th>紫区</th><th>近品牌</th></tr>" +
+        rows.map(([k, h, hx, inP, nearB]) =>
+          "<tr><td>" + k + '</td><td class="mono">' + h.toFixed(1) + '°</td><td class="mono">' + hx +
+          '</td><td class="' + (inP ? "fail" : "pass") + '">' + (inP ? "越界" : "OK") +
+          '</td><td class="' + (nearB ? "fail" : "pass") + '">' + (nearB ? "过近" : "OK") + "</td></tr>"
+        ).join("") +
+        '<tr><td colspan="5" class="' + (bad === 0 ? "pass" : "fail") + '">' +
+        "品牌渲染色相 " + brandHue.toFixed(1) + "° ｜ 类别两两最小间距 " + minSep.toFixed(1) + "°（" + pair +
+        "）｜ 越界 " + bad + " 项</td></tr>";
+    }
+
+    function rebuild() {
+      /* 主题切换后 CSS 变量全变，色卡与断言都必须重建 */
+      build();
+      buildContrast();
+      buildHue();
+    }
 
     document.getElementById("title").addEventListener("dblclick", function () {
-      const next = document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark";
-      document.documentElement.setAttribute("data-theme", next);
-      paintFiles(next === "dark");
+      const next = root.getAttribute("data-theme") === "dark" ? "light" : "dark";
+      root.setAttribute("data-theme", next);
+      rebuild();
     });
+
     ["sw1", "sw2"].forEach(function (id) {
       document.getElementById(id).addEventListener("click", function (e) {
         e.currentTarget.classList.toggle("on");
       });
     });
-  } catch (err) {
-    // 让脚本错误直接可见，而不是留一堆空容器在那儿
-    document.body.insertAdjacentHTML(
-      "afterbegin",
-      '<pre style="background:#c51d28;color:#fff;padding:14px;border-radius:10px;font-size:13px">预览脚本出错：' +
-        String(err && err.stack || err) + "</pre>",
-    );
-  }
+
+    rebuild();
+  })();
 </script>
   </body>
 </html>

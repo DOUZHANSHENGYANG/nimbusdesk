@@ -10,8 +10,10 @@
     "tauri": "tauri",
     "check:i18n": "node scripts/check-i18n.mjs",
     "check:rust": "cargo test --manifest-path src-tauri/Cargo.toml --lib",
-    "verify": "npm run check:i18n && npm run check:contrast && tsc --noEmit && npm run check:rust",
-    "check:contrast": "node scripts/check-contrast.mjs"
+    "verify": "npm run check:i18n && npm run check:contrast && npm run check:preview && tsc --noEmit && npm run check:rust",
+    "check:contrast": "node scripts/check-contrast.mjs",
+    "build:preview": "node scripts/build-preview.mjs",
+    "check:preview": "node scripts/check-preview-sync.mjs"
   },
   "dependencies": {
     "@floating-ui/dom": "^1.8.0",

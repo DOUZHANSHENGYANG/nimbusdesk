@@ -3,12 +3,17 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#101014" />
+    <!--
+      启动底色的兜底值必须与 tokens.css 的 --pr-gray-950 一致（真无彩）。
+      旧值 #101014 反算色相是 H=285.5° —— 落在紫区，每次启动/重绘
+      都会先闪一层紫黑底，这正是「残留紫色感」的来源之一。
+    -->
+    <meta name="theme-color" content="#0c0c0c" />
     <title>NimbusDesk 云台</title>
     <style>
-      /* 防白闪底色：与默认暗色主题一致 */
+      /* 防白闪底色：与默认暗色主题一致（--pr-gray-950，C=0 纯灰） */
       html {
-        background: #101014;
+        background: #0c0c0c;
       }
     </style>
   </head>
@@ -23,7 +28,7 @@
           box = document.createElement("div");
           box.id = "boot-error";
           box.style.cssText =
-            "position:fixed;inset:0;z-index:99999;background:#101014;color:#ff6b6b;" +
+            "position:fixed;inset:0;z-index:99999;background:#0c0c0c;color:#ff6b6b;" +
             "font:12px/1.6 Consolas,monospace;padding:16px;white-space:pre-wrap;overflow:auto;";
           document.body.appendChild(box);
         }

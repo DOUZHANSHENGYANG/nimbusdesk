@@ -76,12 +76,39 @@
   --color-file-audio: var(--pr-file-audio);
   --color-file-misc: var(--pr-file-misc);
 
-  /* 圆角 */
-  --radius-sm: calc(var(--pr-radius-sm) - 2px);
-  --radius-md: var(--pr-radius-sm);
-  --radius-lg: var(--pr-radius-md);
-  --radius-xl: var(--pr-radius-lg);
+  /*
+   * 字阶：**只新增，不覆盖**。
+   *
+   * Tailwind v4 的 `--text-sm` / `--text-xs` 等是全局词汇表，改一个就改所有
+   * `text-sm`。而 src/components/ui/*（shadcn）与 src/components/motion/*（beUI）
+   * 里共有 58 处 text-sm/xs —— 覆盖会让按钮、菜单、弹窗一起缩水，
+   * 这些是第三方原语，不该由主题层偷偷改尺寸。
+   * 所以这里只补两个 tailwind 没有的档位：2xs(10px) 与 md(14px)。
+   * 需要「紧凑桌面密度」的**自有**组件，直接用 --pr-text-* 一档。
+   */
+  --text-2xs: var(--pr-text-2xs);
+  --text-md: var(--pr-text-md);
+
+  /*
+   * 间距 / 控件高度刻意**不**暴露成 tailwind 变量：
+   * v4 的 `--spacing` 是单个标量（0.25rem），间距工具类是 calc() 出来的，
+   * 定义 --spacing-1…--spacing-12 不会生成任何工具类 —— 只是死重量。
+   * 4pt 栅格请用 tailwind 原生 p-1/p-2/p-3（=4/8/12px），数值一致。
+   */
+
+  /* 圆角：数值与旧映射等价（rounded-lg=12px、md=8px），仅补齐 xs/full 两档 */
+  --radius-xs: var(--pr-radius-xs);
+  --radius-sm: var(--pr-radius-sm);
+  --radius-md: var(--pr-radius-md);
+  --radius-lg: var(--pr-radius-lg);
+  --radius-xl: var(--pr-radius-xl);
   --radius-2xl: var(--pr-radius-xl);
+  --radius-full: var(--pr-radius-full);
+
+  /* 阴影：浅/深两档在 tokens.css 里分别定义，这里只做转发 */
+  --shadow-1: var(--pr-shadow-1);
+  --shadow-2: var(--pr-shadow-2);
+  --shadow-3: var(--pr-shadow-3);
 }
 
 /* ── 基础 ─────────────────────────────────────────────── */
@@ -95,6 +122,17 @@ body,
 #root {
   height: 100%;
   overflow: hidden;
+}
+
+/*
+ * html 也要跟随主题上色。
+ *
+ * index.html 里那层 `background: #0c0c0c` 只是**首帧防闪**（CSS 还没加载时
+ * 不要白闪），但它一旦生效就会一直压着 —— 浅色模式下 html 区域仍是深色，
+ * 在圆角/overscroll 露底的地方能看见一圈黑边。这里用 token 覆盖回去。
+ */
+html {
+  background: var(--color-background);
 }
 
 body {

@@ -1,13 +1,20 @@
 import { gsap } from "@/lib/gsap";
 
 export type ThemeMode = "light" | "dark";
-
-/** 应用主题类到 <html> */
+/*
+ * 应用主题类到 <html>，并同步 <meta name="theme-color">。
+ *
+ * theme-color 从**计算样式**读，不在这里写死 hex：
+ * 写死就必然与 tokens.css 漂移（上一版就是 #07090c/#f3f4f6 两个过时值）。
+ * 注意 html 背景由 index.css 的 `html { background: var(--color-background) }`
+ * 提供 —— index.html 里那层 #0c0c0c 只是首帧防闪，随后被 token 覆盖。
+ */
 export function applyTheme(mode: ThemeMode) {
   document.documentElement.classList.toggle("dark", mode === "dark");
-  document
-    .querySelector('meta[name="theme-color"]')
-    ?.setAttribute("content", mode === "dark" ? "#07090c" : "#f3f4f6");
+  const bg = getComputedStyle(document.documentElement).backgroundColor;
+  if (bg && bg !== "rgba(0, 0, 0, 0)") {
+    document.querySelector('meta[name="theme-color"]')?.setAttribute("content", bg);
+  }
 }
 
 let switching = false;
@@ -106,5 +113,6 @@ function themeBg(mode: ThemeMode): string {
   root.classList.toggle("dark", mode === "dark");
   const bg = getComputedStyle(root).backgroundColor;
   root.classList.toggle("dark", wasDark);
-  return bg || (mode === "dark" ? "#07090c" : "#f3f4f6");
+  // 兜底取 tokens.css 的 --pr-gray-950 / --pr-gray-50，避免计算样式取不到时返回透明
+  return bg && bg !== "rgba(0, 0, 0, 0)" ? bg : mode === "dark" ? "#0c0c0c" : "#f4f4f4";
 }
