@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
+import { useEffect, useState } from "react";
 import { tauriJsonStorage } from "@/lib/storage";
 import {
   subtreeIds,
@@ -8,13 +9,39 @@ import {
   type PlanTaskPatch,
 } from "@/features/plans/types";
 
+/* ── v1 → v2 迁移 ─────────────────────────────────────── */
+
+/**
+ * v1 是 `time: "HH:mm"` + `status: todo|doing|done`；
+ * v2 是 `start`/`end` 区间 + `done` 布尔。
+ *
+ * v1 没有区间概念，把 time 当作起点、结束补 1 小时，
+ * 这样老任务在时间轴上仍有可见跨度，而不是塌成一个点。
+ */
+function migrateTaskV1(t: Partial<PlanTask> & { time?: string; status?: string }): PlanTask {
+  const start = t.start ?? t.time;
+  const { time: _time, status: _status, ...rest } = t;
+  let end = t.end;
+  if (!end && start) {
+    const m = /^([01]\d|2[0-3]):([0-5]\d)$/.exec(start);
+    if (m) {
+      // 23:xx + 1h 会跨天，截到 23:59（区间不跨日）
+      const total = Math.min(Number(m[1]) * 60 + Number(m[2]) + 60, 23 * 60 + 59);
+      const hh = String(Math.floor(total / 60)).padStart(2, "0");
+      const mm = String(total % 60).padStart(2, "0");
+      end = `${hh}:${mm}`;
+    }
+  }
+  return { ...(rest as PlanTask), start, end, done: t.done ?? _status === "done" };
+}
+
 /* ── 活跃计划：plans.json ─────────────────────────────── */
 
 interface PlansState {
   days: Record<string, PlanTask[]>;
   addTask: (date: string, parentId: string | null, title: string) => void;
   updateTask: (date: string, id: string, patch: PlanTaskPatch) => void;
-  setStatus: (date: string, id: string, status: PlanTask["status"]) => void;
+  /** 勾选/取消完成（唯一由用户直接设置的状态） */
   toggleDone: (date: string, id: string) => void;
   removeTask: (date: string, id: string) => void;
   /** 归档整日（返回该日任务，供写入归档库）；无该日返回 null */
@@ -33,7 +60,7 @@ export const usePlans = create<PlansState>()(
             id: crypto.randomUUID(),
             parentId,
             title,
-            status: "todo",
+            done: false,
             createdAt: Date.now(),
           };
           return { days: { ...s.days, [date]: [...tasks, task] } };
@@ -51,12 +78,10 @@ export const usePlans = create<PlansState>()(
           };
         }),
 
-      setStatus: (date, id, status) => get().updateTask(date, id, { status }),
-
       toggleDone: (date, id) => {
         const t = (get().days[date] ?? []).find((x) => x.id === id);
         if (!t) return;
-        get().setStatus(date, id, t.status === "done" ? "todo" : "done");
+        get().updateTask(date, id, { done: !t.done });
       },
 
       removeTask: (date, id) =>
@@ -64,8 +89,7 @@ export const usePlans = create<PlansState>()(
           const tasks = s.days[date];
           if (!tasks) return s;
           const kill = subtreeIds(tasks, id);
-          const next = tasks.filter((t) => !kill.has(t.id));
-          return { days: { ...s.days, [date]: next } };
+          return { days: { ...s.days, [date]: tasks.filter((t) => !kill.has(t.id)) } };
         }),
 
       takeDay: (date) => {
@@ -79,7 +103,22 @@ export const usePlans = create<PlansState>()(
         return tasks;
       },
     }),
-    { name: "plans", storage: createJSONStorage(() => tauriJsonStorage), version: 1 },
+    {
+      name: "plans",
+      storage: createJSONStorage(() => tauriJsonStorage),
+      version: 2,
+      migrate: (persisted, version) => {
+        const state = persisted as { days?: Record<string, unknown[]> } | undefined;
+        if (!state?.days || version >= 2) return persisted as PlansState;
+        const days: Record<string, PlanTask[]> = {};
+        for (const [date, list] of Object.entries(state.days)) {
+          days[date] = (list as (Partial<PlanTask> & { time?: string; status?: string })[]).map(
+            migrateTaskV1,
+          );
+        }
+        return { days } as PlansState;
+      },
+    },
   ),
 );
 
@@ -112,7 +151,28 @@ export const usePlansArchive = create<ArchiveState>()(
         return entry.tasks;
       },
     }),
-    { name: "plans-archive", storage: createJSONStorage(() => tauriJsonStorage), version: 1 },
+    {
+      name: "plans-archive",
+      storage: createJSONStorage(() => tauriJsonStorage),
+      version: 2,
+      // 归档库的迁移规则与活跃库一致
+      migrate: (persisted, version) => {
+        const state = persisted as
+          | { days?: Record<string, { archivedAt: number; tasks: unknown[] }> }
+          | undefined;
+        if (!state?.days || version >= 2) return persisted as ArchiveState;
+        const days: ArchiveState["days"] = {};
+        for (const [date, entry] of Object.entries(state.days)) {
+          days[date] = {
+            archivedAt: entry.archivedAt,
+            tasks: (
+              entry.tasks as (Partial<PlanTask> & { time?: string; status?: string })[]
+            ).map(migrateTaskV1),
+          };
+        }
+        return { days } as ArchiveState;
+      },
+    },
   ),
 );
 
@@ -121,6 +181,34 @@ const EMPTY_TASKS: PlanTask[] = [];
 /** 某日任务（稳定快照：缺失日返回模块级空数组，避免 useSyncExternalStore 不稳定快照） */
 export function useDayTasks(date: string): PlanTask[] {
   return usePlans((s) => s.days[date] ?? EMPTY_TASKS);
+}
+
+/* ── 时间推进 ─────────────────────────────────────────── */
+
+/**
+ * 定期重算当前时刻，驱动「进行中」自动出现/消失。
+ *
+ * 对齐到下一个整分钟触发：这样 09:00 一到就立刻亮起，
+ * 而不是等固定轮询恰好撞上（最坏会晚近一分钟）。
+ */
+export function useNow(): Date {
+  const [now, setNow] = useState(() => new Date());
+
+  useEffect(() => {
+    let timer: number;
+    const schedule = () => {
+      const d = new Date();
+      const toNextMinute = 60_000 - (d.getSeconds() * 1000 + d.getMilliseconds());
+      timer = window.setTimeout(() => {
+        setNow(new Date());
+        schedule();
+      }, Math.max(toNextMinute, 1000));
+    };
+    schedule();
+    return () => window.clearTimeout(timer);
+  }, []);
+
+  return now;
 }
 
 /* ── 跨库动作 ─────────────────────────────────────────── */

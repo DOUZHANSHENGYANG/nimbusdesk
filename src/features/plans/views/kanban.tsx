@@ -1,32 +1,51 @@
 import { useState } from "react";
-import { Clock, Layers, Trash2 } from "lucide-react";
+import { Layers, Pencil, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { childrenOf, type PlanTask, type TaskStatus } from "@/features/plans/types";
-import { useDayTasks, usePlans } from "@/features/plans/store";
+import {
+  childrenOf,
+  rangeLabel,
+  statusOf,
+  type PlanTask,
+} from "@/features/plans/types";
+import { useDayTasks, useNow, usePlans } from "@/features/plans/store";
 import { useModal } from "@/components/shell/modal-host";
 import { StatusButton, doneTitleStyle } from "@/features/plans/views/shared";
 import { cn } from "@/lib/utils";
 
-const COLUMNS: TaskStatus[] = ["todo", "doing", "done"];
+/**
+ * 看板视图：两列（待办 / 已完成）。
+ *
+ * 「进行中」不再是可拖入的列 —— 它由时间范围推导（到点自动开始），
+ * 若还允许手工拖进去，就会出现「手动设为进行中，但时间没到」的矛盾状态。
+ * 进行中的任务在待办列里以高亮卡片呈现。
+ */
+const COLUMNS = ["todo", "done"] as const;
+type Column = (typeof COLUMNS)[number];
 
-/** 看板视图：顶层计划按状态三列，原生拖拽换列 */
 export function KanbanView({ date }: { date: string }) {
   const { t } = useTranslation();
   const tasks = useDayTasks(date);
-  const setStatus = usePlans((s) => s.setStatus);
+  const now = useNow();
+  const toggleDone = usePlans((s) => s.toggleDone);
   const removeTask = usePlans((s) => s.removeTask);
   const addTask = usePlans((s) => s.addTask);
-  const toggleDone = usePlans((s) => s.toggleDone);
   const { confirm } = useModal();
-  const [overCol, setOverCol] = useState<TaskStatus | null>(null);
+  const [overCol, setOverCol] = useState<Column | null>(null);
+  /** 正在编辑的任务 id（就地改名） */
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   const roots = childrenOf(tasks, null);
 
-  const onDrop = (status: TaskStatus, e: React.DragEvent) => {
+  /** 拖到「已完成」= 勾选完成；拖回「待办」= 取消完成 */
+  const onDrop = (col: Column, e: React.DragEvent) => {
     e.preventDefault();
     setOverCol(null);
     const id = e.dataTransfer.getData("text/plain");
-    if (id) setStatus(date, id, status);
+    if (!id) return;
+    const task = tasks.find((x) => x.id === id);
+    if (!task) return;
+    const shouldBeDone = col === "done";
+    if (task.done !== shouldBeDone) toggleDone(date, id);
   };
 
   const onDelete = async (task: PlanTask) => {
@@ -39,87 +58,130 @@ export function KanbanView({ date }: { date: string }) {
   };
 
   return (
-    <div className="grid grid-cols-3 gap-3">
-      {COLUMNS.map((status) => {
-        const colTasks = roots.filter((t) => t.status === status);
+    <div className="grid grid-cols-2 gap-4">
+      {COLUMNS.map((col) => {
+        const colTasks = roots.filter((task) => {
+          const done = task.done;
+          return col === "done" ? done : !done;
+        });
+
         return (
           <div
-            key={status}
+            key={col}
             onDragOver={(e) => {
               e.preventDefault();
-              setOverCol(status);
+              setOverCol(col);
             }}
-            onDragLeave={() => setOverCol((c) => (c === status ? null : c))}
-            onDrop={(e) => onDrop(status, e)}
+            onDragLeave={() => setOverCol((c) => (c === col ? null : c))}
+            onDrop={(e) => onDrop(col, e)}
             className={cn(
-              "flex min-h-64 flex-col gap-2 rounded-xl border p-2.5 transition-colors duration-150",
-              overCol === status
+              "flex min-h-72 flex-col gap-2.5 rounded-2xl border p-3 transition-colors duration-150",
+              overCol === col
                 ? "border-brand/60 bg-brand/5"
                 : "border-border bg-muted/30",
             )}
           >
-            <div className="flex items-center gap-2 px-1 pb-1">
+            <div className="flex items-center gap-2 px-1 pb-0.5">
               <span
                 className={cn(
                   "size-2 rounded-full",
-                  status === "todo" && "bg-muted-foreground/50",
-                  status === "doing" && "bg-brand",
-                  status === "done" && "bg-success",
+                  col === "todo" ? "bg-muted-foreground/50" : "bg-success",
                 )}
               />
-              <span className="text-[12px] font-semibold text-foreground/90">
-                {t(`plans.status.${status}`)}
+              <span className="text-[13px] font-semibold text-foreground/90">
+                {t(`plans.status.${col}`)}
               </span>
               <span className="rounded-full bg-muted px-1.5 text-[11px] text-muted-foreground">
                 {colTasks.length}
               </span>
             </div>
 
-            {colTasks.map((task) => (
-              <div
-                key={task.id}
-                draggable
-                onDragStart={(e) => e.dataTransfer.setData("text/plain", task.id)}
-                className="group cursor-grab rounded-lg border border-border bg-card p-2.5 shadow-[var(--pr-shadow-1)] transition-shadow hover:shadow-[var(--pr-shadow-2)] active:cursor-grabbing"
-              >
-                <div className="flex items-start gap-1.5">
-                  <StatusButton
-                    status={status}
-                    onToggle={() => toggleDone(date, task.id)}
-                    className="mt-0.5"
-                  />
-                  <p
-                    className="min-w-0 flex-1 break-words text-[13px] leading-5"
-                    style={doneTitleStyle(status === "done")}
-                  >
-                    {task.title}
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => void onDelete(task)}
-                    className="shrink-0 text-muted-foreground/0 transition-colors group-hover:text-muted-foreground/70 hover:!text-destructive"
-                  >
-                    <Trash2 className="size-3.5" />
-                  </button>
-                </div>
-                <div className="mt-1.5 flex items-center gap-1.5">
-                  {task.time && (
-                    <span className="flex items-center gap-1 rounded-md bg-muted px-1.5 py-px font-mono text-[11px] text-muted-foreground">
-                      <Clock className="size-3" />
-                      {task.time}
-                    </span>
+            {colTasks.map((task) => {
+              const status = statusOf(task, date, now);
+              const range = rangeLabel(task);
+              const kids = childrenOf(tasks, task.id);
+              return (
+                <div
+                  key={task.id}
+                  draggable={editingId !== task.id}
+                  onDragStart={(e) => e.dataTransfer.setData("text/plain", task.id)}
+                  className={cn(
+                    "group cursor-grab rounded-xl border bg-card p-3 shadow-[var(--pr-shadow-1)] transition-shadow hover:shadow-[var(--pr-shadow-2)] active:cursor-grabbing",
+                    status === "doing" ? "border-brand/50" : "border-border",
                   )}
-                  {childrenOf(tasks, task.id).length > 0 && (
-                    <span className="flex items-center gap-1 rounded-md bg-muted px-1.5 py-px text-[11px] text-muted-foreground">
-                      <Layers className="size-3" />
-                      {t("plans.childrenCount", { count: childrenOf(tasks, task.id).length })}
-                    </span>
-                  )}
-                </div>
-              </div>
-            ))}
+                >
+                  <div className="flex items-start gap-2">
+                    <StatusButton
+                      status={status}
+                      onToggle={() => toggleDone(date, task.id)}
+                      className="mt-0.5"
+                    />
+                    <p
+                      className="min-w-0 flex-1 break-words text-[13px] leading-5"
+                      style={doneTitleStyle(task.done)}
+                    >
+                      {task.title}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setEditingId(editingId === task.id ? null : task.id)}
+                      className="shrink-0 text-muted-foreground/0 transition-colors group-hover:text-muted-foreground/70 hover:!text-brand"
+                      title={t("plans.editTip")}
+                    >
+                      <Pencil className="size-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void onDelete(task)}
+                      className="shrink-0 text-muted-foreground/0 transition-colors group-hover:text-muted-foreground/70 hover:!text-destructive"
+                      title={t("common.confirm")}
+                    >
+                      <Trash2 className="size-3.5" />
+                    </button>
+                  </div>
 
-            {status === "todo" && <AddCard onAdd={(title) => addTask(date, null, title)} />}
+                  {editingId === task.id && (
+                    <input
+                      autoFocus
+                      defaultValue={task.title}
+                      onBlur={(e) => {
+                        const v = e.target.value.trim();
+                        if (v && v !== task.title) {
+                          usePlans.getState().updateTask(date, task.id, { title: v });
+                        }
+                        setEditingId(null);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                        if (e.key === "Escape") setEditingId(null);
+                      }}
+                      className="mt-1.5 w-full rounded-md border border-brand/40 bg-background px-2 py-1 text-[13px] outline-none"
+                    />
+                  )}
+
+                  <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                    {range && (
+                      <span className="rounded-md bg-muted px-1.5 py-px font-mono text-[11px] text-muted-foreground">
+                        {range}
+                      </span>
+                    )}
+                    {status === "doing" && (
+                      <span className="rounded-md bg-brand px-1.5 py-px text-[11px] font-medium text-white">
+                        {t("plans.status.doing")}
+                      </span>
+                    )}
+                    {kids.length > 0 && (
+                      <span className="flex items-center gap-1 rounded-md bg-muted px-1.5 py-px text-[11px] text-muted-foreground">
+                        <Layers className="size-3" />
+                        {t("plans.childrenCount", { count: kids.length })}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+
+            {col === "todo" && <AddCard onAdd={(title) => addTask(date, null, title)} />}
           </div>
         );
       })}
@@ -139,7 +201,7 @@ function AddCard({ onAdd }: { onAdd: (title: string) => void }) {
   };
 
   return (
-    <div className="mt-auto flex items-center gap-1.5 rounded-lg border border-dashed border-border px-2.5 py-2 transition-colors focus-within:border-brand/50">
+    <div className="mt-auto flex items-center gap-1.5 rounded-xl border border-dashed border-border px-3 py-2.5 transition-colors focus-within:border-brand/50">
       <input
         value={input}
         onChange={(e) => setInput(e.target.value)}

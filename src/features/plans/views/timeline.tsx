@@ -1,6 +1,11 @@
 import { useTranslation } from "react-i18next";
-import type { PlanTask } from "@/features/plans/types";
-import { useDayTasks, usePlans } from "@/features/plans/store";
+import {
+  minutesOf,
+  rangeLabel,
+  statusOf,
+  type PlanTask,
+} from "@/features/plans/types";
+import { useDayTasks, useNow, usePlans } from "@/features/plans/store";
 import { StatusButton, doneTitleStyle } from "@/features/plans/views/shared";
 import { cn } from "@/lib/utils";
 
@@ -8,12 +13,17 @@ import { cn } from "@/lib/utils";
 export function TimelineView({ date }: { date: string }) {
   const { t } = useTranslation();
   const tasks = useDayTasks(date);
+  const now = useNow();
   const toggleDone = usePlans((s) => s.toggleDone);
 
+  // 有时间范围的任务按开始时间排；只有起点没终点的也归入定时区（按起点排）
   const timed = tasks
-    .filter((t) => t.time)
-    .sort((a, b) => (a.time ?? "").localeCompare(b.time ?? "") || a.createdAt - b.createdAt);
-  const untimed = tasks.filter((t) => !t.time);
+    .filter((task) => minutesOf(task.start) != null)
+    .sort(
+      (a, b) =>
+        (minutesOf(a.start) ?? 0) - (minutesOf(b.start) ?? 0) || a.createdAt - b.createdAt,
+    );
+  const untimed = tasks.filter((task) => minutesOf(task.start) == null);
 
   return (
     <div className="flex flex-col gap-6">
@@ -23,6 +33,8 @@ export function TimelineView({ date }: { date: string }) {
             <TimelineEntry
               key={task.id}
               task={task}
+              date={date}
+              now={now}
               depth={depthOf(tasks, task)}
               onToggle={() => toggleDone(date, task.id)}
             />
@@ -45,11 +57,11 @@ export function TimelineView({ date }: { date: string }) {
                 key={task.id}
                 className="flex min-h-8 items-center gap-2 rounded-md px-2 py-1 transition-colors hover:bg-surface-hover"
               >
-                <StatusButton status={task.status} onToggle={() => toggleDone(date, task.id)} />
-                <span
-                  className="truncate text-[13px]"
-                  style={doneTitleStyle(task.status === "done")}
-                >
+                <StatusButton
+                  status={statusOf(task, date, now)}
+                  onToggle={() => toggleDone(date, task.id)}
+                />
+                <span className="truncate text-[13px]" style={doneTitleStyle(task.done)}>
                   {task.title}
                 </span>
               </div>
@@ -73,37 +85,55 @@ function depthOf(all: PlanTask[], task: PlanTask): number {
 
 function TimelineEntry({
   task,
+  date,
+  now,
   depth,
   onToggle,
 }: {
   task: PlanTask;
+  date: string;
+  now: Date;
   depth: number;
   onToggle: () => void;
 }) {
+  const { t } = useTranslation();
+  const status = statusOf(task, date, now);
+  const range = rangeLabel(task);
+  const doing = status === "doing";
+
   return (
     <div className="relative flex items-start gap-3" style={{ marginLeft: depth * 14 }}>
       <span className="absolute -left-[26px] top-2 grid size-3 place-items-center">
         <span
           className={cn(
             "size-2.5 rounded-full border-2",
-            task.status === "done"
+            task.done
               ? "border-brand bg-brand"
-              : "border-muted-foreground/50 bg-background",
+              : doing
+                ? "border-brand bg-brand/40"
+                : "border-muted-foreground/50 bg-background",
           )}
         />
       </span>
-      <span className="shrink-0 pt-0.5 font-mono text-[12px] text-muted-foreground">
-        {task.time}
-      </span>
-      <div className="min-w-0 flex-1 rounded-lg border border-border bg-card px-3 py-2">
+      <div
+        className={cn(
+          "min-w-0 flex-1 rounded-lg border bg-card px-3 py-2",
+          doing ? "border-brand/50 bg-brand/5" : "border-border",
+        )}
+      >
         <div className="flex items-center gap-2">
-          <StatusButton status={task.status} onToggle={onToggle} />
-          <span
-            className="truncate text-[13px]"
-            style={doneTitleStyle(task.status === "done")}
-          >
+          <StatusButton status={status} onToggle={onToggle} />
+          <span className="shrink-0 font-mono text-[12px] text-muted-foreground">
+            {range ?? task.start}
+          </span>
+          <span className="min-w-0 truncate text-[13px]" style={doneTitleStyle(task.done)}>
             {task.title}
           </span>
+          {doing && (
+            <span className="shrink-0 rounded-full bg-brand px-1.5 py-px text-[10px] font-semibold text-white">
+              {t("plans.status.doing")}
+            </span>
+          )}
         </div>
         {task.note && (
           <p className="mt-0.5 truncate text-[12px] text-muted-foreground">{task.note}</p>

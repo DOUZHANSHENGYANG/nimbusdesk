@@ -1,7 +1,12 @@
 import { Check, Circle, CircleDot } from "lucide-react";
-import { childrenOf, type PlanTask, type TaskStatus } from "@/features/plans/types";
+import {
+  childrenOf,
+  rangeLabel,
+  statusOf,
+  type PlanTask,
+  type TaskStatus,
+} from "@/features/plans/types";
 import { cn } from "@/lib/utils";
-
 /** 状态圆钮：todo 空圈 / doing 半点 / done 实心勾。点击在 todo↔done 间切换 */
 export function StatusButton({
   status,
@@ -63,9 +68,10 @@ export function doneTitleStyle(done: boolean): React.CSSProperties | undefined {
     : undefined;
 }
 
-/** 只读树（归档浏览/预览用） */
-export function ReadOnlyTree({ tasks, parentId = null, depth = 0 }: {
+/** 只读树（归档浏览/预览用）。date 用于推导「进行中」 */
+export function ReadOnlyTree({ tasks, date, parentId = null, depth = 0 }: {
   tasks: PlanTask[];
+  date: string;
   parentId?: string | null;
   depth?: number;
 }) {
@@ -79,16 +85,16 @@ export function ReadOnlyTree({ tasks, parentId = null, depth = 0 }: {
             className="group flex min-h-8 items-center gap-2 rounded-md py-1 pr-2"
             style={{ paddingLeft: 10 + depth * 18 }}
           >
-            <StatusButton status={task.status} readOnly />
+            <StatusButton status={statusOf(task, date)} readOnly />
             <span
               className="truncate text-[13px]"
-              style={doneTitleStyle(task.status === "done")}
+              style={doneTitleStyle(task.done)}
             >
               {task.title}
             </span>
-            {task.time && (
-              <span className="shrink-0 rounded-md bg-muted px-1.5 py-px font-mono text-[11px] text-muted-foreground">
-                {task.time}
+            {rangeLabel(task) && (
+              <span className="shrink-0 font-mono text-[11px] text-muted-foreground">
+                {rangeLabel(task)}
               </span>
             )}
             {task.note && (
@@ -96,8 +102,9 @@ export function ReadOnlyTree({ tasks, parentId = null, depth = 0 }: {
                 ≡
               </span>
             )}
+
           </div>
-          <ReadOnlyTree tasks={tasks} parentId={task.id} depth={depth + 1} />
+          <ReadOnlyTree tasks={tasks} date={date} parentId={task.id} depth={depth + 1} />
         </div>
       ))}
     </div>

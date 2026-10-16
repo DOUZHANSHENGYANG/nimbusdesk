@@ -78,7 +78,7 @@ export function ArchiveView({ onRestore }: { onRestore: (date: string) => void }
 
             {open && (
               <div className="border-t border-border/60 px-3 py-2">
-                <ReadOnlyTree tasks={entry.tasks} />
+                <ReadOnlyTree tasks={entry.tasks} date={date} />
               </div>
             )}
           </div>

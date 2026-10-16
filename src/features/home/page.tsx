@@ -8,8 +8,15 @@ import {
   ArrowRight,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { childrenOf, dayProgress, todayStr, type PlanTask } from "@/features/plans/types";
-import { useDayTasks, usePlans } from "@/features/plans/store";
+import {
+  childrenOf,
+  dayProgress,
+  rangeLabel,
+  statusOf,
+  todayStr,
+  type PlanTask,
+} from "@/features/plans/types";
+import { useDayTasks, useNow, usePlans } from "@/features/plans/store";
 import { StatusButton, doneTitleStyle } from "@/features/plans/views/shared";
 import { useFiles, useFences } from "@/stores/files";
 import { ItemIcon } from "@/features/files/icons";
@@ -25,11 +32,12 @@ export function HomePage() {
   const today = todayStr();
   const tasks = useDayTasks(today);
   const toggleDone = usePlans((s) => s.toggleDone);
+  const now = useNow();
   const items = useFiles((s) => s.items);
   const fences = useFences((s) => s.fences);
 
   const progress = dayProgress(tasks);
-  const doing = tasks.filter((x) => x.status === "doing").length;
+  const doing = tasks.filter((x) => statusOf(x, today, now) === "doing").length;
   const roots = childrenOf(tasks, null);
   const itemsCount = items.length;
   const fencesOn = Object.values(fences).filter((f) => f.open).length;
@@ -125,7 +133,13 @@ export function HomePage() {
           ) : (
             <div className="flex flex-col">
               {roots.slice(0, 6).map((task) => (
-                <TodayTaskRow key={task.id} task={task} onToggle={() => toggleDone(today, task.id)} />
+                <TodayTaskRow
+                  key={task.id}
+                  task={task}
+                  date={today}
+                  now={now}
+                  onToggle={() => toggleDone(today, task.id)}
+                />
               ))}
             </div>
           )}
@@ -172,19 +186,30 @@ export function HomePage() {
   );
 }
 
-function TodayTaskRow({ task, onToggle }: { task: PlanTask; onToggle: () => void }) {
+function TodayTaskRow({
+  task,
+  date,
+  now,
+  onToggle,
+}: {
+  task: PlanTask;
+  date: string;
+  now: Date;
+  onToggle: () => void;
+}) {
+  const range = rangeLabel(task);
   return (
     <div className="flex min-h-9 items-center gap-2.5 rounded-lg px-1.5 py-1 transition-colors hover:bg-surface-hover">
-      <StatusButton status={task.status} onToggle={onToggle} />
+      <StatusButton status={statusOf(task, date, now)} onToggle={onToggle} />
       <span
         className="min-w-0 flex-1 truncate text-[13px]"
-        style={doneTitleStyle(task.status === "done")}
+        style={doneTitleStyle(task.done)}
       >
         {task.title}
       </span>
-      {task.time && (
+      {range && (
         <span className="shrink-0 rounded-md bg-muted px-1.5 py-px font-mono text-[11px] text-muted-foreground">
-          {task.time}
+          {range}
         </span>
       )}
     </div>

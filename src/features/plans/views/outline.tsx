@@ -1,8 +1,10 @@
 import { Fragment, useRef, useState } from "react";
-import { ChevronRight, Clock, Pencil, Plus, Trash2, X } from "lucide-react";
+import { ChevronRight, Pencil, Plus, Trash2, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import {
   childrenOf,
+  rangeLabel,
+  statusOf,
   subtreeProgress,
   type PlanTask,
 } from "@/features/plans/types";
@@ -10,17 +12,17 @@ import { doneTitleStyle } from "@/features/plans/views/shared";
 
 /** 兄弟排序：未完成在前、已完成沉底（display 层，不动存储顺序 → 取消勾选自动恢复原位） */
 function sortDoneLast(tasks: PlanTask[]): PlanTask[] {
-  const active = tasks.filter((t) => t.status !== "done");
-  const done = tasks.filter((t) => t.status === "done");
+  const active = tasks.filter((t) => !t.done);
+  const done = tasks.filter((t) => t.done);
   return [...active, ...done];
 }
-import { useDayTasks, usePlans } from "@/features/plans/store";
+import { useDayTasks, useNow, usePlans } from "@/features/plans/store";
 import { StatusButton } from "@/features/plans/views/shared";
+import { TimeRangePicker } from "@/features/plans/views/time-range";
 import { useModal } from "@/components/shell/modal-host";
 import { gsap, useGSAP } from "@/lib/gsap";
 import { cn } from "@/lib/utils";
 
-const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 /** 每层缩进（树形引导线间距） */
 const INDENT = 20;
 
@@ -90,7 +92,7 @@ function RowsWithDoneDivider({
   dividerIndent: number;
   label: string;
 }) {
-  const activeCount = list.filter((t) => t.status !== "done").length;
+  const activeCount = list.filter((t) => !t.done).length;
   return (
     <>
       {list.map((task, idx) => (
@@ -116,6 +118,7 @@ function TaskRow({ date, task, depth }: { date: string; task: PlanTask; depth: n
   const { t } = useTranslation();
   const { confirm } = useModal();
   const tasks = useDayTasks(date);
+  const now = useNow();
   const addTask = usePlans((s) => s.addTask);
   const updateTask = usePlans((s) => s.updateTask);
   const removeTask = usePlans((s) => s.removeTask);
@@ -123,14 +126,24 @@ function TaskRow({ date, task, depth }: { date: string; task: PlanTask; depth: n
 
   const children = sortDoneLast(childrenOf(tasks, task.id));
   const sub = subtreeProgress(tasks, task.id);
+  const status = statusOf(task, date, now);
+  const range = rangeLabel(task);
   const [open, setOpen] = useState(true);
   const [editing, setEditing] = useState(false);
   const [adding, setAdding] = useState(false);
-  const [draft, setDraft] = useState({ title: "", time: "", note: "" });
+  const [draft, setDraft] = useState<{ title: string; start?: string; end?: string; note: string }>({
+    title: "",
+    note: "",
+  });
   const [childInput, setChildInput] = useState("");
 
   const startEdit = () => {
-    setDraft({ title: task.title, time: task.time ?? "", note: task.note ?? "" });
+    setDraft({
+      title: task.title,
+      start: task.start,
+      end: task.end,
+      note: task.note ?? "",
+    });
     setEditing(true);
   };
 
@@ -139,7 +152,8 @@ function TaskRow({ date, task, depth }: { date: string; task: PlanTask; depth: n
     if (!title) return;
     updateTask(date, task.id, {
       title,
-      time: TIME_RE.test(draft.time) ? draft.time : undefined,
+      start: draft.start,
+      end: draft.end,
       note: draft.note.trim() || undefined,
     });
     setEditing(false);
@@ -169,6 +183,8 @@ function TaskRow({ date, task, depth }: { date: string; task: PlanTask; depth: n
       <div
         className={cn(
           "group flex min-h-10 items-center gap-2 rounded-lg py-1 pr-1 transition-colors hover:bg-surface-hover",
+          // 进行中：左侧一条品牌色标记，扫一眼就能看到当前该做什么
+          status === "doing" && "bg-brand/5 ring-1 ring-inset ring-brand/20",
         )}
         style={{ paddingLeft: 4 }}
       >
@@ -185,11 +201,11 @@ function TaskRow({ date, task, depth }: { date: string; task: PlanTask; depth: n
           <ChevronRight className="size-4" />
         </button>
 
-        <StatusButton status={task.status} onToggle={() => toggleDone(date, task.id)} />
+        <StatusButton status={status} onToggle={() => toggleDone(date, task.id)} />
 
         {/* 标题 / 编辑态 */}
         {editing ? (
-          <div className="flex min-w-0 flex-1 flex-col gap-1.5 rounded-lg border border-border bg-card p-2.5">
+          <div className="flex min-w-0 flex-1 flex-col gap-2 rounded-lg border border-border bg-card p-2.5">
             <input
               autoFocus
               value={draft.title}
@@ -201,22 +217,25 @@ function TaskRow({ date, task, depth }: { date: string; task: PlanTask; depth: n
               className="w-full bg-transparent text-[13px] font-medium outline-none"
               placeholder={t("plans.titleLabel")}
             />
-            <div className="flex items-center gap-2">
-              <div className="flex items-center gap-1 rounded-md bg-muted px-2 py-1">
-                <Clock className="size-3.5 text-muted-foreground" />
-                <input
-                  value={draft.time}
-                  onChange={(e) => setDraft({ ...draft, time: e.target.value })}
-                  placeholder="HH:mm"
-                  className="w-14 bg-transparent font-mono text-[12px] outline-none placeholder:text-muted-foreground/50"
-                />
-              </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <TimeRangePicker
+                start={draft.start}
+                end={draft.end}
+                onChange={({ start, end }) => setDraft({ ...draft, start, end })}
+              />
               <input
                 value={draft.note}
                 onChange={(e) => setDraft({ ...draft, note: e.target.value })}
                 placeholder={t("plans.noteLabel")}
                 className="min-w-0 flex-1 bg-transparent text-[12px] text-muted-foreground outline-none placeholder:text-muted-foreground/50"
               />
+              <button
+                type="button"
+                onClick={saveEdit}
+                className="rounded-md bg-brand px-2.5 py-1 text-[12px] font-medium text-white transition-colors hover:bg-brand-strong"
+              >
+                {t("common.confirm")}
+              </button>
               <button
                 type="button"
                 onClick={() => setEditing(false)}
@@ -234,7 +253,7 @@ function TaskRow({ date, task, depth }: { date: string; task: PlanTask; depth: n
               title={t("plans.editTip")}
               className="min-w-0 text-left text-[13px] leading-5"
             >
-              <span style={doneTitleStyle(task.status === "done")}>
+              <span style={doneTitleStyle(task.done)}>
                 {task.title}
               </span>
               {/* 父任务进度徽章 */}
@@ -250,14 +269,19 @@ function TaskRow({ date, task, depth }: { date: string; task: PlanTask; depth: n
                   {sub.done}/{sub.total}
                 </span>
               )}
+              {status === "doing" && (
+                <span className="ml-2 inline-block rounded-full bg-brand px-1.5 py-px align-middle text-[10px] font-semibold text-white">
+                  {t("plans.status.doing")}
+                </span>
+              )}
             </button>
 
-            {/* 时间 / 备注：另起一行，避免与标题争宽度 */}
-            {(task.time || task.note) && (
+            {/* 时间范围 / 备注：另起一行，避免与标题争宽度 */}
+            {(range || task.note) && (
               <div className="flex min-w-0 items-center gap-2">
-                {task.time && (
+                {range && (
                   <span className="shrink-0 font-mono text-[11px] text-muted-foreground/80">
-                    {task.time}
+                    {range}
                   </span>
                 )}
                 {task.note && (
