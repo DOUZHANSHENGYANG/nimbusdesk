@@ -109,6 +109,9 @@ interface PlansState {
   /** 勾选/取消完成（唯一由用户直接设置的状态） */
   toggleDone: (date: string, id: string) => void;
   removeTask: (date: string, id: string) => void;
+  removeTasks: (date: string, ids: readonly string[]) => void;
+  setTasksDone: (date: string, ids: readonly string[], done: boolean) => void;
+  reorderTask: (date: string, id: string, targetId: string, position: "before" | "after") => void;
   /** 归档整日（返回该日任务，供写入归档库）；无该日返回 null */
   takeDay: (date: string) => PlanTask[] | null;
   /** 把某日全部已完成任务删掉，返回删除条数 */
@@ -137,31 +140,15 @@ export const HISTORY_LABEL = {
   restore: "plans.undo.restore",
 } as const;
 
-/**
- * 勾选完成后套用设置的自动行为。
- *
- * 顺序很重要：先置底再清除没有意义（清掉的行不需要重排），
- * 但先清除则可能把「被清除后剩下哪些」算错 —— 所以清除优先且短路。
- */
-function applyCompletionPolicy(
-  date: string,
-  get: () => PlansState,
-  set: (fn: (s: PlansState) => Partial<PlansState>) => void,
-  id: string,
-) {
-  const { autoClear, autoSortDone } = readCompletionPolicy();
-  if (autoClear) {
-    // 只删这一个（用户刚勾的那个），不是「清空所有已完成」——
-    // 那会把之前已完成但用户还想看的历史一并抹掉
-    set((s) => {
-      const tasks = s.days[date];
-      if (!tasks) return s;
-      const kill = subtreeIds(tasks, id);
-      return { days: { ...s.days, [date]: tasks.filter((t) => !kill.has(t.id)) } };
-    });
-    return;
+function selectedSubtrees(tasks: PlanTask[], ids: readonly string[]): Set<string> {
+  const selected = new Set(ids);
+  const kill = new Set<string>();
+  for (const task of tasks) {
+    if (selected.has(task.id) && !kill.has(task.id)) {
+      for (const id of subtreeIds(tasks, task.id)) kill.add(id);
+    }
   }
-  if (autoSortDone) get().sortDoneToBottom(date);
+  return kill;
 }
 
 export const usePlans = create<PlansState>()(
@@ -231,20 +218,62 @@ export const usePlans = create<PlansState>()(
       toggleDone: (date, id) => {
         const t = (get().days[date] ?? []).find((x) => x.id === id);
         if (!t) return;
-        get().updateTask(date, id, { done: !t.done });
-        // 勾选完成后按设置自动沉底 / 清除。放在 toggle 之内而不是 UI 层，
-        // 这样大纲、看板、纸片窗口三处勾选的行为完全一致。
-        if (!t.done) applyCompletionPolicy(date, get, set, id);
+        get().setTasksDone(date, [id], !t.done);
       },
 
-      removeTask: (date, id) =>
+      setTasksDone: (date, ids, done) =>
         set((s) => {
           const tasks = s.days[date];
           if (!tasks) return s;
-          const kill = subtreeIds(tasks, id);
+          const selected = new Set(ids);
+          const changed = tasks.filter((task) => selected.has(task.id) && task.done !== done);
+          if (!changed.length) return s;
+          const { autoClear, autoSortDone } = readCompletionPolicy();
+          const kill = done && autoClear ? selectedSubtrees(tasks, changed.map(task => task.id)) : new Set<string>();
+          const now = Date.now();
+          let next = tasks.filter(task => !kill.has(task.id)).map(task => selected.has(task.id) && task.done !== done ? { ...task, done, updatedAt: now } : task);
+          if (autoSortDone && !kill.size) next = withDoneLastTree(next);
+          return {
+            history: pushBefore(s.history, s.days, [date], HISTORY_LABEL.update),
+            days: { ...s.days, [date]: next },
+          };
+        }),
+
+      removeTask: (date, id) => get().removeTasks(date, [id]),
+
+      removeTasks: (date, ids) =>
+        set((s) => {
+          const tasks = s.days[date];
+          if (!tasks) return s;
+          const kill = selectedSubtrees(tasks, ids);
+          if (!kill.size) return s;
           return {
             history: pushBefore(s.history, s.days, [date], HISTORY_LABEL.remove),
             days: { ...s.days, [date]: tasks.filter((t) => !kill.has(t.id)) },
+          };
+        }),
+
+      reorderTask: (date, id, targetId, position) =>
+        set((s) => {
+          const tasks = s.days[date];
+          if (!tasks || id === targetId) return s;
+          const source = tasks.find(task => task.id === id);
+          const target = tasks.find(task => task.id === targetId);
+          if (!source || !target || source.parentId !== target.parentId) return s;
+          const movingIds = subtreeIds(tasks, id);
+          if (movingIds.has(targetId)) return s;
+          const moving = tasks.filter(task => movingIds.has(task.id));
+          const remaining = tasks.filter(task => !movingIds.has(task.id));
+          let index = remaining.findIndex(task => task.id === targetId);
+          if (position === "after") {
+            const targetIds = subtreeIds(remaining, targetId);
+            index = remaining.reduce((last, task, i) => targetIds.has(task.id) ? i + 1 : last, index + 1);
+          }
+          const next = [...remaining.slice(0, index), ...moving, ...remaining.slice(index)];
+          if (next.every((task, i) => task === tasks[i])) return s;
+          return {
+            history: pushBefore(s.history, s.days, [date], HISTORY_LABEL.update),
+            days: { ...s.days, [date]: next },
           };
         }),
 
@@ -260,12 +289,12 @@ export const usePlans = create<PlansState>()(
 
       clearDone: (date) => {
         const tasks = get().days[date] ?? [];
-        const kept = tasks.filter((t) => !t.done);
-        const removed = tasks.length - kept.length;
+        const kill = selectedSubtrees(tasks, tasks.filter(task => task.done).map(task => task.id));
+        const removed = kill.size;
         if (!removed) return 0;
         set((s) => ({
           history: pushBefore(s.history, s.days, [date], HISTORY_LABEL.clearDone),
-          days: { ...s.days, [date]: kept },
+          days: { ...s.days, [date]: tasks.filter(task => !kill.has(task.id)) },
         }));
         return removed;
       },

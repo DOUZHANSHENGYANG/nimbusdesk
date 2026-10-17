@@ -13,4 +13,7 @@ pub mod site;
 pub mod sys;
 pub mod fence_drop;
 pub mod desktop_shortcut;
+pub mod desktop;
 pub mod search;
+
+pub mod quick_tools;

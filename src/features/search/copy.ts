@@ -1,12 +1,14 @@
 export function searchCopy(en: boolean) {
   return en ? {
-    title: "Search", placeholder: "Search files, plans, knowledge…", all: "All", file: "Files", plan: "Plans", knowledge: "Knowledge", feed: "Feeds",
+    title: "Search", placeholder: "Search apps, files, plans, knowledge…", all: "All", app: "Apps", file: "Files", plan: "Plans", knowledge: "Knowledge", feed: "Feeds",
+    pinned: "Pinned", recent: "Recently opened", pin: "Pin", unpin: "Unpin", clearRecent: "Clear recent",
     empty: "Search your computer and workspace", emptyHint: "File names, plans, notes and cached articles, together.", noResults: "No matching results", tryAgain: "Try a shorter name or another category.",
     clear: "Clear search", hide: "Hide search", open: "Open", reveal: "Show in folder", copy: "Copy path or name", copied: "Copied", copyFailed: "Could not copy", preview: "Preview", noPreview: "Preview is unavailable for this file.", previewLoading: "Loading preview…", closePreview: "Close preview",
     searching: "Searching…", indexing: "Updating index…", indexed: "workspace items", ready: "Ready", navigate: "Navigate", category: "Category", esc: "Hide", error: "Search is temporarily unavailable. Existing results are kept.", fileError: "File search is unavailable. Workspace results are still shown.",
     settingsTitle: "Quick search", settingsHint: "Search local files and workspace content in an independent window.", launch: "Open search", shortcutHint: "Leave empty to disable the global shortcut.", save: "Save", saving: "Saving…", saved: "Search settings saved", provider: "File search provider", auto: "Automatic · Everything, then Windows Search", everything: "Everything", windows: "Windows Search", instance: "Everything instance", instanceHint: "Leave empty for the default instance.", available: "Everything is running", unavailable: "Everything is not detected", download: "Get Everything", rebuild: "Rebuild index", rebuilding: "Rebuild requested", lastIndexed: "Last indexed", never: "Not yet", statusUnavailable: "Index status unavailable", backend: "File provider", retry: "Retry loading settings", loadError: "Settings could not be loaded. Saving is disabled to protect stored values.", previewAction: "Preview selected file", fullPath: "Full path", keyboardHint: "↑ ↓ Navigate · Enter Open · Ctrl+Enter Reveal · Space Preview · Tab Category",
   } : {
-    title: "快捷搜索", placeholder: "搜索文件、计划、知识…", all: "全部", file: "文件", plan: "计划", knowledge: "知识", feed: "资讯",
+    title: "快捷搜索", placeholder: "搜索应用、文件、计划、知识…", all: "全部", app: "应用", file: "文件", plan: "计划", knowledge: "知识", feed: "资讯",
+    pinned: "固定", recent: "最近打开", pin: "固定", unpin: "取消固定", clearRecent: "清空最近",
     empty: "电脑文件与工作台，一起搜索", emptyHint: "按名称查找文件，也能找到计划、笔记和缓存资讯。", noResults: "没有找到相关内容", tryAgain: "试试更短的名称，或切换分类。",
     clear: "清空搜索", hide: "隐藏搜索", open: "打开", reveal: "在文件夹中显示", copy: "复制路径或名称", copied: "已复制", copyFailed: "复制失败", preview: "预览", noPreview: "此文件暂不支持预览。", previewLoading: "正在读取预览…", closePreview: "关闭预览",
     searching: "正在搜索…", indexing: "正在更新索引…", indexed: "条工作台内容", ready: "已就绪", navigate: "选择", category: "分类", esc: "隐藏", error: "搜索暂时不可用，已保留当前结果。", fileError: "文件服务暂时不可用，工作台结果仍可使用。",

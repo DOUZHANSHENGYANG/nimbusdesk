@@ -2,22 +2,22 @@ import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { I18nextProvider, useTranslation } from "react-i18next";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
-import { Search, X, FileText, Folder, CalendarCheck, BookOpen, Rss, Bookmark, FolderKanban, Copy, FolderOpen, Eye, CornerDownLeft } from "lucide-react";
+import { Search, X, FileText, Folder, CalendarCheck, BookOpen, Rss, Bookmark, FolderKanban, Copy, FolderOpen, Eye, CornerDownLeft, AppWindow, Pin, PinOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { i18n } from "@/lib/i18n";
 import { applyTheme } from "@/lib/theme";
 import { inTauri, readJson, windowReady } from "@/lib/tauri";
 import { copyText } from "@/lib/clipboard";
 import { ItemIcon } from "@/features/files/icons";
-import { openSearchResult, previewSearchResult, searchQuery } from "./api";
-import { createRequestGate, mergeSearchHits, moveSelection, searchHitIdentity } from "./core";
+import { clearSearchRecent, openSearchResult, pinSearchResult, previewSearchResult, searchAppsStatus, searchHome, searchQuery } from "./api";
+import { createRequestGate, mergeSearchHits, moveSelection, searchHitIdentity, searchHomeGroups } from "./core";
 import { searchCopy } from "./copy";
 import { updateSearchStatus, useSearchStore } from "./store";
-import type { SearchHit, SearchKind, SearchPreview, SearchReply, SearchScope, SearchStatus } from "./types";
+import type { SearchAppsStatus, SearchHit, SearchHome, SearchKind, SearchPreview, SearchReply, SearchScope, SearchStatus } from "./types";
 import "./search.css";
 
-const scopes: SearchScope[] = ["all", "file", "plan", "knowledge", "feed"];
-const icons = { file: FileText, folder: Folder, plan: CalendarCheck, knowledge: BookOpen, feed: Rss, bookmark: Bookmark, project: FolderKanban };
+const scopes: SearchScope[] = ["all", "app", "file", "plan", "knowledge", "feed"];
+const icons = { app: AppWindow, file: FileText, folder: Folder, plan: CalendarCheck, knowledge: BookOpen, feed: Rss, bookmark: Bookmark, project: FolderKanban };
 
 /** Standalone webview: no main-app Providers, stores or background runtimes. */
 export function SearchWindow() {
@@ -46,6 +46,13 @@ function SearchSurface() {
   const [scope, setScope] = useState<SearchScope>("all");
   const [composing, setComposing] = useState(false);
   const [reply, setReply] = useState<SearchReply | null>(null);
+  const [home, setHome] = useState<SearchHome>({ pinned: [], recent: [] });
+  const [homeReady, setHomeReady] = useState(false);
+  const [homeBusy, setHomeBusy] = useState(false);
+  const [apps, setApps] = useState<SearchAppsStatus | null>(null);
+  const [settingsRevision, setSettingsRevision] = useState(0);
+  const homeRevision = useRef(0);
+  const queryNow = useRef(query); queryNow.current = query;
   const [selected, setSelected] = useState(0);
   const [keyboardSelected, setKeyboardSelected] = useState(false);
   const selectionId = useRef<string | undefined>(undefined);
@@ -60,7 +67,10 @@ function SearchSurface() {
   const resultsCurrent = useRef(false);
   const composingNow = useRef(false);
   const status = useSearchStore(state => state.status);
-  const hits = reply?.results ?? [];
+  const isHome = !query.trim();
+  const groups = searchHomeGroups(home, scope);
+  const hits = isHome ? [...groups.pinned, ...groups.recent] : reply?.results ?? [];
+  const pinnedIds = new Set(home.pinned.map(searchHitIdentity));
   const hit = hits[selected];
 
   function changeQuery(value: string) {
@@ -70,9 +80,26 @@ function SearchSurface() {
     if (!value.trim()) { setReply(null); setLoading(false); }
   }
   function changeScope(value: SearchScope) { if (value === scope) return; resultsCurrent.current = false; gate.current.invalidate(); setScope(value); setSelected(0); setKeyboardSelected(false); selectionId.current = undefined; previewRevision.current++; setPreview(null); }
+  async function loadHome() {
+    const ticket = ++homeRevision.current;
+    try {
+      const value = await searchHome();
+      if (ticket !== homeRevision.current) return;
+      setHome(value ?? { pinned: [], recent: [] }); setHomeReady(true);
+      if (!queryNow.current.trim() && !composingNow.current) { resultsCurrent.current = true; setSelected(0); }
+    } catch (error) { if (ticket === homeRevision.current) setFailure(String(error)); }
+  }
+  async function updateHome(operation: () => Promise<SearchHome>) {
+    if (homeBusy || !resultsCurrent.current) return;
+    const ticket = ++homeRevision.current;
+    setHomeBusy(true); setFailure("");
+    try { const value = await operation(); if (ticket === homeRevision.current) { setHome(value); setHomeReady(true); setSelected(0); } }
+    catch (error) { if (ticket === homeRevision.current) setFailure(String(error)); }
+    finally { setHomeBusy(false); }
+  }
   useEffect(() => {
     const ticket = gate.current.invalidate();
-    if (!query.trim() || composing) { setLoading(false); return; }
+    if (!query.trim() || composing) { setLoading(false); resultsCurrent.current = !composing && homeReady; return; }
     const timer = setTimeout(() => {
       setLoading(true);
       if (scope !== "all") {
@@ -101,9 +128,10 @@ function SearchSurface() {
       void Promise.allSettled([fast, slow]).then(() => { if (gate.current.current(ticket)) setLoading(false); });
     }, 100);
     return () => { clearTimeout(timer); gate.current.invalidate(); };
-  }, [query, scope, composing, c.error, c.fileError, status?.lastIndexedAt, status?.files?.updatedAt]);
+  }, [query, scope, composing, c.error, c.fileError, status?.lastIndexedAt, status?.files?.updatedAt, apps?.lastIndexedAt, settingsRevision, homeReady]);
   useEffect(() => {
-    const focus = () => { input.current?.focus(); void updateSearchStatus().catch(() => undefined); };
+    const update = () => { void updateSearchStatus().catch(() => undefined); void searchAppsStatus().then(setApps).catch(() => undefined); };
+    const focus = () => { input.current?.focus(); update(); void loadHome(); };
     let blurTimer: ReturnType<typeof setTimeout> | undefined;
     const blur = () => {
       clearTimeout(blurTimer);
@@ -115,21 +143,27 @@ function SearchSurface() {
     };
     focus(); window.addEventListener("focus", focus);
     window.addEventListener("blur", blur);
-    const timer = setInterval(() => { void updateSearchStatus().catch(() => undefined); }, 3000);
+    const timer = setInterval(update, 3000);
     const statusSub = inTauri ? listen<SearchStatus>("search://status", event => useSearchStore.setState({ status: event.payload })) : null;
     const focusSub = inTauri ? listen("search://focus", focus) : null;
-    return () => { window.removeEventListener("focus", focus); window.removeEventListener("blur", blur); clearTimeout(blurTimer); clearInterval(timer); for (const sub of [statusSub, focusSub]) void sub?.then(stop => stop()).catch(() => undefined); };
+    const homeSub = inTauri ? listen("search://home", () => void loadHome()) : null;
+    const appsSub = inTauri ? listen<SearchAppsStatus>("search://apps-status", event => setApps(event.payload)) : null;
+    const settingsSub = inTauri ? listen<{ key: string }>("storage://changed", ({ payload }) => {
+      if (payload.key !== "search-settings") return;
+      resultsCurrent.current = false; gate.current.invalidate(); setReply(null); setHome({ pinned: [], recent: [] }); setHomeReady(false); previewRevision.current++; setPreview(null); setSettingsRevision(value => value + 1); void loadHome();
+    }) : null;
+    return () => { homeRevision.current++; window.removeEventListener("focus", focus); window.removeEventListener("blur", blur); clearTimeout(blurTimer); clearInterval(timer); for (const sub of [statusSub, focusSub, homeSub, appsSub, settingsSub]) void sub?.then(stop => stop()).catch(() => undefined); };
   }, []);
   useEffect(() => { list.current?.querySelector(`[data-search-index="${selected}"]`)?.scrollIntoView({ block: "nearest" }); }, [selected]);
   async function hide() { if (inTauri) await getCurrentWebviewWindow().hide().catch(error => setFailure(String(error))); }
   async function activate(result: SearchHit, action: "open" | "reveal" = "open") {
     if (!resultsCurrent.current) return;
-    try { await openSearchResult(result, action); setFailure(""); if (action === "open") await hide(); }
+    try { await openSearchResult(result, action); setFailure(""); void loadHome(); if (action === "open") await hide(); }
     catch (error) { setFailure(String(error)); }
   }
   async function copy(result: SearchHit) { setNotice(await copyText(result.path || result.title) ? c.copied : c.copyFailed); }
   async function showPreview(result: SearchHit) {
-    if (!resultsCurrent.current || !result.path) return;
+    if (!resultsCurrent.current || !result.path || result.kind === "app") return;
     const ticket = ++previewRevision.current;
     setPreview({ id: result.id, title: result.title, data: null });
     try { const data = await previewSearchResult(result.path); if (ticket === previewRevision.current) setPreview({ id: result.id, title: result.title, data }); }
@@ -171,8 +205,10 @@ function SearchSurface() {
     <div className="quick-search-body">
       <div id="quick-search-results" ref={list} tabIndex={0} role="listbox" aria-label={c.title} aria-activedescendant={hit ? `search-hit-${selected}` : undefined} className="quick-search-results">
         {!hits.length && <div className="quick-search-empty"><Search size={28} strokeWidth={1.3} /><strong>{query.trim() ? loading ? c.searching : c.noResults : c.empty}</strong><p>{query.trim() ? c.tryAgain : c.emptyHint}</p></div>}
-        {hits.map((result, index) => { const Icon = icons[result.kind] ?? FileText; return <div key={searchHitIdentity(result)} id={`search-hit-${index}`} data-search-index={index} role="option" aria-selected={index === selected} className="quick-search-result" onMouseEnter={() => { setSelected(index); setKeyboardSelected(false); selectionId.current = searchHitIdentity(result); }}>
-          {(result.kind === "file" || result.kind === "folder") && result.path
+        {hits.map((result, index) => { const Icon = icons[result.kind] ?? FileText; const pinned = pinnedIds.has(searchHitIdentity(result)); return <div className="quick-search-entry" key={searchHitIdentity(result)}>
+          {isHome && (index === 0 || index === groups.pinned.length) && <div className="quick-search-group"><span>{index < groups.pinned.length ? c.pinned : c.recent}</span>{index >= groups.pinned.length && <Button size="sm" variant="ghost" disabled={homeBusy} onClick={() => void updateHome(clearSearchRecent)}>{c.clearRecent}</Button>}</div>}
+          <div id={`search-hit-${index}`} data-search-index={index} role="option" aria-selected={index === selected} className="quick-search-result" onMouseEnter={() => { setSelected(index); setKeyboardSelected(false); selectionId.current = searchHitIdentity(result); }}>
+          {(result.kind === "file" || result.kind === "folder" || result.kind === "app") && result.path
             ? <ItemIcon type={result.kind === "folder" ? "folder" : "file"} path={result.path} size={20} className="quick-search-kind-icon" />
             : <Icon size={19} strokeWidth={1.6} className="quick-search-kind-icon" aria-hidden="true" />}
           <button type="button" className="quick-search-result-main" onClick={() => void activate(result)} title={result.path || result.subtitle}>
@@ -181,14 +217,15 @@ function SearchSurface() {
           </button>
           <span className="quick-search-kind">{kindLabel(result.kind)}</span>
           <div className="quick-search-actions">
-            {result.path && <><Button variant="ghost" size="icon-xs" aria-label={c.preview} title={c.preview} onClick={() => void showPreview(result)}><Eye /></Button><Button variant="ghost" size="icon-xs" aria-label={c.reveal} title={c.reveal} onClick={() => void activate(result, "reveal")}><FolderOpen /></Button></>}
+            <Button variant="ghost" size="icon-xs" aria-label={pinned ? c.unpin : c.pin} title={pinned ? c.unpin : c.pin} aria-pressed={pinned} disabled={homeBusy} onClick={() => void updateHome(() => pinSearchResult(result, !pinned))}>{pinned ? <PinOff /> : <Pin />}</Button>
+            {result.path && <>{result.kind !== "app" && <Button variant="ghost" size="icon-xs" aria-label={c.preview} title={c.preview} onClick={() => void showPreview(result)}><Eye /></Button>}<Button variant="ghost" size="icon-xs" aria-label={c.reveal} title={c.reveal} onClick={() => void activate(result, "reveal")}><FolderOpen /></Button></>}
             <Button variant="ghost" size="icon-xs" aria-label={c.copy} title={c.copy} onClick={() => void copy(result)}><Copy /></Button>
           </div>
-        </div>; })}
+        </div></div>; })}
       </div>
       {preview && <aside className="quick-search-preview" aria-label={c.preview}><div><strong title={preview.title}>{preview.title}</strong><Button variant="ghost" size="icon-xs" aria-label={c.closePreview} onClick={() => { previewRevision.current++; setPreview(null); }}><X /></Button></div>{!preview.data ? <p>{c.previewLoading}</p> : preview.data.kind === "text" ? <pre>{preview.data.text}</pre> : preview.data.kind === "image" && preview.data.dataUrl?.startsWith("data:image/") ? <img src={preview.data.dataUrl} alt={preview.title} /> : <p>{c.noPreview}</p>}</aside>}
     </div>
     {hit?.path && <div className="quick-search-selected-path" title={hit.path} aria-label={c.fullPath}>{hit.path}</div>}
-    <footer className="quick-search-footer"><span title={status?.error || status?.backend}>{status?.indexing || status?.files?.running || status?.files?.nameRunning || reply?.indexing ? c.indexing : status ? `${status.count.toLocaleString()} ${c.indexed}` : c.ready}{status?.backend && <span className="quick-search-backend"> · {status.backend}</span>}</span><div title={c.keyboardHint}><span><kbd>↑ ↓</kbd> {c.navigate}</span><span><CornerDownLeft size={11} /> {c.open}</span><span><kbd>Tab</kbd> {c.category}</span></div></footer>
+    <footer className="quick-search-footer"><span title={apps?.error || status?.error || status?.backend}>{apps?.indexing || status?.indexing || status?.files?.running || status?.files?.nameRunning || reply?.indexing ? c.indexing : status ? `${status.count.toLocaleString()} ${c.indexed}` : c.ready}{apps && <span> · {apps.count} {c.app}</span>}{status?.backend && <span className="quick-search-backend"> · {status.backend}</span>}</span><div title={c.keyboardHint}><span><kbd>↑ ↓</kbd> {c.navigate}</span><span><CornerDownLeft size={11} /> {c.open}</span><span><kbd>Tab</kbd> {c.category}</span></div></footer>
   </main>;
 }

@@ -1,0 +1,43 @@
+.quick-tools-root,.quick-tools-root body,.quick-tools-root #root{height:100%;overflow:hidden}
+.quick-tools.developer-tools{height:100%;display:flex;flex-direction:column;background:var(--background);font-size:13px;overflow:hidden}
+.quick-tools button{cursor:pointer;transition:background-color 120ms ease,color 120ms ease,opacity 120ms ease}
+.quick-tools button:disabled{cursor:default;opacity:.45}
+.quick-tools button:focus-visible,.quick-tools textarea:focus-visible,.quick-tools select:focus-visible{outline:2px solid var(--primary);outline-offset:3px}
+.quick-tools svg{width:16px;height:16px;flex-shrink:0}
+.quick-tools-header{display:flex;align-items:center;justify-content:space-between;padding:12px 18px 9px;flex-shrink:0}
+.quick-tools-drag{display:flex;align-items:center;gap:9px;flex:1;min-height:32px}
+.quick-tools-drag>svg{color:var(--primary)}
+.quick-tools h1{font-size:15px;font-weight:600;margin:0}
+.quick-tools-actions{display:flex;gap:4px}
+.quick-tools-actions button{display:grid;place-items:center;width:30px;height:30px;border-radius:8px;color:var(--muted-foreground)}
+.quick-tools-actions button:hover,.quick-tools-actions button[aria-pressed=true]{background:var(--accent);color:var(--foreground)}
+.quick-tools-tabs{display:flex;gap:4px;padding:0 18px 12px;border-bottom:1px solid var(--border);flex-shrink:0}
+.quick-tools-tabs button{display:flex;justify-content:center;align-items:center;gap:6px;padding:8px 10px;flex:1;border-radius:8px;color:var(--muted-foreground);white-space:nowrap}
+.quick-tools-tabs button:hover{background:var(--muted)}
+.quick-tools-tabs button[aria-pressed=true]{background:color-mix(in srgb,var(--primary) 14%,transparent);color:var(--primary)}
+.quick-tools-body{flex:1;min-height:0;overflow:auto;padding:15px 20px 20px;scrollbar-gutter:stable}
+.quick-tools-config{min-height:0;margin-bottom:14px}
+.quick-tools .tool-options{gap:12px;flex-wrap:wrap}
+.quick-tools .tool-option>span{font-size:11px}
+.quick-tools .tool-option select{min-height:32px;font-size:12px;padding:5px 27px 5px 10px}
+.quick-tools-input-heading{display:flex;align-items:baseline;gap:12px;margin-bottom:9px;line-height:1.5}
+.quick-tools-input-heading label{font-weight:600;flex-shrink:0}
+.quick-tools-input-heading span{color:var(--muted-foreground);font-size:11px;overflow-wrap:anywhere}
+.quick-tools .tool-composer{flex:none;min-height:0;border:1px solid var(--border);border-radius:12px;overflow:hidden;background:var(--card)}
+.quick-tools .tool-input{display:block;flex:none;min-height:72px;max-height:240px;height:clamp(72px,calc(100dvh - 380px),160px);width:100%;padding:14px 16px;border:0;border-radius:0;line-height:1.7;font-size:13px;resize:vertical;background:transparent;box-shadow:none}
+.quick-tools .tool-input:focus-visible{outline:none}
+.quick-tools .tool-composer:focus-within{border-color:color-mix(in srgb,var(--primary) 65%,var(--border));box-shadow:0 0 0 3px color-mix(in srgb,var(--primary) 10%,transparent)}
+.quick-tools .tool-composer-footer{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:48px;padding:8px 12px;border-top:1px solid var(--border)}
+.quick-tools-send-hint{font-size:11px;color:var(--muted-foreground)}
+.quick-tools-run{display:flex;gap:7px;align-items:center;background:var(--primary);color:var(--primary-foreground);border-radius:8px;padding:8px 11px;font-weight:500;white-space:nowrap}
+.quick-tools-run:hover:enabled{filter:brightness(1.1)}
+.quick-tools-run:active:enabled{transform:scale(.985)}
+.quick-tools-run kbd{font-size:10px;margin-left:5px;opacity:.8}
+.quick-tools-unconfigured{margin-top:12px;display:flex;align-items:center;gap:8px;color:var(--primary)}
+.quick-tools-result{margin-top:20px;padding-top:16px;border-top:1px solid var(--border)}
+.quick-tools .tool-result-body{padding:0}
+.quick-tools-footer{display:flex;align-items:center;gap:7px;padding:10px 20px;border-top:1px solid var(--border);font-size:11px;color:var(--muted-foreground);flex-shrink:0}
+.quick-tools-footer>span:nth-child(2){overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:50%}
+.quick-tools-local{margin-left:auto}
+@media(max-width:620px){.quick-tools-tabs button{padding:8px 5px;font-size:12px;gap:4px}.quick-tools-tabs button svg{display:none}.quick-tools-send-hint{display:none}.quick-tools .tool-composer-footer{justify-content:flex-end}}
+@media(prefers-reduced-motion:reduce){.quick-tools button{transition:none}.quick-tools-run:active:enabled{transform:none}}

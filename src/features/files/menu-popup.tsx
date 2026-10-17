@@ -100,6 +100,13 @@ export function MenuPopupWindow() {
     if (i18n.language !== payload.lang) changeLang(payload.lang as never);
     applyTheme(payload.theme as ThemeMode);
   }, [payload]);
+  useEffect(() => {
+    if (!payload) return;
+    const frame = requestAnimationFrame(() => {
+      rootRef.current?.querySelector<HTMLButtonElement>('button[role="menuitem"]:not(:disabled)')?.focus({ preventScroll: true });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [payload]);
   // 渲染完成 / 子菜单展开 → 回报尺寸，打开方据此定位并放大窗口。
   // 只在 key 匹配当前菜单时才回报：否则换了菜单后会把上一份尺寸先报出去，
   // 打开方就会按旧尺寸定位窗口（表现为菜单位置/大小错一下）。
@@ -115,7 +122,10 @@ export function MenuPopupWindow() {
     const owner = payload.owner;
     const openedAt = Date.now();
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") void sendMenuAction(owner, { action: "close" });
+      if (!e.defaultPrevented && (e.key === "Escape" || e.key === "Tab")) {
+        e.preventDefault();
+        void sendMenuAction(owner, { action: "close" });
+      }
     };
     const onBlur = () => {
       // 刚 show + set_focus 的瞬间可能有一次多余 blur（如焦点短暂转移），
@@ -145,11 +155,13 @@ export function MenuPopupWindow() {
         <div
           ref={rootRef}
           data-menu-col
+          role="menu"
+          onKeyDown={navigateMenu}
           className="w-max min-w-48 rounded-lg bg-popover p-1 text-popover-foreground shadow-md ring-1 ring-foreground/10"
         >
           {payload?.nodes.map((node, i) => (
             <MenuRow
-              key={i}
+              key={`${payload?.seq}-${i}`}
               node={node}
               onRun={run}
               onSubToggle={() => setSubVersion((v) => v + 1)}
@@ -171,12 +183,20 @@ function MenuRow({
   onSubToggle: () => void;
 }) {
   const [open, setOpen] = useState(false);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const submenuRef = useRef<HTMLDivElement>(null);
 
   if (node.kind === "sep") {
-    return <div className="-mx-1 my-1 h-px bg-border" />;
+    return <div role="separator" className="-mx-1 my-1 h-px bg-border" />;
   }
 
   if (node.kind === "sub") {
+    const closeSubmenu = () => { setOpen(false); onSubToggle(); };
+    const openSubmenu = () => {
+      setOpen(true);
+      onSubToggle();
+      requestAnimationFrame(() => submenuRef.current?.querySelector<HTMLButtonElement>('button[role="menuitem"]:not(:disabled)')?.focus({ preventScroll: true }));
+    };
     return (
       <div
         className="relative"
@@ -184,13 +204,35 @@ function MenuRow({
           setOpen(true);
           onSubToggle();
         }}
-        onMouseLeave={() => {
-          setOpen(false);
-          onSubToggle();
+        onMouseLeave={(event) => {
+          if (!event.currentTarget.contains(document.activeElement)) closeSubmenu();
+        }}
+        onBlurCapture={(event) => {
+          if (open && !event.currentTarget.contains(event.relatedTarget)) closeSubmenu();
+        }}
+        onKeyDown={(event) => {
+          if (open && (event.key === "Escape" || event.key === "ArrowLeft")) {
+            event.preventDefault();
+            event.stopPropagation();
+            closeSubmenu();
+            triggerRef.current?.focus({ preventScroll: true });
+          }
         }}
       >
         <button
+          ref={triggerRef}
           type="button"
+          role="menuitem"
+          aria-haspopup="menu"
+          aria-expanded={open}
+          onClick={openSubmenu}
+          onKeyDown={(event) => {
+            if (event.key === "ArrowRight") {
+              event.preventDefault();
+              event.stopPropagation();
+              openSubmenu();
+            }
+          }}
           className="flex w-full items-center gap-1.5 rounded-md px-1.5 py-1 text-left text-sm hover:bg-accent hover:text-accent-foreground"
         >
           {node.icon && <Icon name={node.icon} />}
@@ -199,7 +241,10 @@ function MenuRow({
         </button>
         {open && (
           <div
+            ref={submenuRef}
             data-menu-col
+            role="menu"
+            aria-label={node.label}
             className="absolute top-0 left-full ml-0.5 min-w-44 rounded-lg bg-popover p-1 shadow-md ring-1 ring-foreground/10"
           >
             {node.items.map((child, i) => (
@@ -214,6 +259,7 @@ function MenuRow({
   return (
     <button
       type="button"
+      role="menuitem"
       disabled={node.disabled}
       onClick={() => onRun(node)}
       className={cn(
@@ -231,6 +277,23 @@ function MenuRow({
       )}
     </button>
   );
+}
+
+/** Arrow navigation stays in the active column, even when nested menus are open. */
+function navigateMenu(event: React.KeyboardEvent<HTMLDivElement>) {
+  if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+  const target = (event.target as HTMLElement).closest<HTMLButtonElement>('button[role="menuitem"]');
+  const column = target?.closest("[data-menu-col]");
+  if (!target || !column) return;
+  const items = Array.from(column.querySelectorAll<HTMLButtonElement>('button[role="menuitem"]:not(:disabled)'))
+    .filter(item => item.closest("[data-menu-col]") === column);
+  if (!items.length) return;
+  const index = items.indexOf(target);
+  const next = event.key === "Home" ? 0 : event.key === "End" ? items.length - 1
+    : (index + (event.key === "ArrowDown" ? 1 : -1) + items.length) % items.length;
+  event.preventDefault();
+  event.stopPropagation();
+  items[next]?.focus({ preventScroll: true });
 }
 
 function Icon({ name }: { name: keyof IconMap }) {

@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { getAllWebviewWindows, getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
-import { listen } from "@tauri-apps/api/event";
+import { emitTo, listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { toast } from "sonner";
 import { inTauri, openFence } from "@/lib/tauri";
@@ -21,6 +21,7 @@ export function toggleDesktopFences(): Promise<void> {
         for (const category of categories) {
             const geometry = fences[category.id] ?? DEFAULT_FENCE;
             await openFence(category.id, category.name, geometry);
+            if (windows.some(window => window.label === `fence-${category.id}`)) await emitTo(`fence-${category.id}`, 'desktop://window-action', { action: 'show' });
         }
     })();
     toggling = request;

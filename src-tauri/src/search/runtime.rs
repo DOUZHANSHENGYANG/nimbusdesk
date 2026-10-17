@@ -16,6 +16,8 @@ static COUNT: AtomicU64 = AtomicU64::new(0);
 static UPDATED: AtomicU64 = AtomicU64::new(0);
 static ERROR: Mutex<Option<String>> = Mutex::new(None);
 static SHORTCUT_ERROR: Mutex<Option<String>> = Mutex::new(None);
+static HISTORY_ERROR: Mutex<Option<String>> = Mutex::new(None);
+pub fn set_history_error(error: Option<String>) { if let Ok(mut current)=HISTORY_ERROR.lock(){*current=error;} }
 pub fn set_shortcut_error(error: Option<String>) {
     if let Ok(mut current) = SHORTCUT_ERROR.lock() {
         *current = error;
@@ -72,6 +74,7 @@ pub fn status() -> SearchStatus {
             let errors = [
                 ERROR.lock().ok().and_then(|v| v.clone()),
                 SHORTCUT_ERROR.lock().ok().and_then(|v| v.clone()),
+                HISTORY_ERROR.lock().ok().and_then(|v|v.clone()),
                 super::everything_app::last_start_error(),
             ]
             .into_iter()

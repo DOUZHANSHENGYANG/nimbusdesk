@@ -1,8 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type DragEvent } from "react";
 import { useTranslation } from "react-i18next";
-import { ChevronDown, ChevronUp, PictureInPicture2, Pin, PinOff, Plus, X } from "lucide-react";
-import { LogicalPosition, LogicalSize } from "@tauri-apps/api/dpi";
+import { Check, CheckSquare, ChevronDown, ChevronUp, Copy, PictureInPicture2, Pin, PinOff, Plus, Redo2, Search, Trash2, Undo2, X } from "lucide-react";
+import { LogicalSize } from "@tauri-apps/api/dpi";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
+import { listen } from "@tauri-apps/api/event";
+import { PhysicalPosition } from "@tauri-apps/api/dpi";
+import { readMonitors } from "@/features/desktop/monitors";
+import { isDesktopVisible, setDesktopVisibility } from "@/features/desktop/visibility";
 import {
   childrenOf,
   parseDate,
@@ -11,15 +15,19 @@ import {
   type PlanTask,
 } from "@/features/plans/types";
 import { useDayTasks, useNow, usePlans } from "@/features/plans/store";
+import { flattenTree } from "@/features/plans/capsule";
+import { findPaperTasks, paperDragScroll, paperKeyAction, pastedTaskTitles } from "@/features/plans/paper-interactions";
 import { CapsuleView } from "@/features/plans/views/capsule";
+import { queueWindowOperation } from "@/features/desktop/edge-dock";
+import { COLLAPSED_PAPER_H, normalPaperGeometry } from "@/features/plans/capsule-window";
 import { IconBtn, PaperRow } from "@/features/plans/views/paper-row";
-import { paperGeometryFor, usePapers } from "@/stores/papers";
+import { usePapers } from "@/stores/papers";
 import { cn } from "@/lib/utils";
 import { inTauri, windowReady } from "@/lib/tauri";
 import { usePlanCopy } from "@/features/plans/copy";
 import { closeDailyTodo, useTaskWindowSettings } from "@/features/plans/window-runtime";
 import { StorageAlert } from "@/components/shell/storage-alert";
-import { i18n as appI18n, I18nextProvider } from "@/lib/i18n";
+import { Providers } from "@/app/providers";
 
 /**
  * 桌面「待办纸片」窗口。
@@ -60,17 +68,42 @@ export function TodoPaperWindow({ date }: { date: string }) {
   const form = usePapers((s) => s.papers[date]?.form) ?? "paper";
   const pinned = usePapers((s) => s.papers[date]?.pinned) ?? false;
   const hydrated = usePapersHydrated();
+  const [windowError, setWindowError] = useState("");
+  const initialWindowShown = useRef(false);
 
-  /*
-   * windowReady / 系统级关闭监听必须留在这一层，不能下沉到各自形态的组件里。
-   *
-   * open_todo_paper 用 `visible(false)` 建窗（防白闪），只有前端调 windowReady() 才会 show()。
-   * 这条一旦放进 PaperPanel，切到胶囊形态时 PaperPanel 根本没挂载 ——
-   * 窗口创建成功、invoke 不报错、位置尺寸全对，就是永远不显示，看起来像「点了没反应」。
-   *
-   * 系统关闭（Alt+F4 / 任务栏）也在这里落 open=false：只在自己的关闭按钮里写是不够的，
-   * 那条路径之外关掉的窗口下次启动会被「恢复」回来，用户会觉得「关不掉」。
-   */
+  useEffect(() => {
+    if (!inTauri || !hydrated || form !== "paper") return;
+    const win = getCurrentWebviewWindow();
+    let alive = true;
+    const current = () => alive && (usePapers.getState().papers[date]?.form ?? "paper") === "paper";
+    const subscription = listen<{ action: "restore" | "fold" | "hide" }>("desktop://window-action", ({ payload }) => {
+      setDesktopVisibility(win.label, payload.action !== "hide");
+      void queueWindowOperation(win.label, async () => {
+        if (payload.action === "hide") { if (!isDesktopVisible(win.label)) await win.hide(); return; }
+        if (!current()) return;
+        if (!isDesktopVisible(win.label)) return;
+        if (payload.action === "fold") {
+          const geometry = await normalPaperGeometry(win, () => ({ active: current(), collapsed: usePapers.getState().papers[date]?.collapsed ?? false }));
+          if (!current() || !isDesktopVisible(win.label)) return;
+          if (geometry) usePapers.getState().setGeometry(date, geometry);
+          usePapers.getState().setForm(date, "capsule");
+          return;
+        }
+        const [position, size, areas] = await Promise.all([win.outerPosition(), win.outerSize(), readMonitors()]);
+        if (!current() || !isDesktopVisible(win.label)) return;
+        if (!areas.some(area => position.x + size.width > area.x && position.x < area.x + area.w && position.y + 36 > area.y && position.y < area.y + area.h) && areas[0]) {
+          const area = areas[0];
+          await win.setPosition(new PhysicalPosition(area.x + 40 * area.scale, area.y + 40 * area.scale));
+        }
+        if (!current() || !isDesktopVisible(win.label)) return;
+        await win.show();
+        if (current() && isDesktopVisible(win.label)) await win.setFocus();
+      }).catch(error => { if (current()) setWindowError(String(error)); });
+    }, { target: win.label });
+    return () => { alive = false; void subscription.then(off => off()); };
+  }, [date, form, hydrated]);
+
+  // System close follows the same explicit, persisted-close path as the header.
   useEffect(() => {
     if (!inTauri) return;
     const win = getCurrentWebviewWindow();
@@ -78,102 +111,53 @@ export function TodoPaperWindow({ date }: { date: string }) {
       event.preventDefault();
       void closeDailyTodo(date);
     });
-    void (async () => {
-      await windowReady().catch(() => undefined);
-    })();
     return () => {
       void unClose.then((fn) => fn());
     };
-    // form 只取挂载那一刻的值：它决定「启动时按哪种形态收尾」，
-    // 之后的形态切换由 CapsuleWindow / CapsuleView 负责，不该让这个 effect 重跑
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [date]);
 
-  /*
-   * 这个窗口**唯一**的层级写入点。
-   *
-   * 为什么必须只有一个：层级由「置顶 / 压底」两个互斥标记决定，而 tao 在
-   * WM_WINDOWPOSCHANGING 里对带 ALWAYS_ON_BOTTOM 的窗口会把 hwndInsertAfter
-   * 强制改成 HWND_BOTTOM —— 谁最后写入谁说了算，而且一旦留下压底标记，
-   * 之后每次窗口移动都会被压回底部（贴边滑动一秒要改十几次位置，更是一路压到底）。
-   *
-   * 还有一个更隐蔽的坑：这个 effect 在**水合完成之前**就会先用缺省值跑一遍 ——
-   * 那时 form 读到的还是 "paper"，于是先落一个「压底」；等水合把 form 改成
-   * "capsule" 再落「置顶」。两条 async 链交错时落地顺序并不保证，实测正是它
-   * 把刚设好的置顶又压回了底层。症状极具迷惑性：同一份代码，
-   * 只开一张纸片时胶囊正常置顶、多开一张就掉回底层。
-   *
-   * 所以这里加了**水合门闩**：水合完成之前一个字节都不写。form / pinned 都是
-   * 响应式的 store 值，水合后会自动重算，不需要各形态组件自己去猜时机；
-   * 顺带也修好了「挂载时按持久化的 pinned 恢复一次」这件事
-   * （之前漏了，重启后置顶的纸片会悄悄掉回桌面层）。
-   */
   useEffect(() => {
     if (!inTauri || !hydrated) return;
-    const win = getCurrentWebviewWindow();
-    void (async () => {
-      // 贴边胶囊必须常驻可见；普通纸片由图钉决定，未置顶时回到桌面层
-      const onTop = form === "capsule" || pinned;
-      if (onTop) {
-        await win.setAlwaysOnBottom(false).catch(() => undefined);
-        await win.setAlwaysOnTop(true).catch(() => undefined);
-      } else {
-        await win.setAlwaysOnTop(false).catch(() => undefined);
-        await win.setAlwaysOnBottom(true).catch(() => undefined);
-      }
-    })();
-  }, [form, pinned, hydrated]);
+    if (form === "capsule") { initialWindowShown.current = true; return; }
+    if (initialWindowShown.current) return;
+    initialWindowShown.current = true;
+    void windowReady().catch((error) => setWindowError(String(error)));
+  }, [hydrated, form]);
 
-  return <I18nextProvider i18n={appI18n}>{form === "capsule" ? <CapsuleWindow date={date} /> : <PaperPanel date={date} />}</I18nextProvider>;
+  // Normal paper owns its paired top/bottom flags only while mounted in paper form.
+  // Capsule placement and z-order are exclusively owned by the shared edge dock.
+  useEffect(() => {
+    if (!inTauri || !hydrated || form !== "paper") return;
+    const win = getCurrentWebviewWindow();
+    let canceled = false;
+    const current = () => !canceled && (usePapers.getState().papers[date]?.form ?? "paper") === "paper";
+    // The edge controller uses this same queue. A pending normal-window write
+    // finishes before docking; its canceled remainder cannot push the tab down.
+    void queueWindowOperation(win.label, async () => {
+      if (!current()) return;
+      if (pinned) await win.setAlwaysOnBottom(false);
+      else await win.setAlwaysOnTop(false);
+      if (!current()) return;
+      if (pinned) await win.setAlwaysOnTop(true);
+      else await win.setAlwaysOnBottom(true);
+      if (current()) setWindowError("");
+    }).catch((error) => { if (current()) setWindowError(String(error)); });
+    return () => { canceled = true; };
+  }, [date, form, pinned, hydrated]);
+
+  return <Providers>{hydrated && <>{windowError && <div role="alert" className="absolute inset-x-2 top-10 z-50 rounded bg-destructive/15 p-2 text-xs text-destructive">{windowError}</div>}{form === "capsule" ? <CapsuleWindow date={date} /> : <PaperPanel date={date} />}</>}</Providers>;
 }
 
-/**
- * 胶囊形态的外壳：只负责**还原窗口**，内容交给 CapsuleView。
- *
- * 为什么还原动作放在这里而不是让 CapsuleView 自己在卸载时做：
- * CapsuleView 一旦卸载，它的 effect 清理函数里再想操作这个窗口已经没意义了，
- * 就算能调也没人保证顺序。所以必须由「还活着的父组件」先把几何/层级/穿透摆回去，
- * **最后**才切形态让它卸载。顺序反过来的症状是：窗口以胶囊状态
- * （294×340、穿透、置顶）永久留在屏幕上，纸片看起来再也回不来了。
- */
+/** Switch the stored form only after the shared edge controller restores the normal window. */
 function CapsuleWindow({ date }: { date: string }) {
-  const paper = usePapers((s) => s.papers[date]);
   const setForm = usePapers((s) => s.setForm);
-
-  const expand = useCallback(async () => {
-    if (!inTauri) {
-      setForm(date, "paper");
-      return;
-    }
-    const win = getCurrentWebviewWindow();
-    const g = paperGeometryFor(date);
-    const pinned = paper?.pinned ?? false;
-    // 顺序：先能接鼠标 → 再摆回原位 → 再还原层级 → 最后才切形态
-    await win.setIgnoreCursorEvents(false).catch(() => undefined);
-    await win.setSize(new LogicalSize(g.w, g.h)).catch(() => undefined);
-    await win.setPosition(new LogicalPosition(g.x, g.y)).catch(() => undefined);
-    /*
-     * 还原层级。置顶与压底是**两个互斥标记**，必须成对设置：
-     * tao 只看「当前带哪个标记」决定 z 序，而它在 WM_WINDOWPOSCHANGING 里对带
-     * ALWAYS_ON_BOTTOM 的窗口会强制 hwndInsertAfter = HWND_BOTTOM ——
-     * 纸片窗口本来就是带这个标记创建的，所以只调 setAlwaysOnTop 会被立刻推翻。
-     * 详细推导见 CapsuleView 首次挂载处那段注释。
-     */
-    if (pinned) {
-      await win.setAlwaysOnBottom(false).catch(() => undefined);
-      await win.setAlwaysOnTop(true).catch(() => undefined);
-    } else {
-      await win.setAlwaysOnTop(false).catch(() => undefined);
-      await win.setAlwaysOnBottom(true).catch(() => undefined);
-    }
-    setForm(date, "paper");
-  }, [date, paper?.pinned, setForm]);
-
+  // The dock restores size, position and paired z-order before this callback.
+  const expand = useCallback(() => setForm(date, "paper"), [date, setForm]);
   const close = useCallback(async () => {
     await closeDailyTodo(date);
   }, [date]);
 
-  return <CapsuleView date={date} onExpand={() => void expand()} onClose={() => void close()} />;
+  return <CapsuleView date={date} onExpand={expand} onClose={() => void close()} />;
 }
 
 function PaperPanel({ date }: { date: string }) {
@@ -185,6 +169,7 @@ function PaperPanel({ date }: { date: string }) {
   const addTasks = usePlans((s) => s.addTasks);
   const toggleDone = usePlans((s) => s.toggleDone);
   const updateTask = usePlans((s) => s.updateTask);
+  const history = usePlans((s) => s.history);
 
   const paper = usePapers((s) => s.papers[date]);
   const setGeometry = usePapers((s) => s.setGeometry);
@@ -196,7 +181,123 @@ function PaperPanel({ date }: { date: string }) {
   const pinned = paper?.pinned ?? false;
 
   const [input, setInput] = useState("");
+  const [operationError, setOperationError] = useState("");
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(() => new Set());
+  const selectionAnchor = useRef<string | null>(null);
+  const [findOpen, setFindOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [matchIndex, setMatchIndex] = useState(0);
+  const findRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+  const composing = useRef(false);
+  type DragState = { sourceId: string; targetId?: string; position?: "before" | "after" };
+  const [drag, setDrag] = useState<DragState | null>(null);
+  const dragRef = useRef<DragState | null>(null);
+  const dragPointer = useRef({ x: 0, y: 0 });
+  const dragFrame = useRef(0);
+  const orderedTasks = useMemo(() => flattenTree(tasks).map(row => row.task), [tasks]);
+  const selectedIds = useMemo(() => orderedTasks.filter(task => selected.has(task.id)).map(task => task.id), [orderedTasks, selected]);
+  const matches = useMemo(() => findPaperTasks(orderedTasks, query), [orderedTasks, query]);
+  const activeMatch = matches.length ? matches[matchIndex % matches.length] : undefined;
   const rootRef = useRef<HTMLDivElement>(null);
+  const generation = useRef(0);
+  const resizing = useRef(0);
+  const titleDragCleanup = useRef<(() => void) | null>(null);
+  useEffect(() => {
+    generation.current++;
+    return () => {
+      generation.current++;
+      titleDragCleanup.current?.();
+    };
+  }, []);
+  const current = useCallback((epoch: number) => generation.current === epoch && (usePapers.getState().papers[date]?.form ?? "paper") === "paper", [date]);
+
+  const cancelDrag = useCallback(() => {
+    dragRef.current = null; setDrag(null);
+    cancelAnimationFrame(dragFrame.current); dragFrame.current = 0;
+  }, []);
+  useEffect(() => cancelDrag, [cancelDrag]);
+  useEffect(() => {
+    if (findOpen) findRef.current?.focus();
+  }, [findOpen]);
+  useEffect(() => {
+    if (!activeMatch || !findOpen) return;
+    const row = Array.from(listRef.current?.querySelectorAll<HTMLElement>("[data-paper-task]") ?? []).find(node => node.dataset.paperTask === activeMatch);
+    row?.scrollIntoView({ block: "nearest" });
+  }, [activeMatch, findOpen, collapsed]);
+
+  const updateDragTarget = useCallback(() => {
+    const session = dragRef.current;
+    const list = listRef.current;
+    if (!session || !list) return;
+    const node = document.elementFromPoint(dragPointer.current.x, dragPointer.current.y)?.closest<HTMLElement>("[data-paper-task]");
+    const day = usePlans.getState().days[date] ?? [];
+    const source = day.find(task => task.id === session.sourceId);
+    const target = day.find(task => task.id === node?.dataset.paperTask);
+    const valid = node && list.contains(node) && source && target && source.id !== target.id && source.parentId === target.parentId;
+    const next: DragState = valid ? { sourceId: source.id, targetId: target.id, position: dragPointer.current.y < node.getBoundingClientRect().top + node.getBoundingClientRect().height / 2 ? "before" : "after" } : { sourceId: session.sourceId };
+    if (next.targetId !== session.targetId || next.position !== session.position) { dragRef.current = next; setDrag(next); }
+  }, [date]);
+
+  const startTaskDrag = (event: DragEvent<HTMLElement>, id: string) => {
+    event.stopPropagation();
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/x-nimbus-task", id);
+    dragPointer.current = { x: event.clientX, y: event.clientY };
+    const next = { sourceId: id }; dragRef.current = next; setDrag(next);
+    const frame = () => {
+      if (!dragRef.current) return;
+      const list = listRef.current;
+      if (list) {
+        const rect = list.getBoundingClientRect();
+        list.scrollTop += paperDragScroll(dragPointer.current.y, rect.top, rect.bottom);
+        updateDragTarget();
+      }
+      dragFrame.current = requestAnimationFrame(frame);
+    };
+    dragFrame.current = requestAnimationFrame(frame);
+  };
+
+  const overTask = (event: DragEvent<HTMLElement>) => {
+    if (!dragRef.current) return;
+    event.preventDefault(); event.stopPropagation();
+    event.dataTransfer.dropEffect = "move";
+    dragPointer.current = { x: event.clientX, y: event.clientY }; updateDragTarget();
+  };
+  const dropTask = (event: DragEvent<HTMLElement>) => {
+    if (!dragRef.current) return;
+    event.preventDefault(); event.stopPropagation();
+    dragPointer.current = { x: event.clientX, y: event.clientY }; updateDragTarget();
+    const session = dragRef.current;
+    cancelDrag();
+    if (session?.targetId && session.position) usePlans.getState().reorderTask(date, session.sourceId, session.targetId, session.position);
+  };
+
+  const selectTask = (id: string, shift: boolean) => {
+    const anchor = orderedTasks.findIndex(task => task.id === selectionAnchor.current);
+    const at = orderedTasks.findIndex(task => task.id === id);
+    setSelected(previous => {
+      const next = new Set(previous);
+      if (shift && anchor >= 0 && at >= 0) {
+        for (const task of orderedTasks.slice(Math.min(anchor, at), Math.max(anchor, at) + 1)) next.add(task.id);
+      } else if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+    selectionAnchor.current = id;
+  };
+
+  const copySelected = async () => {
+    try {
+      await navigator.clipboard.writeText(orderedTasks.filter(task => selected.has(task.id)).map(task => `${task.done ? "- [x]" : "- [ ]"} ${task.title}`).join("\n"));
+      setOperationError("");
+    } catch { setOperationError(copy.copyFailed); }
+  };
+  const deleteSelected = () => {
+    usePlans.getState().removeTasks(date, selectedIds);
+    setSelected(new Set());
+  };
+  const navigateMatch = (direction: number) => setMatchIndex(index => matches.length ? (index + direction + matches.length) % matches.length : 0);
 
   /**
    * 标题栏拖动。
@@ -214,6 +315,7 @@ function PaperPanel({ date }: { date: string }) {
     let dragging = false;
     const el = e.currentTarget as HTMLElement;
     const win = getCurrentWebviewWindow();
+    titleDragCleanup.current?.();
 
     const onMove = (ev: PointerEvent) => {
       if (dragging) return;
@@ -226,10 +328,12 @@ function PaperPanel({ date }: { date: string }) {
       window.removeEventListener("pointermove", onMove);
       window.removeEventListener("pointerup", cleanup);
       el.removeEventListener("pointercancel", cleanup);
+      if (titleDragCleanup.current === cleanup) titleDragCleanup.current = null;
     };
     window.addEventListener("pointermove", onMove);
     window.addEventListener("pointerup", cleanup);
     el.addEventListener("pointercancel", cleanup);
+    titleDragCleanup.current = cleanup;
   };
 
   /**
@@ -250,13 +354,26 @@ function PaperPanel({ date }: { date: string }) {
     if (ancestors.has(task.id)) return null;
     const next = new Set(ancestors).add(task.id);
     const children = collapsed ? [] : childrenOf(tasks, task.id);
+    const siblings = childrenOf(tasks, task.parentId);
+    const index = siblings.findIndex(sibling => sibling.id === task.id);
     return (
       <div key={task.id}>
         <PaperRow date={date} task={task} now={now}
           onToggle={() => toggleDone(date, task.id)}
           onEdit={(title) => updateTask(date, task.id, { title })}
           onTimeChange={(time) => updateTask(date, task.id, time)}
-          onAddChild={collapsed ? undefined : (title) => addTask(date, task.id, title)} />
+          onAddChild={collapsed ? undefined : (title) => addTask(date, task.id, title)}
+          onDelete={() => usePlans.getState().removeTask(date, task.id)}
+          selected={selected.has(task.id)}
+          onSelect={selectionMode ? (shift) => selectTask(task.id, shift) : undefined}
+          searchMatch={findOpen && matches.includes(task.id) ? (activeMatch === task.id ? "current" : "match") : undefined}
+          reorder={collapsed ? undefined : {
+            active: drag?.sourceId === task.id,
+            position: drag?.targetId === task.id ? drag.position : undefined,
+            onMoveUp: index > 0 ? () => usePlans.getState().reorderTask(date, task.id, siblings[index - 1].id, "before") : undefined,
+            onMoveDown: index < siblings.length - 1 ? () => usePlans.getState().reorderTask(date, task.id, siblings[index + 1].id, "after") : undefined,
+            onStart: event => startTaskDrag(event, task.id), onEnd: cancelDrag, onOver: overTask, onDrop: dropTask,
+          }} />
         {children.length > 0 && <div className="daily-paper-tree" style={next.size > 4 ? { marginLeft: 0, paddingLeft: 2 } : undefined}>
           {children.map((child) => renderTask(child, next))}
         </div>}
@@ -284,28 +401,29 @@ function PaperPanel({ date }: { date: string }) {
      Rust 侧不保存任何窗口状态（单一数据源在前端）。 */
 
   const persistGeometry = useCallback(async () => {
-    if (!inTauri) return;
+    if (!inTauri || resizing.current > 0) return;
+    const epoch = generation.current;
+    const win = getCurrentWebviewWindow();
     try {
-      const win = getCurrentWebviewWindow();
-      const pos = await win.outerPosition();
-      const size = await win.innerSize();
-      const factor = await win.scaleFactor();
-      // 物理像素 → CSS 像素：不除这个比例，多屏不同 DPI 下坐标会逐次漂移
-      setGeometry(date, {
-        x: Math.round(pos.x / factor),
-        y: Math.round(pos.y / factor),
-        w: Math.round(size.width / factor),
-        h: Math.round(size.height / factor),
+      await queueWindowOperation(win.label, async () => {
+        const geometry = await normalPaperGeometry(win, () => ({ active: current(epoch) && resizing.current === 0, collapsed: usePapers.getState().papers[date]?.collapsed ?? false }));
+        if (geometry && current(epoch)) setGeometry(date, geometry);
       });
     } catch {
-      /* 窗口关闭中，忽略 */
+      // Snapshot failures leave the last normal geometry untouched.
     }
-  }, [date, setGeometry]);
+  }, [date, setGeometry, current]);
 
   useEffect(() => {
     const onResize = () => void persistGeometry();
     window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
+    let canceled = false;
+    const unMove = inTauri ? getCurrentWebviewWindow().onMoved(() => { if (!canceled) void persistGeometry(); }) : null;
+    return () => {
+      canceled = true;
+      window.removeEventListener("resize", onResize);
+      void unMove?.then((unlisten) => unlisten()).catch(() => undefined);
+    };
   }, [persistGeometry]);
 
   /**
@@ -327,32 +445,69 @@ function PaperPanel({ date }: { date: string }) {
    * 只改 CSS 会出现「内容变短了但窗口还是那么高」——桌面上一块透明区域
    * 照样拦截鼠标，用户点不到下面的东西。所以必须连窗口一起缩。
    */
-  const COLLAPSED_H = 116;
   const toggleCollapse = async () => {
-    const next = !collapsed;
+    const previous = usePapers.getState().papers[date]?.collapsed ?? false;
+    const next = !previous;
+    const epoch = generation.current;
+    if (inTauri) resizing.current++;
     setCollapsed(date, next);
     if (!inTauri) return;
     try {
       const win = getCurrentWebviewWindow();
-      if (next) {
-        await win.setSize(new (await import("@tauri-apps/api/dpi")).LogicalSize(
-          (paper?.w ?? 260),
-          COLLAPSED_H,
-        ));
-      } else {
-        await win.setSize(new (await import("@tauri-apps/api/dpi")).LogicalSize(
-          paper?.w ?? 260,
-          paper?.h ?? 360,
-        ));
-      }
-    } catch {
-      /* 忽略 */
+      await queueWindowOperation(win.label, async () => {
+        const state = usePapers.getState().papers[date];
+        if (!current(epoch) || (state?.collapsed ?? false) !== next) return;
+        await win.setSize(new LogicalSize(state?.w ?? 260, next ? COLLAPSED_PAPER_H : state?.h ?? 360));
+        if (current(epoch)) setOperationError("");
+      });
+    } catch (error) {
+      if (!current(epoch)) return;
+      if ((usePapers.getState().papers[date]?.collapsed ?? false) === next) setCollapsed(date, previous);
+      setOperationError(String(error));
+    } finally {
+      resizing.current--;
     }
   };
+
+  const openFind = () => {
+    if (collapsed) void toggleCollapse();
+    setFindOpen(true);
+    requestAnimationFrame(() => { findRef.current?.focus(); findRef.current?.select(); });
+  };
+  const onPaperKey = (event: globalThis.KeyboardEvent) => {
+    if (event.defaultPrevented) return;
+    const target = event.target instanceof HTMLElement ? event.target : document.body;
+    const editable = !!target.closest("input,textarea,select,[contenteditable=true]");
+    const action = paperKeyAction(event, { editable, findInput: !!target.closest("[data-paper-find]"), composing: composing.current, dragging: !!dragRef.current, findOpen, selectedCount: selectedIds.length });
+    if (!action) return;
+    event.preventDefault(); event.stopPropagation();
+    switch (action) {
+      case "cancel-edit": target.blur(); break;
+      case "cancel-drag": cancelDrag(); break;
+      case "close-find": setFindOpen(false); break;
+      case "clear-selection": setSelected(new Set()); setSelectionMode(false); break;
+      case "fold": setForm(date, "capsule"); break;
+      case "find": openFind(); break;
+      case "find-next": openFind(); navigateMatch(1); break;
+      case "find-previous": openFind(); navigateMatch(-1); break;
+      case "undo": usePlans.getState().undo(); break;
+      case "redo": usePlans.getState().redo(); break;
+      case "select-all": setSelectionMode(true); setSelected(new Set(orderedTasks.map(task => task.id))); break;
+      case "copy": void copySelected(); break;
+      case "delete": deleteSelected(); break;
+    }
+  };
+  useEffect(() => {
+    window.addEventListener("keydown", onPaperKey);
+    return () => window.removeEventListener("keydown", onPaperKey);
+  });
 
   return (
     <div
       ref={rootRef}
+      tabIndex={-1}
+      onCompositionStart={() => { composing.current = true; }}
+      onCompositionEnd={() => { composing.current = false; }}
       className="daily-paper flex h-screen w-screen flex-col overflow-hidden rounded-xl border border-border/70 text-[13px] shadow-[var(--workbench-shadow)]"
       style={{
         // 半透明纸感：85% 卡片色 + 模糊，桌面内容透出一点点，但文字仍然清晰
@@ -363,6 +518,8 @@ function PaperPanel({ date }: { date: string }) {
       {/* ── 标题栏：整条可拖，标题双击不改名（与栅栏一致：纸片标题就是日期） ── */}
       <div
         onPointerDown={startTitleDrag}
+        onAuxClick={(event) => { if (event.button === 1 && !(event.target as HTMLElement).closest("button,input")) { event.preventDefault(); cancelDrag(); setForm(date, "capsule"); } }}
+        onMouseDown={(event) => { if (event.button === 1) event.preventDefault(); }}
         className="flex h-9 shrink-0 cursor-default items-center gap-2 border-b border-border/60 px-2.5 select-none"
       >
         <span className="min-w-0 flex-1 truncate font-semibold" title={`${date} · ${copy.dailyTodos}`}>
@@ -395,9 +552,42 @@ function PaperPanel({ date }: { date: string }) {
       </div>
 
       <StorageAlert />
+      {operationError && <div role="alert" className="px-2.5 py-1.5 text-xs text-destructive">{operationError}</div>}
+
+      {!collapsed && <div className="flex min-h-8 shrink-0 flex-wrap items-center gap-1 border-b border-border/60 px-2 py-1">
+        <IconBtn label={`${copy.find} (Ctrl+F)`} pressed={findOpen} onClick={openFind}><Search size={14}/></IconBtn>
+        <IconBtn label={`${copy.selection} (Ctrl+A)`} pressed={selectionMode} onClick={() => { setSelectionMode(!selectionMode); setSelected(new Set()); }}><CheckSquare size={14}/></IconBtn>
+        <span className="flex-1"/>
+        <IconBtn label={`${copy.undo} (Ctrl+Z)`} disabled={!history.past.length} onClick={() => usePlans.getState().undo()}><Undo2 size={14}/></IconBtn>
+        <IconBtn label={`${copy.redo} (Ctrl+Y)`} disabled={!history.future.length} onClick={() => usePlans.getState().redo()}><Redo2 size={14}/></IconBtn>
+        <IconBtn label={copy.clearDone} disabled={!doneCount} onClick={() => usePlans.getState().clearDone(date)}><Trash2 size={14}/></IconBtn>
+      </div>}
+
+      {findOpen && <div data-paper-find className="flex min-h-9 shrink-0 items-center gap-0.5 border-b border-border/60 px-2">
+        <input ref={findRef} value={query} aria-label={copy.find} placeholder={copy.find} className="min-w-0 flex-1 bg-transparent text-xs outline-none"
+          onChange={event => { setQuery(event.target.value); setMatchIndex(0); }}
+          onKeyDown={event => { if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return; if (event.key === "Enter") { event.preventDefault(); event.stopPropagation(); navigateMatch(event.shiftKey ? -1 : 1); } }}/>
+        <span role="status" aria-live="polite" title={matches.length ? undefined : copy.noMatches} className="shrink-0 text-[10px] tabular-nums text-muted-foreground">{matches.length ? `${matchIndex % matches.length + 1}/${matches.length}` : "0/0"}</span>
+        <IconBtn label={copy.previousMatch} disabled={!matches.length} onClick={() => navigateMatch(-1)}><ChevronUp size={14}/></IconBtn>
+        <IconBtn label={copy.nextMatch} disabled={!matches.length} onClick={() => navigateMatch(1)}><ChevronDown size={14}/></IconBtn>
+        <IconBtn label={copy.closeFind} onClick={() => setFindOpen(false)}><X size={14}/></IconBtn>
+      </div>}
+
+      {selectionMode && <div className="flex shrink-0 flex-wrap items-center gap-1 border-b border-border/60 px-2 py-1">
+        <span className="mr-auto text-[11px] text-muted-foreground" aria-live="polite">{selectedIds.length} {copy.selected}</span>
+        <IconBtn label={copy.selectAll} onClick={() => setSelected(new Set(orderedTasks.map(task => task.id)))}><CheckSquare size={14}/></IconBtn>
+        <IconBtn label={copy.complete} disabled={!selectedIds.length} onClick={() => usePlans.getState().setTasksDone(date, selectedIds, true)}><Check size={14}/></IconBtn>
+        <IconBtn label={copy.restore} disabled={!selectedIds.length} onClick={() => usePlans.getState().setTasksDone(date, selectedIds, false)}><Undo2 size={14}/></IconBtn>
+        <IconBtn label={copy.copy} disabled={!selectedIds.length} onClick={() => void copySelected()}><Copy size={14}/></IconBtn>
+        <IconBtn label={copy.remove} disabled={!selectedIds.length} danger onClick={deleteSelected}><Trash2 size={14}/></IconBtn>
+        <IconBtn label={copy.clearSelection} onClick={() => { setSelected(new Set()); setSelectionMode(false); }}><X size={14}/></IconBtn>
+      </div>}
 
       {/* ── 任务列表 ── */}
-      <div className="min-h-0 flex-1 overflow-y-auto px-1.5 py-1.5">
+      <div ref={listRef} onDragOver={overTask} onDrop={dropTask} onDragLeave={(event) => {
+        if (event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget)) return;
+        if (dragRef.current) { const next = { sourceId: dragRef.current.sourceId }; dragRef.current = next; setDrag(next); }
+      }} className="min-h-0 flex-1 overflow-y-auto px-1.5 py-1.5">
         {visible.length === 0 ? (
           <p className="px-2 py-6 text-center text-[12px] text-muted-foreground/70">
             {t("plans.emptyDay")}
@@ -418,8 +608,19 @@ function PaperPanel({ date }: { date: string }) {
           <Plus className="size-3.5 shrink-0 text-brand" strokeWidth={2.4} />
           <input
             value={input}
+            aria-label={t("plans.addPlaceholder")}
             onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && !e.nativeEvent.isComposing && submit()}
+            onPaste={(event) => {
+              const field = event.currentTarget;
+              const titles = pastedTaskTitles(event.clipboardData.getData("text/plain"), input.slice(0, field.selectionStart ?? input.length), input.slice(field.selectionEnd ?? input.length));
+              if (!titles || composing.current) return;
+              event.preventDefault(); addTasks(date, null, titles); setInput("");
+            }}
+            onKeyDown={(event) => {
+              if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229) return;
+              if (event.key === "Enter") { event.preventDefault(); submit(); }
+              if (event.key === "Escape" || ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "w")) { event.preventDefault(); event.stopPropagation(); setInput(""); event.currentTarget.blur(); }
+            }}
             placeholder={t("plans.addPlaceholder")}
             className="w-full bg-transparent text-[12px] outline-none placeholder:text-muted-foreground/60"
           />

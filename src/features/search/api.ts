@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { EverythingStatus, SearchHit, SearchPreview, SearchReply, SearchScope, SearchStatus } from "./types";
+import type { EverythingStatus, SearchAppsStatus, SearchHit, SearchHome, SearchPreview, SearchReply, SearchScope, SearchStatus } from "./types";
 
 export const searchQuery = (query: string, scope: SearchScope, includeFiles?: boolean) => invoke<SearchReply>("search_query", { query, scope, limit: 60, ...(includeFiles === undefined ? {} : { includeFiles }) });
 export const searchStatus = () => invoke<SearchStatus>("search_status");
@@ -12,3 +12,10 @@ export const searchDocumentDefaults = () => invoke<string[]>("search_document_de
 export const pauseSearchIndex = (paused: boolean) => invoke<void>("search_index_pause", { paused });
 export const detectEverything = (path?: string, instance?: string) => invoke<EverythingStatus>("search_everything_detect", { path, instance });
 export const startEverything = (path?: string, instance?: string) => invoke<EverythingStatus>("search_everything_start", { path, instance });
+export const searchHome = () => invoke<SearchHome>("search_home");
+export const pinSearchResult = (result: SearchHit, pinned: boolean) => invoke<SearchHome>("search_pin", { result, pinned });
+export const clearSearchRecent = () => invoke<SearchHome>("search_clear_recent");
+export const searchAppsStatus = () => invoke<SearchAppsStatus>("search_apps_status");
+export const refreshSearchApps = () => invoke<void>("search_apps_refresh");
+export const setQuickToolsShortcut = (shortcut: string) => invoke<void>("quick_tools_set_shortcut", { shortcut });
+export const openQuickToolsWindow = () => invoke<void>("quick_tools_open_window");

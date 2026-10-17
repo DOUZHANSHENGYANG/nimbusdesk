@@ -150,3 +150,5 @@
 @media (prefers-reduced-motion:reduce) { .developer-tools *, .tool-preferences-popover, .tool-preferences-popover * { animation:none !important; transition:color 80ms,background-color 80ms !important; } .tool-preferences-popover, .developer-tools button:active { transform:none !important; } }
 @media (prefers-reduced-transparency:reduce) { .tool-preferences-popover { background:var(--popover); backdrop-filter:none; } }
 @media (prefers-contrast:more) { .tool-composer, .tool-preferences-popover { border-color:var(--foreground); background:var(--background); } .tool-preferences-popover { backdrop-filter:none; } }
+
+.tools-quick-panel{display:flex;align-items:center;gap:7px;margin-left:auto;min-height:32px;padding:6px 10px;border:1px solid var(--workbench-line);border-radius:8px;font-size:12px;cursor:pointer}.tools-quick-panel svg{width:14px;height:14px}

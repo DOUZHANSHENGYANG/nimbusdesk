@@ -45,6 +45,8 @@ export interface PaperState {
   edge?: CapsuleEdge;
   /** 胶囊沿边位置：相对**工作区顶**的逻辑像素（不是屏幕绝对坐标，换显示器才不会漂） */
   edgeY?: number;
+  /** Stable display identity for edge queues; ordinary geometry remains independent. */
+  edgeMonitor?: string;
 }
 
 interface PapersStoreState {

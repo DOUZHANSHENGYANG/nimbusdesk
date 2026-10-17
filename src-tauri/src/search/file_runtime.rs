@@ -82,11 +82,13 @@ struct Snapshot {
     instance: String,
     enabled: bool,
     derived: bool,
+    name_limit: u64,
 }
 fn absolute_directory(value: &str) -> Result<PathBuf, String> {
     let path = PathBuf::from(value.trim());
     if !path.is_absolute()
         || path.components().any(|c| matches!(c, Component::ParentDir))
+        || value.contains('"')
         || value.chars().any(char::is_control)
     {
         return Err("索引目录必须是无跳转的绝对路径".into());
@@ -218,6 +220,12 @@ fn read_snapshot() -> Result<Snapshot, String> {
                 .get("pinyinEnabled")
                 .and_then(Value::as_bool)
                 .unwrap_or(true),
+            native_roots: settings.get("nameRoots").filter(|v|!v.is_null()).map(|v| {
+                let roots=v.as_array().ok_or("文件名索引目录必须是数组")?;
+                if roots.len()>64 {return Err("最多选择 64 个文件名索引目录".to_string());}
+                roots.iter().map(|v|absolute_directory(v.as_str().ok_or("文件名索引目录无效")?).map(|p|normalize(&p.to_string_lossy()))).collect::<Result<Vec<_>,String>>()
+            }).transpose()?,
+            hide_noise: settings.get("hideNoisyResults").and_then(Value::as_bool).unwrap_or(true),
             native_source,
         },
         roots,
@@ -227,6 +235,7 @@ fn read_snapshot() -> Result<Snapshot, String> {
             .and_then(Value::as_bool)
             .unwrap_or(true),
         derived,
+        name_limit: super::filters::name_limit(settings.get("nameIndexLimit").and_then(Value::as_u64)),
     })
 }
 pub fn defaults() -> Result<Vec<String>, String> {
@@ -411,25 +420,9 @@ fn walk(
             return;
         }
     };
-    let name = path
-        .file_name()
-        .and_then(|s| s.to_str())
-        .unwrap_or_default();
-    if link_or_hidden(&meta)
-        || name.starts_with('.')
-        || (meta.is_dir()
-            && [
-                "node_modules",
-                "target",
-                "vendor",
-                "__pycache__",
-                "$recycle.bin",
-                "system volume information",
-            ]
-            .contains(&name.to_ascii_lowercase().as_str()))
-    {
-        return;
-    }
+    // Reparse points are never followed. Noise folders follow the user's toggle;
+    // build output such as target/dist remains searchable.
+    if link_or_hidden(&meta) { return; }
     scan.entries.push(Entry {
         path: path.to_path_buf(),
         directory: meta.is_dir(),
@@ -604,6 +597,7 @@ fn update(
     }
     if snapshot.scope.pinyin
         && snapshot.scope.native_source.is_some()
+        && snapshot.scope.native_roots.as_ref().is_none_or(|roots|!roots.is_empty())
         && (force
             || last_names.as_ref().is_none_or(|(previous, t)| {
                 previous != source || t.elapsed() > Duration::from_secs(600)
@@ -616,7 +610,7 @@ fn update(
         });
         let mut processed = 0;
         let enumerated =
-            super::name_enum::enumerate(&snapshot.instance, &CANCEL, |names, total| {
+            super::name_enum::enumerate_scoped(&snapshot.instance, &CANCEL, snapshot.scope.native_roots.as_deref(), snapshot.scope.hide_noise, snapshot.name_limit, |names, total| {
                 if CANCEL.load(Ordering::Acquire) {
                     return Err("文件索引已取消".into());
                 }
@@ -624,7 +618,7 @@ fn update(
                 index.names_for_source(
                     &names
                         .into_iter()
-                        .filter(|name| !snapshot.scope.excluded(&normalize(&name.path)))
+                        .filter(|name| snapshot.scope.native_selected(&normalize(&name.path)))
                         .map(|name| (name.path, name.directory))
                         .collect::<Vec<_>>(),
                     true,
@@ -666,7 +660,8 @@ fn update(
     }
     if snapshot.scope.pinyin {
         if let Some((previous, error)) = NAME_ERROR.lock().ok().and_then(|error| error.clone()) {
-            if previous == source && snapshot.scope.native_source.is_some() {
+            if previous == source && snapshot.scope.native_source.is_some()
+        && snapshot.scope.native_roots.as_ref().is_none_or(|roots|!roots.is_empty()) {
                 scan.warnings.push(error);
             }
         }
@@ -696,6 +691,26 @@ fn update(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn scanner_noise_toggle_keeps_build_outputs_and_respects_exclusions() {
+        let root=std::env::temp_dir().join(format!("nimbus-noise-{}-{}",std::process::id(),std::time::SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos()));
+        fs::create_dir_all(root.join("node_modules")).unwrap();
+        fs::create_dir_all(root.join("target")).unwrap();
+        fs::create_dir_all(root.join("dist")).unwrap();
+        fs::write(root.join("node_modules/noise.txt"),"noise").unwrap();
+        fs::write(root.join("target/runner.exe"),"fixture").unwrap();
+        fs::write(root.join("dist/release.bat"),"fixture").unwrap();
+        let mut snapshot=Snapshot{data:root.clone(),roots:vec![root.clone()],scope:QueryScope{roots:vec![normalize(&root.to_string_lossy())],hide_noise:true,..Default::default()},instance:String::new(),enabled:true,derived:false,name_limit:250_000};
+        let filtered=scan(&snapshot,&AtomicBool::new(false));
+        assert!(filtered.entries.iter().any(|e|e.path.ends_with("runner.exe")));
+        assert!(filtered.entries.iter().any(|e|e.path.ends_with("release.bat")));
+        assert!(!filtered.entries.iter().any(|e|e.path.ends_with("noise.txt")));
+        snapshot.scope.hide_noise=false;
+        assert!(scan(&snapshot,&AtomicBool::new(false)).entries.iter().any(|e|e.path.ends_with("noise.txt")));
+        snapshot.scope.excludes.push(normalize(&root.join("dist").to_string_lossy()));
+        assert!(!scan(&snapshot,&AtomicBool::new(false)).entries.iter().any(|e|e.path.ends_with("release.bat")));
+        assert!(root.starts_with(std::env::temp_dir())); fs::remove_dir_all(root).unwrap();
+    }
     #[test]
     fn defaults_stay_in_managed_folders_and_explicit_empty_is_preserved() {
         let knowledge = serde_json::json!({"state":{"vaultRoot":"C:/vault","folderBindings":{"c:/vault":{"experience":"work/experience","recipe":"work/recipe","resource":"saved"}}}});
@@ -737,11 +752,14 @@ mod tests {
                 content: true,
                 pinyin: true,
                 native_source: None,
+                hide_noise: true,
+                ..Default::default()
             },
             roots,
             instance: String::new(),
             enabled: true,
             derived: false,
+            name_limit: 250_000,
         };
         let result = scan(&snapshot, &AtomicBool::new(false));
         assert_eq!(result.entries.iter().filter(|e| e.extract).count(), 1);

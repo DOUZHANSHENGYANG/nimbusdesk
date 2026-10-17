@@ -24,7 +24,7 @@ function SearchNavigationBridge() {
     if (!inTauri) return;
     let active = true;
     const subscription = listen<string>("search://navigate", ({ payload }) => {
-      if (active && /^\/(plans|knowledge|feeds|files|projects)(\?|$)/.test(payload)) navigate(payload);
+      if (active && /^\/(plans|knowledge|feeds|files|projects|tools|settings)(\?|$)/.test(payload)) navigate(payload);
     });
     return () => { active = false; void subscription.then(stop => stop()).catch(() => undefined); };
   }, [navigate]);

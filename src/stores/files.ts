@@ -250,6 +250,11 @@ export const useFiles = create<FilesState>()(
 /* ── 栅栏几何/开关：fences.json ───────────────────────── */
 
 export interface FenceState {
+  /** Edge mode is independent of the saved normal rectangle. Missing values are legacy paper mode. */
+  form?: "paper" | "capsule";
+  edge?: "left" | "right";
+  edgeY?: number;
+  edgeMonitor?: string;
   x: number;
   y: number;
   w: number;
@@ -264,6 +269,10 @@ export interface FenceState {
 
 interface FencesStoreState {
   fences: Record<string, FenceState>;
+  setForm: (categoryId: string, form: "paper" | "capsule") => void;
+  setEdge: (categoryId: string, edge: "left" | "right") => void;
+  setEdgeY: (categoryId: string, edgeY: number) => void;
+  setDockPosition: (categoryId: string, position: { edge?: "left" | "right"; edgeY?: number; edgeMonitor?: string }) => void;
   setGeometry: (categoryId: string, geo: { x: number; y: number; w: number; h: number }) => void;
   setGhost: (categoryId: string, ghost: boolean) => void;
   setOpen: (categoryId: string, open: boolean) => void;
@@ -277,6 +286,15 @@ export const useFences = create<FencesStoreState>()(
   persist(
     (set) => ({
       fences: {},
+
+      setForm: (categoryId, form) => set((s) => ({ fences: { ...s.fences,
+        [categoryId]: { ...(s.fences[categoryId] ?? DEFAULT_FENCE), form } } })),
+      setEdge: (categoryId, edge) => set((s) => ({ fences: { ...s.fences,
+        [categoryId]: { ...(s.fences[categoryId] ?? DEFAULT_FENCE), edge } } })),
+      setEdgeY: (categoryId, edgeY) => set((s) => ({ fences: { ...s.fences,
+        [categoryId]: { ...(s.fences[categoryId] ?? DEFAULT_FENCE), edgeY } } })),
+      setDockPosition: (categoryId, position) => set(s => ({ fences: { ...s.fences,
+        [categoryId]: { ...(s.fences[categoryId] ?? DEFAULT_FENCE), ...position } } })),
 
       setGeometry: (categoryId, geo) =>
         set((s) => ({

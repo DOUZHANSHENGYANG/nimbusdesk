@@ -1,0 +1,37 @@
+<!doctype html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head><body><div id="root"></div><script type="module">
+import {mockIPC,mockWindows} from '@tauri-apps/api/mocks';
+import {emit} from '@tauri-apps/api/event';
+const params=new URLSearchParams(location.search);
+const options={format:'json',mode:'repair',sourceLanguage:'auto',target:'Japanese',translationStyle:'literal',codeLanguage:'Java',namingKind:'variable',instruction:'TEAM-PREF'};
+const providers=[{id:'other',name:'Other',baseUrl:'https://other.example/v1',model:'other-model',vision:false},{id:'shared',name:'Shared',baseUrl:'https://shared.example/v1',model:'shared-model',vision:false}];
+const fixtures={settings:{version:3,state:{theme:params.get('theme')||'dark',lang:'zh'}},'ai-providers':{version:1,state:{providers:params.has('unconfigured')?[]:providers,defaultTextId:params.has('unconfigured')?null:'shared',defaultVisionId:null}},'tools-settings':{version:1,state:{options:Object.fromEntries(['format','translate','naming','diagnose','regex'].map(id=>[id,options]))}}};
+window.quickReview={fixtures,calls:[],delay:20,failure:false,selection:{text:'snapshot old',source:'uia',error:null,revision:1},snapshotRequests:0};
+Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async text=>{window.quickReview.copied=text;}}});
+mockIPC(async(cmd,args)=>{
+ const r=window.quickReview;r.calls.push({cmd,args});
+ if(cmd==='read_json')return structuredClone(fixtures[args.key]??null);
+ if(cmd==='write_json'){fixtures[args.key]=structuredClone(args.value);return args.value;}
+ if(cmd==='quick_tools_selection'){
+  const old=structuredClone(r.selection);r.snapshotRequests++;
+  if(!params.has('manual'))setTimeout(()=>{r.selection={text:'event newer',source:'uia',error:null,revision:2};void emit('quick-tools://selection',r.selection);},10);
+  await new Promise(resolve=>setTimeout(resolve,120));return old;
+ }
+ if(cmd==='ai_chat'){
+  const prompt=args.input.messages[0].content;
+  const source=JSON.parse(args.input.messages[1].content.split('\n')[1]).source;
+  await new Promise(resolve=>setTimeout(resolve,r.delay));
+  if(r.failure)throw new Error('AI_HTTP_401');
+  if(prompt.includes('Generate 4 to 6'))return JSON.stringify({text:'',summary:'names',notes:[],candidates:['userService','orderService','accountService'].map(name=>({name,meaning:'meaning',reason:'reason'}))});
+  if(prompt.includes('Check JSON'))return JSON.stringify({text:'{"a":1}',summary:'format summary',notes:[]});
+  return JSON.stringify({text:'RESULT: '+source,summary:'Review summary',notes:[]});
+ }
+ if(cmd==='plugin:window|get_all_windows'||cmd==='plugin:webview|get_all_webviews')return [];
+ if(cmd==='plugin:window|is_maximized')return false;
+ if(cmd==='plugin:window|available_monitors')return [];
+ return null;
+},{shouldMockEvents:true});
+mockWindows(params.has('main')?'main':'quick-tools');
+window.quickReview.emit=emit;
+if(params.has('main')){const {SOURCE_LIST}=await import('/src/sources/registry.ts');for(const source of SOURCE_LIST)source.fetch=async()=>[];}
+await import('/src/main.tsx');
+</script></body></html>

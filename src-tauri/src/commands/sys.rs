@@ -66,7 +66,8 @@ pub async fn open_fence(
         .decorations(false)
         .transparent(true)
         .shadow(false)
-        .always_on_bottom(true)
+        // The frontend sets bottom/top as a pair after state hydration, just as
+        // for todo papers. A builder-level bottom flag can override later pins.
         .skip_taskbar(true)
         .visible(false)
         .build()

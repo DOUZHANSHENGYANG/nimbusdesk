@@ -1,5 +1,5 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { Braces, Languages, CaseSensitive, Bug, Regex, Settings2, Sparkles, LoaderCircle, RotateCcw, FileUp, Info, CheckCheck, Circle, TriangleAlert } from "lucide-react";
 import { toast } from "sonner";
 import { Switch } from "@/components/ui/switch";
@@ -10,7 +10,9 @@ import { useProviders } from "@/features/ai/providers";
 import { useSettings } from "@/stores/settings";
 import { copyText } from "@/lib/clipboard";
 import { toolIds, buildMessages, type ToolId } from "./core";
-import { useToolsCopy, type ToolsCopy } from "./copy";
+import { useToolsCopy } from "./copy";
+import { toolErrorMessage } from "./errors";
+import { openQuickToolsWindow } from "@/features/search/api";
 import { useToolsPreferences } from "./preferences";
 import { runTool, StaleToolRequest, type ToolResult } from "./request";
 import { checkSyntax } from "./syntax";
@@ -30,26 +32,17 @@ const examples: Record<ToolId, string> = {
 interface Draft { input: string; result: ToolResult | null; resultKey: string; error: string; undo: string | null }
 const draftsInitial = () => Object.fromEntries(toolIds.map((tool) => [tool, { input: "", result: null, resultKey: "", error: "", undo: null }])) as Record<ToolId, Draft>;
 
-function errorMessage(error: unknown, c: ToolsCopy): string {
-  const message = error instanceof Error ? error.message : String(error);
-  if (message.includes("AI_NO_PROVIDER")) return c.unconfigured;
-  if (/AI_HTTP_(401|403)/.test(message)) return c.auth;
-  if (message.includes("AI_NETWORK")) return c.network;
-  if (message.includes("AI_DESKTOP_REQUIRED")) return c.desktop;
-  if (message.includes("TOOLS_TOO_LARGE")) return c.tooLarge;
-  if (message.includes("TOOLS_EMPTY")) return c.empty;
-  if (error instanceof Error && error.name === "StructuredReplyError") return c.structured;
-  return c.failed;
-}
-
 export function ToolsPage() {
   const c = useToolsCopy();
+  const [params] = useSearchParams();
+  const requestedTool = params.get("tool");
   const lang = useSettings((state) => state.lang);
   const navigate = useNavigate();
   const providers = useProviders((state) => state.providers);
   const defaultId = useProviders((state) => state.defaultTextId);
   const provider = providers.find((item) => item.id === defaultId);
   const [tool, setTool] = useState<ToolId>("format");
+  useEffect(() => { if (toolIds.some(id => id === requestedTool)) setTool(requestedTool as ToolId); }, [requestedTool]);
   const options = useToolsPreferences((state) => state.options[tool]);
   const updateOptions = useToolsPreferences((state) => state.update);
   const [drafts, setDrafts] = useState(draftsInitial);
@@ -89,7 +82,7 @@ export function ToolsPage() {
     try {
       const result = await runTool(id, source, snapshot, language, chatWithProvider, current);
       if (current()) change(id, { result, resultKey: key });
-    } catch (error) { if (current() && !(error instanceof StaleToolRequest)) change(id, { error: errorMessage(error, c) }); }
+    } catch (error) { if (current() && !(error instanceof StaleToolRequest)) change(id, { error: toolErrorMessage(error, c) }); }
     finally { lock.current = false; if (alive.current) setJob(null); }
   }, [change, c]);
 
@@ -104,7 +97,7 @@ export function ToolsPage() {
   const runLabel = c[`${tool}Run`];
 
   return <div className="developer-tools workbench-ui">
-    <header className="tools-header"><h1>{c.title}</h1><button className="tools-provider" onClick={() => navigate("/settings?tab=ai")} title={c.configure}><span className="tools-model-dot" data-connected={Boolean(provider)} /><span><small>{c.shared}</small><strong>{provider?.model || c.unconfigured}</strong></span><Settings2 /></button></header>
+    <header className="tools-header"><h1>{c.title}</h1><button className="tools-quick-panel" onClick={() => void openQuickToolsWindow().catch(() => toast.error(c.failed))}><Sparkles />{lang === "zh" ? "快捷工具" : "Quick tools"}</button><button className="tools-provider" onClick={() => navigate("/settings?tab=ai")} title={c.configure}><span className="tools-model-dot" data-connected={Boolean(provider)} /><span><small>{c.shared}</small><strong>{provider?.model || c.unconfigured}</strong></span><Settings2 /></button></header>
     <div className="tools-layout">
       <nav className="tools-nav" aria-label={c.title}>{toolIds.map((id) => { const ToolIcon = icons[id]; return <button key={id} aria-current={tool === id ? "page" : undefined} onClick={() => setTool(id)}>{job === id ? <LoaderCircle className="animate-spin" /> : <ToolIcon />}<span>{c[id]}</span></button>; })}</nav>
       <section className="tools-workspace" aria-label={c[tool]}>

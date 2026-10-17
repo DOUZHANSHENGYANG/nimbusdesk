@@ -129,9 +129,14 @@ export function subscribeMenuSize(
 export async function revealMenu(
   anchor: { x: number; y: number; w: number; h: number },
   size: { w: number; h: number },
+  valid: () => boolean = () => true,
 ): Promise<void> {
+  if (!valid()) return;
   const win = getCurrentWebviewWindow();
   const [pos, sf] = await Promise.all([win.innerPosition(), win.scaleFactor()]);
+  // Position IPC may finish after blur/Escape, owner unmount or another menu
+  // request. Never turn an already dismissed owner back into a visible popup.
+  if (!valid()) return;
   const ox = pos.x / sf; // 窗口原点（屏幕逻辑像素）
   const oy = pos.y / sf;
 
@@ -163,6 +168,12 @@ export function useMenuHost(onOpen: (p: MenuPayload) => void, onClose: () => voi
     const unOpen = listen<MenuPayload>(
       EV_OPEN,
       (e) => {
+        // The shared host can be claimed by another fence/main window. Tell the
+        // previous owner so its edge-card menu hold cannot remain latched forever.
+        const previous = ownerRef.current;
+        if (previous && previous !== e.payload.owner) {
+          void sendMenuAction(previous, { action: "close" }).catch(() => undefined);
+        }
         ownerRef.current = e.payload.owner;
         openRef.current(e.payload);
       },
@@ -181,6 +192,7 @@ export function useMenuHost(onOpen: (p: MenuPayload) => void, onClose: () => voi
       { target: POPUP_LABEL },
     );
     return () => {
+      if (ownerRef.current) void sendMenuAction(ownerRef.current, { action: "close" }).catch(() => undefined);
       void unOpen.then((fn) => fn());
       void unClose.then((fn) => fn());
     };

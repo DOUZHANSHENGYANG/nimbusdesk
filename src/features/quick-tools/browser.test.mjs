@@ -1,0 +1,82 @@
+// Uses src/features/quick-tools/fixtures/window.html and the existing installed Playwright/Chrome runtime.
+import { pathToFileURL } from 'node:url';
+import assert from 'node:assert/strict';
+const runtime = process.env.SEARCH_PLAYWRIGHT_PATH;
+if (!runtime) throw new Error('Set SEARCH_PLAYWRIGHT_PATH to an existing playwright/index.mjs.');
+const { chromium } = await import(pathToFileURL(runtime).href);
+const browser = await chromium.launch({headless:true,executablePath:process.env.SEARCH_BROWSER_PATH});
+try {
+ const page=await browser.newPage({viewport:{width:760,height:620}}), errors=[];
+ page.on('pageerror',error=>errors.push(error.message));
+ const base=`${process.env.SEARCH_REVIEW_ORIGIN||'http://127.0.0.1:17802'}/src/features/quick-tools/fixtures/window.html`;
+ const calls=cmd=>page.evaluate(cmd=>window.quickReview.calls.filter(call=>call.cmd===cmd),cmd);
+ await page.goto(base);
+ const input=page.getByRole('textbox',{name:'输入',exact:true}), run=page.locator('.quick-tools-run');
+ await page.waitForFunction(()=>document.querySelector('#quick-tools-input')?.value==='event newer');
+ await page.waitForTimeout(200);
+ assert.equal(await input.inputValue(),'event newer','late initial snapshot cannot replace a newer event');
+ assert.equal((await calls('ai_chat')).length,0,'capture and hydration never invoke AI');
+ assert.equal(await page.getByRole('combobox',{name:/^目标语言/}).inputValue(),'Japanese','saved tool preferences are reused');
+ assert.match(await page.locator('.quick-tools-footer').innerText(),/shared-model/);
+ await run.click();await page.getByText('RESULT: event newer',{exact:true}).waitFor();
+ const request=(await calls('ai_chat')).at(-1).args.input;
+ assert.equal(request.provider.id,'shared');assert.equal(request.provider.model,'shared-model');
+ assert.match(request.messages[0].content,/Japanese/);assert.match(request.messages[0].content,/TEAM-PREF/);
+ await page.getByRole('button',{name:'复制结果',exact:true}).click();
+ assert.equal(await page.evaluate(()=>window.quickReview.copied),'RESULT: event newer');
+ await page.evaluate(()=>window.quickReview.delay=300);
+ await input.fill('slow original');await run.click();await input.fill('new manual edit');
+ await page.waitForTimeout(420);
+ assert.equal(await input.inputValue(),'new manual edit');
+ assert.equal(await page.getByText('RESULT: slow original',{exact:true}).count(),0,'old response is suppressed after input edit');
+ const beforeCapture=(await calls('ai_chat')).length;
+ await page.evaluate(async()=>{window.quickReview.selection={text:'',source:'manual',error:'UIA unavailable; paste manually',revision:3};await window.quickReview.emit('quick-tools://selection',window.quickReview.selection);});
+ await page.getByText('UIA unavailable; paste manually',{exact:true}).waitFor();
+ assert.equal(await input.inputValue(),'');assert.equal(await run.isDisabled(),true);
+ assert.equal((await calls('ai_chat')).length,beforeCapture);
+ assert.equal(await page.getByRole('region',{name:'结果',exact:true}).count(),0,'failed new capture clears previous result');
+ await input.fill('manual fallback');await input.press('Control+Enter');
+ await page.getByText('RESULT: manual fallback',{exact:true}).waitFor();
+ await page.evaluate(()=>window.quickReview.failure=true);
+ await run.click();await page.getByRole('alert').filter({hasText:'AI 鉴权失败'}).waitFor();
+ await page.getByRole('button',{name:'报错诊断',exact:true}).click();
+ assert.equal(await page.getByRole('alert').count(),0,'switching tools clears prior errors');
+ assert.equal(await input.inputValue(),'manual fallback');
+ await page.evaluate(()=>window.quickReview.failure=false);
+ await run.click();await page.locator('.tool-markdown').filter({hasText:'RESULT: manual fallback'}).waitFor();
+ await page.getByRole('button',{name:'置顶',exact:true}).click();
+ assert.equal((await calls('plugin:window|set_always_on_top')).at(-1).args.value,true);
+ await page.getByRole('button',{name:'打开完整工具',exact:true}).click();
+ assert.equal((await calls('quick_tools_open_main')).at(-1).args.route,'/tools?tool=diagnose');
+ await input.press('Escape');assert.equal((await calls('plugin:window|hide')).length,1);
+ assert.equal(await input.inputValue(),'manual fallback','hide keeps temporary draft');
+ const writes=await calls('write_json');
+ assert.equal(writes.some(call=>JSON.stringify(call.args.value).includes('manual fallback')),false,'input and results are absent from persistence');
+ await page.setViewportSize({width:560,height:420});
+ for(const theme of ['light','dark']) {
+  await page.goto(`${base}?theme=${theme}`);await input.waitFor();
+  await page.waitForFunction(()=>document.querySelector('#quick-tools-input')?.value==='event newer');
+  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth||document.querySelector('.quick-tools-body').scrollWidth>document.querySelector('.quick-tools-body').clientWidth),false,`${theme} narrow window has no horizontal overflow`);
+  const field=await input.boundingBox();assert.ok(field.width>450 && field.height>=64);
+  for(const label of ['智能翻译','智能格式修复','代码命名']) {
+   await page.getByRole('button',{name:label,exact:true}).click();
+   const action=await run.boundingBox();
+   assert.ok(action && action.x>=0 && action.y>=0 && action.x+action.width<=560 && action.y+action.height<=420,`${theme} ${label} run action is fully visible without scrolling`);
+  }
+ }
+ await page.emulateMedia({reducedMotion:'reduce'});
+ assert.equal(await run.evaluate(element=>getComputedStyle(element).transform),'none');
+ await run.click();
+ assert.equal(await page.locator('.quick-tools-run svg').evaluate(element=>getComputedStyle(element).animationName),'none');
+ await page.goto(`${base}?unconfigured`);await page.getByRole('button',{name:'请先连接 AI 提供商',exact:true}).waitFor();
+ assert.equal(await run.isDisabled(),true);assert.equal((await calls('ai_chat')).length,0);
+ await page.getByRole('button',{name:'请先连接 AI 提供商',exact:true}).click();
+ assert.equal((await calls('quick_tools_open_main')).at(-1).args.route,'/settings?tab=ai');
+ await page.goto(`${base}?main#/tools?tool=regex`);
+ await page.locator('.tools-nav button[aria-current=page]').filter({hasText:'正则助手'}).waitFor();
+ assert.equal((await calls('ai_chat')).length,0,'opening the full tool route does not run AI');
+ await page.locator('.tools-quick-panel').click();
+ assert.equal((await calls('quick_tools_open_window')).length,1,'full tools entry invokes the existing native panel command');
+ assert.deepEqual(errors,[]);
+ console.log('PASS quick tools: explicit AI, selection snapshot race, default provider/preferences, copy, stale response, failed capture/manual fallback, errors/tool switch, hide/pin/main navigation, no content persistence, narrow light/dark and reduced motion.');
+} finally {await browser.close();}

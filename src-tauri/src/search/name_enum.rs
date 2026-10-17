@@ -12,6 +12,12 @@ struct PageOrder {
     previous: Option<Name>,
     seen: std::collections::HashSet<String>,
 }
+fn constrain_page(names: &mut Vec<Name>, offset: u64, limit: u64) -> bool {
+    let remaining=limit.saturating_sub(offset) as usize;
+    let truncated=names.len()>remaining;
+    names.truncate(remaining);
+    truncated
+}
 impl PageOrder {
     fn check(&mut self, names: &[Name]) -> Result<(), String> {
         for name in names {
@@ -31,18 +37,16 @@ impl PageOrder {
     }
 }
 
-pub fn enumerate(
-    instance: &str,
-    cancel: &AtomicBool,
-    page: impl FnMut(Vec<Name>, u64) -> Result<(), String>,
-) -> Result<u64, String> {
+pub fn enumerate_scoped(instance:&str,cancel:&AtomicBool,roots:Option<&[String]>,hide_noise:bool,limit:u64,page:impl FnMut(Vec<Name>,u64)->Result<(),String>)->Result<u64,String>{
+    if roots.is_some_and(|r|r.is_empty()) { return Ok(0); }
+    let expression=super::filters::everything("", roots, hide_noise)?;
     #[cfg(windows)]
     {
-        native::enumerate(instance, cancel, page)
+        native::enumerate(instance, cancel, &expression, limit, page)
     }
     #[cfg(not(windows))]
     {
-        let _ = (instance, cancel, page);
+        let _ = (instance, cancel, expression, limit, page);
         Err("Everything 文件名索引仅支持 Windows".into())
     }
 }
@@ -66,11 +70,12 @@ mod native {
     }
     static CLIENT: Mutex<Option<Client>> = Mutex::new(None);
     const PAGE: u32 = 1000;
-    const MAX_NAMES: u64 = 250_000;
 
     pub(super) fn enumerate(
         instance: &str,
         cancel: &AtomicBool,
+        expression: &str,
+        limit: u64,
         mut page: impl FnMut(Vec<Name>, u64) -> Result<(), String>,
     ) -> Result<u64, String> {
         if instance.len() > 256 || instance.chars().any(char::is_control) {
@@ -113,7 +118,7 @@ mod native {
                 }
                 current
                     .client
-                    .query("")
+                    .query(expression)
                     .sort(Sort::PathAscending)
                     .request_flags(RequestFlags::FullPathAndFileName | RequestFlags::Attributes)
                     // Re-read the preceding boundary in the same response.
@@ -176,8 +181,12 @@ mod native {
             }
             let count = names.len() as u32;
             order.check(&names)?;
+            let truncated = constrain_page(&mut names, offset as u64, limit);
             page(names, total)?;
             offset += count;
+            if truncated {
+                return Err(format!("文件名拼音索引已达 {limit} 条上限；原生 Everything 搜索仍可用"));
+            }
             if offset as u64 >= total {
                 return if total_changed {
                     Err("Everything 索引在枚举期间发生变化；已保留本次结果，稍后再次对账".into())
@@ -188,9 +197,9 @@ mod native {
             if count == 0 {
                 return Err("Everything 枚举提前结束；保留快照".into());
             }
-            if offset as u64 >= MAX_NAMES {
+            if offset as u64 >= limit {
                 return Err(format!(
-                    "文件名拼音索引已达 {MAX_NAMES} 条上限；原生 Everything 搜索仍可用"
+                    "文件名拼音索引已达 {limit} 条上限；原生 Everything 搜索仍可用"
                 ));
             }
         }
@@ -205,6 +214,15 @@ mod tests {
             path: path.into(),
             directory: false,
         }
+    }
+    #[test]
+    fn partial_final_page_cannot_report_complete_or_exceed_limit() {
+        let mut names=(0..500).map(|i|name(&format!("C:/data/{i}"))).collect::<Vec<_>>();
+        assert!(constrain_page(&mut names,10_000,10_001));
+        assert_eq!(names.len(),1);
+        assert!(!constrain_page(&mut names,10_000,10_001));
+        assert!(constrain_page(&mut names,10_001,10_001));
+        assert!(names.is_empty());
     }
     #[test]
     fn duplicate_paths_and_changed_page_boundaries_are_rejected() {

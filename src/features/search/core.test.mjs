@@ -47,3 +47,30 @@ test('Windows extended local and UNC paths share an identity with ordinary provi
 test('keyboard selection wraps in both directions and empty lists have no selection', () => {
   assert.equal(moveSelection(0,3,-1),2); assert.equal(moveSelection(2,3,1),0); assert.equal(moveSelection(0,0,1),-1);
 });
+
+test('filename indexing settings preserve empty scope, isolate content roots and clamp limits', () => {
+  const defaults=normalizeSearchSettings(null);
+  assert.equal(defaults.hideNoisyResults,true);assert.equal(defaults.nameRoots,null);assert.equal(defaults.nameIndexLimit,250000);
+  const value=normalizeSearchSettings({state:{nameRoots:[],documentRoots:['E:/正文'],hideNoisyResults:false,nameIndexLimit:3}});
+  assert.deepEqual(value.nameRoots,[]);assert.deepEqual(value.documentRoots,['E:/正文']);assert.equal(value.hideNoisyResults,false);assert.equal(value.nameIndexLimit,10000);
+  assert.equal(normalizeSearchSettings({state:{nameIndexLimit:9000000}}).nameIndexLimit,5000000);
+  assert.equal(normalizeSearchSettings({state:{nameIndexLimit:'bad'}}).nameIndexLimit,250000);
+  assert.deepEqual(normalizeSearchSettings({state:{nameRoots:[' E:/应用 ',null,'E:/应用']}}).nameRoots,['E:/应用']);
+});
+
+test('home groups preserve pin order, hide duplicate recent hits and filter category', () => {
+  assert.equal(typeof core.searchHomeGroups,'function');
+  const app={id:'app:one',kind:'app',title:'应用',subtitle:'',snippet:'',score:1};
+  const note={...app,id:'note:one',kind:'knowledge',title:'笔记'};
+  const home={pinned:[app],recent:[app,note]};
+  assert.deepEqual(core.searchHomeGroups(home,'all'),{pinned:[app],recent:[note]});
+  assert.deepEqual(core.searchHomeGroups(home,'app'),{pinned:[app],recent:[]});
+  assert.notEqual(core.searchHitIdentity(app),core.searchHitIdentity({...app,id:'app:two'}));
+});
+
+test('mixed provider merges preserve app priority ahead of executable files and ordinary hits', () => {
+  const app={id:'app:wechat',kind:'app',title:'微信',subtitle:'',snippet:'',score:10};
+  const executable={...app,id:'exe',kind:'file',title:'wechat.exe',path:'C:/Apps/wechat.exe',score:1000};
+  const document={...app,id:'note',kind:'knowledge',title:'微信使用说明',score:2000};
+  assert.deepEqual(core.mergeSearchHits([document,app],[executable]).map(hit=>hit.id),['app:wechat','exe','note']);
+});

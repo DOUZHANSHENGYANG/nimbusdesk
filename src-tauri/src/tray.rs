@@ -2,7 +2,7 @@
 //! 菜单文案跟随 SQLite settings 的 lang（缺省 zh）。
 
 use crate::commands::data::read_current;
-use tauri::Manager;
+use tauri::{Emitter, Manager};
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 
@@ -33,7 +33,11 @@ pub fn create(app: &tauri::App) -> tauri::Result<()> {
     let quit = MenuItem::with_id(app, "quit", label_quit, true, None::<&str>)?;
     let capture = MenuItem::with_id(app, "capture", label_capture, true, None::<&str>)?;
     let search = MenuItem::with_id(app,"search",if lang=="en"{"Search"}else{"搜索"},true,None::<&str>)?;
-    let menu = Menu::with_items(app, &[&toggle, &search, &capture, &quit])?;
+    let tools = MenuItem::with_id(app,"quick-tools",if lang=="en"{"Quick tools"}else{"快捷工具"},true,None::<&str>)?;
+    let desktop_show = MenuItem::with_id(app, "desktop-show", if lang == "en" { "Show desktop windows" } else { "显示桌面窗口" }, true, None::<&str>)?;
+    let desktop_hide = MenuItem::with_id(app, "desktop-hide", if lang == "en" { "Hide desktop windows" } else { "隐藏桌面窗口" }, true, None::<&str>)?;
+    let desktop_fold = MenuItem::with_id(app, "desktop-fold", if lang == "en" { "Fold desktop windows" } else { "收起桌面窗口" }, true, None::<&str>)?;
+    let menu = Menu::with_items(app, &[&toggle, &search, &capture, &tools, &desktop_show, &desktop_hide, &desktop_fold, &quit])?;
 
     let mut builder = TrayIconBuilder::with_id("main-tray")
         .menu(&menu)
@@ -50,17 +54,24 @@ pub fn create(app: &tauri::App) -> tauri::Result<()> {
             "search" => {
                 let app=app.clone();tauri::async_runtime::spawn(async move{let _=crate::commands::search::search_open_window(app).await;});
             }
+            "quick-tools" => { let app=app.clone();tauri::async_runtime::spawn(async move { let _=crate::commands::quick_tools::quick_tools_open_window(app).await; }); }
+            "desktop-show" => { let _ = app.emit("desktop://recall-all", ()); }
+            "desktop-hide" => { let _ = app.emit("desktop://hide-all", ()); }
+            "desktop-fold" => { let _ = app.emit("desktop://fold-all", ()); }
             "quit" => app.exit(0),
             _ => {}
         })
         .on_tray_icon_event(|tray, event| {
-            if let TrayIconEvent::Click {
-                button: MouseButton::Left,
-                button_state: MouseButtonState::Up,
-                ..
-            } = event
-            {
-                toggle_main(tray.app_handle());
+            match event {
+                TrayIconEvent::Click {
+                    button: MouseButton::Left,
+                    button_state: MouseButtonState::Up,
+                    ..
+                } => toggle_main(tray.app_handle()),
+                TrayIconEvent::DoubleClick { button: MouseButton::Left, .. } => {
+                    let _ = tray.app_handle().emit("desktop://recall-all", ());
+                }
+                _ => {}
             }
         });
 

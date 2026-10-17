@@ -11,6 +11,8 @@ import { searchCopy, searchExtensionCopy } from "./copy";
 import { detectEverything, openSearchWindow, pauseSearchIndex, refreshSearch, searchDocumentDefaults, startEverything } from "./api";
 import { hydrateSearchSettings, saveSearchSettings, updateSearchStatus, useSearchStore } from "./store";
 import type { EverythingStatus, SearchSettingsValue } from "./types";
+import { SearchAppsSettings } from "./apps-settings";
+import { QuickToolsSettings } from "./quick-tools-settings";
 import "./search.css";
 
 export function SearchSettings() {
@@ -77,7 +79,7 @@ export function SearchSettings() {
     catch (error) { setLocalError(String(error)); }
     finally { setAction(null); if (ticket === probeRevision.current) setDetecting(false); }
   }
-  async function choose(kind: "program" | "roots" | "excludes") {
+  async function choose(kind: "program" | "roots" | "excludes" | "names") {
     setAction("picker"); setLocalError("");
     try {
       const selected = await open(kind === "program" ? { directory: false, multiple: false, filters: [{ name: "Everything", extensions: ["exe"] }] } : { directory: true, multiple: true });
@@ -85,9 +87,9 @@ export function SearchSettings() {
       if (kind === "program") { probeRevision.current++; patch({ everythingPath: Array.isArray(selected) ? selected[0] : selected }); setEverything(null); }
       else {
         const entries = Array.isArray(selected) ? selected : [selected];
-        const current = kind === "roots" ? draft.documentRoots ?? defaults : draft.documentExcludes;
+        const current = kind === "roots" ? draft.documentRoots ?? defaults : kind === "names" ? draft.nameRoots ?? [] : draft.documentExcludes;
         const paths = [...new Map([...current, ...entries].map(path => [path.replace(/\\/g, "/").toLocaleLowerCase(), path])).values()];
-        patch(kind === "roots" ? { documentRoots: paths } : { documentExcludes: paths });
+        patch(kind === "roots" ? { documentRoots: paths } : kind === "names" ? { nameRoots: paths } : { documentExcludes: paths });
       }
     } catch (error) { setLocalError(String(error)); }
     finally { setAction(null); }
@@ -107,6 +109,7 @@ export function SearchSettings() {
     <header className="search-settings-header"><div><h2><Search className="size-4" />{c.settingsTitle}</h2><p>{c.settingsHint}</p></div><Button variant="outline" onClick={() => void openSearchWindow().catch(error => setLocalError(String(error)))}>{c.launch}</Button></header>
     {!hydrated && error && <div role="alert" className="search-settings-error"><p>{c.loadError}</p><Button variant="outline" size="sm" onClick={() => void hydrateSearchSettings().catch(() => undefined)}>{c.retry}</Button></div>}
     <div className="search-settings-section"><ShortcutRecorder value={draft.shortcut} onChange={shortcut => patch({ shortcut })} en={en} disabled={disabled} onRecordingChange={setRecording} placeholder="Ctrl+Alt+K" /><p className="search-settings-hint">{c.shortcutHint}</p></div>
+    <SearchAppsSettings en={en} />
     <section className="search-settings-section" aria-label={e.program}>
       <div className="search-settings-section-heading"><h3>{e.program}</h3><span className="search-service-status" role="status">{!detecting && everything?.state === "ready" ? <CheckCircle2 /> : <Circle />}{detecting ? action === "start" ? e.launching : e.probing : everything ? e.states[everything.state] : e.unknown}</span></div>
       <div className="search-setting-field"><label htmlFor="search-file-provider">{c.provider}</label><select id="search-file-provider" value={draft.fileBackend} disabled={disabled} onChange={event => patch({ fileBackend: event.target.value as SearchSettingsValue["fileBackend"] })}><option value="auto">{c.auto}</option><option value="everything">{c.everything}</option><option value="windows">{c.windows}</option></select></div>
@@ -126,7 +129,15 @@ export function SearchSettings() {
       <details className="search-settings-advanced"><summary>{e.exclusions}{draft.documentExcludes.length > 0 && <span className="tabular-nums"> · {draft.documentExcludes.length}</span>}</summary><div className="search-scope-heading"><span>{draft.documentExcludes.length ? e.exclusions : e.noExclusions}</span><Button size="sm" variant="outline" disabled={busy} onClick={() => void choose("excludes")}><FolderPlus />{e.addExclusion}</Button></div>{pathList(draft.documentExcludes, true)}</details>
       <p className="search-settings-hint">{e.sourcesHint}</p>
     </section>
-    <section className="search-settings-section"><div className="search-setting-toggle"><div><label htmlFor="search-pinyin">{e.pinyin}</label><p id="search-pinyin-hint" className="search-settings-hint">{e.pinyinHint}</p></div><Switch id="search-pinyin" checked={draft.pinyinEnabled} disabled={disabled} aria-describedby="search-pinyin-hint" onCheckedChange={pinyinEnabled => patch({ pinyinEnabled })} /></div></section>
+    <section className="search-settings-section" aria-label={en ? "File names and pinyin" : "文件名与拼音"}>
+      <div className="search-settings-section-heading"><h3>{en ? "File names and pinyin" : "文件名与拼音"}</h3></div>
+      <div className="search-setting-toggle"><div><label htmlFor="search-pinyin">{e.pinyin}</label><p id="search-pinyin-hint" className="search-settings-hint">{e.pinyinHint}</p></div><Switch id="search-pinyin" checked={draft.pinyinEnabled} disabled={disabled} aria-describedby="search-pinyin-hint" onCheckedChange={pinyinEnabled => patch({ pinyinEnabled })} /></div>
+      <p className="search-settings-hint">{en ? "Choose the Everything file-name / pinyin index range separately from document content folders. Direct file-name search remains available beyond the index limit." : "单独设置 Everything 文件名／拼音索引范围，与文档正文目录分开。超过索引上限的文件仍可通过原名直接搜索。"}</p>
+      <div className="search-scope-heading"><span>{draft.nameRoots === null ? en ? "All Everything locations" : "Everything 全部位置" : draft.nameRoots.length ? e.customScope : en ? "File-name index disabled" : "不建立文件名索引"}</span><div><Button size="sm" variant="ghost" disabled={busy || draft.nameRoots === null} onClick={() => patch({ nameRoots: null })}>{en ? "All locations" : "全部位置"}</Button><Button size="sm" variant="ghost" disabled={busy || draft.nameRoots?.length === 0} onClick={() => patch({ nameRoots: [] })}>{en ? "Disable file-name index" : "不索引文件名"}</Button><Button size="sm" variant="outline" disabled={busy} onClick={() => void choose("names")}><FolderPlus />{en ? "Add name folders" : "添加文件名目录"}</Button></div></div>
+      {draft.nameRoots !== null && <ul className="search-folder-list">{draft.nameRoots.map(path => <li key={path}><span title={path}>{path}</span><Button variant="ghost" size="icon-xs" disabled={busy} aria-label={`${en ? "Remove name folder" : "移除文件名目录"} ${path}`} onClick={() => patch({ nameRoots: draft.nameRoots!.filter(item => item !== path) })}><X /></Button></li>)}</ul>}
+      <div className="search-setting-field"><label htmlFor="search-name-limit">{en ? "File-name index limit" : "文件名索引上限"}</label><Input id="search-name-limit" type="number" min={10000} max={5000000} step={10000} value={draft.nameIndexLimit} disabled={disabled} onChange={event => patch({ nameIndexLimit: Number(event.target.value) })} /><p className="search-settings-hint">{en ? "10,000–5,000,000 names. Raising the limit uses more disk and indexing time." : "10,000～5,000,000 条。提高上限会增加磁盘占用与索引耗时。"}</p></div>
+      <div className="search-setting-toggle"><div><label htmlFor="search-noise">{en ? "Hide common noise folders" : "隐藏常见噪音目录"}</label><p className="search-settings-hint">node_modules、.git、WinSxS、$Recycle.Bin、System Volume Information、__pycache__、.cache</p></div><Switch id="search-noise" checked={draft.hideNoisyResults} disabled={disabled} onCheckedChange={hideNoisyResults => patch({ hideNoisyResults })} /></div>
+    </section>
     <section className="search-settings-section search-index-progress" aria-label={e.progress}>
       <div className="search-settings-section-heading"><h3>{e.progress}</h3><div className="search-index-actions"><Button size="sm" variant="ghost" disabled={busy || !files} onClick={() => void pause()}>{files?.paused ? <Play /> : <Pause />}{files?.paused ? e.resume : e.pause}</Button><Button size="sm" variant="outline" disabled={busy || dirty || status?.indexing || files?.running} title={dirty ? e.unsaved : undefined} onClick={() => void rebuild()}><RefreshCw />{c.rebuild}</Button></div></div>
       {files ? <><p className="search-settings-hint">{en ? "Document text index" : "文档正文索引"}</p><div className="search-index-summary"><strong>{files.processed.toLocaleString()} <span>/ {files.total.toLocaleString()}</span></strong><span>{files.paused ? e.paused : files.running ? e.running : files.total > 0 && files.processed >= files.total ? e.complete : e.waiting}</span></div><progress max={Math.max(1, files.total)} value={files.processed} aria-label={e.processed} /><div className="search-index-counts"><span>{e.indexed} <b>{files.indexed.toLocaleString()}</b></span><span>{e.failed} <b>{files.failed.toLocaleString()}</b></span></div>{files.current && <p className="search-detected-path" title={files.current}>{files.current}</p>}{files.error && <p role="status" className="search-settings-error">{files.error}</p>}</> : <p className="search-settings-hint">{e.noIndex}</p>}
@@ -135,5 +146,6 @@ export function SearchSettings() {
       {status?.error && <p role="status" className="search-settings-hint">{status.error}</p>}
     </section>
     <footer className="search-settings-save"><div><p role="status">{message || (dirty ? e.unsaved : e.unchanged)}</p>{localError && <p role="alert" className="search-settings-error">{localError}</p>}</div><Button onClick={() => void save()} disabled={busy || !dirty || recording}>{saving ? c.saving : c.save}</Button></footer>
+    <QuickToolsSettings />
   </section>;
 }

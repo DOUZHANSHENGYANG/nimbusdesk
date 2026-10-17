@@ -6,9 +6,11 @@
     "main",
     "capture",
     "search",
+    "quick-tools",
     "fence-*",
     "popup-menu",
-    "todo-*"
+    "todo-*",
+    "edge-hub-*"
   ],
   "permissions": [
     "core:default",
@@ -16,7 +18,11 @@
     "opener:default",
     {
       "identifier": "opener:allow-open-url",
-      "allow": [{ "url": "obsidian://*" }]
+      "allow": [
+        {
+          "url": "obsidian://*"
+        }
+      ]
     },
     "core:window:allow-minimize",
     "core:window:allow-maximize",

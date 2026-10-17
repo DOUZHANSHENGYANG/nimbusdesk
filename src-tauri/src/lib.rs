@@ -9,8 +9,11 @@ mod commands;
 mod tray;
 mod organization_clock;
 mod search;
+mod quick_tools;
 
 /// Entry used by the executable before initializing any UI or background tasks.
+pub fn run_quick_tools_selection_worker() -> bool { quick_tools::worker::run_if_worker() }
+
 pub fn run_search_extract_worker() -> bool { search::extract_worker::run_if_worker() }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -24,7 +27,22 @@ pub fn run() {
         .manage(commands::capture::CaptureShortcut::default())
         .manage(commands::desktop_shortcut::FenceShortcut::default())
         .manage(commands::search::SearchShortcut::default())
+        .manage(commands::quick_tools::QuickToolsShortcut::default())
         .invoke_handler(tauri::generate_handler![
+            commands::desktop::desktop_open_hub,
+            commands::desktop::desktop_close_hub,
+            commands::desktop::desktop_open_main,
+            commands::desktop::desktop_wait_drag_end,
+            commands::quick_tools::quick_tools_open_window,
+            commands::quick_tools::quick_tools_selection,
+            commands::quick_tools::quick_tools_set_shortcut,
+            commands::quick_tools::quick_tools_shortcut_error,
+            commands::quick_tools::quick_tools_open_main,
+            commands::search::search_home,
+            commands::search::search_pin,
+            commands::search::search_clear_recent,
+            commands::search::search_apps_status,
+            commands::search::search_apps_refresh,
             commands::search::search_query,
             commands::search::search_everything_detect,
             commands::search::search_everything_start,
@@ -101,6 +119,7 @@ pub fn run() {
             tray::create(app)?;
             organization_clock::start(app.handle().clone())?;
             commands::search::start(app.handle().clone());
+            commands::quick_tools::start(app.handle().clone());
             // 兜底：若前端 6s 内未调用 window_ready（JS 崩溃/页面加载失败），
             // 强制显示主窗口，避免"窗口永远不出现"的无声失败。
             let handle = app.handle().clone();
@@ -124,7 +143,7 @@ pub fn run() {
                 if window.label() == "main" {
                     let _ = window.hide();
                     api.prevent_close();
-                } else if window.label() == "search" {
+                } else if window.label() == "search" || window.label() == "quick-tools" {
                     let _ = window.hide();
                     api.prevent_close();
                 } else if window.label() == "capture" {

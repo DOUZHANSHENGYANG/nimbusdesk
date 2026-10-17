@@ -51,6 +51,7 @@ export function usePopupMenu({
   onCategoryRename,
   onCategoryDelete,
   onCategoryAddChild,
+  onOpenChange,
 }: {
   actions: FileActions;
   onRenameInline?: (item: FileItem) => void;
@@ -58,6 +59,8 @@ export function usePopupMenu({
   onCategoryRename?: (categoryId: string) => void;
   onCategoryDelete?: (categoryId: string) => void;
   onCategoryAddChild?: (categoryId: string) => void;
+  /** Owner lifecycle, unlike open()'s promise which resolves before menu dismissal. */
+  onOpenChange?: (open: boolean) => void;
 }) {
   const { t, i18n } = useTranslation();
   const theme = useSettings((s) => s.theme);
@@ -70,13 +73,23 @@ export function usePopupMenu({
   /** 锚点：菜单展开起点（CSS 像素，相对当前窗口） */
   const anchorRef = useRef({ x: 0, y: 0, w: 0, h: 0 });
   /** 当前菜单归属窗口 label；close 时带上，避免误关别的窗口刚开的菜单 */
-  const ownerRef = useRef("main");
+  const ownerRef = useRef(ownerLabel());
   /** 当前菜单的尺寸监听取消函数（下次打开 / 动作完成时清理） */
   const unlistenRef = useRef<(() => void) | null>(null);
+  const requestRef = useRef(0);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lifecycleRef = useRef(onOpenChange);
+  lifecycleRef.current = onOpenChange;
 
   const stopListening = useCallback(() => {
+    // Also invalidates reveals already awaiting native position/scale queries,
+    // including failure/timeout paths that do not dispatch a menu action.
+    requestRef.current++;
     unlistenRef.current?.();
     unlistenRef.current = null;
+    if (timerRef.current) clearTimeout(timerRef.current);
+    timerRef.current = null;
+    lifecycleRef.current?.(false);
   }, []);
 
   const open = useCallback(
@@ -84,6 +97,9 @@ export function usePopupMenu({
       targetRef.current = target;
       anchorRef.current = { x: at.x, y: at.y, w: 0, h: 0 };
       stopListening(); // 丢弃上一个菜单残留的监听
+      const request = ++requestRef.current;
+      lifecycleRef.current?.(true);
+      try {
 
       const cat =
         target.kind === "category"
@@ -117,7 +133,8 @@ export function usePopupMenu({
       //    若先发菜单再订阅，预热窗口的尺寸回报会早于订阅而丢失。
       // 3) 尺寸回报可能多次（展开子菜单后变大），每次都重新定位并放大窗口。
       const ready = await ensurePopupReady();
-      if (!ready) return; // 浮窗起不来就别发菜单，否则无人接收
+      if (request !== requestRef.current) return;
+      if (!ready) { stopListening(); return; }
 
 
       const seq = beginMenu();
@@ -125,20 +142,32 @@ export function usePopupMenu({
       ownerRef.current = owner;
 
       let revealed = false;
-      unlistenRef.current = await subscribeMenuSize(seq, (s) => {
+      const unlisten = await subscribeMenuSize(seq, (s) => {
+        if (request !== requestRef.current) return;
         revealed = true;
-        void revealMenu(anchorRef.current, s);
+        void revealMenu(anchorRef.current, s, () => request === requestRef.current).catch(() => {
+          if (request !== requestRef.current) return;
+          stopListening();
+          void closeMenu(owner);
+        });
       });
+      if (request !== requestRef.current) { unlisten(); return; }
+      unlistenRef.current = unlisten;
 
       await emitMenuRequest(seq, owner, nodes, i18n.language, theme);
+      if (request !== requestRef.current) return;
 
       // 兜底：浮窗若因异常始终没回报尺寸，收起并清理，避免悬挂监听
-      window.setTimeout(() => {
-        if (!revealed && ownerRef.current === owner) {
+      timerRef.current = setTimeout(() => {
+        if (!revealed && request === requestRef.current) {
           void closeMenu(owner);
           stopListening();
         }
       }, 1500);
+      } catch (error) {
+        if (request === requestRef.current) { stopListening(); targetRef.current = null; void closeMenu(ownerRef.current); }
+        throw error;
+      }
     },
     [categories, filesRoot, i18n.language, stopListening, t, theme],
   );
@@ -146,6 +175,7 @@ export function usePopupMenu({
   // 浮窗回传动作 → 在这里执行（只有打开方持有 actions / store）
   useMenuActions((a: MenuAction) => {
     const target = targetRef.current;
+    requestRef.current++;
     stopListening();
     void closeMenu(ownerRef.current);
     targetRef.current = null;
@@ -218,12 +248,15 @@ export function usePopupMenu({
   // 「点到别处关闭」由浮窗自身的 blur 负责。
   useEffect(() => {
     const onResize = () => {
+      requestRef.current++;
       stopListening();
       void closeMenu(ownerRef.current);
     };
     window.addEventListener("resize", onResize);
     return () => {
       window.removeEventListener("resize", onResize);
+      requestRef.current++;
+      void closeMenu(ownerRef.current);
       stopListening();
     };
   }, [stopListening]);

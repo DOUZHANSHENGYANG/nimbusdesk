@@ -59,6 +59,7 @@ pub async fn search_set_shortcut(
 pub fn start(app: AppHandle) {
     runtime::start(app.clone());
     search::file_runtime::start(app.clone());
+    search::apps::start(app.clone());
     let startup_app = app.clone();
     tauri::async_runtime::spawn_blocking(move || {
         let prefs = runtime::preferences();
@@ -157,6 +158,14 @@ pub fn search_refresh() {
     search::file_runtime::request_refresh();
 }
 #[tauri::command]
+pub fn search_apps_status() -> search::apps::AppStatus {
+    search::apps::status()
+}
+#[tauri::command]
+pub fn search_apps_refresh() {
+    search::apps::refresh();
+}
+#[tauri::command]
 pub async fn search_document_defaults() -> Result<Vec<String>, String> {
     tauri::async_runtime::spawn_blocking(search::file_runtime::defaults)
         .await
@@ -247,7 +256,7 @@ pub async fn search_query(
         if query.len() > 4096 || query.chars().any(char::is_control) {
             return Err("搜索词过长或包含控制字符".into());
         }
-        if !["all", "file", "plan", "knowledge", "feed"].contains(&scope.as_str()) {
+        if !["all", "app", "file", "plan", "knowledge", "feed"].contains(&scope.as_str()) {
             return Err("无效搜索分类".into());
         }
         let mut results = vec![];
@@ -257,11 +266,17 @@ pub async fn search_query(
             .get("pinyinEnabled")
             .and_then(serde_json::Value::as_bool)
             .unwrap_or(true);
-        if scope != "file" {
+        if scope != "file" && scope != "app" {
             match super::data::with_data_dir(|root| {
                 ContentIndex::open(root)?.query_with_pinyin(&query, &scope, limit, pinyin)
             }) {
                 Ok(hits) => results = hits,
+                Err(error) => warnings.push(error),
+            }
+        }
+        if scope == "all" || scope == "app" {
+            match search::apps::query(&query, limit) {
+                Ok(hits) => results.extend(hits),
                 Err(error) => warnings.push(error),
             }
         }
@@ -297,7 +312,7 @@ pub async fn search_query(
                     format!("{reason}；文件搜索使用 Windows 索引，仅覆盖系统已收录的位置")
                 });
             }
-            match search::files::query(&query, limit, backend, instance) {
+            match search::files::query_filtered(&query, limit, backend, instance, settings.get("hideNoisyResults").and_then(serde_json::Value::as_bool).unwrap_or(true)) {
                 Ok(hits) => results.extend(hits),
                 Err(error) => warnings.push(error),
             }
@@ -321,7 +336,7 @@ pub async fn search_query(
             results,
             indexing: {
                 let files=search::file_runtime::status();
-                runtime::is_indexing() || files.running || files.name_running
+                runtime::is_indexing() || files.running || files.name_running || search::apps::status().indexing
             },
             warnings,
             elapsed_ms: started.elapsed().as_millis() as u64,
@@ -330,7 +345,7 @@ pub async fn search_query(
     .await
     .map_err(|e| e.to_string())?
 }
-fn allowed_route(route: &str) -> bool {
+pub(crate) fn allowed_route(route: &str) -> bool {
     if route.chars().any(char::is_control) || route.contains('\\') {
         return false;
     }
@@ -346,7 +361,13 @@ pub async fn search_open_result(
     if action != "open" && action != "reveal" {
         return Err("无效搜索操作".into());
     }
-    if action == "reveal" {
+    let opened = (action == "open").then(|| result.clone());
+    if result.kind == "app" {
+        let id = result.id;
+        tauri::async_runtime::spawn_blocking(move || {
+            if action == "reveal" { search::apps::reveal(&id) } else { search::apps::launch(&id) }
+        }).await.map_err(|e| e.to_string())??;
+    } else if action == "reveal" {
         let path = result.path.ok_or("该条目没有本地路径")?;
         if !std::path::Path::new(&path).is_absolute() {
             return Err("文件路径无效".into());
@@ -369,9 +390,16 @@ pub async fn search_open_result(
         main.emit("search://navigate", route)
             .map_err(|e| e.to_string())?;
     }
-    if let Some(w) = app.get_webview_window("search") {
-        let _ = w.hide();
+    if let Some(result) = opened {
+        // Successful activation stays successful even when local history storage fails.
+        let saved = tauri::async_runtime::spawn_blocking(move || search::personalization::opened(result)).await;
+        match saved {
+            Ok(Ok(home)) => { runtime::set_history_error(None); let _ = app.emit("search://home", home); }
+            _ => { runtime::set_history_error(Some("最近使用保存失败，可在存储恢复后重试".into())); }
+        }
+        let _ = app.emit("search://status", runtime::status());
     }
+    if let Some(w) = app.get_webview_window("search") { let _ = w.hide(); }
     Ok(())
 }
 #[derive(Serialize)]
@@ -473,4 +501,19 @@ mod tests {
             assert!(!super::allowed_route(route));
         }
     }
+}
+
+#[tauri::command]
+pub async fn search_home() -> Result<search::personalization::Home,String> {
+    tauri::async_runtime::spawn_blocking(search::personalization::home).await.map_err(|e|e.to_string())?
+}
+#[tauri::command]
+pub async fn search_pin(app:AppHandle,result:SearchHit,pinned:bool)->Result<search::personalization::Home,String>{
+    let home=tauri::async_runtime::spawn_blocking(move||search::personalization::pin(result,pinned)).await.map_err(|e|e.to_string())??;
+    let _=app.emit("search://home",&home);Ok(home)
+}
+#[tauri::command]
+pub async fn search_clear_recent(app:AppHandle)->Result<search::personalization::Home,String>{
+    let home=tauri::async_runtime::spawn_blocking(search::personalization::clear_recent).await.map_err(|e|e.to_string())??;
+    let _=app.emit("search://home",&home);Ok(home)
 }

@@ -2,7 +2,8 @@ import { useEffect, useRef, type ReactNode } from "react";
 import { I18nextProvider } from "react-i18next";
 import { i18n, changeLang } from "@/lib/i18n";
 import { applyTheme, isThemeSwitching } from "@/lib/theme";
-import { getDataDir, windowReady } from "@/lib/tauri";
+import { getDataDir, windowReady, inTauri } from "@/lib/tauri";
+import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { onStorageSynced } from "@/lib/storage";
 import { isPopupWindow } from "@/features/files/popup";
 import { useSettings, useSettingsHydrated } from "@/stores/settings";
@@ -15,12 +16,13 @@ import { Toaster } from "@/components/ui/sonner";
 import { useReminderLoop } from "@/features/plans/reminder";
 import { FeedsRuntime } from "@/features/feeds/runtime";
 import { DesktopRuntime } from "@/features/files/desktop-runtime";
+import { EdgeRuntime } from "@/features/desktop/edge-runtime";
 import { KnowledgeRuntime } from "@/features/knowledge/runtime";
 import { SearchRuntime } from "@/features/search";
 
 /**
  * 提醒调度包装：`useReminderLoop` 是 hook，不能直接当组件渲染。
- * 只在主窗口跑 —— Providers 仅被 App 使用，栅栏/菜单浮窗走各自入口。
+ * 由 Providers 的主窗口门控挂载；栅格只复用外观和存储同步。
  */
 function ReminderLoop() {
   useReminderLoop();
@@ -29,18 +31,22 @@ function ReminderLoop() {
 
 /** 全局 Provider 组合 + 设置同步（主题/语言/数据目录/防白闪显示） */
 export function Providers({ children }: { children: ReactNode }) {
+  const main = !inTauri || getCurrentWebviewWindow().label === "main";
   return (
     <I18nextProvider i18n={i18n}>
       <ModalProvider>
         <TooltipProvider delayDuration={300}>
           <StorageSync />
           <SettingsSync />
-          <PaperRestore />
-          <ReminderLoop />
-          <KnowledgeRuntime />
-          <SearchRuntime />
-          <FeedsRuntime />
-          <DesktopRuntime />
+          {main && <>
+            <PaperRestore />
+            <ReminderLoop />
+            <KnowledgeRuntime />
+            <SearchRuntime />
+            <FeedsRuntime />
+            <DesktopRuntime />
+            <EdgeRuntime />
+          </>}
           {children}
           <Toaster position="bottom-right" />
         </TooltipProvider>
@@ -165,7 +171,7 @@ function SettingsSync() {
     // 直接通知显示（勿用 rAF：窗口 visible:false 时 WebView2 不派发
     // requestAnimationFrame，等首帧再显示会死锁）。主题在上行已同步应用，无白闪。
     // 菜单浮窗例外：它由打开方在菜单渲染完成后定位并 show()，不能自己冒出来。
-    if (!isPopupWindow()) {
+    if (!isPopupWindow() && (!inTauri || getCurrentWebviewWindow().label === "main")) {
       void windowReady().catch((e) => console.error("[bootstrap] ready:", e));
     }
   }, []);

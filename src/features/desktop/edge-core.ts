@@ -1,0 +1,87 @@
+export interface NormalRect { x: number; y: number; w: number; h: number }
+export interface WorkArea extends NormalRect { scale: number }
+export type Edge = "left" | "right";
+export const EDGE_TAB_W = 24;
+export const EDGE_TAB_H = 64;
+export function allocateEdgeY(id: string, slots: { id: string; y?: number }[], preferred?: number): number {
+  const used = slots.filter(slot => slot.id !== id && slot.y !== undefined).map(slot => slot.y!);
+  if (preferred !== undefined && !used.some(y => Math.abs(y - preferred) < EDGE_TAB_H + 4)) return preferred;
+  let result = 48;
+  for (const slot of [...slots.filter(slot => slot.y === undefined), { id }].filter((slot, index, all) => all.findIndex(item => item.id === slot.id) === index).sort((a, b) => a.id.localeCompare(b.id))) {
+    let y = 48;
+    while (used.some(value => Math.abs(value - y) < EDGE_TAB_H + 4)) y += EDGE_TAB_H + 4;
+    if (slot.id === id) result = y;
+    used.push(y);
+  }
+  return result;
+}
+
+const queues = new Map<string, Promise<void>>();
+/** Shared across React lifetimes: an old resize must finish before a new form writes. */
+export function queueWindowOperation(label: string, operation: () => Promise<void>): Promise<void> {
+  const next = (queues.get(label) ?? Promise.resolve()).catch(() => undefined).then(operation);
+  queues.set(label, next);
+  void next.finally(() => { if (queues.get(label) === next) queues.delete(label); }).catch(() => undefined);
+  return next;
+}
+
+const clamp = (n: number, min: number, max: number) => Math.min(Math.max(n, min), Math.max(min, max));
+export function edgeBounds(area: WorkArea, edge: Edge, y: number, opened: boolean, normal: NormalRect, tabHeight = EDGE_TAB_H): NormalRect {
+  const s = area.scale;
+  const w = Math.min(area.w, Math.round((opened ? clamp(normal.w, 280, 480) + EDGE_TAB_W : EDGE_TAB_W) * s));
+  const h = Math.min(area.h, Math.round((opened ? clamp(normal.h, 240, 640) : tabHeight) * s));
+  return { x: Math.round(edge === "left" ? area.x : area.x + area.w - w), y: Math.round(clamp(area.y + y * s, area.y, area.y + area.h - h)), w, h };
+}
+
+export interface EdgePort {
+  label: string;
+  monitor(): Promise<WorkArea | null>;
+  ignore(value: boolean): Promise<void>;
+  size(rect: NormalRect): Promise<void>;
+  position(rect: NormalRect): Promise<void>;
+  layer(pinned: boolean, valid: () => boolean): Promise<void>;
+  show(mode?: "dock" | "normal"): Promise<void>;
+}
+
+/** Every awaited native write checks the latest intent before continuing. No animation IPC. */
+export class EdgeController {
+  private generation = 0;
+  private disposed = false;
+  private area: WorkArea | null = null;
+  constructor(private port: EdgePort, private normal: () => NormalRect) {}
+  dispose() { this.disposed = true; this.generation++; }
+
+  place(opened: boolean, edge: Edge, y: number, tabHeight = EDGE_TAB_H): Promise<void> {
+    return this.perform(async valid => {
+      this.area = await this.port.monitor() ?? this.area;
+      if (!valid()) return;
+      if (!this.area) throw new Error("Cannot locate the screen work area");
+      const rect = edgeBounds(this.area, edge, y, opened, this.normal(), tabHeight);
+      await this.port.ignore(false); if (!valid()) return;
+      await this.port.layer(true, valid); if (!valid()) return;
+      await this.port.size(rect); if (!valid()) return;
+      await this.port.position(rect); if (!valid()) return;
+      await this.port.show("dock");
+    });
+  }
+
+  restore(pinned: boolean): Promise<void> {
+    return this.perform(async valid => {
+      this.area = await this.port.monitor() ?? this.area; if (!valid()) return;
+      const a = this.area, n = this.normal(), s = a?.scale ?? 1;
+      const rect = { x: Math.round(n.x * s), y: Math.round(n.y * s), w: Math.round(n.w * s), h: Math.round(n.h * s) };
+      if (a) { rect.w = Math.min(rect.w, a.w); rect.h = Math.min(rect.h, a.h); rect.x = clamp(rect.x, a.x, a.x + a.w - rect.w); rect.y = clamp(rect.y, a.y, a.y + a.h - rect.h); }
+      await this.port.ignore(false); if (!valid()) return;
+      await this.port.size(rect); if (!valid()) return;
+      await this.port.position(rect); if (!valid()) return;
+      await this.port.layer(pinned, valid); if (!valid()) return;
+      await this.port.show("normal");
+    });
+  }
+
+  private perform(operation: (valid: () => boolean) => Promise<void>): Promise<void> {
+    const generation = ++this.generation;
+    const valid = () => !this.disposed && this.generation === generation;
+    return queueWindowOperation(this.port.label, async () => { if (valid()) await operation(valid); });
+  }
+}

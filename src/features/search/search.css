@@ -20,6 +20,8 @@ html.search-root, .search-root body, .search-root #root { width: 100%; height: 1
 .quick-search-empty p { margin-top: 8px; max-width: 290px; line-height: 1.7; font-size: 12px; }
 .quick-search-result { display: flex; align-items: center; min-width: 0; gap: 12px; border-radius: 7px; padding: 10px 12px; min-height: 64px; }
 .quick-search-result[aria-selected=true] { background: var(--secondary); }
+.quick-search-group { display:flex; align-items:center; justify-content:space-between; min-height:34px; padding:4px 12px; color:var(--muted-foreground); font-size:11px; }
+.quick-search-group > button { height:26px; font-size:11px; }
 .quick-search-kind-icon { width: 20px; height: 20px; flex-shrink: 0; color: var(--muted-foreground); }
 .quick-search-result-main { text-align: left; min-width: 0; flex: 1; outline-offset: 2px; }
 .quick-search-result-main > span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

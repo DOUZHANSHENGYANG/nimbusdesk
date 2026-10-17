@@ -1,6 +1,9 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
+import { QuickToolsWindow } from "@/features/quick-tools/window";
+import { EdgeHubWindow } from "@/features/desktop/edge-hub";
+import { Providers } from "@/app/providers";
 import App from "@/app/App";
 import { FenceWindow } from "@/features/files/fence";
 import { MenuPopupWindow } from "@/features/files/menu-popup";
@@ -27,7 +30,12 @@ const windowLabel = (() => {
 })();
 
 let root: React.ReactNode;
-if (windowLabel === "search") {
+if (windowLabel.startsWith("edge-hub-")) {
+  document.documentElement.classList.add("fence-root");
+  root = <Providers><EdgeHubWindow /></Providers>;
+} else if (windowLabel === "quick-tools") {
+  root = <QuickToolsWindow />;
+} else if (windowLabel === "search") {
   root = <SearchWindow />;
 } else if (windowLabel === "capture") {
   root = <CaptureWindow />;

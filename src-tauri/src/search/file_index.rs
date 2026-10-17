@@ -18,6 +18,8 @@ pub struct QueryScope {
     pub content: bool,
     pub pinyin: bool,
     pub native_source: Option<String>,
+    pub native_roots: Option<Vec<String>>,
+    pub hide_noise: bool,
 }
 pub fn normalize(path: &str) -> String {
     let path = path
@@ -33,8 +35,11 @@ impl QueryScope {
     pub fn selected(&self, path: &str) -> bool {
         self.roots.iter().any(|root| inside(path, root)) && !self.excluded(path)
     }
+    pub fn native_selected(&self,path:&str)->bool {
+        self.native_roots.as_ref().is_none_or(|roots|roots.iter().any(|r|inside(path,r))) && !self.excluded(path)
+    }
     pub fn excluded(&self, path: &str) -> bool {
-        self.excludes.iter().any(|root| inside(path, root))
+        (self.hide_noise && super::filters::noisy(path)) || self.excludes.iter().any(|root| inside(path, root))
     }
 }
 fn confirmed_missing(path: &Path) -> bool {
@@ -337,8 +342,9 @@ impl FileIndex {
             .collect::<Vec<_>>()
             .join(" OR ");
         let mut statement=self.0.prepare("SELECT f.path,f.display,f.title,f.directory,f.native,f.scoped,f.body,f.pinyin,f.native_source FROM files f JOIN file_terms t ON t.rowid=f.rowid WHERE file_terms MATCH ?1
-          AND ((f.native=1 AND f.native_source=?4) OR (f.scoped=1 AND EXISTS(SELECT 1 FROM json_each(?2) r WHERE f.path=r.value OR substr(f.path,1,length(r.value)+1)=r.value||'/')))
+          AND ((f.native=1 AND f.native_source=?4 AND (?5 IS NULL OR EXISTS(SELECT 1 FROM json_each(?5) r WHERE f.path=r.value OR substr(f.path,1,length(r.value)+1)=r.value||'/'))) OR (f.scoped=1 AND EXISTS(SELECT 1 FROM json_each(?2) r WHERE f.path=r.value OR substr(f.path,1,length(r.value)+1)=r.value||'/')))
           AND NOT EXISTS(SELECT 1 FROM json_each(?3) x WHERE f.path=x.value OR substr(f.path,1,length(x.value)+1)=x.value||'/')
+          AND (?6=0 OR NOT EXISTS(SELECT 1 FROM json_each(?7) n WHERE instr('/'||f.path||'/', '/'||n.value||'/')>0))
           ORDER BY CASE WHEN EXISTS(SELECT 1 FROM json_each(?2) r WHERE f.path=r.value OR substr(f.path,1,length(r.value)+1)=r.value||'/') THEN 1 ELSE 0 END DESC LIMIT 20000").map_err(|e|e.to_string())?;
         let rows = statement
             .query_map(
@@ -346,7 +352,10 @@ impl FileIndex {
                     expression,
                     serde_json::to_string(&scope.roots).map_err(|e| e.to_string())?,
                     serde_json::to_string(&scope.excludes).map_err(|e| e.to_string())?,
-                    scope.native_source
+                    scope.native_source,
+                    scope.native_roots.as_ref().map(serde_json::to_string).transpose().map_err(|e|e.to_string())?,
+                    scope.hide_noise,
+                    serde_json::to_string(super::filters::NOISY_SEGMENTS).map_err(|e|e.to_string())?
                 ],
                 |r| {
                     Ok((
@@ -379,7 +388,7 @@ impl FileIndex {
             inspected += 1;
             body_bytes += body.len();
             let selected = scope.selected(&path);
-            let native = native && scope.native_source.as_deref() == Some(&native_source);
+            let native = native && scope.native_source.as_deref() == Some(&native_source) && scope.native_selected(&path);
             if scope.excluded(&path)
                 || (!native && !(scoped && selected))
                 || kind.is_some_and(|v| v != directory)
@@ -479,7 +488,24 @@ mod tests {
             content: true,
             pinyin: true,
             native_source: Some(String::new()),
+            ..Default::default()
         }
+    }
+    #[test]
+    fn changed_native_ranges_hide_old_snapshot_but_keep_independent_document_scope() {
+        let mut index=FileIndex::memory().unwrap();
+        index.names_for_source(&[("C:/old/report.txt".into(),false),("C:/new/report.txt".into(),false),("C:/new/node_modules/report.txt".into(),false)],true,1,"").unwrap();
+        index.name("C:/docs/report.txt",false,false,1).unwrap();
+        let mut selected=scope(&["C:/docs"]);
+        selected.native_roots=Some(vec![normalize("C:/new")]); selected.hide_noise=true;
+        let hits=index.query("report",20,&selected).unwrap();
+        assert_eq!(hits.len(),2);
+        assert!(hits.iter().all(|h|!h.path.as_deref().unwrap().contains("old") && !h.path.as_deref().unwrap().contains("node_modules")));
+        selected.native_roots=Some(vec![]);
+        let hits=index.query("report",20,&selected).unwrap();
+        assert_eq!(hits.len(),1); assert_eq!(hits[0].path.as_deref(),Some("C:/docs/report.txt"));
+        selected.native_roots=None; selected.hide_noise=false;
+        assert_eq!(index.query("report",20,&selected).unwrap().len(),4);
     }
     #[test]
     fn names_pinyin_and_content_are_independent_and_scoped() {

@@ -15,6 +15,12 @@ pub fn query(
     backend: &str,
     instance: &str,
 ) -> Result<Vec<SearchHit>, String> {
+    query_filtered(query,limit,backend,instance,false)
+}
+pub fn query_filtered(query:&str,limit:usize,backend:&str,instance:&str,hide_noise:bool)->Result<Vec<SearchHit>,String>{
+    query_impl(query,limit,backend,instance,hide_noise).map(|mut hits| {if hide_noise {hits.retain(|h|h.path.as_deref().is_none_or(|p|!super::filters::noisy(p)));}hits.truncate(limit);hits})
+}
+fn query_impl(query:&str,limit:usize,backend:&str,instance:&str,hide_noise:bool)->Result<Vec<SearchHit>,String>{
     let generation = GENERATION.fetch_add(1, Ordering::SeqCst) + 1;
     let query = query.trim();
     if query.is_empty() || limit == 0 {
@@ -49,7 +55,7 @@ pub fn query(
             }
             return native::windows_query(query, limit, generation);
         }
-        match native::everything_query(query, limit, instance.trim(), generation) {
+        match native::everything_query(&super::filters::everything(query,None,hide_noise)?, limit, instance.trim(), generation) {
             Ok(hits) => Ok(hits),
             Err(error) => {
                 if backend == "everything" {

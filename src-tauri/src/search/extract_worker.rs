@@ -175,7 +175,7 @@ fn read_bounded(mut pipe: impl Read, limit: usize, overflow: Option<Arc<AtomicBo
     output
 }
 
-fn run_child(
+pub(crate) fn run_child(
     mut command: Command,
     request: &[u8],
     cancel: &AtomicBool,
