@@ -6,6 +6,7 @@ import { FenceWindow } from "@/features/files/fence";
 import { MenuPopupWindow } from "@/features/files/menu-popup";
 import { TodoPaperWindow } from "@/features/plans/views/paper";
 import { POPUP_LABEL } from "@/features/files/popup";
+import { CaptureWindow } from "@/features/knowledge/capture";
 import "@/index.css";
 
 /**
@@ -25,7 +26,9 @@ const windowLabel = (() => {
 })();
 
 let root: React.ReactNode;
-if (windowLabel === POPUP_LABEL) {
+if (windowLabel === "capture") {
+  root = <CaptureWindow />;
+} else if (windowLabel === POPUP_LABEL) {
   document.documentElement.classList.add("popup-root");
   root = <MenuPopupWindow />;
 } else if (windowLabel.startsWith("fence-")) {

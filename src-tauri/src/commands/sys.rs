@@ -4,6 +4,36 @@
 use tauri::AppHandle;
 use tauri::Manager;
 
+/// Only the main workbench has a developer-mode preference. Keep the native
+/// editing menu available while gating its Inspect item and debug shortcuts.
+#[tauri::command]
+pub async fn set_developer_mode(window: tauri::WebviewWindow, enabled: bool) -> Result<(), String> {
+    if window.label() != "main" {
+        return Err("Developer mode is only available in the main window".into());
+    }
+    if !enabled {
+        window.close_devtools();
+    }
+    #[cfg(windows)]
+    {
+        let (sender, receiver) = std::sync::mpsc::channel();
+        window.with_webview(move |webview| {
+            // These are the app's own WebView2 settings, accessed on its UI thread.
+            let result = unsafe {
+                webview.controller().CoreWebView2()
+                    .and_then(|view| view.Settings())
+                    .and_then(|settings| settings.SetAreDevToolsEnabled(enabled))
+            }.map_err(|error| error.to_string());
+            let _ = sender.send(result);
+        }).map_err(|error| error.to_string())?;
+        tauri::async_runtime::spawn_blocking(move || {
+            receiver.recv_timeout(std::time::Duration::from_secs(5))
+                .map_err(|error| error.to_string())?
+        }).await.map_err(|error| error.to_string())??;
+    }
+    Ok(())
+}
+
 /// 前端首帧渲染完成后调用：显示调用方窗口（防白闪，主窗/设置窗通用）。
 #[tauri::command]
 pub fn window_ready(window: tauri::Window) -> Result<(), String> {
@@ -83,7 +113,18 @@ pub async fn open_todo_paper(
         .decorations(false)
         .transparent(true)
         .shadow(false)
-        .always_on_bottom(true)
+        /*
+         * 刻意**不**在这里设 always_on_bottom：层级改由前端按形态显式决定
+         * （纸片默认压底、贴边胶囊置顶）。
+         *
+         * 因为 tao 在 WM_WINDOWPOSCHANGING 里有这么一段：
+         *     if window_flags.contains(ALWAYS_ON_BOTTOM) { pos.hwndInsertAfter = HWND_BOTTOM }
+         * 窗口只要还带着这个标记，**每次位置变化都会被强制塞回底部** ——
+         * 于是 setAlwaysOnTop(true) 只生效一瞬就被推翻；而滑出动画一秒要改十几次位置，
+         * 更是一路压到底。实测症状极具迷惑性：窗口能显示、能穿透、位置尺寸全对，
+         * 只是 z 序紧贴 Program Manager、ex 样式里永远没有 WS_EX_TOPMOST。
+         * 前端用 setAlwaysOnBottom(true/false) 显式设置同一标记则没有这个副作用。
+         */
         .skip_taskbar(true)
         .visible(false)
         .build()

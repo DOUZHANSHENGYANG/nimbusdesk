@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { useFiles, useFences, type FileItem } from "@/stores/files";
+import { useFiles, type FileItem } from "@/stores/files";
 import { useSettings } from "@/stores/settings";
 import type { FileActions } from "@/features/files/actions";
 import type { MenuIconKey, MenuNode } from "@/features/files/menu-model";
@@ -63,7 +63,6 @@ export function usePopupMenu({
   const theme = useSettings((s) => s.theme);
   const filesRoot = useSettings((s) => s.filesRoot);
   const categories = useFiles((s) => s.categories);
-  const fences = useFences((s) => s.fences);
   const updateItem = useFiles((s) => s.updateItem);
 
   /** 当前打开的菜单目标：动作执行时用它还原上下文 */
@@ -106,7 +105,7 @@ export function usePopupMenu({
           });
         nodes = buildItemMenu(t, target.item, moves);
       } else if (target.kind === "category" && cat) {
-        nodes = buildCategoryMenu(t, cat, fences[cat.id]?.open ?? false, !cat.parentId);
+        nodes = buildCategoryMenu(t);
       } else {
         nodes = buildBlankMenu(t, cat, !!filesRoot, categories.length > 0);
       }
@@ -141,7 +140,7 @@ export function usePopupMenu({
         }
       }, 1500);
     },
-    [categories, filesRoot, fences, i18n.language, stopListening, t, theme],
+    [categories, filesRoot, i18n.language, stopListening, t, theme],
   );
 
   // 浮窗回传动作 → 在这里执行（只有打开方持有 actions / store）
@@ -343,13 +342,7 @@ function buildBlankMenu(
   ];
 }
 
-function buildCategoryMenu(
-  t: T,
-  cat: { id: string; dir?: string },
-  fenceOn: boolean,
-  /** 是否顶级分类：只有顶级能再建子分类（单层约束） */
-  isTop: boolean,
-): MenuNode[] {
+function buildCategoryMenu(t: T): MenuNode[] {
   return [
     {
       kind: "sub",
@@ -373,28 +366,6 @@ function buildCategoryMenu(
       action: "renameCategory",
       label: t("files.renameCategory"),
       icon: "rename",
-    },
-    ...(isTop
-      ? [
-          {
-            kind: "item" as const,
-            action: "newSubCategory",
-            label: t("files.addSubCategory"),
-            icon: "newFolder" as const,
-          },
-        ]
-      : []),
-    {
-      kind: "item",
-      action: "toggleFence",
-      label: fenceOn ? t("files.ctx.fenceOff") : t("files.ctx.fenceOn"),
-      icon: fenceOn ? "fenceOff" : "fence",
-    },
-    {
-      kind: "item",
-      action: "bindDir",
-      label: cat.dir ? t("files.ctx.changeDir") : t("files.ctx.bindDir"),
-      icon: "bindDir",
     },
     { kind: "sep" },
     {

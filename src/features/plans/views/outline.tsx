@@ -28,6 +28,7 @@ import { cn } from "@/lib/utils";
 import { useDismiss } from "@/lib/hooks/use-dismiss";
 import { TaskLinkBadge, TaskLinkPicker } from "@/features/plans/views/task-link";
 import { toast } from "sonner";
+import { TaskAttachments } from "@/features/plans/attachments";
 
 /** 每层缩进（树形引导线间距） */
 const INDENT = 20;
@@ -413,9 +414,10 @@ function TaskRow({ date, task, depth }: { date: string; task: PlanTask; depth: n
           </div>
         )}
 
-        {/* 悬停操作 */}
+        {/* 操作与附件保持同行，便于直接发现入口。 */}
         {!editing && (
-          <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity duration-150 group-hover:opacity-100">
+          <div className="flex shrink-0 items-center gap-0.5">
+            <TaskAttachments date={date} task={task} />
             <RowAction title={t("plans.editTip")} onClick={startEdit}>
               <Pencil className="size-3.5" />
             </RowAction>

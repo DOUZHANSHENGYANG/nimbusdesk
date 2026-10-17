@@ -33,6 +33,7 @@ export const useFavorites = create<FavState>()(
                 title: entry.title,
                 url: entry.url,
                 extra: entry.extra,
+                content: entry.content,
                 pubDate: entry.pubDate,
                 sourceName: sourceName ?? prev,
                 savedAt: Date.now(),

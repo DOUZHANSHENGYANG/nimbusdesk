@@ -2,6 +2,15 @@
 
 export type TaskStatus = "todo" | "doing" | "done";
 
+/** Managed local copy; path is relative to the data directory. */
+export interface TaskAttachment {
+  id: string;
+  name: string;
+  path: string;
+  size: number;
+  createdAt: number;
+}
+
 export interface PlanTask {
   id: string;
   /** null = 顶层计划；否则为父任务 id */
@@ -32,6 +41,7 @@ export interface PlanTask {
    * 缺失 = 未关联（不写空对象，JSON 里干脆不带这个键）。
    */
   link?: TaskLink;
+  attachments?: TaskAttachment[];
 }
 
 /** 关联类型，与 FileItem.type 对齐 */
@@ -73,7 +83,7 @@ export interface ArchivedDay {
   tasks: PlanTask[];
 }
 
-export type PlanTaskPatch = Partial<Pick<PlanTask, "title" | "note" | "start" | "end" | "done" | "link">>;
+export type PlanTaskPatch = Partial<Pick<PlanTask, "title" | "note" | "start" | "end" | "done" | "link" | "attachments">>;
 
 /* ── 时间 ─────────────────────────────────────────────── */
 

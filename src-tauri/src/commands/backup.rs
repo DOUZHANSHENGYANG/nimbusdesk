@@ -8,7 +8,17 @@
 
 use crate::atomic::write_file_atomic;
 use serde::Serialize;
+use std::io::Read;
 use std::path::{Path, PathBuf};
+
+const MAX_BACKUP_JSON_BYTES: u64 = 256 * 1024 * 1024;
+
+fn validate_backup_size(bytes: u64) -> Result<(), String> {
+    if bytes > MAX_BACKUP_JSON_BYTES {
+        return Err(format!("backup too large: {bytes} bytes (maximum {MAX_BACKUP_JSON_BYTES})"));
+    }
+    Ok(())
+}
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -56,6 +66,7 @@ pub async fn pick_backup_open_path(app: tauri::AppHandle) -> Result<Option<Strin
 #[tauri::command]
 pub async fn write_backup(path: String, content: String) -> Result<BackupExport, String> {
     tauri::async_runtime::spawn_blocking(move || {
+        validate_backup_size(content.len() as u64)?;
         write_file_atomic(&path, content.as_bytes()).map_err(|e| e.to_string())?;
         Ok(BackupExport {
             path: path.clone(),
@@ -71,15 +82,31 @@ pub async fn write_backup(path: String, content: String) -> Result<BackupExport,
 pub async fn read_backup(path: String) -> Result<String, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let meta = std::fs::metadata(&path).map_err(|e| format!("{path}: {e}"))?;
-        // 上限 64MB：备份是纯文本，超过这个量级几乎肯定是选错了文件
-        const MAX: u64 = 64 * 1024 * 1024;
-        if meta.len() > MAX {
-            return Err(format!("file too large: {} bytes", meta.len()));
-        }
-        std::fs::read_to_string(&path).map_err(|e| format!("{path}: {e}"))
+        // Includes base64 attachment material (128 MiB raw attachment budget).
+        validate_backup_size(meta.len())?;
+        let file = std::fs::File::open(&path).map_err(|e| format!("{path}: {e}"))?;
+        let mut content = String::new();
+        file.take(MAX_BACKUP_JSON_BYTES + 1)
+            .read_to_string(&mut content)
+            .map_err(|e| format!("{path}: {e}"))?;
+        // Recheck the bytes read, including a file that grew after metadata().
+        validate_backup_size(content.len() as u64)?;
+        Ok(content)
     })
     .await
     .map_err(|e| format!("task join error: {e}"))?
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn backup_json_limit_accepts_boundary_and_rejects_excess() {
+        assert!(validate_backup_size(0).is_ok());
+        assert!(validate_backup_size(MAX_BACKUP_JSON_BYTES).is_ok());
+        assert!(validate_backup_size(MAX_BACKUP_JSON_BYTES + 1).is_err());
+    }
 }
 
 /// 扫描一个目录，返回**相对路径**列表（只含目录，按字典序）。

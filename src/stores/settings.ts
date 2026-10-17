@@ -12,10 +12,12 @@ interface SettingsState {
   theme: ThemeMode;
   lang: Lang;
   sidebarCollapsed: boolean;
+  developerMode: boolean;
   /** 最近一次已解析的数据目录（展示用，真值在 Rust 侧解析） */
   dataDir: string | null;
   /** 文件库全局根目录：分类未单独绑定时，用 <root>/<分类名> 作为其目录 */
   filesRoot: string | null;
+  fenceShortcut: string;
   /** 计划管理上次停留的视图（持久化：刷新/切页回来不跳回大纲） */
   plansView: PlansView;
   /** 勾选完成后自动把该项沉到底部（只影响显示，数据不删） */
@@ -25,8 +27,10 @@ interface SettingsState {
   setTheme: (theme: ThemeMode) => void;
   setLang: (lang: Lang) => void;
   setSidebarCollapsed: (v: boolean) => void;
+  setDeveloperMode: (v: boolean) => void;
   setDataDir: (dir: string | null) => void;
   setFilesRoot: (dir: string | null) => void;
+  setFenceShortcut: (shortcut: string) => void;
   setPlansView: (v: PlansView) => void;
   setAutoSortDone: (v: boolean) => void;
   setAutoClearDone: (v: boolean) => void;
@@ -45,8 +49,10 @@ export const useSettings = create<SettingsState>()(
       theme: "dark",
       lang: "zh",
       sidebarCollapsed: false,
+      developerMode: false,
       dataDir: null,
       filesRoot: null,
+      fenceShortcut: "",
       plansView: "outline",
       /*
        * 置底默认开（纯显示效果、随时可逆），自动清除默认关（真删数据）。
@@ -57,8 +63,10 @@ export const useSettings = create<SettingsState>()(
       setTheme: (theme) => set({ theme }),
       setLang: (lang) => set({ lang }),
       setSidebarCollapsed: (sidebarCollapsed) => set({ sidebarCollapsed }),
+      setDeveloperMode: (developerMode) => set({ developerMode }),
       setDataDir: (dataDir) => set({ dataDir }),
       setFilesRoot: (filesRoot) => set({ filesRoot }),
+      setFenceShortcut: (fenceShortcut) => set({ fenceShortcut }),
       setPlansView: (plansView) => set({ plansView }),
       setAutoSortDone: (autoSortDone) => set({ autoSortDone }),
       setAutoClearDone: (autoClearDone) => set({ autoClearDone }),

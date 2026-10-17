@@ -1,0 +1,5 @@
+Remix Icon React v4.2.0
+Source: https://github.com/Remix-Design/RemixIcon/tree/v4.2.0
+Licensed under Apache License 2.0 (full text included alongside this notice).
+Original package notice: @remixicon/react v4.2.0 - Apache-2.0
+The icons used by NimbusDesk are unmodified official React components.

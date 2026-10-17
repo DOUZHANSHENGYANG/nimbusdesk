@@ -1,302 +1,119 @@
-import { useRef } from "react";
-import { useNavigate } from "react-router-dom";
-import {
-  CalendarCheck2,
-  CircleDot,
-  Folder,
-  Monitor,
-  ArrowRight,
-} from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import {
-  childrenOf,
-  dayProgress,
-  rangeLabel,
-  statusOf,
-  todayStr,
-  type PlanTask,
-} from "@/features/plans/types";
+import { useNavigate } from "react-router-dom";
+import { RiBookOpenLine, RiCalendarCheckLine, RiFolderLine, RiComputerLine, RiPauseLine, RiPlayLine, RiArrowLeftLine } from "@remixicon/react";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { childrenOf, dayProgress, todayStr } from "@/features/plans/types";
 import { useDayTasks, useNow, usePlans } from "@/features/plans/store";
-import { StatusButton, doneTitleStyle } from "@/features/plans/views/shared";
+import { listCaptures, openCaptureWindow } from "@/features/knowledge/api";
+import { useKnowledge } from "@/features/knowledge/store";
 import { useFiles, useFences } from "@/stores/files";
-import { ItemIcon } from "@/features/files/icons";
-import { openPath, openUrl } from "@/lib/tauri";
-import { gsap, useGSAP } from "@/lib/gsap";
-import { cn } from "@/lib/utils";
+import { deriveHomeRelations } from "./relations";
+import { WorkspaceOrbit, type HomeModule, type WorkspaceNode } from "./workspace-orbit";
+import { HomeInspector, type InboxSummary } from "./inspector";
 
-/** 主页仪表盘：问候 + 统计 + 今日计划速览 + 最新收藏 */
 export function HomePage() {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
-
   const today = todayStr();
   const tasks = useDayTasks(today);
-  const toggleDone = usePlans((s) => s.toggleDone);
+  const toggleDone = usePlans((state) => state.toggleDone);
   const now = useNow();
-  const items = useFiles((s) => s.items);
-  const fences = useFences((s) => s.fences);
+  const items = useFiles((state) => state.items);
+  const categories = useFiles((state) => state.categories);
+  const fences = useFences((state) => state.fences);
+  const root = useKnowledge((state) => state.vaultRoot);
+  const vaultName = useKnowledge((state) => state.vaultName);
+  const [selected, setSelected] = useState<HomeModule | null>(null);
+  const [paused, setPaused] = useState(false);
+  const [captureBusy, setCaptureBusy] = useState(false);
+  const workspace = useRef<HTMLDivElement>(null);
+  const { inbox, refreshInbox } = useInbox(root);
+  const returnCenter = useCallback(() => {
+    const activeNode = workspace.current?.querySelector<HTMLButtonElement>('.orbit-node[data-active="true"]');
+    setSelected(null);
+    requestAnimationFrame(() => activeNode?.focus({ preventScroll: true }));
+  }, []);
+
+  useEffect(() => {
+    const handleKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !event.isComposing) returnCenter();
+    };
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [returnCenter]);
 
   const progress = dayProgress(tasks);
-  const doing = tasks.filter((x) => statusOf(x, today, now) === "doing").length;
   const roots = childrenOf(tasks, null);
-  const itemsCount = items.length;
-  const fencesOn = Object.values(fences).filter((f) => f.open).length;
+  const latest = useMemo(() => [...items].sort((a, b) => b.createdAt - a.createdAt).slice(0, 6), [items]);
+  const openCategories = categories.filter((category) => fences[category.id]?.open);
+  const relations = useMemo(() => deriveHomeRelations({ tasks, items, categories, fences }), [tasks, items, categories, fences]);
+  const dateLabel = new Intl.DateTimeFormat(i18n.language === "en" ? "en-US" : "zh-CN", { month: "long", day: "numeric", weekday: "long" }).format(now);
+  const contentCount = selected ? { plans: Math.min(roots.length, 6), files: latest.length, knowledge: Math.min(inbox.records.length, 5), fences: Math.min(openCategories.length, 6) }[selected] : 0;
+  const nodes: WorkspaceNode[] = [
+    { id: "plans", icon: <RiCalendarCheckLine className="size-5" />, label: t("home.todayPlans"), value: progress.total, detail: t("home.progressLabel", { done: progress.done, total: progress.total }) },
+    { id: "files", icon: <RiFolderLine className="size-5" />, label: t("home.collections"), value: items.length, detail: t("home.categoryCount", { count: categories.length }) },
+    { id: "knowledge", icon: <RiBookOpenLine className="size-5" />, label: t("nav.knowledge"), value: inbox.status === "ready" ? inbox.records.length : "—", detail: inbox.status === "unbound" ? t("home.vaultUnbound") : inbox.status === "error" ? t("home.inboxUnavailable") : inbox.status === "loading" ? t("home.loadingInbox") : t("home.awaitingOrganize") },
+    { id: "fences", icon: <RiComputerLine className="size-5" />, label: t("home.desktopFences"), value: openCategories.length, detail: t("home.fencesOn") },
+  ];
 
-  const hour = new Date().getHours();
-  const greeting = hour < 12 ? t("home.morning") : hour < 18 ? t("home.afternoon") : t("home.evening");
-  const dateLabel = new Intl.DateTimeFormat(i18n.language === "en" ? "en-US" : "zh-CN", {
-    month: "long",
-    day: "numeric",
-    weekday: "long",
-  }).format(new Date());
+  async function capture() {
+    if (!root) { navigate("/knowledge"); return; }
+    setCaptureBusy(true);
+    try { await openCaptureWindow(); }
+    catch (error) { toast.error(String(error)); }
+    finally { setCaptureBusy(false); }
+  }
 
-  const latest = [...items].sort((a, b) => b.createdAt - a.createdAt).slice(0, 6);
-
-  const wrapRef = useRef<HTMLDivElement>(null);
-  useGSAP(
-    () => {
-      gsap.from("[data-dash-card]", {
-        autoAlpha: 0,
-        y: 16,
-        duration: 0.4,
-        stagger: 0.06,
-        ease: "power2.out",
-        clearProps: "all",
-      });
-    },
-    { scope: wrapRef },
-  );
+  function selectModule(id: HomeModule) {
+    setSelected(id);
+    requestAnimationFrame(() => {
+      const panel = workspace.current?.querySelector<HTMLElement>(".home-module-panel");
+      // In stacked layouts, reveal the result of selecting a node below the map.
+      if (panel && getComputedStyle(panel).position === "relative") {
+        panel.scrollIntoView({ block: "nearest", behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth" });
+      }
+    });
+  }
 
   return (
-    <div className="h-full overflow-y-auto" ref={wrapRef}>
-      <div className="mx-auto flex w-full max-w-4xl flex-col gap-5 p-6 pb-10">
-        {/* ── 问候 ── */}
-        <div>
-          <h2 className="text-[20px] font-semibold tracking-tight">
-            {greeting}，{t("app.name")}
-          </h2>
-          <p className="mt-0.5 text-[13px] text-muted-foreground">{dateLabel}</p>
+    <div className="home-workspace workbench-ui" ref={workspace} data-expanded={selected !== null}>
+      <div className="home-content">
+        <header className="home-header flex flex-wrap items-center justify-between gap-4">
+          <div><p className="text-xs text-muted-foreground">{dateLabel}</p><h1 className="mt-2 text-[22px] font-semibold tracking-tight">{t("home.workspaceTitle")}</h1></div>
+          <Button variant="ghost" size="icon" aria-label={t(paused ? 'home.resumeScene' : 'home.pauseScene')} title={t(paused ? 'home.resumeScene' : 'home.pauseScene')} aria-pressed={paused} onClick={()=>setPaused(value=>!value)}>{paused?<RiPlayLine className="size-4"/>:<RiPauseLine className="size-4"/>}</Button>
+        </header>
+        <div className="home-layout">
+          <WorkspaceOrbit nodes={nodes} selected={selected} onSelect={selectModule} onCenter={returnCenter} relations={relations} paused={paused} contentCount={contentCount} />
+          {selected && <div className="home-module-panel" data-module={selected}><button type="button" className="home-return" onClick={returnCenter}><RiArrowLeftLine className="size-4" />{t("home.returnCenter")}<kbd>Esc</kbd></button><HomeInspector selected={selected} tasks={roots} latest={latest} categories={categories} openCategories={openCategories} items={items} inbox={inbox} vaultName={vaultName} today={today} now={now} onToggle={(id) => toggleDone(today, id)} onRetry={refreshInbox} onCapture={()=>void capture()} captureBusy={captureBusy} /></div>}
         </div>
-
-        {/* ── 统计卡片 ── */}
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <StatCard
-            icon={<CalendarCheck2 className="size-4" />}
-            label={t("home.todayPlans")}
-            value={progress.total}
-            sub={
-              progress.total > 0
-                ? `${progress.done}/${progress.total}`
-                : undefined
-            }
-            accent="brand"
-            onClick={() => navigate("/plans")}
-          />
-          <StatCard
-            icon={<CircleDot className="size-4" />}
-            label={t("home.doing")}
-            value={doing}
-            accent="info"
-            onClick={() => navigate("/plans")}
-          />
-          <StatCard
-            icon={<Folder className="size-4" />}
-            label={t("home.collections")}
-            value={itemsCount}
-            accent="success"
-            onClick={() => navigate("/files")}
-          />
-          <StatCard
-            icon={<Monitor className="size-4" />}
-            label={t("home.fencesOn")}
-            value={fencesOn}
-            accent="warning"
-            onClick={() => navigate("/files")}
-          />
-        </div>
-
-        {/* ── 今日计划速览 ── */}
-        <section className="rounded-2xl border border-border bg-card p-4">
-          <SectionHeader
-            title={t("home.plansToday")}
-            action={t("home.goToPlans")}
-            onAction={() => navigate("/plans")}
-          />
-          {roots.length === 0 ? (
-            <p className="py-5 text-center text-[13px] text-muted-foreground">
-              {t("home.noPlansToday")}
-            </p>
-          ) : progress.done === progress.total && progress.total > 0 ? (
-            <p className="py-5 text-center text-[13px] font-medium text-success">
-              {t("home.allDoneToday")}
-            </p>
-          ) : (
-            <div className="flex flex-col">
-              {roots.slice(0, 6).map((task) => (
-                <TodayTaskRow
-                  key={task.id}
-                  task={task}
-                  date={today}
-                  now={now}
-                  onToggle={() => toggleDone(today, task.id)}
-                />
-              ))}
-            </div>
-          )}
-        </section>
-
-        {/* ── 最新收藏 ── */}
-        <section className="rounded-2xl border border-border bg-card p-4">
-          <SectionHeader
-            title={t("home.latestItems")}
-            action={t("home.goFiles")}
-            onAction={() => navigate("/files")}
-          />
-          {latest.length === 0 ? (
-            <p className="py-5 text-center text-[13px] text-muted-foreground">
-              {t("home.noItems")}
-            </p>
-          ) : (
-            <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-              {latest.map((item) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  onClick={() => {
-                    const p = item.type === "url" ? openUrl(item.path) : openPath(item.path);
-                    void p.catch(() => undefined);
-                  }}
-                  className="flex min-w-0 items-center gap-2 rounded-lg border border-border px-2.5 py-2 text-left transition-colors hover:border-brand/40 hover:bg-surface-hover"
-                >
-                  <ItemIcon
-                    type={item.type}
-                    path={item.path}
-                    iconUrl={item.iconUrl}
-                    className="size-4"
-                  />
-                  <span className="min-w-0 flex-1 truncate text-[12px]">{item.title}</span>
-                  <ArrowRight className="size-3 shrink-0 text-muted-foreground/50" />
-                </button>
-              ))}
-            </div>
-          )}
-        </section>
       </div>
     </div>
   );
 }
 
-function TodayTaskRow({
-  task,
-  date,
-  now,
-  onToggle,
-}: {
-  task: PlanTask;
-  date: string;
-  now: Date;
-  onToggle: () => void;
-}) {
-  const range = rangeLabel(task);
-  return (
-    <div className="flex min-h-9 items-center gap-2.5 rounded-lg px-1.5 py-1 transition-colors hover:bg-surface-hover">
-      <StatusButton status={statusOf(task, date, now)} onToggle={onToggle} />
-      <span
-        className="min-w-0 flex-1 truncate text-[13px]"
-        style={doneTitleStyle(task.done)}
-      >
-        {task.title}
-      </span>
-      {range && (
-        <span className="shrink-0 rounded-md bg-muted px-1.5 py-px font-mono text-[11px] text-muted-foreground">
-          {range}
-        </span>
-      )}
-    </div>
-  );
-}
-
-function SectionHeader({
-  title,
-  action,
-  onAction,
-}: {
-  title: string;
-  action: string;
-  onAction: () => void;
-}) {
-  return (
-    <div className="mb-3 flex items-center justify-between">
-      <h3 className="text-[13px] font-semibold text-foreground/90">{title}</h3>
-      <button
-        type="button"
-        onClick={onAction}
-        className="flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[12px] text-muted-foreground transition-colors hover:bg-muted hover:text-brand"
-      >
-        {action}
-        <ArrowRight className="size-3" />
-      </button>
-    </div>
-  );
-}
-
-function StatCard({
-  icon,
-  label,
-  value,
-  sub,
-  accent,
-  onClick,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: number;
-  sub?: string;
-  accent: "brand" | "info" | "success" | "warning";
-  onClick: () => void;
-}) {
-  const ref = useRef<HTMLSpanElement>(null);
-
-  // 数字滚动
-  useGSAP(
-    () => {
-      const el = ref.current;
-      if (!el) return;
-      const proxy = { v: 0 };
-      gsap.to(proxy, {
-        v: value,
-        duration: 0.7,
-        ease: "power2.out",
-        onUpdate: () => {
-          el.textContent = String(Math.round(proxy.v));
-        },
-      });
-    },
-    { dependencies: [value] },
-  );
-
-  const accentClass = {
-    brand: "bg-brand/10 text-brand",
-    info: "bg-info/10 text-info",
-    success: "bg-success/10 text-success",
-    warning: "bg-warning/10 text-warning",
-  }[accent];
-
-  return (
-    <button
-      type="button"
-      data-dash-card
-      onClick={onClick}
-      className="flex flex-col gap-2 rounded-2xl border border-border bg-card p-4 text-left shadow-[var(--pr-shadow-1)] transition-all duration-150 hover:-translate-y-0.5 hover:shadow-[var(--pr-shadow-2)]"
-    >
-      <span className={cn("grid size-8 place-items-center rounded-lg", accentClass)}>{icon}</span>
-      <div className="flex items-baseline gap-2">
-        <span ref={ref} className="text-[26px] font-bold leading-none tracking-tight">
-          0
-        </span>
-        {sub && <span className="text-[12px] text-muted-foreground">{sub}</span>}
-      </div>
-      <span className="text-[12px] text-muted-foreground">{label}</span>
-    </button>
-  );
+/** Metadata only; refresh on focus and ignore results after unmount or vault changes. */
+function useInbox(root: string | null) {
+  const [result, setResult] = useState<InboxSummary & { root: string | null }>({ root: null, status: "unbound", records: [] });
+  const [revision, setRevision] = useState(0);
+  const request = useRef(0);
+  const refreshInbox = useCallback(() => setRevision((value) => value + 1), []);
+  useEffect(() => {
+    const current = ++request.current;
+    if (!root) return;
+    setResult({ root, status: "loading", records: [] });
+    void listCaptures(root).then((records) => {
+      if (current === request.current) setResult({ root, status: "ready", records: records.filter((record) => record.status === "inbox") });
+    }).catch((error) => {
+      if (current === request.current) setResult({ root, status: "error", records: [], error: String(error) });
+    });
+    return () => { request.current++; };
+  }, [root, revision]);
+  useEffect(() => {
+    window.addEventListener("focus", refreshInbox);
+    return () => window.removeEventListener("focus", refreshInbox);
+  }, [refreshInbox]);
+  const inbox: InboxSummary = !root ? { status: "unbound", records: [] } : result.root === root ? result : { status: "loading", records: [] };
+  return { inbox, refreshInbox };
 }

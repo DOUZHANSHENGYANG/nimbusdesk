@@ -1,8 +1,8 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
-import { tauriJsonStorage } from "@/lib/storage";
+import { onStorageSynced, tauriJsonStorage } from "@/lib/storage";
 
-/** 资讯功能的 AI 配置（独立于全局 settings，避免污染） */
+/** 资讯联网搜索配置；llm 字段仅保留用于旧配置迁移，模型调用统一使用 ai-providers。 */
 export interface AiSettings {
   llmBaseUrl: string;
   llmApiKey: string;
@@ -33,3 +33,15 @@ export const useAiSettings = create<AiState>()(
     { name: "ai-settings", storage: createJSONStorage(() => tauriJsonStorage), version: 1 },
   ),
 );
+
+onStorageSynced((key) => {
+  if (key === "ai-settings") void useAiSettings.persist.rehydrate();
+});
+
+export async function aiSettingsReady(): Promise<void> {
+  if (useAiSettings.persist.hasHydrated()) return;
+  await new Promise<void>((resolve) => {
+    const off = useAiSettings.persist.onFinishHydration(() => { off(); resolve(); });
+    if (useAiSettings.persist.hasHydrated()) { off(); resolve(); }
+  });
+}

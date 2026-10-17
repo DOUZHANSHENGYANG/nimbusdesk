@@ -6,10 +6,8 @@
 import type { SourceAdapter } from "./types";
 import { github } from "./hot/github";
 import { hackernews } from "./hot/hackernews";
-import { juejin } from "./hot/juejin";
 import { sspai } from "./hot/sspai";
 import { zhihu } from "./hot/zhihu";
-import { bilibili } from "./hot/bilibili";
 import { v2ex } from "./hot/v2ex";
 import { solidot } from "./hot/solidot";
 
@@ -17,10 +15,8 @@ export const SOURCE_LIST: SourceAdapter[] = [
   github,
   hackernews,
   solidot,
-  juejin,
   sspai,
   zhihu,
-  bilibili,
   v2ex,
 ];
 

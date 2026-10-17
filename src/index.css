@@ -2,6 +2,7 @@
 @import "tw-animate-css";
 @import "@fontsource-variable/geist";
 @import "./styles/tokens.css";
+@import "./styles/workspace.css";
 
 @custom-variant dark (&:is(.dark *));
 

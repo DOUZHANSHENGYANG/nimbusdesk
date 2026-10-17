@@ -11,19 +11,19 @@ export interface SetDataDirResult {
   migrated: string[];
 }
 
-/** 更换数据目录（自动迁移全部 *.json） */
+/** 更换数据目录（快照 SQLite3 并复制模块文件） */
 export async function setDataDir(newDir: string): Promise<SetDataDirResult> {
   return invoke<SetDataDirResult>("set_data_dir", { newDir });
 }
 
-/** 读取 JSON（key 如 "settings"，对应 <dataDir>/settings.json；不存在返回 null） */
+/** 读取 SQLite 模块状态；不存在返回 null。 */
 export async function readJson<T>(key: string): Promise<T | null> {
   return invoke<T | null>("read_json", { key });
 }
 
 /** 写入 JSON（原子写） */
-export async function writeJson(key: string, value: unknown): Promise<void> {
-  await invoke("write_json", { key, value });
+export async function writeJson(key: string, value: unknown, base?: { value: unknown }): Promise<unknown> {
+  return invoke("write_json", { key, value, base });
 }
 
 /** 前端首帧就绪：通知 Rust 显示调用方窗口（防白闪） */
@@ -227,3 +227,18 @@ export async function restoreDirTree(root: string, dirs: string[]): Promise<numb
 /** 是否运行在 Tauri 环境（浏览器 pnpm dev 时为 false） */
 export const inTauri =
   typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+
+export interface MovedFenceEntry {
+  source: string;
+  path: string;
+  name: string;
+  kind: "file" | "folder";
+  sourceRetained?: boolean;
+}
+export interface FenceMoveResult {
+  moved: MovedFenceEntry[];
+  failed: { source: string; error: string }[];
+}
+export function moveFenceEntries(paths: string[], destination: string): Promise<FenceMoveResult> {
+  return invoke("move_fence_entries", { paths, destination });
+}

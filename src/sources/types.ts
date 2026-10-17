@@ -5,6 +5,8 @@ export interface SourceEntry {
   url: string;
   /** epoch ms，可选 */
   pubDate?: number;
+  /** Complete article supplied by RSS/Atom, kept separately from list previews. */
+  content?: { format: "html" | "text"; value: string };
   extra?: {
     /** 徽标信息，如 "✰ 1.2k"、"384 points" */
     info?: string;

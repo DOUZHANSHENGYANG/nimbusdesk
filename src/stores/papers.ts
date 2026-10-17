@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
-import { tauriJsonStorage } from "@/lib/storage";
+import { tauriJsonStorage, onStorageSynced } from "@/lib/storage";
+import type { CapsuleEdge, PaperForm } from "@/features/plans/capsule";
 
 /**
  * 桌面「待办纸片」窗口。
@@ -32,6 +33,18 @@ export interface PaperState {
   collapsed?: boolean;
   /** 置顶（覆盖 always-on-bottom） */
   pinned?: boolean;
+  /**
+   * 形态。缺省 = "paper"。
+   *
+   * 刻意不复用 collapsed：collapsed 是「就地压矮」（窗口还在原位置，
+   * 高度收到 116px，只留标题 + 前三条），胶囊是「挪到屏幕边缘只露一条」。
+   * 两者叠加也讲得通：胶囊态里点开卡片再展开，先回到正常纸片。
+   */
+  form?: PaperForm;
+  /** 胶囊吸附的屏幕边（缺省右） */
+  edge?: CapsuleEdge;
+  /** 胶囊沿边位置：相对**工作区顶**的逻辑像素（不是屏幕绝对坐标，换显示器才不会漂） */
+  edgeY?: number;
 }
 
 interface PapersStoreState {
@@ -42,6 +55,9 @@ interface PapersStoreState {
   setCollapsed: (date: string, collapsed: boolean) => void;
   setOpen: (date: string, open: boolean) => void;
   setPinned: (date: string, pinned: boolean) => void;
+  setForm: (date: string, form: PaperForm) => void;
+  setEdge: (date: string, edge: CapsuleEdge) => void;
+  setEdgeY: (date: string, edgeY: number) => void;
   /** 记录一次打开（用于 order） */
   touch: (date: string) => void;
   /** 移除此纸片的几何记录（关窗时可选调用） */
@@ -102,6 +118,30 @@ export const usePapers = create<PapersStoreState>()(
           },
         })),
 
+      setForm: (date, form) =>
+        set((s) => ({
+          papers: {
+            ...s.papers,
+            [date]: { ...(s.papers[date] ?? DEFAULT_PAPER), form },
+          },
+        })),
+
+      setEdge: (date, edge) =>
+        set((s) => ({
+          papers: {
+            ...s.papers,
+            [date]: { ...(s.papers[date] ?? DEFAULT_PAPER), edge },
+          },
+        })),
+
+      setEdgeY: (date, edgeY) =>
+        set((s) => ({
+          papers: {
+            ...s.papers,
+            [date]: { ...(s.papers[date] ?? DEFAULT_PAPER), edgeY },
+          },
+        })),
+
       touch: (date) =>
         set((s) => ({
           order: [...s.order.filter((d) => d !== date), date],
@@ -117,6 +157,11 @@ export const usePapers = create<PapersStoreState>()(
     {
       name: "todo-papers",
       storage: createJSONStorage(() => tauriJsonStorage),
+      /*
+       * 刻意**不**升 version。新字段全部可选，老记录读进来照样合法；
+       * 而版本号 +1 却又不给 migrate 的话，zustand 会直接丢弃磁盘上的旧记录，
+       * 用户所有纸片的位置尺寸会被一次静默清空。
+       */
       version: 1,
     },
   ),
@@ -139,3 +184,9 @@ export function paperGeometryFor(date: string): PaperState {
     }
   );
 }
+
+onStorageSynced((key, value) => {
+  if (key !== "todo-papers" || !value || typeof value !== "object") return;
+  const state = (value as { state?: Partial<PapersStoreState> }).state;
+  if (state?.papers && Array.isArray(state.order)) usePapers.setState({ papers: state.papers, order: state.order });
+});

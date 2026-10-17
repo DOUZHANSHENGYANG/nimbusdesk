@@ -18,6 +18,7 @@ import { useModal } from "@/components/shell/modal-host";
 import { useSettings } from "@/stores/settings";
 import { gsap, useGSAP } from "@/lib/gsap";
 import { cn } from "@/lib/utils";
+import { usePlanCopy } from "@/features/plans/copy";
 
 /**
  * 视图键。顺序即 pill 顺序，也是 `1`–`6` 快捷键的顺序。
@@ -42,6 +43,7 @@ function useStoreHydrated(store: typeof usePlans | typeof usePlansArchive): bool
 
 /** 计划管理：日期导航 + 六视图切换（`1`–`6` 快捷键）+ 自动/手动归档 */
 export function PlansPage() {
+  const copy = usePlanCopy();
   const { t, i18n } = useTranslation();
   const { confirm } = useModal();
   const [date, setDate] = useState(todayStr());
@@ -315,7 +317,8 @@ export function PlansPage() {
             <button
               type="button"
               onClick={() => void onTogglePaper()}
-              title={t("plans.paperOpenHint")}
+              title={paperOn ? copy.closeDesktopDay : copy.desktopDay}
+              aria-label={paperOn ? copy.closeDesktopDay : copy.desktopDay}
               className={cn(
                 "flex items-center gap-1.5 rounded-xl border px-2.5 py-1.5 text-[12px] transition-colors",
                 paperOn

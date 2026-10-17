@@ -1,0 +1,45 @@
+.organization-activity { display: flex; align-items: center; justify-content: flex-end; flex-shrink: 0; gap: 4px; min-width: 0; padding: 2px 20px; border-bottom: 1px solid var(--workbench-line); background: var(--workbench-surface); color: var(--foreground); font-family: var(--workbench-font); }
+.organization-activity-trigger { display: inline-flex; align-items: center; gap: 10px; min-width: 0; min-height: 34px; padding: 4px 8px; border-radius: 8px; font-size: 12px; line-height: 20px; text-align: left; cursor: pointer; }
+.organization-activity-trigger:hover, .organization-activity-icon-button:hover { background: var(--muted); }
+.organization-activity-trigger > svg { width: 14px; height: 14px; flex-shrink: 0; color: var(--accent-foreground); }
+.organization-activity-status { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.organization-activity-count { color: var(--muted-foreground); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.organization-activity-trigger > .organization-activity-chevron { width: 12px; height: 12px; color: var(--muted-foreground); }
+.organization-activity-track { width: 76px; height: 3px; flex-shrink: 0; border-radius: 2px; background: var(--border); overflow: hidden; }
+.organization-activity-track > span, .organization-activity-detail-track > span { display: block; height: 100%; background: var(--primary); transition: width .2s; }
+.organization-activity-icon-button { display: grid; place-items: center; width: 30px; height: 30px; flex-shrink: 0; border-radius: 8px; color: var(--muted-foreground); cursor: pointer; }
+.organization-activity-icon-button > svg { width: 14px; height: 14px; }
+.organization-activity-trigger:focus-visible, .organization-activity-icon-button:focus-visible, .organization-activity-action:focus-visible, .organization-activity-results summary:focus-visible { outline: 2px solid var(--ring); outline-offset: 3px; }
+.organization-activity-spinner { animation: organization-activity-spin 1.3s linear infinite; }
+.organization-activity-compact { justify-content: flex-start; padding: 0; border: 0; background: transparent; width: 100%; }
+.organization-activity-compact .organization-activity-trigger { padding-left: 0; flex-wrap: wrap; gap: 4px 8px; }
+.organization-activity-details { width: min(380px, calc(100vw - 32px)); max-height: min(560px, var(--radix-popover-content-available-height)); overflow-y: auto; padding: 20px; gap: 0; border-radius: 14px; color: var(--foreground); background: var(--workbench-surface); box-shadow: var(--workbench-shadow); font-family: var(--workbench-font); }
+.organization-activity-details > header { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; margin-bottom: 20px; }
+.organization-activity-details > header > div { min-width: 0; overflow-wrap: anywhere; }
+.organization-activity-details h2 { display: flex; align-items: center; gap: 8px; font-size: 14px; line-height: 22px; font-weight: 600; }
+.organization-activity-details h2 > svg { width: 15px; height: 15px; color: var(--accent-foreground); }
+.organization-activity-details header p { margin-top: 4px; font-size: 11px; line-height: 18px; color: var(--muted-foreground); }
+.organization-activity-detail-status { display: flex; justify-content: space-between; gap: 16px; font-size: 12px; line-height: 20px; }
+.organization-activity-detail-status strong { font-weight: 500; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.organization-activity-detail-track { height: 4px; overflow: hidden; border-radius: 2px; background: var(--border); margin-top: 10px; }
+.organization-activity-current { margin-top: 16px; font-size: 11px; line-height: 18px; color: var(--muted-foreground); }
+.organization-activity-current strong { display: block; margin-top: 4px; font-size: 12px; line-height: 20px; font-weight: 500; color: var(--foreground); overflow-wrap: anywhere; }
+.organization-activity-error { margin-top: 12px; color: var(--destructive); font-size: 12px; line-height: 20px; overflow-wrap: anywhere; }
+.organization-activity-results { margin-top: 16px; font-size: 12px; line-height: 20px; }
+.organization-activity-results > p { color: var(--muted-foreground); }
+.organization-activity-results details { margin-top: 12px; }
+.organization-activity-results summary { cursor: pointer; border-radius: 4px; }
+.organization-activity-results ul { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
+.organization-activity-results li { display: flex; align-items: flex-start; gap: 8px; overflow-wrap: anywhere; }
+.organization-activity-results li > svg { width: 13px; height: 13px; margin-top: 3px; flex-shrink: 0; color: var(--muted-foreground); }
+.organization-activity-results li > span { min-width: 0; }
+.organization-activity-results li small { display: block; margin-top: 4px; color: var(--destructive); font-size: 11px; line-height: 18px; }
+.organization-activity-details > footer { margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--workbench-line); display: flex; flex-direction: column; align-items: flex-end; gap: 12px; }
+.organization-activity-details footer p { width: 100%; font-size: 11px; line-height: 18px; color: var(--muted-foreground); }
+.organization-activity-action { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 32px; padding: 5px 10px; border: 1px solid var(--workbench-line); border-radius: 8px; cursor: pointer; font-size: 12px; line-height: 20px; }
+.organization-activity-action:hover { background: var(--muted); }
+.organization-activity-action:disabled { opacity: .55; cursor: default; }
+.organization-activity-action svg { width: 12px; height: 12px; }
+@keyframes organization-activity-spin { to { transform: rotate(360deg); } }
+@media (max-width: 540px) { .organization-activity { padding-left: 8px; padding-right: 8px; } .organization-activity-track { display: none; } .organization-activity-compact { padding: 0; } }
+@media (prefers-reduced-motion: reduce) { .organization-activity-spinner { animation: none; } .organization-activity-track > span, .organization-activity-detail-track > span { transition: none; } }

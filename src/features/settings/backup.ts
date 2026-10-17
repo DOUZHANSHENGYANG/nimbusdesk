@@ -2,7 +2,8 @@
  * 一键全量备份 / 恢复。
  *
  * ## 备份包含什么
- * - 数据目录下的全部 `*.json`（settings / files / fences / plans / plans-archive …）
+ * - SQLite 模块状态（沿用 read_json 接口取得 persist 包裹）
+ * - 活跃与归档任务引用的本地附件文件
  * - 分类根目录的**目录结构清单**（只记文件夹名，不含里面的实际文件）
  *
  * 不打包 `categories/` 里的真实文件：那可能是几个 GB，塞进 JSON 既不现实也没必要。
@@ -32,12 +33,15 @@ import {
 } from "@/lib/tauri";
 import { flushAllStorage } from "@/lib/storage";
 import { useSettings } from "@/stores/settings";
+import { invoke } from "@tauri-apps/api/core";
+import { cleanProvider, getProviderModels } from "@/features/ai/core";
+import { collectAttachmentPaths, validateAttachmentFiles, type BackupAttachmentFile } from "./backup-files";
 
 /** 备份文件格式版本（与各 store 自己的 version 是两件事） */
-export const BACKUP_SCHEMA = 1;
+export const BACKUP_SCHEMA = 2;
 
 /** 备份里会带上的数据 key。顺序即展示顺序 */
-export const BACKUP_KEYS = ["settings", "files", "fences", "plans", "plans-archive"] as const;
+export const BACKUP_KEYS = ["settings", "files", "fences", "plans", "plans-archive", "todo-papers", "reminders", "favorites", "custom-feeds", "feed-network", "ai-providers", "knowledge-settings"] as const;
 export type BackupKey = (typeof BACKUP_KEYS)[number];
 
 export interface BackupFile {
@@ -51,6 +55,7 @@ export interface BackupFile {
   dirs?: string[];
   /** 分类根目录的绝对路径（仅供恢复时知道往哪建） */
   root?: string | null;
+  attachments?: BackupAttachmentFile[];
 }
 
 export interface MergeStats {
@@ -81,21 +86,22 @@ export function parseBackup(text: string): BackupFile {
   if (!raw || typeof raw !== "object") throw new Error("not-an-object");
   const file = raw as Partial<BackupFile>;
   if (file.kind !== "nimbusdesk-backup") throw new Error("not-a-nimbusdesk-backup");
-  if (typeof file.schema !== "number" || file.schema > BACKUP_SCHEMA) {
+  if (file.schema !== 1 && file.schema !== BACKUP_SCHEMA) {
     throw new Error(`unsupported-schema:${String(file.schema)}`);
   }
-  if (!file.data || typeof file.data !== "object") throw new Error("no-data");
+  if (!file.data || typeof file.data !== "object" || Array.isArray(file.data)) throw new Error("no-data");
+  validateAttachmentFiles(file.data, file.attachments);
   return file as BackupFile;
 }
 
 /** 按 id 取「较新的那个」。缺 `updatedAt` 时退化为「保留本机」（保守优先） */
-function newer<T extends { updatedAt?: number; createdAt?: number }>(
+function newer<T extends { updatedAt?: number; createdAt?: number; savedAt?: number }>(
   local: T | undefined,
   incoming: T,
 ): { value: T; replaced: boolean } {
   if (!local) return { value: incoming, replaced: false };
-  const lt = local.updatedAt ?? local.createdAt ?? 0;
-  const it = incoming.updatedAt ?? incoming.createdAt ?? 0;
+  const lt = local.updatedAt ?? local.createdAt ?? local.savedAt ?? 0;
+  const it = incoming.updatedAt ?? incoming.createdAt ?? incoming.savedAt ?? 0;
   // 相等也保留本机：备份与本机一样新时，本机是用户此刻看到的那份
   return it > lt ? { value: incoming, replaced: true } : { value: local, replaced: false };
 }
@@ -140,6 +146,16 @@ function unwrapState(value: unknown): Record<string, unknown> | null {
   const box = value as { state?: unknown };
   const inner = (box.state ?? value) as Record<string, unknown>;
   return inner && typeof inner === "object" ? inner : null;
+}
+
+/** Settings keyed by stable identifiers have no edit timestamp: keep local conflicts. */
+function mergeLocalMap(local: Record<string, unknown>, incoming: Record<string, unknown>, stats: MergeStats) {
+  const merged = { ...local };
+  for (const [id, value] of Object.entries(incoming)) {
+    if (Object.prototype.hasOwnProperty.call(merged, id)) stats.skipped++;
+    else { Object.defineProperty(merged, id, { value, enumerable: true, writable: true, configurable: true }); stats.added++; }
+  }
+  return merged;
 }
 
 /** 合并「日期 → 任务数组」形态（plans / plans-archive 共用） */
@@ -188,6 +204,9 @@ export async function mergeBackup(
   opts: { overwriteSettings: boolean },
 ): Promise<MergeStats> {
   const stats: MergeStats = { added: 0, updated: 0, skipped: 0 };
+  // Material first: a missing, invalid or conflicting file must not leave dangling task metadata.
+  const attachmentFiles = validateAttachmentFiles(file.data, file.attachments);
+  if (attachmentFiles.length) await invoke("task_attachments_import", { files: attachmentFiles });
 
   // —— files ——
   const files = unwrapState(file.data.files);
@@ -247,6 +266,67 @@ export async function mergeBackup(
     } as never);
   }
 
+  const papers = unwrapState(file.data["todo-papers"]);
+  if (papers?.papers && typeof papers.papers === "object" && !Array.isArray(papers.papers)) {
+    const { usePapers } = await import("@/stores/papers");
+    const current = usePapers.getState();
+    const merged = mergeLocalMap(current.papers, papers.papers as Record<string, unknown>, stats);
+    const order = [...new Set([...current.order, ...(Array.isArray(papers.order) ? papers.order.filter((id): id is string => typeof id === "string" && Object.prototype.hasOwnProperty.call(merged, id)) : [])])];
+    usePapers.setState({ papers: merged, order } as never);
+  }
+
+  const favorites = unwrapState(file.data.favorites);
+  if (Array.isArray(favorites?.items)) {
+    const { useFavorites } = await import("@/stores/favorites");
+    useFavorites.setState({ items: mergeEntityList(useFavorites.getState().items, favorites.items as never[], stats) });
+  }
+
+  const feeds = unwrapState(file.data["custom-feeds"]);
+  if (Array.isArray(feeds?.feeds)) {
+    const { useCustomFeeds } = await import("@/stores/custom-feeds");
+    useCustomFeeds.setState({ feeds: mergeEntityList(useCustomFeeds.getState().feeds, feeds.feeds as never[], stats) });
+  }
+
+  const providers = unwrapState(file.data["ai-providers"]);
+  const network = unwrapState(file.data["feed-network"]);
+  if (opts.overwriteSettings && Array.isArray(network?.routes)) {
+    const { useFeedNetwork } = await import("@/stores/feed-network");
+    useFeedNetwork.getState().setRoutes(network.routes);
+    stats.updated++;
+  }
+  if (Array.isArray(providers?.providers)) {
+    const { useProviders } = await import("@/features/ai/providers");
+    const current = useProviders.getState();
+    const merged = mergeEntityList(current.providers, providers.providers.map((item) => cleanProvider(item)), stats);
+    const defaultTextId = current.defaultTextId ?? (typeof providers.defaultTextId === "string" && merged.some((item) => item.id === providers.defaultTextId) ? providers.defaultTextId : null);
+    const candidateImageModel = current.defaultVisionId ? current.defaultVisionModel : providers.defaultVisionModel;
+    const defaultVisionId = current.defaultVisionId ?? (typeof providers.defaultVisionId === "string" && merged.some((item) => item.id === providers.defaultVisionId && getProviderModels(item).some((model) => model.id === (candidateImageModel ?? item.model) && model.vision)) ? providers.defaultVisionId : null);
+    const defaultVisionModel = defaultVisionId && typeof candidateImageModel === "string" ? candidateImageModel : null;
+    useProviders.setState({ providers: merged, defaultTextId, defaultVisionId, defaultVisionModel });
+  }
+
+  const reminders = unwrapState(file.data.reminders);
+  if (reminders) {
+    const { useReminderSettings } = await import("@/stores/reminders");
+    const current = useReminderSettings.getState();
+    const notified = [...new Set([...current.notified, ...(Array.isArray(reminders.notified) ? reminders.notified.filter((item): item is string => typeof item === "string") : [])])].slice(-500);
+    const preference = opts.overwriteSettings ? {
+      ...(typeof reminders.enabled === "boolean" ? { enabled: reminders.enabled } : {}),
+      ...(Number.isFinite(reminders.advance) && Number(reminders.advance) >= 0 ? { advance: Math.round(Number(reminders.advance)) } : {}),
+    } : {};
+    useReminderSettings.setState({ notified, ...preference });
+    stats.added += notified.filter((item) => !current.notified.includes(item)).length;
+    stats.updated += Object.keys(preference).length;
+  }
+
+  const knowledge = unwrapState(file.data["knowledge-settings"]);
+  if (knowledge && opts.overwriteSettings && typeof knowledge.shortcut === "string") {
+    const { useKnowledge } = await import("@/features/knowledge/store");
+    // Vault paths belong to this machine, like dataDir/filesRoot; keep them intact.
+    useKnowledge.setState({ shortcut: knowledge.shortcut });
+    stats.updated++;
+  }
+
   // —— settings ——：默认不动本机值
   if (opts.overwriteSettings) {
     const s = unwrapState(file.data.settings);
@@ -255,6 +335,7 @@ export async function mergeBackup(
       if (typeof s.theme === "string") patch.theme = s.theme;
       if (typeof s.lang === "string") patch.lang = s.lang;
       if (typeof s.sidebarCollapsed === "boolean") patch.sidebarCollapsed = s.sidebarCollapsed;
+      if (typeof s.fenceShortcut === "string") patch.fenceShortcut = s.fenceShortcut;
       // dataDir / filesRoot 不覆盖：它们是本机路径，照搬过来会指向不存在的目录
       useSettings.setState(patch as never);
       stats.updated += Object.keys(patch).length;
@@ -300,8 +381,17 @@ export async function buildBackup(opts: ExportOptions): Promise<BackupFile> {
   const data: BackupFile["data"] = {};
   for (const key of BACKUP_KEYS) {
     const v = await readJson<unknown>(key);
-    if (v != null) data[key] = v;
+    if (v != null) {
+      if (key === "ai-providers") {
+        const state = unwrapState(v);
+        const clean = { providers: (Array.isArray(state?.providers) ? state.providers : []).map((item) => cleanProvider(item)), defaultTextId: state?.defaultTextId ?? null, defaultVisionId: state?.defaultVisionId ?? null, defaultVisionModel: state?.defaultVisionModel ?? null };
+        data[key] = { state: clean, version: (v as { version?: number }).version ?? 1 };
+      } else data[key] = v;
+    }
   }
+  const paths = collectAttachmentPaths(data);
+  const material = paths.length ? await invoke<BackupAttachmentFile[]>("task_attachments_export", { paths }) : [];
+  const attachments = validateAttachmentFiles(data, material);
 
   let dirs: string[] | undefined;
   let root: string | null = null;
@@ -325,6 +415,7 @@ export async function buildBackup(opts: ExportOptions): Promise<BackupFile> {
     data,
     dirs,
     root,
+    attachments,
   };
 }
 
@@ -334,7 +425,7 @@ export async function exportBackup(opts: ExportOptions): Promise<BackupExport | 
   const path = await pickBackupSavePath(`nimbusdesk-backup-${stamp}.json`);
   if (!path) return null;
   // 先落盘所有待写，保证备份内容是「最新」而不是少 250ms 的那一版
-  flushAllStorage();
+  await flushAllStorage();
   const file = await buildBackup(opts);
   return writeBackup(path, JSON.stringify(file, null, 2));
 }
@@ -345,11 +436,12 @@ export async function importBackup(opts: {
 }): Promise<{ stats: MergeStats; file: BackupFile } | null> {
   const path = await pickBackupOpenPath();
   if (!path) return null;
+  await flushAllStorage();
   const text = await readBackup(path);
   const file = parseBackup(text);
   const stats = await mergeBackup(file, opts);
   // 合并结果立即落盘（setState 会触发 persist，但那是 250ms 防抖）
-  flushAllStorage();
+  await flushAllStorage();
   // settings 若被覆盖，需要立刻应用到界面
   const { applyTheme } = await import("@/lib/theme");
   const { changeLang } = await import("@/lib/i18n");

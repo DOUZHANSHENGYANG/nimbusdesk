@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { DesktopFenceSettings } from "@/features/files/desktop-settings";
 import { useReminderSettings } from "@/stores/reminders";
 import { advanceLabel } from "@/features/plans/reminder";
 import {
@@ -9,12 +10,13 @@ import {
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
-import { FolderOpen, FolderInput, ExternalLink, Database, Palette, Info, Bot, SlidersHorizontal, ArrowLeft, Download, Upload, Bell, TriangleAlert, ListChecks } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { FolderOpen, FolderInput, ExternalLink, Database, Palette, Info, Bot, SlidersHorizontal, ArrowLeft, Download, Upload, Bell, TriangleAlert, ListChecks, BookOpen, CalendarCheck } from "lucide-react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useModal } from "@/components/shell/modal-host";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/motion/button/base";
 import { useSettings } from "@/stores/settings";
 import { useAiSettings } from "@/stores/ai";
@@ -25,18 +27,33 @@ import { setDataDir as invokeSetDataDir, pickFolder, revealInExplorer } from "@/
 import { exportBackup, importBackup } from "@/features/settings/backup";
 import { gsap, useGSAP } from "@/lib/gsap";
 import { cn } from "@/lib/utils";
+import { KnowledgeSettings } from "@/features/knowledge/settings";
+import { ProviderSettings } from "@/features/ai/provider-settings";
+import { FeedNetworkSettings } from "@/features/feeds/network-settings";
+import { useProviderCopy } from "@/features/ai/provider-copy";
 
-type SettingsTab = "system" | "ai" | "about";
+type SettingsTab = "system" | "plans" | "knowledge" | "feeds" | "ai" | "about";
 
-/** 设置页：独立路由 + 左侧分类侧栏（系统/AI/关于）+ 右侧内容 */
+/** 设置页：独立路由 + 左侧功能分类侧栏 + 右侧内容 */
 export function SettingsPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const [tab, setTab] = useState<SettingsTab>("system");
+  const { confirm } = useModal();
+  const aiCopy = useProviderCopy();
+  const [aiDirty, setAiDirty] = useState(false);
+  const [searchParams] = useSearchParams();
+  const [tab, setTab] = useState<SettingsTab>(searchParams.get("tab") === "ai" ? "ai" : searchParams.get("tab") === "knowledge" ? "knowledge" : "system");
   const contentRef = useRef<HTMLDivElement>(null);
+  async function leaveAi() {
+    if (tab !== "ai" || !aiDirty) return true;
+    return confirm({ title: aiCopy.discardTitle, description: aiCopy.discardHint, confirmText: aiCopy.discard, cancelText: aiCopy.stay });
+  }
 
   const TABS: { key: SettingsTab; icon: React.ComponentType<{ className?: string }>; label: string }[] = [
     { key: "system", icon: SlidersHorizontal, label: t("settings.tabs.system") },
+    { key: "plans", icon: CalendarCheck, label: t("settings.tabs.plans") },
+    { key: "knowledge", icon: BookOpen, label: t("nav.knowledge") },
+    { key: "feeds", icon: SlidersHorizontal, label: t("nav.feeds") },
     { key: "ai", icon: Bot, label: t("settings.tabs.ai") },
     { key: "about", icon: Info, label: t("settings.tabs.about") },
   ];
@@ -61,7 +78,7 @@ export function SettingsPage() {
         <div className="px-2.5 pt-3">
           <button
             type="button"
-            onClick={() => navigate(-1)}
+            onClick={() => { void leaveAi().then((allowed) => { if (allowed) navigate(-1); }); }}
             className="flex h-9 w-full items-center gap-2.5 rounded-lg px-3 text-[13px] font-medium text-sidebar-foreground/80 transition-colors hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground"
           >
             <ArrowLeft className="size-4" />
@@ -77,7 +94,8 @@ export function SettingsPage() {
             <button
               key={key}
               type="button"
-              onClick={() => setTab(key)}
+              aria-current={tab === key ? "page" : undefined}
+              onClick={() => { if (key !== tab) void leaveAi().then((allowed) => { if (allowed) { setAiDirty(false); setTab(key); } }); }}
               className={cn(
                 "flex h-9 items-center gap-2.5 rounded-lg px-3 text-[13px] font-medium transition-colors duration-150",
                 tab === key
@@ -96,9 +114,12 @@ export function SettingsPage() {
 
       {/* ── 内容区 ── */}
       <div ref={contentRef} className="min-w-0 flex-1 overflow-y-auto">
-        <div className="mx-auto flex w-full max-w-2xl flex-col gap-5 p-6 pb-10">
+        <div className={cn("mx-auto flex w-full flex-col gap-5 p-6 pb-10", tab === "ai" ? "max-w-6xl" : "max-w-2xl")}>
           {tab === "system" && <SystemSection />}
-          {tab === "ai" && <AiSection />}
+          {tab === "plans" && <PlansSection />}
+          {tab === "knowledge" && <KnowledgeSettings />}
+          {tab === "feeds" && <FeedNetworkSettings />}
+          {tab === "ai" && <AiSection onDirtyChange={setAiDirty} />}
           {tab === "about" && <AboutSection />}
         </div>
       </div>
@@ -117,6 +138,8 @@ function SystemSection() {
   const setLang = useSettings((s) => s.setLang);
   const dataDir = useSettings((s) => s.dataDir);
   const storeSetDataDir = useSettings((s) => s.setDataDir);
+  const developerMode = useSettings((s) => s.developerMode);
+  const setDeveloperMode = useSettings((s) => s.setDeveloperMode);
   const [migrating, setMigrating] = useState(false);
 
   /** 切换主题：径向扩散动画 */
@@ -148,7 +171,7 @@ function SystemSection() {
     if (!ok) return;
     setMigrating(true);
     try {
-      flushAllStorage(); // 迁移前落盘
+      await flushAllStorage(); // 迁移前等待所有写入完成
       const result = await invokeSetDataDir(dir);
       storeSetDataDir(result.dataDir);
       toast.success(t("settings.migrated", { count: result.migrated.length }));
@@ -161,6 +184,7 @@ function SystemSection() {
 
   return (
     <>
+      <DesktopFenceSettings />
       {/* 外观 */}
       <Card>
         <CardHeader>
@@ -241,14 +265,25 @@ function SystemSection() {
         </CardContent>
       </Card>
 
-      <ReminderCard />
-      <CompletionCard />
+      <Card>
+        <CardContent className="flex items-center justify-between gap-6">
+          <div className="min-w-0 space-y-1.5">
+            <Label htmlFor="developer-mode" className="text-[14px] font-medium">{t("settings.developerMode")}</Label>
+            <p id="developer-mode-hint" className="text-[13px] leading-relaxed text-muted-foreground">{t("settings.developerModeHint")}</p>
+          </div>
+          <Switch id="developer-mode" checked={developerMode} onCheckedChange={setDeveloperMode} aria-describedby="developer-mode-hint" />
+        </CardContent>
+      </Card>
       <BackupCard />
     </>
   );
 }
 
-/* ── 系统：完成后的行为 ─────────────────────────────────── */
+/* ── 计划：提醒与完成行为 ───────────────────────────────── */
+
+function PlansSection() {
+  return <><ReminderCard /><CompletionCard /></>;
+}
 
 /*
  * 两个开关刻意不对称：
@@ -277,7 +312,7 @@ function CompletionCard() {
           <span className="text-[13px] font-medium text-foreground/90">
             {t("plans.autoSortDone")}
           </span>
-          <Switch checked={autoSortDone} onChange={setAutoSortDone} label={t("plans.autoSortDone")} />
+          <Switch checked={autoSortDone} onCheckedChange={setAutoSortDone} aria-label={t("plans.autoSortDone")} />
         </label>
         <label className="flex cursor-pointer items-center justify-between gap-3">
           <span className="flex flex-col gap-0.5">
@@ -291,48 +326,14 @@ function CompletionCard() {
           </span>
           <Switch
             checked={autoClearDone}
-            onChange={setAutoClearDone}
-            label={t("plans.autoClearDone")}
+            onCheckedChange={setAutoClearDone}
+            aria-label={t("plans.autoClearDone")}
           />
         </label>
       </CardContent>
     </Card>
   );
 }
-
-/** 开关：与提醒卡片同一套视觉（h-6 w-11 + 白色滑块） */
-function Switch({
-  checked,
-  onChange,
-  label,
-}: {
-  checked: boolean;
-  onChange: (v: boolean) => void;
-  label: string;
-}) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      aria-label={label}
-      onClick={() => onChange(!checked)}
-      className={cn(
-        "relative h-6 w-11 shrink-0 rounded-full transition-colors duration-200",
-        checked ? "bg-brand" : "bg-muted-foreground/30",
-      )}
-    >
-      <span
-        className={cn(
-          "absolute top-0.5 size-5 rounded-full bg-white shadow transition-transform duration-200",
-          checked ? "translate-x-5.5" : "translate-x-0.5",
-        )}
-      />
-    </button>
-  );
-}
-
-/* ── 系统：任务提醒 ───────────────────────────────────── */
 
 function ReminderCard() {
   const { t } = useTranslation();
@@ -388,23 +389,11 @@ function ReminderCard() {
           <span className="text-[13px] font-medium text-foreground/90">
             {t("settings.reminderEnable")}
           </span>
-          <button
-            type="button"
-            role="switch"
-            aria-checked={enabled}
-            onClick={() => void onToggle()}
-            className={cn(
-              "relative h-6 w-11 shrink-0 rounded-full transition-colors duration-200",
-              enabled ? "bg-brand" : "bg-muted-foreground/30",
-            )}
-          >
-            <span
-              className={cn(
-                "absolute top-0.5 size-5 rounded-full bg-white shadow transition-transform duration-200",
-                enabled ? "translate-x-5.5" : "translate-x-0.5",
-              )}
-            />
-          </button>
+          <Switch
+            checked={enabled}
+            onCheckedChange={() => void onToggle()}
+            aria-label={t("settings.reminderEnable")}
+          />
         </label>
 
         <Field label={t("settings.reminderAdvance")}>
@@ -413,6 +402,7 @@ function ReminderCard() {
               <button
                 key={m}
                 type="button"
+                aria-pressed={advance === m}
                 onClick={() => onAdvance(m)}
                 className={cn(
                   "h-8 rounded-full border px-3 text-[12px] font-medium transition-colors duration-150",
@@ -552,24 +542,18 @@ function BackupCard() {
   );
 }
 
-/* ── AI（资讯） ───────────────────────────────────────── */
+/* ── 全局 AI 提供商与资讯联网搜索 ───────────────────────── */
 
-function AiSection() {
+function AiSection({ onDirtyChange }: { onDirtyChange: (dirty: boolean) => void }) {
   const { t } = useTranslation();
   const ai = useAiSettings();
   const setAi = useAiSettings((s) => s.setAi);
   const [aiDraft, setAiDraft] = useState<null | {
-    llmBaseUrl: string;
-    llmApiKey: string;
-    llmModel: string;
     searchProvider: string;
     tavilyApiKey: string;
   }>(null);
   const [aiSaved, setAiSaved] = useState(false);
   const aiCurrent = aiDraft ?? {
-    llmBaseUrl: ai.llmBaseUrl,
-    llmApiKey: ai.llmApiKey,
-    llmModel: ai.llmModel,
     searchProvider: ai.searchProvider || "auto",
     tavilyApiKey: ai.tavilyApiKey,
   };
@@ -584,11 +568,11 @@ function AiSection() {
   };
 
   return (
-    <Card>
+    <><ProviderSettings onDirtyChange={onDirtyChange} /><Card className="workbench-ui">
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-[15px]">
           <Bot className="size-4" />
-          {t("feeds.aiSection", "AI")}
+          {t("feeds.searchServices")}
         </CardTitle>
         <CardDescription>{t("feeds.aiDesc")}</CardDescription>
       </CardHeader>
@@ -606,18 +590,6 @@ function AiSection() {
           </select>
         </div>
         <div className="space-y-1.5">
-          <Label className="text-xs">{t("feeds.llmEndpoint")}</Label>
-          <Input value={aiCurrent.llmBaseUrl} onChange={(e) => updateAi({ llmBaseUrl: e.target.value })} placeholder="http://127.0.0.1:7865/v1" />
-        </div>
-        <div className="space-y-1.5">
-          <Label className="text-xs">{t("feeds.llmKey")}</Label>
-          <Input type="password" value={aiCurrent.llmApiKey} onChange={(e) => updateAi({ llmApiKey: e.target.value })} placeholder="sk-…" />
-        </div>
-        <div className="space-y-1.5">
-          <Label className="text-xs">{t("feeds.llmModel")}</Label>
-          <Input value={aiCurrent.llmModel} onChange={(e) => updateAi({ llmModel: e.target.value })} />
-        </div>
-        <div className="space-y-1.5">
           <Label className="text-xs">{t("feeds.tavilyKey")}</Label>
           <Input type="password" value={aiCurrent.tavilyApiKey} onChange={(e) => updateAi({ tavilyApiKey: e.target.value })} placeholder="tvly-…" />
         </div>
@@ -626,7 +598,7 @@ function AiSection() {
           {aiSaved ? <span className="text-xs text-success">{t("feeds.aiSaved")}</span> : null}
         </div>
       </CardContent>
-    </Card>
+    </Card></>
   );
 }
 
@@ -693,6 +665,8 @@ function ThemePreview({
     <button
       type="button"
       onClick={(e) => onClick(mode, e)}
+      aria-pressed={selected}
+      aria-label={label}
       className={cn(
         "relative h-16 w-28 overflow-hidden rounded-xl border-2 transition-colors duration-150",
         selected ? "border-brand" : "border-border hover:border-muted-foreground/40",
@@ -722,8 +696,7 @@ function ThemePreview({
         className="absolute right-2 bottom-2 size-5 rounded-md"
         style={{ background: "var(--pr-brand-500)" }}
       />
-      /* 标签色不能跟着**当前**主题走：当前是深色时 text-foreground 会变浅，
-         两种缩略图的字色就一样了。按缩略图代表的主题取固定灰。 */
+      {/* Use the represented theme's text color in both previews. */}
       <span
         className="absolute bottom-1.5 left-2 text-[11px] font-semibold"
         style={{

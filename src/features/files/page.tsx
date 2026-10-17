@@ -875,9 +875,12 @@ function ItemModal({
   const [type, setType] = useState<ItemType>(editing?.type ?? "folder");
   const [title, setTitle] = useState(editing?.title ?? "");
   const [path, setPath] = useState(editing?.path ?? "");
-  const [categoryId, setCategoryId] = useState(
+  const [selectedCategoryId, setCategoryId] = useState(
     editing?.categoryId ?? defaultCategory ?? categories[0]?.id ?? "",
   );
+  const categoryId = categories.some((category) => category.id === selectedCategoryId)
+    ? selectedCategoryId
+    : categories.find((category) => category.id === defaultCategory)?.id ?? categories[0]?.id ?? "";
   const [tagsText, setTagsText] = useState((editing?.tags ?? []).join(", "));
   const [note, setNote] = useState(editing?.note ?? "");
   const [fetchedIcon, setFetchedIcon] = useState<string | undefined>(undefined);
@@ -1105,7 +1108,8 @@ function ItemModal({
           <button
             type="button"
             onClick={save}
-            className="rounded-full bg-brand px-4 py-1.5 text-[13px] font-medium text-white hover:bg-brand-strong"
+            disabled={!title.trim() || !path.trim() || !categoryId || urlInvalid}
+            className="rounded-full bg-brand px-4 py-1.5 text-[13px] font-medium text-white hover:bg-brand-strong disabled:cursor-not-allowed disabled:opacity-40"
           >
             {t("common.confirm")}
           </button>

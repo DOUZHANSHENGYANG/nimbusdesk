@@ -5,11 +5,12 @@
  */
 import { searchTavily, type WebResult } from "./tavily";
 import { searchBing } from "./providers/bing";
-import { useAiSettings } from "@/stores/ai";
+import { aiSettingsReady, useAiSettings } from "@/stores/ai";
 
 export type { WebResult };
 
 export async function searchWeb(query: string, maxResults = 5): Promise<WebResult[]> {
+  await aiSettingsReady();
   const provider = useAiSettings.getState().searchProvider || "auto";
 
   if (provider === "bing") return searchBing(query, maxResults);

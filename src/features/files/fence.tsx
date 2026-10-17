@@ -7,7 +7,8 @@ import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Providers } from "@/app/providers";
 import { useFiles, useFences, DEFAULT_FENCE, type FileItem } from "@/stores/files";
-import { inTauri, probePaths, openPath, openUrl, dragOut, windowReady } from "@/lib/tauri";
+import { inTauri, openPath, openUrl, dragOut, windowReady } from "@/lib/tauri";
+import { moveDroppedFiles } from "./fence-drop";
 import { ItemIcon } from "@/features/files/icons";
 import { useFileActions } from "@/features/files/actions";
 import { usePopupMenu } from "@/features/files/use-popup-menu";
@@ -32,10 +33,9 @@ const SCALE_MAX = 1.6;
 const GAP = 6;
 
 function FencePanel({ categoryId }: { categoryId: string }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const categories = useFiles((s) => s.categories);
   const allItems = useFiles((s) => s.items); // 稳定引用，selector 内不得造新数组
-  const addItems = useFiles((s) => s.addItems);
   const moveItemBefore = useFiles((s) => s.moveItemBefore);
   const category = useMemo(
     () => categories.find((c) => c.id === categoryId),
@@ -58,13 +58,16 @@ function FencePanel({ categoryId }: { categoryId: string }) {
   const [draft, setDraft] = useState("");
   const renameRef = useRef<HTMLInputElement>(null);
   const dragOutBusy = useRef(false);
+  const receivingDrop = useRef(false);
+  const [dropActive, setDropActive] = useState(false);
+  const [dropBusy, setDropBusy] = useState(false);
   const suppressClickUntil = useRef(0);
   const panelRef = useRef<HTMLDivElement>(null);
   const gridWrapRef = useRef<HTMLDivElement>(null);
   const gridRef = useRef<HTMLDivElement>(null);
   const itemRefs = useRef(new Map<string, HTMLDivElement>());
   const [gridSize, setGridSize] = useState({ w: 0, h: 0 });
-  /** 单击选中的条目（选中后拖动 = 排序） */
+  /** 当前选中条目；直接拖动排序，越过边界后系统拖出。 */
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [dragId, setDragId] = useState<string | null>(null);
   /** 落点竖线：插入位 + 相对网格容器的坐标 */
@@ -143,7 +146,8 @@ function FencePanel({ categoryId }: { categoryId: string }) {
   useEffect(() => {
     void windowReady().catch(() => undefined);
     if (!win) return;
-    const unClose = win.onCloseRequested(() => {
+    const unClose = win.onCloseRequested(event => {
+      if (receivingDrop.current) { event.preventDefault(); return; }
       setOpen(categoryId, false);
     });
     return () => {
@@ -290,32 +294,33 @@ function FencePanel({ categoryId }: { categoryId: string }) {
       const p = ev.payload;
       if (p.type === "enter" || p.type === "over") {
         setHover(true);
+        setDropActive(true);
         return;
       }
       if (p.type === "leave") {
         setHover(false);
+        setDropActive(false);
         return;
       }
       if (p.type === "drop") {
         const paths = p.paths;
-        if (!paths.length) return;
+        setDropActive(false);
+        if (!paths.length || receivingDrop.current) return;
+        receivingDrop.current = true;
+        setDropBusy(true);
         try {
-          const probed = await probePaths(paths);
-          if (cancelled) return;
-          const valid = probed.filter((x) => x.kind !== "missing");
-          if (!valid.length) return;
-          addItems(
-            valid.map((x) => ({
-              categoryId,
-              type: x.kind === "folder" ? ("folder" as const) : ("file" as const),
-              title: x.name,
-              path: x.path,
-              tags: [],
-            })),
-          );
-          toast.success(t("files.collected", { count: valid.length }));
+          const destination = await actions.ensureDir(categoryId);
+          if (!destination || cancelled) return;
+          const result = await moveDroppedFiles(categoryId, paths, destination);
+          const en = i18n.language.startsWith('en');
+          if (result.moved.length) toast.success(en ? `Added ${result.moved.length} items to this fence` : `已移动并加入栅格 ${result.moved.length} 项`);
+          if (result.moved.some(entry => entry.sourceRetained)) toast.warning(en ? 'A source could not be removed. Its original was kept.' : '部分源文件无法移除，原文件已保留。');
+          if (result.failed.length) toast.error(result.failed.map(item => `${item.source.split(/[\\/]/).pop()}: ${item.error}`).join('\n'));
         } catch (e) {
           toast.error(String(e));
+        } finally {
+          receivingDrop.current = false;
+          setDropBusy(false);
         }
       }
     });
@@ -323,7 +328,7 @@ function FencePanel({ categoryId }: { categoryId: string }) {
       cancelled = true;
       void un.then((fn) => fn());
     };
-  }, [categoryId, addItems, t]);
+  }, [categoryId, actions.ensureDir, i18n]);
 
   /* ── 滚轮：翻页 / Ctrl+滚轮缩放（非 passive 才能拦截 Ctrl 滚轮） ── */
   useEffect(() => {
@@ -379,8 +384,6 @@ function FencePanel({ categoryId }: { categoryId: string }) {
   /* ── 条目指针手势：单击选中 · 窗口内拖动=排序 · 拖出窗口=系统拖出 ── */
   const startItemDrag = (e: React.PointerEvent, item: FileItem) => {
     if (e.button !== 0 || dragOutBusy.current) return;
-    /** 按下时是否已选中：已选中 → 拖动=排序；未选中 → 拖动=拖出 */
-    const wasSelected = selectedId === item.id;
     setSelectedId(item.id);
     const el = e.currentTarget as HTMLElement;
     const pointerId = e.pointerId;
@@ -423,8 +426,8 @@ function FencePanel({ categoryId }: { categoryId: string }) {
       if (mode === "out") return;
       if (mode === "idle") {
         if (Math.hypot(ev.clientX - sx, ev.clientY - sy) < 5) return;
-        mode = wasSelected || !isLocal ? "reorder" : "out";
-        if (mode === "reorder") setDragId(item.id);
+        mode = "reorder";
+        setDragId(item.id);
       }
       // 越过栅栏边界 → 转为系统拖出（网址条目留在原地）
       if (isOutside(ev.clientX, ev.clientY)) {
@@ -501,7 +504,7 @@ function FencePanel({ categoryId }: { categoryId: string }) {
       <div
         ref={panelRef}
         className={cn(
-          "flex h-full w-full flex-col overflow-hidden rounded-2xl border transition-opacity duration-300",
+          "relative flex h-full w-full flex-col overflow-hidden rounded-2xl border transition-opacity duration-300",
           ghosted ? "opacity-[0.14]" : "opacity-100",
         )}
         style={{
@@ -510,6 +513,9 @@ function FencePanel({ categoryId }: { categoryId: string }) {
           backdropFilter: "blur(2px)",
         }}
       >
+        {(dropActive || dropBusy) && <div role="status" className="pointer-events-none absolute inset-0 z-40 grid place-items-center rounded-2xl border-2 border-brand bg-card/95 p-5 text-center text-sm text-foreground">
+          {i18n.language.startsWith('en') ? (dropBusy ? 'Moving files…' : 'Drop to move into this fence\u2019s folder') : (dropBusy ? '正在移动文件…' : '松开以移动到此栅格目录')}
+        </div>}
         {/* 迷你标题栏：按住拖动移动（自己实现，避免双击被当成最大化）；双击名称 = 改名 */}
         <div
           onPointerDown={startTitleDrag}

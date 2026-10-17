@@ -19,13 +19,28 @@ export async function rawFetch(url: string, init?: RequestInit): Promise<Respons
   return globalThis.fetch(url, init);
 }
 
-export async function httpText(url: string, init?: RequestInit): Promise<string> {
-  const res = await rawFetch(url, {
-    ...init,
-    headers: { "User-Agent": UA, ...(init?.headers as Record<string, string> | undefined) },
+export async function httpText(url: string, init?: RequestInit, timeoutMs = 12000): Promise<string> {
+  const signal = AbortSignal.any([AbortSignal.timeout(timeoutMs), ...(init?.signal ? [init.signal] : [])]);
+  signal.throwIfAborted();
+  let abort: () => void = () => {};
+  const cancelled = new Promise<never>((_, reject) => {
+    abort = () => reject(signal.reason);
+    signal.addEventListener('abort', abort, {once:true});
   });
-  if (!res.ok) throw new Error(`HTTP ${res.status} for ${url}`);
-  return res.text();
+  try {
+    return await Promise.race([cancelled, (async () => {
+      const res = await rawFetch(url, {
+        ...init, signal,
+        headers: { "User-Agent": UA, ...(init?.headers as Record<string, string> | undefined) },
+      });
+      signal.throwIfAborted();
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const body = await res.text();
+      signal.throwIfAborted();
+      if (body.length > 5_000_000) throw new Error("Response exceeds 5 MB");
+      return body;
+    })()]);
+  } finally { signal.removeEventListener('abort', abort); }
 }
 
 export async function httpJson<T = unknown>(url: string, init?: RequestInit): Promise<T> {

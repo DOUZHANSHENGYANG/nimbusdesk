@@ -90,3 +90,12 @@ tags: [architecture, tauri2, shell, data-layer]
 - **条目图标**（`features/files/icons.tsx` `ItemIcon`）：网站 favicon（`<img>`，加载失败回退）→ 文件按扩展名映射 40+ 类型专属 lucide 图标与配色（pdf红/文档蓝/表格绿/图片紫/音视频/压缩包琥珀/代码天蓝/exe灰）→ 兜底 File。主页速览 / 文件卡片 / 栅栏网格三处统一。
 - 类型选择器为 **motion layoutId 弹性滑块**；条目模型加 `note`（网站填 SEO 描述，可手改）与 `iconUrl`。
 - 大纲交互（Todoist/Workflowy 式修订）：顶部快速添加、子树容器 `border-l-2` 引导线（缩进只由容器 margin 提供、行 padding 固定，避免双重缩进）、父任务 `done/total` 子树进度徽章、时间文本校验；大纲视图淘汰了按行累加缩进的旧实现。
+
+## 模块：开发知识与快捷收集（2026-10-17）
+
+- `src/features/knowledge/` 提供 vault 绑定、收件箱/经验/配方/收藏、全文搜索、图片预览、AI建议和手动归档；正文直接存 vault，元数据记录来源与图片归属。
+- 收集入口为主窗口按钮、托盘和可配置全局快捷键，独立 `capture` 窗口置顶；IndexedDB 按 vault 持久草稿，隐藏前落盘，跨窗口冲突明确处理。
+- `src-tauri/src/knowledge/` 管理受限目录文件系统、图片校验与事务恢复，`commands/knowledge.rs` 为异步 IPC；归档落在用户确认的 `02-工作/开发经验/`、`02-工作/开发配方/`、`04-资源收藏/`。
+- `src/features/ai/` 提供多服务商及文本/图片默认模型；`commands/ai.rs` 用 Windows 凭据管理器保存 Key，原生请求兼容 Chat Completions，旧资讯配置显式迁移。
+- `commands/capture.rs` 与官方 global-shortcut 插件管理热键和窗口；opener 仅增加 Obsidian URI 范围用于打开笔记。
+- vault 与应用 dataDir/filesRoot 独立，应用备份不包含知识库正文/附件。详见 `docs/开发知识使用说明.md` 与 `docs/开发知识验证记录.md`。

@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
-import { Minus, Square, Copy, X, Cloud, Sun, Moon, Settings2 } from "lucide-react";
+import { Minus, Square, Copy, X, Sun, Moon, Settings2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { inTauri } from "@/lib/tauri";
 import { toggleThemeRadial } from "@/lib/theme";
@@ -63,9 +63,7 @@ export function Titlebar() {
     >
       {/* 左：品牌区（可拖拽） */}
       <div data-tauri-drag-region className="flex items-center gap-2.5 pl-3.5 pr-2">
-        <span className="grid size-6 place-items-center rounded-md bg-brand/15 text-brand">
-          <Cloud className="size-4" strokeWidth={2.2} />
-        </span>
+        <img src="/app-icon.png" alt="" className="size-7 shrink-0" draggable={false} />
         <span
           data-tauri-drag-region
           className="text-[13px] font-semibold tracking-wide text-sidebar-foreground"

@@ -17,7 +17,7 @@ export function AiSearchView() {
   const error = useAiSearch((s) => s.error);
   const setQuery = useAiSearch((s) => s.setQuery);
   const run = useAiSearch((s) => s.run);
-  const provider = useAiSettings((s) => s.searchProvider || "auto");
+  const provider = useAiSettings((s) => s.searchProvider === "tavily" || (s.searchProvider === "auto" && !!s.tavilyApiKey) ? "tavily" : "bing");
 
   return (
     <div className="flex h-full min-w-0 flex-col">
@@ -30,6 +30,7 @@ export function AiSearchView() {
           }}
         >
           <input
+            aria-label={t("feeds.tabAi")}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder={t("feeds.searchPh")}
@@ -46,7 +47,7 @@ export function AiSearchView() {
       </header>
 
       <ScrollArea className="min-h-0 flex-1 p-4">
-        {error ? <div className="mb-3 text-sm text-destructive">{t("feeds.searchFail")}{error}</div> : null}
+        {error ? <div role="alert" className="mb-3 text-sm text-destructive">{t("feeds.searchFail")}{error}</div> : null}
 
         {!answer && asking ? (
           <div className="space-y-2">
@@ -58,7 +59,7 @@ export function AiSearchView() {
         ) : null}
 
         {answer ? (
-          <div className="max-w-3xl">
+          <div className="max-w-3xl" aria-label={t("feeds.aiAnswer")}>
             <div className="whitespace-pre-wrap text-sm leading-relaxed">{answer}</div>
             {sources.length ? (
               <div className="mt-4 border-t pt-3">

@@ -1,4 +1,4 @@
-//! 数据目录解析与 JSON 持久化。
+//! 便携数据目录解析、SQLite 状态与兼容 JSON 命令。
 //!
 //! 目录优先级（绿色/便携优先）：
 //! 1. 指针文件（`data.dir`，位于 exe 目录或 %APPDATA%/nimbusdesk）指向的自定义目录
@@ -9,15 +9,28 @@
 //! 阻塞 IO 会卡死 UI 事件循环。
 
 use crate::atomic::{read_file_with_fallback, write_file_atomic};
+use crate::database;
+use serde::Deserialize;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use serde_json::Value;
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 const APP_DIR_NAME: &str = "nimbusdesk";
 const POINTER_FILE: &str = "data.dir";
+static DATA_IO: Mutex<()> = Mutex::new(());
+static PROBE_ID: AtomicU64 = AtomicU64::new(0);
+
+/// Resolve under the same lock as relocation so callers cannot write the old
+/// directory after its verified snapshot has been published.
+pub fn with_data_dir<T>(operation: impl FnOnce(&Path) -> Result<T, String>) -> Result<T, String> {
+    let _guard = DATA_IO.lock().map_err(|_| "data directory lock poisoned")?;
+    operation(&resolve_data_dir()?)
+}
 
 fn appdata_dir() -> Result<PathBuf, String> {
     let base = std::env::var("APPDATA").map_err(|_| "APPDATA not found".to_string())?;
@@ -36,8 +49,16 @@ fn ensure_dir(path: &Path) -> Result<(), String> {
 }
 
 fn is_writable_dir(path: &Path) -> bool {
-    let probe = path.join(".write-test");
-    match fs::File::create(&probe) {
+    let probe = path.join(format!(
+        ".nimbusdesk-write-check-{}-{}",
+        std::process::id(),
+        PROBE_ID.fetch_add(1, Ordering::Relaxed)
+    ));
+    match fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(&probe)
+    {
         Ok(mut f) => {
             let ok = f.write_all(b"ok").is_ok();
             drop(f);
@@ -52,7 +73,7 @@ fn valid_pointer(path: &Path) -> bool {
     path.is_dir() && is_writable_dir(path)
 }
 
-/// 解析当前数据目录（不创建）。
+/// 按便携优先策略解析数据目录，必要时创建默认目录。
 pub fn resolve_data_dir() -> Result<PathBuf, String> {
     let appdata = appdata_dir()?;
     // 1a. %APPDATA%/nimbusdesk/data.dir
@@ -86,34 +107,28 @@ pub fn resolve_data_dir() -> Result<PathBuf, String> {
 
 fn write_pointer(target: &Path) -> Result<String, String> {
     let content = target.to_string_lossy().to_string();
-    // 优先 exe 旁（随 exe 迁移），失败则写 APPDATA
+    let appdata = appdata_dir()?;
+    // Existing APPDATA pointers have resolver priority, so update that pointer
+    // rather than leaving a stale higher-priority value after moving the data.
+    let preferred = appdata.join(POINTER_FILE);
+    if preferred.exists() {
+        write_file_atomic(&preferred.to_string_lossy(), content.as_bytes())
+            .map_err(|e| e.to_string())?;
+        return Ok(preferred.display().to_string());
+    }
     if let Ok(exe) = exe_dir() {
         let p = exe.join(POINTER_FILE);
-        if fs::write(&p, &content).is_ok() {
+        if write_file_atomic(&p.to_string_lossy(), content.as_bytes()).is_ok() {
             return Ok(p.display().to_string());
         }
     }
-    let appdata = appdata_dir()?;
     ensure_dir(&appdata)?;
     let p = appdata.join(POINTER_FILE);
-    fs::write(&p, &content).map_err(|e| e.to_string())?;
+    write_file_atomic(&p.to_string_lossy(), content.as_bytes()).map_err(|e| e.to_string())?;
     Ok(p.display().to_string())
 }
 
-fn data_file(key: &str) -> Result<PathBuf, String> {
-    // key 只允许字母数字下划线连字符，防目录穿越
-    if key.is_empty()
-        || !key
-            .chars()
-            .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
-    {
-        return Err(format!("invalid data key: {key}"));
-    }
-    let dir = resolve_data_dir()?;
-    Ok(dir.join(format!("{key}.json")))
-}
-
-/// 读取 JSON。主文件不存在返回 `None`；主文件损坏/丢失时回退 `.bak` 自愈。
+/// 仅用于旧 AI 迁移文件；读取失败时尝试 `.bak`，JSON 解析失败显式报错。
 fn read_file<T: DeserializeOwned>(path: &Path) -> Result<Option<T>, String> {
     let text = match read_file_with_fallback(&path.to_string_lossy()) {
         Ok(s) => s,
@@ -139,29 +154,19 @@ fn blocking_get_data_dir() -> Result<String, String> {
 }
 
 fn blocking_set_data_dir(new_dir: String) -> Result<Value, String> {
+    let _guard = DATA_IO.lock().map_err(|_| "data directory lock poisoned")?;
     let target = PathBuf::from(new_dir.trim());
     if target.as_os_str().is_empty() {
         return Err("empty path".into());
     }
+    database::reject_link_components(&target)?;
     ensure_dir(&target)?;
     if !is_writable_dir(&target) {
         return Err(format!("not writable: {}", target.display()));
     }
     let old = resolve_data_dir()?;
-    let mut migrated: Vec<String> = Vec::new();
-    if old != target {
-        if let Ok(entries) = fs::read_dir(&old) {
-            for entry in entries.flatten() {
-                let p = entry.path();
-                if p.extension().and_then(|e| e.to_str()) == Some("json") {
-                    let dest = target.join(entry.file_name());
-                    if fs::copy(&p, &dest).is_ok() {
-                        migrated.push(entry.file_name().to_string_lossy().to_string());
-                    }
-                }
-            }
-        }
-    }
+    let target = target.canonicalize().map_err(|e| e.to_string())?;
+    let migrated = database::snapshot_to(&old, &target)?;
     let pointer = write_pointer(&target)?;
     Ok(serde_json::json!({
         "dataDir": target.display().to_string(),
@@ -171,13 +176,43 @@ fn blocking_set_data_dir(new_dir: String) -> Result<Value, String> {
 }
 
 fn blocking_read_json(key: String) -> Result<Option<Value>, String> {
-    let path = data_file(&key)?;
-    read_file(&path)
+    read_current(&key)
 }
 
-fn blocking_write_json(key: String, value: Value) -> Result<(), String> {
-    let path = data_file(&key)?;
-    write_file(&path, &value)
+/// Native readers share the same SQLite authority as frontend persistence.
+pub fn read_current(key: &str) -> Result<Option<Value>, String> {
+    database::validate_key(key)?;
+    with_data_dir(|root| {
+        if key == "ai-settings" {
+            read_file(&root.join("ai-settings.json"))
+        } else {
+            database::read_at(root, key)
+        }
+    })
+}
+
+#[derive(Deserialize)]
+pub struct ExpectedState {
+    pub value: Value,
+}
+
+fn blocking_write_json(
+    key: String,
+    value: Value,
+    base: Option<ExpectedState>,
+) -> Result<Value, String> {
+    database::validate_key(&key)?;
+    with_data_dir(|root| {
+        if key == "ai-settings" {
+            write_file(&root.join("ai-settings.json"), &value)?;
+            Ok(value)
+        } else if let Some(base) = base {
+            database::write_with_base_at(root, &key, &value, &base.value)
+        } else {
+            database::write_at(root, &key, &value)?;
+            Ok(value)
+        }
+    })
 }
 
 async fn blocking<T>(f: impl FnOnce() -> T + Send + 'static) -> Result<T, String>
@@ -207,6 +242,10 @@ pub async fn read_json(key: String) -> Result<Option<Value>, String> {
 }
 
 #[command]
-pub async fn write_json(key: String, value: Value) -> Result<(), String> {
-    blocking(move || blocking_write_json(key, value)).await?
+pub async fn write_json(
+    key: String,
+    value: Value,
+    base: Option<ExpectedState>,
+) -> Result<Value, String> {
+    blocking(move || blocking_write_json(key, value, base)).await?
 }

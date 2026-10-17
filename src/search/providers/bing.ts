@@ -1,13 +1,24 @@
 /**
- * Bing 网页搜索 —— 免注册 HTML 抓取（searchWeb 的零门槛实现）。
- * 2026-10 实测：cn.bing.com 国内可达，li.b_algo > h2>a + p 结构稳定。
+ * Bing search: RSS first, with HTML fallback when the RSS endpoint is unavailable.
+ * A successful HTML response may be a home/challenge page without any result rows.
  */
 import type { WebResult } from "../tavily";
 import { httpText } from "@/sources/http";
+import { parseRssFeed } from "@/sources/rss";
 
 export async function searchBing(query: string, maxResults = 5): Promise<WebResult[]> {
   const q = encodeURIComponent(query);
   const hosts = ["https://cn.bing.com", "https://www.bing.com"];
+
+  for (const host of [...hosts].reverse()) {
+    try {
+      const url = `${host}/search?format=rss&q=${q}&count=${Math.max(maxResults, 10)}&mkt=en-US`;
+      const entries = parseRssFeed(await httpText(url), url, maxResults).entries;
+      if (entries.length) return entries.map(entry => ({ title: entry.title, url: entry.url, content: entry.extra?.hover ?? "" }));
+    } catch {
+      /* Try the other region, then the original HTML result parser. */
+    }
+  }
 
   for (const host of hosts) {
     try {

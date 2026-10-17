@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import { tauriJsonStorage } from "@/lib/storage";
+import type { MovedFenceEntry } from "@/lib/tauri";
 
 /* ── 文件条目库：files.json ───────────────────────────── */
 
@@ -48,6 +49,7 @@ interface FilesState {
   setCategoryDir: (id: string, dir: string | null) => void;
   addItem: (item: Omit<FileItem, "id" | "createdAt">) => void;
   addItems: (items: Omit<FileItem, "id" | "createdAt">[]) => void;
+  applyMovedEntries: (categoryId: string, entries: MovedFenceEntry[]) => void;
   updateItem: (id: string, patch: Partial<Omit<FileItem, "id" | "createdAt">>) => void;
   removeItem: (id: string) => void;
   /** 拖拽排序：把 itemId 移到 anchorId 之前（anchorId=null 表示移到自己分类末尾） */
@@ -63,6 +65,41 @@ export const useFiles = create<FilesState>()(
     (set, get) => ({
       categories: [],
       items: [],
+
+      applyMovedEntries: (categoryId, entries) => set((state) => {
+        if (!state.categories.some(category => category.id === categoryId)) return state;
+        let items = [...state.items];
+        let categories = [...state.categories];
+        const normalized = (path: string) => path.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
+        for (const entry of entries) {
+          const source = normalized(entry.source);
+          const sourceLength = entry.source.replace(/\\/g, "/").replace(/\/+$/, "").length;
+          let reusableId: string | undefined;
+          if (!entry.sourceRetained) {
+            items = items.map(item => {
+              if (item.type === "url") return item;
+              const path = normalized(item.path);
+              if (path !== source && !(entry.kind === "folder" && path.startsWith(source + "/"))) return item;
+              const exact = path === source;
+              if (exact && !reusableId) reusableId = item.id;
+              return { ...item, path: entry.path + item.path.replace(/\\/g, "/").slice(sourceLength),
+                ...(exact && item.title === item.path.split(/[\\/]/).pop() ? { title: entry.name } : {}), updatedAt: Date.now() };
+            });
+          }
+          if (entry.kind === "folder" && !entry.sourceRetained) {
+            categories = categories.map(category => {
+              if (!category.dir) return category;
+              const path = normalized(category.dir);
+              if (path !== source && !path.startsWith(source + "/")) return category;
+              return { ...category, dir: entry.path + category.dir.replace(/\\/g, "/").slice(sourceLength), updatedAt: Date.now() };
+            });
+          }
+          if (items.some(item => item.categoryId === categoryId && normalized(item.path) === normalized(entry.path))) continue;
+          if (reusableId) items = items.map(item => item.id === reusableId ? { ...item, categoryId } : item);
+          else items.push({ id: uid(), categoryId, type: entry.kind, path: entry.path, title: entry.name, tags: [], createdAt: Date.now(), updatedAt: Date.now() });
+        }
+        return { items, categories };
+      }),
 
       addCategory: (name, parentId) => {
         const clean = name.trim();

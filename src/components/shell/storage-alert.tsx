@@ -47,7 +47,7 @@ export function StorageAlert() {
       <AlertTriangle className="mt-px size-4 shrink-0" />
       <div className="min-w-0 flex-1">
         <span className="font-semibold">{kindLabel}</span>
-        {key && <span className="ml-1.5 font-mono opacity-80">{key}.json</span>}
+        {key && <span className="ml-1.5 font-mono opacity-80">{key}</span>}
         {detail && (
           <span className="ml-1.5 break-all opacity-90" title={detail}>
             {detail}

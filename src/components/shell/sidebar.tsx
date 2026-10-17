@@ -1,11 +1,6 @@
 import { useEffect, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import {
-  Home,
-  FolderKanban,
-  CalendarCheck2,
-  Folders,
-  Newspaper,
   PanelLeftClose,
   PanelLeftOpen,
 } from "lucide-react";
@@ -13,14 +8,7 @@ import { useTranslation } from "react-i18next";
 import { gsap, useGSAP, DUR, EASE } from "@/lib/gsap";
 import { useSettings } from "@/stores/settings";
 import { cn } from "@/lib/utils";
-
-const NAV = [
-  { to: "/", key: "nav.home", icon: Home },
-  { to: "/projects", key: "nav.projects", icon: FolderKanban },
-  { to: "/plans", key: "nav.plans", icon: CalendarCheck2 },
-  { to: "/files", key: "nav.files", icon: Folders },
-  { to: "/feeds", key: "nav.feeds", icon: Newspaper },
-] as const;
+import { NAV_ITEMS } from "./navigation";
 
 /** 左侧导航：活跃胶囊指示器（GSAP 滑动） */
 export function Sidebar() {
@@ -71,7 +59,7 @@ export function Sidebar() {
           aria-hidden
           className="pointer-events-none absolute left-2.5 right-2.5 top-0 rounded-lg bg-sidebar-accent opacity-0"
         />
-        {NAV.map(({ to, key, icon: Icon }) => {
+        {NAV_ITEMS.map(({ to, key, icon: Icon }) => {
           const active = location.pathname === to;
           return (
             <button

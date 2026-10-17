@@ -1,4 +1,8 @@
 pub mod backup;
+pub mod task_attachments;
+pub mod ai;
+pub mod capture;
+pub mod knowledge;
 pub mod data;
 pub mod dragdrop;
 pub mod fileops;
@@ -7,3 +11,5 @@ pub mod newfile;
 pub mod shellicon;
 pub mod site;
 pub mod sys;
+pub mod fence_drop;
+pub mod desktop_shortcut;

@@ -3,123 +3,115 @@ import { emit, listen } from "@tauri-apps/api/event";
 import { readJson, writeJson, inTauri } from "@/lib/tauri";
 import { useStorageHealth, type StorageProblem } from "@/stores/storage-health";
 
-/**
- * Zustand persist 适配器：落到自定义数据目录的 JSON 文件。
- * 写入做 trailing 防抖，避免高频 setState 连续落盘。
- *
- * 跨窗口同步：栅栏是独立 WebView，各自有一份 store 内存副本。
- * 任一窗口写盘后广播 key，其他窗口收到后重读该 key 并回灌 store，
- * 否则会出现「主窗口改了分类名、栅栏还显示旧名」这类不同步。
- */
-
+// Serialize writes per WebView. SQLite merges against the snapshot edited here.
+type Write = { value: unknown; base: unknown };
+const pending = new Map<string, Write>();
+const active = new Map<string, Promise<void>>();
+const writing = new Map<string, Write>();
+const known = new Map<string, unknown>();
+const blocked = new Set<string>();
+const applying = new Set<string>();
 const timers = new Map<string, ReturnType<typeof setTimeout>>();
-const pending = new Map<string, unknown>();
-const DEBOUNCE_MS = 250;
-
-/** 本窗口自己写入的 key → 时间戳，用于忽略自己发出的广播（防回声） */
-const selfWrites = new Map<string, number>();
-const ECHO_WINDOW_MS = 1500;
-
+const handlers = new Set<(key: string, value: unknown) => void>();
+const source = crypto.randomUUID();
+const reads = new Map<string, number>();
 const EV_STORAGE = "storage://changed";
 
-/** 收到其他窗口的写盘通知时调用（由各 store 注册回灌逻辑） */
-type SyncHandler = (key: string, value: unknown) => void;
-const handlers = new Set<SyncHandler>();
-
-/** 注册跨窗口同步回调；返回取消函数 */
-export function onStorageSynced(fn: SyncHandler): () => void {
+export function onStorageSynced(fn: (key: string, value: unknown) => void): () => void {
   handlers.add(fn);
   return () => handlers.delete(fn);
 }
 
-if (inTauri) {
-  void listen<{ key: string }>(EV_STORAGE, async (e) => {
-    const { key } = e.payload;
-    // 自己刚写过的忽略，避免回灌覆盖本地更新的状态
-    const mine = selfWrites.get(key);
-    if (mine && Date.now() - mine < ECHO_WINDOW_MS) return;
-    try {
-      const value = await readJson<unknown>(key);
-      if (value == null) return;
-      for (const fn of handlers) fn(key, value);
-    } catch (err) {
-      console.error(`[storage] sync ${key}:`, err);
+function reportFailure(problem: StorageProblem, key: string, error: unknown) {
+  useStorageHealth.getState().report(problem, key, error instanceof Error ? error.message : String(error));
+}
+
+function applyRemote(key: string, value: unknown) {
+  known.set(key, value);
+  applying.add(key);
+  try { for (const handler of handlers) handler(key, value); }
+  finally { applying.delete(key); }
+}
+
+function clearTimer(key: string) {
+  const timer = timers.get(key);
+  if (timer) clearTimeout(timer);
+  timers.delete(key);
+}
+
+function flush(key: string): Promise<void> {
+  clearTimer(key);
+  const existing = active.get(key);
+  if (existing) return existing;
+  const run = (async () => {
+    while (pending.has(key)) {
+      if (blocked.has(key)) throw new Error("读取失败，已暂停写入，避免覆盖原数据。请修复存储后重新加载。");
+      const entry = pending.get(key)!;
+      pending.delete(key);
+      writing.set(key, entry);
+      try {
+        const saved = await writeJson(key, entry.value, { value: entry.base });
+        const canonical = saved === undefined ? entry.value : saved;
+        known.set(key, canonical);
+        useStorageHealth.getState().clear(key);
+        if (!pending.has(key)) applyRemote(key, canonical);
+        if (inTauri) await emit(EV_STORAGE, { key, source }).catch(() => undefined);
+      } catch (error) {
+        const next = pending.get(key);
+        pending.set(key, next ? { value: next.value, base: entry.base } : entry);
+        reportFailure("write", key, error);
+        throw error;
+      } finally { writing.delete(key); }
     }
+  })();
+  active.set(key, run);
+  void run.finally(() => { if (active.get(key) === run) active.delete(key); }).catch(() => undefined);
+  return run;
+}
+
+function enqueue(key: string, value: unknown) {
+  if (applying.has(key)) return;
+  reads.set(key, (reads.get(key) ?? 0) + 1);
+  const previous = pending.get(key);
+  pending.set(key, { value, base: previous ? previous.base : writing.has(key) ? writing.get(key)!.value : known.get(key) ?? null });
+  clearTimer(key);
+  timers.set(key, setTimeout(() => { void flush(key).catch(() => undefined); }, 250));
+}
+
+if (inTauri) {
+  void listen<{ key: string; source?: string }>(EV_STORAGE, async ({ payload }) => {
+    const { key } = payload;
+    if (payload.source === source) return;
+    const generation = (reads.get(key) ?? 0) + 1;
+    reads.set(key, generation);
+    try {
+      await flush(key);
+      const value = await readJson<unknown>(key);
+      if (reads.get(key) === generation && !pending.has(key) && !writing.has(key)) applyRemote(key, value);
+    } catch (error) { reportFailure("unavailable", key, error); }
   }).catch(() => undefined);
-}
-
-/** 把失败收进 storageHealth（唯一出口），UI 顶部据此渲染告警条 */
-function reportFailure(problem: StorageProblem, key: string, e: unknown) {
-  useStorageHealth.getState().report(problem, key, e instanceof Error ? e.message : String(e));
-}
-
-function flush(key: string) {
-  const value = pending.get(key);
-  if (value === undefined) return;
-  pending.delete(key);
-  selfWrites.set(key, Date.now());
-  void writeJson(key, value)
-    .then(() => {
-      // 该 key 恢复正常 → 撤掉它的告警（只撤自己，别的 key 还在失败就留着）
-      useStorageHealth.getState().clear(key);
-      // 落盘成功后再广播，保证其他窗口读到的是新值
-      if (inTauri) void emit(EV_STORAGE, { key }).catch(() => undefined);
-    })
-    .catch((e) => reportFailure("write", key, e));
 }
 
 export const tauriJsonStorage: StateStorage = {
   async getItem(name) {
-    // 读失败也不能静默：读不回来 = 界面数据全丢了，用户必须知道
     try {
-      return await readJson<unknown>(name).then((v) =>
-        v == null ? null : JSON.stringify(v),
-      );
-    } catch (e) {
-      reportFailure("unavailable", name, e);
+      const value = await readJson<unknown>(name);
+      known.set(name, value);
+      blocked.delete(name);
+      return value == null ? null : JSON.stringify(value);
+    } catch (error) {
+      blocked.add(name);
+      reportFailure("unavailable", name, error);
       return null;
     }
   },
-  async setItem(name, value) {
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(value);
-    } catch {
-      return;
-    }
-    pending.set(name, parsed);
-    const t = timers.get(name);
-    if (t) clearTimeout(t);
-    timers.set(
-      name,
-      setTimeout(() => {
-        timers.delete(name);
-        flush(name);
-      }, DEBOUNCE_MS),
-    );
-  },
-  async removeItem(name) {
-    const t = timers.get(name);
-    if (t) clearTimeout(t);
-    timers.delete(name);
-    pending.delete(name);
-    selfWrites.set(name, Date.now());
-    try {
-      await writeJson(name, null);
-      useStorageHealth.getState().clear(name);
-      if (inTauri) void emit(EV_STORAGE, { key: name }).catch(() => undefined);
-    } catch (e) {
-      reportFailure("remove", name, e);
-    }
-  },
+  async setItem(name, value) { enqueue(name, JSON.parse(value)); },
+  async removeItem(name) { enqueue(name, null); await flush(name); },
 };
 
-/** 立即落盘所有待写（供退出/迁移前调用） */
-export function flushAllStorage() {
-  for (const key of [...pending.keys()]) {
-    const t = timers.get(key);
-    if (t) clearTimeout(t);
-    timers.delete(key);
-    flush(key);
+/** Wait for queued/in-flight writes before closing, backup or moving data. */
+export async function flushAllStorage(): Promise<void> {
+  while (pending.size || active.size) {
+    await Promise.all([...new Set([...pending.keys(), ...active.keys()])].map(flush));
   }
 }

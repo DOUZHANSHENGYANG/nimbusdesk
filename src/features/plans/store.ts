@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import { useEffect, useState } from "react";
-import { tauriJsonStorage } from "@/lib/storage";
+import { tauriJsonStorage, onStorageSynced } from "@/lib/storage";
 import {
   subtreeIds,
   todayStr,
@@ -467,3 +467,15 @@ export function autoArchivePastDays(): number {
   }
   return n;
 }
+
+onStorageSynced((key, value) => {
+  if (!value || typeof value !== "object") return;
+  const state = (value as { state?: { days?: unknown } }).state;
+  if (!state?.days || typeof state.days !== "object" || Array.isArray(state.days)) return;
+  if (key === "plans") {
+    const days = state.days as Record<string, PlanTask[]>;
+    if (JSON.stringify(usePlans.getState().days) !== JSON.stringify(days)) usePlans.setState({ days, history: emptyHistory });
+  } else if (key === "plans-archive") {
+    usePlansArchive.setState({ days: state.days as ReturnType<typeof usePlansArchive.getState>["days"] });
+  }
+});

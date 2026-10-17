@@ -5,7 +5,7 @@ import { applyTheme, isThemeSwitching } from "@/lib/theme";
 import { getDataDir, windowReady } from "@/lib/tauri";
 import { onStorageSynced } from "@/lib/storage";
 import { isPopupWindow } from "@/features/files/popup";
-import { useSettings } from "@/stores/settings";
+import { useSettings, useSettingsHydrated } from "@/stores/settings";
 import { useFiles, useFences } from "@/stores/files";
 import { paperGeometryFor, usePapers } from "@/stores/papers";
 import { openTodoPaper } from "@/lib/tauri";
@@ -13,6 +13,9 @@ import { ModalProvider } from "@/components/shell/modal-host";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/sonner";
 import { useReminderLoop } from "@/features/plans/reminder";
+import { FeedsRuntime } from "@/features/feeds/runtime";
+import { DesktopRuntime } from "@/features/files/desktop-runtime";
+import { KnowledgeRuntime } from "@/features/knowledge/runtime";
 
 /**
  * 提醒调度包装：`useReminderLoop` 是 hook，不能直接当组件渲染。
@@ -33,6 +36,9 @@ export function Providers({ children }: { children: ReactNode }) {
           <SettingsSync />
           <PaperRestore />
           <ReminderLoop />
+          <KnowledgeRuntime />
+          <FeedsRuntime />
+          <DesktopRuntime />
           {children}
           <Toaster position="bottom-right" />
         </TooltipProvider>
@@ -61,6 +67,14 @@ function PaperRestore() {
       for (const [date, st] of Object.entries(papers)) {
         if (!st.open) continue;
         // 标题只在 Alt+Tab 里可见；用日期串而非空串，避免任务栏出现无名窗口
+        /*
+         * 先按**纸片几何**建窗，哪怕它是胶囊形态。
+         *
+         * 胶囊形态的窗口几何要等 CapsuleView 挂载后自己摆（它得先问显示器工作区），
+         * 而建窗这一步是同步的、还没有窗口可问。这里给个纸片位置就够了 ——
+         * 胶囊挂载期间根节点 opacity 为 0，用户看不到这个中间态，
+         * 摆好之后才显示出来。反过来「等算好位置再建窗」会把启动恢复拖成异步链。
+         */
         void openTodoPaper(date, date, paperGeometryFor(date)).catch(() => undefined);
       }
     };
@@ -90,6 +104,7 @@ function PaperRestore() {
 function StorageSync() {
   useEffect(() => {
     return onStorageSynced((key, value) => {
+      if (!value || typeof value !== "object") return;
       // zustand persist 的落盘结构是 { state, version }
       const data = (value as { state?: Record<string, unknown> }).state;
       if (!data) return;
@@ -130,6 +145,7 @@ function StorageSync() {
 }
 
 function SettingsSync() {
+  const hydrated = useSettingsHydrated();
   const theme = useSettings((s) => s.theme);
   const lang = useSettings((s) => s.lang);
   const setDataDir = useSettings((s) => s.setDataDir);
@@ -144,10 +160,6 @@ function SettingsSync() {
     applyTheme(useSettings.getState().theme);
     changeLang(useSettings.getState().lang);
 
-    void getDataDir()
-      .then(setDataDir)
-      .catch((e) => console.error("[bootstrap] data dir:", e));
-
     // 直接通知显示（勿用 rAF：窗口 visible:false 时 WebView2 不派发
     // requestAnimationFrame，等首帧再显示会死锁）。主题在上行已同步应用，无白闪。
     // 菜单浮窗例外：它由打开方在菜单渲染完成后定位并 show()，不能自己冒出来。
@@ -155,6 +167,13 @@ function SettingsSync() {
       void windowReady().catch((e) => console.error("[bootstrap] ready:", e));
     }
   }, []);
+
+  // Data-directory display must not persist defaults before async hydration:
+  // that would create a stale base and conflict with existing SQLite settings.
+  useEffect(() => {
+    if (!hydrated) return;
+    void getDataDir().then(setDataDir).catch((error) => console.error("[bootstrap] data dir:", error));
+  }, [hydrated, setDataDir]);
 
   // 水合后（或用户切换时）应用最新设置。
   // 主题：切换动画进行中冻结 —— 真实切换由 toggleThemeRadial 在幕布盖满/收拢时机执行
