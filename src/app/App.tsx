@@ -1,4 +1,7 @@
-import { HashRouter, Route, Routes, useLocation } from "react-router-dom";
+import { HashRouter, Route, Routes, useLocation, useNavigate } from "react-router-dom";
+import { useEffect } from "react";
+import { listen } from "@tauri-apps/api/event";
+import { inTauri } from "@/lib/tauri";
 import { Providers } from "@/app/providers";
 import { Titlebar } from "@/components/shell/titlebar";
 import { StorageAlert } from "@/components/shell/storage-alert";
@@ -14,6 +17,19 @@ import { KnowledgePage } from "@/features/knowledge/page";
 import { OrganizationActivity } from "@/features/knowledge/organization-activity";
 import { ToolsPage } from "@/features/tools/page";
 import { AppContextMenu } from "@/components/shell/app-context-menu";
+
+function SearchNavigationBridge() {
+  const navigate = useNavigate();
+  useEffect(() => {
+    if (!inTauri) return;
+    let active = true;
+    const subscription = listen<string>("search://navigate", ({ payload }) => {
+      if (active && /^\/(plans|knowledge|feeds|files|projects)(\?|$)/.test(payload)) navigate(payload);
+    });
+    return () => { active = false; void subscription.then(stop => stop()).catch(() => undefined); };
+  }, [navigate]);
+  return null;
+}
 
 /** 布局路由：/settings 为完全独立整页（无侧栏/顶栏），其余走后台布局 */
 function Shell() {
@@ -61,6 +77,7 @@ export default function App() {
   return (
     <HashRouter>
       <Providers>
+        <SearchNavigationBridge />
         <Shell />
       </Providers>
     </HashRouter>

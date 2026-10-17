@@ -1,13 +1,15 @@
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
-import { Minus, Square, Copy, X, Sun, Moon, Settings2 } from "lucide-react";
+import { Minus, Square, Copy, X, Sun, Moon, Settings2, Search } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { inTauri } from "@/lib/tauri";
 import { toggleThemeRadial } from "@/lib/theme";
 import { changeLang } from "@/lib/i18n";
 import { useSettings } from "@/stores/settings";
 import { cn } from "@/lib/utils";
+import { openSearchWindow } from "@/features/search";
+import { toast } from "sonner";
 
 const appWindow = inTauri ? getCurrentWebviewWindow() : null;
 
@@ -78,6 +80,7 @@ export function Titlebar() {
       {/* 右：工具组（语言/主题/设置）+ 窗口控制 */}
       <div className="flex items-stretch">
         <div className="flex items-center gap-0.5 pr-1.5">
+          <ToolbarButton title={lang === "en" ? "Global search" : "全局搜索"} onClick={() => void openSearchWindow().catch(error => toast.error(String(error)))}><Search className="size-4" /></ToolbarButton>
           <ToolbarButton title={t("topbar.language")} onClick={onLangClick}>
             <span className="text-[11px] font-bold tracking-wide">
               {lang === "zh" ? "中" : "EN"}

@@ -12,6 +12,7 @@ import {
   Copy,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { useLocation, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import {
   useFiles,
@@ -65,6 +66,10 @@ function nameFromPath(p: string): string {
 /** 文件管理：分类 + 多标签 + 三类绑定（文件夹/文件/网站）+ 桌面栅栏开关 */
 export function FilesPage() {
   const { t } = useTranslation();
+  const location = useLocation();
+  const [searchParams] = useSearchParams();
+  const requestedItem = searchParams.get("item") || "";
+  const consumedSearch = useRef("");
   const { confirm, alert, prompt } = useModal();
   const categories = useFiles((s) => s.categories);
   const items = useFiles((s) => s.items);
@@ -138,6 +143,16 @@ export function FilesPage() {
   };
 
   const gridRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const request = `${location.key}:${requestedItem}`;
+    if (!requestedItem || consumedSearch.current === request || !items.some(item => item.id === requestedItem)) return;
+    consumedSearch.current = request;
+    const item = items.find(item => item.id === requestedItem)!;
+    setSelected(item.categoryId); setSearch(""); setActiveTags([]); setSelectedItemId(item.id);
+    let inner = 0;
+    const frame = requestAnimationFrame(() => { inner = requestAnimationFrame(() => Array.from(gridRef.current?.querySelectorAll<HTMLElement>(`[${ITEM_ATTR}]`) ?? []).find(card => card.getAttribute(ITEM_ATTR) === item.id)?.scrollIntoView({ block: "center", behavior: "instant" })); });
+    return () => { cancelAnimationFrame(frame); cancelAnimationFrame(inner); };
+  }, [location.key, requestedItem, items]);
   useGSAP(
     () => {
       const cards = gridRef.current?.querySelectorAll<HTMLElement>("[data-card]");

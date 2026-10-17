@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { useTranslation } from "react-i18next";
 import { RiBookOpenLine as BookOpen, RiFolderOpenLine as FolderOpen, RiAddLine as Plus, RiRefreshLine as RefreshCw, RiSearchLine as Search, RiMagicLine as Sparkles, RiArrowDownSLine as ChevronDown, RiArrowLeftSLine, RiArrowRightSLine, RiCloseLine, RiMoreLine, RiSettings3Line, RiListCheck } from "@remixicon/react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -34,6 +35,12 @@ export function KnowledgePage() {
 function VaultPage({ root }: { root: string | null }) {
   const c = useKnowledgeCopy();
   const navigate = useNavigate();
+  const location = useLocation();
+  const [searchParams] = useSearchParams();
+  const requestedNote = searchParams.get("note") || "";
+  const routeRequest = `${location.key}:${requestedNote}`;
+  const [consumedRoute, setConsumedRoute] = useState("");
+  const { i18n } = useTranslation();
   const name = useKnowledge((s) => s.vaultName);
   const [notes, setNotes] = useState<KnowledgeNote[]>([]);
   const [captures, setCaptures] = useState<CaptureRecord[]>([]);
@@ -45,6 +52,7 @@ function VaultPage({ root }: { root: string | null }) {
   const [active, setActive] = useState<KnowledgeNote | null>(null);
   const [detail, setDetail] = useState<ReadNote | null>(null);
   const [loading, setLoading] = useState(false);
+  const [scanCompleted, setScanCompleted] = useState(false);
   const [reading, setReading] = useState(false);
   const [binding, setBinding] = useState(false);
   const [error, setError] = useState("");
@@ -69,7 +77,7 @@ function VaultPage({ root }: { root: string | null }) {
     const request = ++scanRequest.current;
     const needle = queryRef.current.trim();
     const isCurrent = () => mounted.current && request === scanRequest.current && needle === queryRef.current.trim();
-    setLoading(true); setError("");
+    setLoading(true); setScanCompleted(false); setError("");
     try {
       const [nextNotes, nextCaptures] = await Promise.all([needle ? searchNotes(root, needle) : scanNotes(root), listCaptures(root)]);
       if (isCurrent()) {
@@ -78,7 +86,7 @@ function VaultPage({ root }: { root: string | null }) {
         setActive((old) => old ? nextNotes.find((note) => note.path === old.path) ?? (needle ? old : null) : null);
       }
     } catch (e) { if (isCurrent()) setError(String(e)); }
-    finally { if (isCurrent()) setLoading(false); }
+    finally { if (isCurrent()) { setLoading(false); setScanCompleted(true); } }
   }, [root]);
   useEffect(() => { const timer = setTimeout(() => void refresh(), query.trim() ? 250 : 0); return () => clearTimeout(timer); }, [query, refresh]);
   useEffect(() => { const focus = () => { void refresh(); }; window.addEventListener("focus", focus); return () => window.removeEventListener("focus", focus); }, [refresh]);
@@ -153,11 +161,32 @@ function VaultPage({ root }: { root: string | null }) {
     return true;
   }), [categoryNotes, tag]);
   useEffect(() => {
-    if (!loading && !active && !initiallySelected.current && filtered[0]) {
+    if (!requestedNote || consumedRoute === routeRequest || !root) return;
+    const normalize = (value: string) => value.replace(/\\/g, "/").toLocaleLowerCase();
+    if (active && normalize(active.path) !== normalize(requestedNote) && noteDirty) {
+      setNotice(i18n.language.startsWith("en") ? "Save the current note to open the search result. Your draft is kept." : "请先保存当前笔记，再打开搜索结果；当前草稿已保留。");
+      return;
+    }
+    if (query || category !== "all" || tag !== null) {
+      if (query) setScanCompleted(false);
+      clearFilters(); return;
+    }
+    if (loading || !scanCompleted) return;
+    const target = notes.find(note => normalize(note.path) === normalize(requestedNote));
+    if (!target) {
+      setNotice(i18n.language.startsWith("en") ? "This note moved or is outside the managed folders." : "这篇笔记已移动，或不在当前管理目录中。");
+      setConsumedRoute(routeRequest); return;
+    }
+    initiallySelected.current = true;
+    setConsumedRoute(routeRequest); setNotice(""); setNoteInfoOpen(false); setActive(target);
+    setPageIndex(Math.floor(notes.indexOf(target) / NOTES_PER_PAGE));
+  }, [requestedNote, routeRequest, consumedRoute, root, active, noteDirty, query, category, tag, loading, scanCompleted, notes, i18n.language]);
+  useEffect(() => {
+    if ((!requestedNote || consumedRoute === routeRequest) && !loading && !active && !initiallySelected.current && filtered[0]) {
       initiallySelected.current = true;
       setActive(filtered[0]);
     }
-  }, [filtered, loading, active]);
+  }, [filtered, loading, active, requestedNote, consumedRoute, routeRequest]);
   const currentCapture = active ? captureForPath.get(active.path) : null;
   const categoryName = (kind: NoteKind | "all") => c[kind];
   const totalPages = Math.max(1, Math.ceil(filtered.length / NOTES_PER_PAGE));

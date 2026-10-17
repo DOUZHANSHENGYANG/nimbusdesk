@@ -1,0 +1,3 @@
+# Search extraction fixtures
+
+All content is synthetic and generated for this project, with no user files or downloaded documents. Regenerate with `python generate.py` (ReportLab, python-docx, openpyxl and python-pptx must already be available). The small Office packages intentionally contain only the XML parts consumed by the extractor. `real-*` packages are complete Office files produced by normal document libraries. `chinese-text.pdf` has a real Simplified Chinese CID text layer; `scanned.pdf` has no text layer. Oversized, cumulative and too-many packages exercise decompression limits. These fixtures do not establish compatibility with every producer or encrypted documents.

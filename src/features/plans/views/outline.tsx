@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Check, ChevronRight, Pencil, Plus, Trash2, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import {
@@ -34,7 +34,7 @@ import { TaskAttachments } from "@/features/plans/attachments";
 const INDENT = 20;
 
 /** 大纲视图：Todoist 式多级任务树 —— 顶部快速添加 + 引导线 + 父任务进度 + 完成沉底 */
-export function OutlineView({ date }: { date: string }) {
+export function OutlineView({ date, searchTaskId, searchToken }: { date: string; searchTaskId?: string; searchToken?: string }) {
   const { t } = useTranslation();
   const tasks = useDayTasks(date);
   const addTask = usePlans((s) => s.addTask);
@@ -42,6 +42,24 @@ export function OutlineView({ date }: { date: string }) {
   const roots = sortDoneLast(childrenOf(tasks, null));
   const listRef = useRef<HTMLDivElement>(null);
   const [input, setInput] = useState("");
+  const revealIds = useMemo(() => {
+    const result = new Set<string>();
+    let task = tasks.find(item => item.id === searchTaskId);
+    while (task && !result.has(task.id)) {
+      result.add(task.id);
+      const parentId = task.parentId;
+      task = parentId ? tasks.find(item => item.id === parentId) : undefined;
+    }
+    return result;
+  }, [tasks, searchTaskId]);
+  useEffect(() => {
+    if (!searchTaskId) return;
+    let inner = 0;
+    const frame = requestAnimationFrame(() => { inner = requestAnimationFrame(() => {
+      Array.from(listRef.current?.querySelectorAll<HTMLElement>("[data-search-task-id]") ?? []).find(row => row.dataset.searchTaskId === searchTaskId)?.scrollIntoView({ block: "center", behavior: "instant" });
+    }); });
+    return () => { cancelAnimationFrame(frame); cancelAnimationFrame(inner); };
+  }, [searchTaskId, searchToken, tasks]);
 
   useGSAP(
     () => {
@@ -95,7 +113,7 @@ export function OutlineView({ date }: { date: string }) {
           list={roots}
           dividerIndent={4}
           label={t("plans.doneGroup")}
-          render={(task) => <TaskRow date={date} task={task} depth={0} />}
+          render={(task) => <TaskRow date={date} task={task} depth={0} searchTaskId={searchTaskId} revealIds={revealIds} searchToken={searchToken} />}
         />
       )}
     </div>
@@ -136,7 +154,7 @@ function RowsWithDoneDivider({
   );
 }
 
-function TaskRow({ date, task, depth }: { date: string; task: PlanTask; depth: number }) {
+function TaskRow({ date, task, depth, searchTaskId, revealIds, searchToken }: { date: string; task: PlanTask; depth: number; searchTaskId?: string; revealIds: Set<string>; searchToken?: string }) {
   const { t } = useTranslation();
   const { confirm } = useModal();
   const tasks = useDayTasks(date);
@@ -152,6 +170,7 @@ function TaskRow({ date, task, depth }: { date: string; task: PlanTask; depth: n
   const status = statusOf(task, date, now);
   const range = rangeLabel(task);
   const [open, setOpen] = useState(true);
+  useEffect(() => { if (revealIds.has(task.id)) setOpen(true); }, [revealIds, task.id, searchToken]);
   const [editing, setEditing] = useState(false);
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState<{
@@ -277,10 +296,12 @@ function TaskRow({ date, task, depth }: { date: string; task: PlanTask; depth: n
       {/* 任务行（编辑态边界：点子任务行/别处都算「外面」→ 自动保存关闭） */}
       <div
         ref={rowRef}
+        data-search-task-id={task.id}
         className={cn(
           "group flex min-h-10 items-center gap-2 rounded-lg py-1 pr-1 transition-colors hover:bg-surface-hover",
           // 进行中：左侧一条品牌色标记，扫一眼就能看到当前该做什么
           status === "doing" && "bg-brand/5 ring-1 ring-inset ring-brand/20",
+          task.id === searchTaskId && "bg-brand/10 ring-1 ring-inset ring-brand/50",
         )}
         style={{ paddingLeft: 4 }}
       >
@@ -462,7 +483,7 @@ function TaskRow({ date, task, depth }: { date: string; task: PlanTask; depth: n
             list={children}
             dividerIndent={4}
             label={t("plans.doneGroup")}
-            render={(child) => <TaskRow date={date} task={child} depth={depth + 1} />}
+            render={(child) => <TaskRow date={date} task={child} depth={depth + 1} searchTaskId={searchTaskId} revealIds={revealIds} searchToken={searchToken} />}
           />
         </div>
       )}

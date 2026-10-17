@@ -19,6 +19,8 @@ import { useSettings } from "@/stores/settings";
 import { gsap, useGSAP } from "@/lib/gsap";
 import { cn } from "@/lib/utils";
 import { usePlanCopy } from "@/features/plans/copy";
+import { useLocation, useSearchParams } from "react-router-dom";
+import { useSettingsHydrated } from "@/stores/settings";
 
 /**
  * 视图键。顺序即 pill 顺序，也是 `1`–`6` 快捷键的顺序。
@@ -47,6 +49,12 @@ export function PlansPage() {
   const { t, i18n } = useTranslation();
   const { confirm } = useModal();
   const [date, setDate] = useState(todayStr());
+  const location = useLocation();
+  const [searchParams] = useSearchParams();
+  const searchDate = searchParams.get("date") || "";
+  const searchTaskId = searchParams.get("task") || undefined;
+  const searchArchived = searchParams.get("archived") === "1";
+  const settingsHydrated = useSettingsHydrated();
   // 视图选择持久化：刷新/切页回来仍停在原视图（存 settings.json）
   const view = useSettings((s) => s.plansView);
   const setView = useSettings((s) => s.setPlansView);
@@ -56,8 +64,17 @@ export function PlansPage() {
   const archiveHydrated = useStoreHydrated(usePlansArchive);
   const tasks = useDayTasks(date);
   const isArchivedDay = usePlansArchive((s) => date in s.days);
+  const searchDateArchived = usePlansArchive((s) => searchDate in s.days);
 
   const bodyRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!settingsHydrated || !plansHydrated || !archiveHydrated || !/^\d{4}-\d{2}-\d{2}$/.test(searchDate)) return;
+    const parsed = parseDate(searchDate);
+    if (parsed.getFullYear() !== Number(searchDate.slice(0, 4)) || parsed.getMonth() + 1 !== Number(searchDate.slice(5, 7)) || parsed.getDate() !== Number(searchDate.slice(8, 10))) return;
+    setDate(searchDate);
+    setView(searchArchived || searchDateArchived ? "archive" : "outline");
+  }, [location.key, location.search, searchDate, searchTaskId, searchArchived, searchDateArchived, settingsHydrated, plansHydrated, archiveHydrated, setView]);
 
   // 自动归档过期日
   useEffect(() => {
@@ -374,7 +391,7 @@ export function PlansPage() {
 
         {/* ── 视图主体 ── */}
         <div ref={bodyRef} className="min-h-0">
-          {view === "outline" && <OutlineView date={date} />}
+          {view === "outline" && <OutlineView date={date} searchTaskId={date === searchDate ? searchTaskId : undefined} searchToken={`${location.key}:${location.search}`} />}
           {view === "timeline" && <TimelineView date={date} />}
           {view === "kanban" && <KanbanView date={date} />}
           {view === "calendar" && (
@@ -391,6 +408,9 @@ export function PlansPage() {
           {view === "stats" && <StatsView date={date} />}
           {view === "archive" && (
             <ArchiveView
+              searchDate={searchDate}
+              searchTaskId={searchTaskId}
+              searchToken={`${location.key}:${location.search}`}
               onRestore={(d) => {
                 setDate(d);
                 switchView("outline");

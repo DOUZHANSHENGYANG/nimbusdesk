@@ -10,7 +10,7 @@ import {
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
-import { FolderOpen, FolderInput, ExternalLink, Database, Palette, Info, Bot, SlidersHorizontal, ArrowLeft, Download, Upload, Bell, TriangleAlert, ListChecks, BookOpen, CalendarCheck } from "lucide-react";
+import { FolderOpen, FolderInput, ExternalLink, Database, Palette, Info, Bot, SlidersHorizontal, ArrowLeft, Download, Upload, Bell, TriangleAlert, ListChecks, BookOpen, CalendarCheck, Search } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useModal } from "@/components/shell/modal-host";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -31,18 +31,19 @@ import { KnowledgeSettings } from "@/features/knowledge/settings";
 import { ProviderSettings } from "@/features/ai/provider-settings";
 import { FeedNetworkSettings } from "@/features/feeds/network-settings";
 import { useProviderCopy } from "@/features/ai/provider-copy";
+import { SearchSettings } from "@/features/search";
 
-type SettingsTab = "system" | "plans" | "knowledge" | "feeds" | "ai" | "about";
+type SettingsTab = "system" | "plans" | "knowledge" | "feeds" | "ai" | "about" | "search";
 
 /** 设置页：独立路由 + 左侧功能分类侧栏 + 右侧内容 */
 export function SettingsPage() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const { confirm } = useModal();
   const aiCopy = useProviderCopy();
   const [aiDirty, setAiDirty] = useState(false);
   const [searchParams] = useSearchParams();
-  const [tab, setTab] = useState<SettingsTab>(searchParams.get("tab") === "ai" ? "ai" : searchParams.get("tab") === "knowledge" ? "knowledge" : "system");
+  const [tab, setTab] = useState<SettingsTab>(searchParams.get("tab") === "search" ? "search" : searchParams.get("tab") === "ai" ? "ai" : searchParams.get("tab") === "knowledge" ? "knowledge" : "system");
   const contentRef = useRef<HTMLDivElement>(null);
   async function leaveAi() {
     if (tab !== "ai" || !aiDirty) return true;
@@ -52,6 +53,7 @@ export function SettingsPage() {
   const TABS: { key: SettingsTab; icon: React.ComponentType<{ className?: string }>; label: string }[] = [
     { key: "system", icon: SlidersHorizontal, label: t("settings.tabs.system") },
     { key: "plans", icon: CalendarCheck, label: t("settings.tabs.plans") },
+    { key: "search", icon: Search, label: i18n.language.startsWith("en") ? "Search" : "搜索" },
     { key: "knowledge", icon: BookOpen, label: t("nav.knowledge") },
     { key: "feeds", icon: SlidersHorizontal, label: t("nav.feeds") },
     { key: "ai", icon: Bot, label: t("settings.tabs.ai") },
@@ -117,6 +119,7 @@ export function SettingsPage() {
         <div className={cn("mx-auto flex w-full flex-col gap-5 p-6 pb-10", tab === "ai" ? "max-w-6xl" : "max-w-2xl")}>
           {tab === "system" && <SystemSection />}
           {tab === "plans" && <PlansSection />}
+          {tab === "search" && <SearchSettings />}
           {tab === "knowledge" && <KnowledgeSettings />}
           {tab === "feeds" && <FeedNetworkSettings />}
           {tab === "ai" && <AiSection onDirtyChange={setAiDirty} />}

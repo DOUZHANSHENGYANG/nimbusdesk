@@ -1,5 +1,5 @@
 import { useEffect, type ReactNode } from "react";
-import { Check, Settings2 } from "lucide-react";
+import { Check, Settings2, Search } from "lucide-react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
@@ -8,9 +8,10 @@ import { ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem, C
 import { useSettings } from "@/stores/settings";
 import { inTauri } from "@/lib/tauri";
 import { NAV_ITEMS } from "./navigation";
+import { openSearchWindow } from "@/features/search";
 
 export function AppContextMenu({ children }: { children: ReactNode }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const developerMode = useSettings((s) => s.developerMode);
@@ -63,6 +64,8 @@ export function AppContextMenu({ children }: { children: ReactNode }) {
         <div className="h-full min-h-0 select-text">{children}</div>
       </ContextMenuTrigger>
       <ContextMenuContent className="w-52 p-1.5 [animation:none]" collisionPadding={8}>
+        <ContextMenuItem className="min-h-8 gap-2.5 px-2 text-[13px]" onSelect={() => void openSearchWindow().catch(error => toast.error(String(error)))}><Search className="size-4 text-muted-foreground" />{i18n.language.startsWith("en") ? "Global search" : "全局搜索"}</ContextMenuItem>
+        <ContextMenuSeparator />
         <ContextMenuLabel className="px-2 pb-1.5 text-xs text-muted-foreground">{t("nav.quickJump")}</ContextMenuLabel>
         {NAV_ITEMS.map(({ to, key, icon: Icon }) => (
           <ContextMenuItem

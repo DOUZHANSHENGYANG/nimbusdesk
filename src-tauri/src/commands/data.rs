@@ -247,5 +247,10 @@ pub async fn write_json(
     value: Value,
     base: Option<ExpectedState>,
 ) -> Result<Value, String> {
-    blocking(move || blocking_write_json(key, value, base)).await?
+    let searchable=crate::search::sources_key(&key);
+    let refresh_files=key=="search-settings" || key=="knowledge-settings";
+    let result=blocking(move || blocking_write_json(key, value, base)).await?;
+    if result.is_ok()&&searchable{crate::search::runtime::request_refresh();}
+    if result.is_ok()&&refresh_files{crate::search::file_runtime::request_refresh();}
+    result
 }

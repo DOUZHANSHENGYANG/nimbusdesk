@@ -32,7 +32,8 @@ pub fn create(app: &tauri::App) -> tauri::Result<()> {
     let toggle = MenuItem::with_id(app, "toggle", label_toggle, true, None::<&str>)?;
     let quit = MenuItem::with_id(app, "quit", label_quit, true, None::<&str>)?;
     let capture = MenuItem::with_id(app, "capture", label_capture, true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&toggle, &capture, &quit])?;
+    let search = MenuItem::with_id(app,"search",if lang=="en"{"Search"}else{"搜索"},true,None::<&str>)?;
+    let menu = Menu::with_items(app, &[&toggle, &search, &capture, &quit])?;
 
     let mut builder = TrayIconBuilder::with_id("main-tray")
         .menu(&menu)
@@ -45,6 +46,9 @@ pub fn create(app: &tauri::App) -> tauri::Result<()> {
                 tauri::async_runtime::spawn(async move {
                     let _ = crate::commands::capture::open_capture(app).await;
                 });
+            }
+            "search" => {
+                let app=app.clone();tauri::async_runtime::spawn(async move{let _=crate::commands::search::search_open_window(app).await;});
             }
             "quit" => app.exit(0),
             _ => {}

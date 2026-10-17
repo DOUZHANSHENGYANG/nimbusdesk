@@ -74,12 +74,13 @@ export function doneTitleStyle(done: boolean): React.CSSProperties | undefined {
  * - only 给定时只渲染这些 id 的子树（归档关键词筛选用），
  *   未给定则渲染整棵树
  */
-export function ReadOnlyTree({ tasks, date, only, parentId = null, depth = 0 }: {
+export function ReadOnlyTree({ tasks, date, only, parentId = null, depth = 0, searchTaskId }: {
   tasks: PlanTask[];
   date: string;
   only?: Set<string>;
   parentId?: string | null;
   depth?: number;
+  searchTaskId?: string;
 }) {
   const kids = childrenOf(tasks, parentId).filter((t) => !only || only.has(t.id));
   if (kids.length === 0) return null;
@@ -88,7 +89,8 @@ export function ReadOnlyTree({ tasks, date, only, parentId = null, depth = 0 }: 
       {kids.map((task) => (
         <div key={task.id}>
           <div
-            className="group flex min-h-8 items-center gap-2 rounded-md py-1 pr-2"
+            data-search-task-id={task.id}
+            className={cn("group flex min-h-8 items-center gap-2 rounded-md py-1 pr-2", task.id === searchTaskId && "bg-brand/10 ring-1 ring-inset ring-brand/50")}
             style={{ paddingLeft: 10 + depth * 18 }}
           >
             <StatusButton status={statusOf(task, date)} readOnly />
@@ -110,7 +112,7 @@ export function ReadOnlyTree({ tasks, date, only, parentId = null, depth = 0 }: 
             )}
 
           </div>
-          <ReadOnlyTree tasks={tasks} date={date} only={only} parentId={task.id} depth={depth + 1} />
+          <ReadOnlyTree tasks={tasks} date={date} only={only} parentId={task.id} depth={depth + 1} searchTaskId={searchTaskId} />
         </div>
       ))}
     </div>

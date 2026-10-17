@@ -1,0 +1,3 @@
+
+# PDF fixtures contain byte offsets and must never undergo line-ending conversion.
+/src-tauri/src/search/fixtures/*.pdf binary

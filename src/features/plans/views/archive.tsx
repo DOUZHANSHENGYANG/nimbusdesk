@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ArchiveRestore, ChevronRight, Search, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import {
@@ -18,13 +18,23 @@ import { cn } from "@/lib/utils";
 const EMPTY_RANGE: DateRange = { from: null, to: null };
 
 /** 归档浏览视图：按日期倒序 + 时间区间/关键词筛选，展开只读树，可恢复 */
-export function ArchiveView({ onRestore }: { onRestore: (date: string) => void }) {
+export function ArchiveView({ onRestore, searchDate, searchTaskId, searchToken }: { onRestore: (date: string) => void; searchDate?: string; searchTaskId?: string; searchToken?: string }) {
   const { t, i18n } = useTranslation();
   const archiveDays = usePlansArchive((s) => s.days);
   const { confirm } = useModal();
   const [openDate, setOpenDate] = useState<string | null>(null);
   const [range, setRange] = useState<DateRange>(EMPTY_RANGE);
   const [keyword, setKeyword] = useState("");
+  const container = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!searchDate || !archiveDays[searchDate]) return;
+    setOpenDate(searchDate); setRange(EMPTY_RANGE); setKeyword("");
+  }, [searchDate, searchToken, archiveDays]);
+  useEffect(() => {
+    if (!searchTaskId || openDate !== searchDate) return;
+    const frame = requestAnimationFrame(() => Array.from(container.current?.querySelectorAll<HTMLElement>("[data-search-task-id]") ?? []).find(row => row.dataset.searchTaskId === searchTaskId)?.scrollIntoView({ block: "center", behavior: "instant" }));
+    return () => cancelAnimationFrame(frame);
+  }, [openDate, searchDate, searchTaskId, searchToken]);
 
   const dateFmt = new Intl.DateTimeFormat(i18n.language === "en" ? "en-US" : "zh-CN", {
     year: "numeric",
@@ -87,7 +97,7 @@ export function ArchiveView({ onRestore }: { onRestore: (date: string) => void }
   }
 
   return (
-    <div className="flex flex-col gap-3">
+    <div ref={container} className="flex flex-col gap-3">
       {/* ── 筛选栏 ── */}
       <div className="flex flex-wrap items-center gap-2">
         <DateRangePicker value={range} onChange={setRange} />
@@ -195,7 +205,7 @@ export function ArchiveView({ onRestore }: { onRestore: (date: string) => void }
                     {kw ? (
                       <FilteredTree tasks={entry.tasks} date={date} keyword={kw} />
                     ) : (
-                      <ReadOnlyTree tasks={entry.tasks} date={date} />
+                      <ReadOnlyTree tasks={entry.tasks} date={date} searchTaskId={date === searchDate ? searchTaskId : undefined} />
                     )}
                   </div>
                 )}

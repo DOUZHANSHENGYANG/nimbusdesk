@@ -23,6 +23,10 @@ tauri-plugin-dialog = "2"
 tauri-plugin-opener = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+pinyin = { version = "=0.11.0", default-features = false, features = ["plain", "heteronym"] }
+lopdf = { version = "=0.42.0", default-features = false }
+zip = { version = "=9.0.4", default-features = false, features = ["deflate"] }
+quick-xml = "=0.41.0"
 rusqlite = { version = "=0.37.0", features = ["bundled", "backup"] }
 reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls", "gzip", "json"] }
 tauri-plugin-http = "2"
@@ -32,16 +36,21 @@ tauri-plugin-notification = "2.7.0"
 tauri-plugin-global-shortcut = "2"
 
 [target."cfg(windows)".dependencies]
+everything-ipc = "=0.1.4"
 windows = { version = "0.62", features = [
   "Win32_Foundation",
   "Win32_Security_Credentials",
   "Win32_Graphics_Gdi",
   "Win32_System_Com",
+  "Win32_System_Registry",
+  "Win32_System_Threading",
   "Win32_System_Com_StructuredStorage",
   "Win32_System_Memory",
+  "Win32_System_JobObjects",
   "Win32_System_Ole",
   "Win32_System_SystemServices",
   "Win32_Storage_FileSystem",
+  "Win32_Storage_IndexServer",
   "Win32_UI_Shell",
   "Win32_UI_Controls",
   "Win32_UI_WindowsAndMessaging",
@@ -55,3 +64,6 @@ lto = true
 opt-level = 3
 panic = "abort"
 strip = true
+
+[patch.crates-io]
+everything-ipc = { path = "vendor/everything-ipc" }

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useLocation, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Sparkles, Star, RefreshCw, Plus, ExternalLink, Loader2, Trash2, Settings2 } from "lucide-react";
 import { toast } from "sonner";
@@ -26,6 +27,11 @@ const GROUP_KEYS: Record<string, string> = { 技术: "feeds.groupTech", 资讯: 
 export function FeedsPage() {
     const { t } = useTranslation();
     const { confirm } = useModal();
+    const location = useLocation();
+    const [searchParams] = useSearchParams();
+    const requestedSource = searchParams.get("source") || "";
+    const requestedArticle = searchParams.get("article") || "";
+    const consumedRoute = useRef("");
     const activeId = useFeeds(state => state.activeId);
     const selectSource = useFeeds(state => state.selectSource);
     const initialize = useFeeds(state => state.initialize);
@@ -51,6 +57,25 @@ export function FeedsPage() {
         start();
         return () => { offFeeds(); offCache(); };
     }, [initialize]);
+    useEffect(() => {
+        const request = `${location.key}:${requestedSource}:${requestedArticle}`;
+        if (!requestedSource && !requestedArticle) return;
+        const apply = () => {
+            if (consumedRoute.current === request || !useFeeds.persist.hasHydrated() || !useFavorites.persist.hasHydrated() || !useCustomFeeds.persist.hasHydrated()) return;
+            const state = useFeeds.getState();
+            const cached = state.entriesBySource[requestedSource]?.find(item => item.url === requestedArticle);
+            const favorite = useFavorites.getState().items.find(item => item.url === requestedArticle);
+            const source = cached ? requestedSource : favorite ? FAVORITES_ID : requestedSource;
+            if (!source || source !== FAVORITES_ID && !mergedSources().some(item => item.id === source)) return;
+            consumedRoute.current = request;
+            setMode("flow");
+            state.selectSource(source);
+            state.selectEntry(cached || favorite || null);
+        };
+        const off = [useFeeds.persist.onFinishHydration(apply), useFavorites.persist.onFinishHydration(apply), useCustomFeeds.persist.onFinishHydration(apply)];
+        apply();
+        return () => off.forEach(stop => stop());
+    }, [location.key, requestedSource, requestedArticle]);
     const sourceButton = (source: SourceAdapter) => (
       <button type="button" key={source.id} onClick={() => selectSource(source.id)} title={source.name}
         aria-current={activeId === source.id ? "true" : undefined}

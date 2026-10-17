@@ -5,6 +5,7 @@
   "windows": [
     "main",
     "capture",
+    "search",
     "fence-*",
     "popup-menu",
     "todo-*"

@@ -1,0 +1,1 @@
+<!DOCTYPE note [<!ENTITY remote SYSTEM "file:///does-not-exist">]><note>&remote;</note>

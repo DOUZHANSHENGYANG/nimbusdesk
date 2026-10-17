@@ -8,6 +8,10 @@ mod knowledge;
 mod commands;
 mod tray;
 mod organization_clock;
+mod search;
+
+/// Entry used by the executable before initializing any UI or background tasks.
+pub fn run_search_extract_worker() -> bool { search::extract_worker::run_if_worker() }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -19,7 +23,19 @@ pub fn run() {
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .manage(commands::capture::CaptureShortcut::default())
         .manage(commands::desktop_shortcut::FenceShortcut::default())
+        .manage(commands::search::SearchShortcut::default())
         .invoke_handler(tauri::generate_handler![
+            commands::search::search_query,
+            commands::search::search_everything_detect,
+            commands::search::search_everything_start,
+            commands::search::search_document_defaults,
+            commands::search::search_index_pause,
+            commands::search::search_status,
+            commands::search::search_refresh,
+            commands::search::search_open_window,
+            commands::search::search_set_shortcut,
+            commands::search::search_open_result,
+            commands::search::search_preview,
             commands::fence_drop::move_fence_entries,
             commands::desktop_shortcut::set_fence_shortcut,
             commands::capture::open_capture,
@@ -84,6 +100,7 @@ pub fn run() {
         .setup(|app| {
             tray::create(app)?;
             organization_clock::start(app.handle().clone())?;
+            commands::search::start(app.handle().clone());
             // 兜底：若前端 6s 内未调用 window_ready（JS 崩溃/页面加载失败），
             // 强制显示主窗口，避免"窗口永远不出现"的无声失败。
             let handle = app.handle().clone();
@@ -105,6 +122,9 @@ pub fn run() {
             // 主窗口关闭 = 隐藏到托盘；其他窗口（如设置）正常关闭销毁
             if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                 if window.label() == "main" {
+                    let _ = window.hide();
+                    api.prevent_close();
+                } else if window.label() == "search" {
                     let _ = window.hide();
                     api.prevent_close();
                 } else if window.label() == "capture" {
