@@ -25,6 +25,9 @@ export async function readJson<T>(key: string): Promise<T | null> {
 export async function writeJson(key: string, value: unknown, base?: { value: unknown }): Promise<unknown> {
   return invoke("write_json", { key, value, base });
 }
+export async function writePlanPair(plans: unknown, archive: unknown, basePlans: unknown, baseArchive: unknown): Promise<{ plans: unknown; archive: unknown }> {
+  return invoke("write_plan_pair", { plans, archive, basePlans, baseArchive });
+}
 
 /** 前端首帧就绪：通知 Rust 显示调用方窗口（防白闪） */
 export async function windowReady(): Promise<void> {

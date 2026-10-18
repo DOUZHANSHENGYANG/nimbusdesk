@@ -27,13 +27,14 @@
  *    改了新东西之后，「重做」指向的未来已经不存在了）。
  */
 
-import type { PlanTask } from "@/features/plans/types";
+import type { PlanTask, ArchivedDay } from "@/features/plans/types";
 
 /** 一组「天 → 该天任务」的快照（null = 当时这天不存在，恢复时要删掉） */
 export type DaySnapshot = Map<string, PlanTask[] | null>;
 
 export interface Snapshot {
   days: DaySnapshot;
+  archive?: Map<string, ArchivedDay | null>;
   /** 供 UI 显示的标签（i18n key，不是已翻译字符串） */
   label: string;
 }
@@ -74,8 +75,10 @@ export function pushBefore(
   days: Record<string, PlanTask[]>,
   affectedDates: string[],
   label: string,
+  archive?: Record<string, ArchivedDay>,
 ): HistoryState {
   const snap: Snapshot = { days: cloneDays(days, affectedDates), label };
+  if (archive) snap.archive = cloneArchive(archive, affectedDates);
   const past = [...history.past, snap];
   // 超出上限时丢最老的（数组头部）
   if (past.length > HISTORY_LIMIT) past.shift();
@@ -94,6 +97,7 @@ export function pushBefore(
 export function popUndo(
   history: HistoryState,
   currentDays: Record<string, PlanTask[]>,
+  archive: Record<string, ArchivedDay> = {},
 ): { snapshot: Snapshot; next: HistoryState } | null {
   const snap = history.past[history.past.length - 1];
   if (!snap) return null;
@@ -101,6 +105,7 @@ export function popUndo(
     days: cloneDays(currentDays, snap.days.keys()),
     label: snap.label,
   };
+  if (snap.archive) redoSnap.archive = cloneArchive(archive, snap.archive.keys());
   return {
     snapshot: snap,
     next: {
@@ -114,6 +119,7 @@ export function popUndo(
 export function popRedo(
   history: HistoryState,
   currentDays: Record<string, PlanTask[]>,
+  archive: Record<string, ArchivedDay> = {},
 ): { snapshot: Snapshot; next: HistoryState } | null {
   const snap = history.future[0];
   if (!snap) return null;
@@ -121,6 +127,7 @@ export function popRedo(
     days: cloneDays(currentDays, snap.days.keys()),
     label: snap.label,
   };
+  if (snap.archive) undoSnap.archive = cloneArchive(archive, snap.archive.keys());
   return {
     snapshot: snap,
     next: {
@@ -149,6 +156,14 @@ export function applySnapshot(
 }
 
 export const canUndo = (h: HistoryState) => h.past.length > 0;
+function cloneArchive(archive: Record<string, ArchivedDay>, dates: Iterable<string>): Map<string, ArchivedDay | null> {
+  return new Map([...dates].map(date => [date, archive[date] ? structuredClone(archive[date]) : null]));
+}
+export function applyArchiveSnapshot(archive: Record<string, ArchivedDay>, snap: Snapshot): Record<string, ArchivedDay> {
+  const next = { ...archive };
+  for (const [date, value] of snap.archive ?? []) { if (value === null) delete next[date]; else next[date] = structuredClone(value); }
+  return next;
+}
 export const canRedo = (h: HistoryState) => h.future.length > 0;
 
 /** 下一次撤销/重做的操作名（i18n key），用于按钮提示「撤销：勾选完成」 */

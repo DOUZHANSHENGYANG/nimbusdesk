@@ -42,6 +42,8 @@ export interface PlanTask {
    */
   link?: TaskLink;
   attachments?: TaskAttachment[];
+  /** Absent inherits the ancestor's project task; null is explicitly standalone. */
+  workItemId?: string | null;
 }
 
 /** 关联类型，与 FileItem.type 对齐 */
@@ -83,7 +85,7 @@ export interface ArchivedDay {
   tasks: PlanTask[];
 }
 
-export type PlanTaskPatch = Partial<Pick<PlanTask, "title" | "note" | "start" | "end" | "done" | "link" | "attachments">>;
+export type PlanTaskPatch = Partial<Pick<PlanTask, "title" | "note" | "start" | "end" | "done" | "link" | "attachments" | "workItemId">>;
 
 /* ── 时间 ─────────────────────────────────────────────── */
 

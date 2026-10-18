@@ -1,6 +1,6 @@
 import type { StateStorage } from "zustand/middleware";
 import { emit, listen } from "@tauri-apps/api/event";
-import { readJson, writeJson, inTauri } from "@/lib/tauri";
+import { readJson, writeJson, writePlanPair, inTauri } from "@/lib/tauri";
 import { useStorageHealth, type StorageProblem } from "@/stores/storage-health";
 
 // Serialize writes per WebView. SQLite merges against the snapshot edited here.
@@ -43,9 +43,14 @@ function flush(key: string): Promise<void> {
   clearTimer(key);
   const existing = active.get(key);
   if (existing) return existing;
+  if ((key === "plans" || key === "plans-archive") && pending.has("plans") && pending.has("plans-archive")) {
+    const other = active.get(key === "plans" ? "plans-archive" : "plans");
+    if (other) return other.then(() => flush(key));
+    return flushPlanPair();
+  }
   const run = (async () => {
     while (pending.has(key)) {
-      if (blocked.has(key)) throw new Error("读取失败，已暂停写入，避免覆盖原数据。请修复存储后重新加载。");
+      if (blocked.has(key) || ((key === "plans" || key === "plans-archive") && (blocked.has("plans") || blocked.has("plans-archive")))) throw new Error("读取失败，已暂停写入，避免覆盖原数据。请修复存储后重新加载。");
       const entry = pending.get(key)!;
       pending.delete(key);
       writing.set(key, entry);
@@ -62,10 +67,46 @@ function flush(key: string): Promise<void> {
         reportFailure("write", key, error);
         throw error;
       } finally { writing.delete(key); }
+      // A transition may arrive behind an ordinary in-flight plan edit. Do not
+      // drain its first half here; the pair scheduler must commit both halves.
+      if ((key === "plans" || key === "plans-archive") && pending.has("plans") && pending.has("plans-archive")) break;
     }
   })();
   active.set(key, run);
-  void run.finally(() => { if (active.get(key) === run) active.delete(key); }).catch(() => undefined);
+  const release = () => { if (active.get(key) === run) active.delete(key); };
+  void run.then(() => {
+    release();
+    // Both debounce callbacks may have fired while independent single writes
+    // were active. Hand pending transitions back immediately on success; failed
+    // writes intentionally stay queued for explicit retry, without a hot loop.
+    if ((key === "plans" || key === "plans-archive") && pending.has("plans") && pending.has("plans-archive")) void flush(key).catch(() => undefined);
+  }, release);
+  return run;
+}
+
+/** Archive/restore/undo touch both stores synchronously. Drain them as a single
+ * native SQLite transaction, including retries and writes queued while in flight. */
+function flushPlanPair(): Promise<void> {
+  const keys = ["plans", "plans-archive"] as const;
+  for (const key of keys) clearTimer(key);
+  const run = (async () => {
+    while (keys.some(key => pending.has(key))) {
+      if (keys.some(key => blocked.has(key))) throw new Error("Plan data could not be loaded; writes are paused.");
+      const entries = keys.map(key => pending.get(key) ?? { value: known.get(key) ?? null, base: known.get(key) ?? null });
+      keys.forEach((key, i) => { pending.delete(key); writing.set(key, entries[i]); });
+      try {
+        const saved = await writePlanPair(entries[0].value, entries[1].value, entries[0].base, entries[1].base);
+        const canonical = [saved.plans, saved.archive];
+        keys.forEach((key, i) => { known.set(key, canonical[i]); useStorageHealth.getState().clear(key); if (!pending.has(key)) applyRemote(key, canonical[i]); });
+        if (inTauri) for (const key of keys) await emit(EV_STORAGE, { key, source }).catch(() => undefined);
+      } catch (error) {
+        keys.forEach((key, i) => { const next = pending.get(key); pending.set(key, next ? { value: next.value, base: entries[i].base } : entries[i]); reportFailure("write", key, error); });
+        throw error;
+      } finally { keys.forEach(key => writing.delete(key)); }
+    }
+  })();
+  keys.forEach(key => active.set(key, run));
+  void run.finally(() => keys.forEach(key => { if (active.get(key) === run) active.delete(key); })).catch(() => undefined);
   return run;
 }
 

@@ -2,6 +2,7 @@ use tauri::Manager;
 
 mod atomic;
 mod database;
+mod project_database;
 mod task_attachments;
 mod state_merge;
 mod knowledge;
@@ -29,6 +30,16 @@ pub fn run() {
         .manage(commands::search::SearchShortcut::default())
         .manage(commands::quick_tools::QuickToolsShortcut::default())
         .invoke_handler(tauri::generate_handler![
+            commands::data::write_plan_pair,
+            commands::projects::project_create_root,
+            commands::projects::project_list_files,
+            commands::projects::project_read_file,
+            commands::projects::project_write_text,
+            commands::projects::project_create_entry,
+            commands::projects::project_transfer_file,
+            commands::projects::project_import_file,
+            commands::projects::project_trash_file,
+            commands::projects::project_open_file,
             commands::desktop::desktop_open_hub,
             commands::desktop::desktop_close_hub,
             commands::desktop::desktop_open_main,

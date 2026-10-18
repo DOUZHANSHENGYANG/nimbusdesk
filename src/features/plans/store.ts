@@ -11,6 +11,7 @@ import {
 } from "@/features/plans/types";
 import {
   applySnapshot,
+  applyArchiveSnapshot,
   emptyHistory,
   popRedo,
   popUndo,
@@ -97,6 +98,7 @@ interface PlansState {
   history: HistoryState;
 
   addTask: (date: string, parentId: string | null, title: string) => void;
+  addLinkedTask: (date: string, parentId: string | null, title: string, workItemId: string) => string;
   /**
    * 一次添加多条（多行粘贴拆分用）。
    *
@@ -156,6 +158,14 @@ export const usePlans = create<PlansState>()(
     (set, get) => ({
       days: {},
       history: emptyHistory,
+
+      addLinkedTask: (date, parentId, title, workItemId) => {
+        const clean = title.trim();
+        if (!clean || !workItemId.trim()) throw new Error("A title and project task are required");
+        const now = Date.now(), id = crypto.randomUUID();
+        set(s => ({ history: pushBefore(s.history, s.days, [date], HISTORY_LABEL.add), days: { ...s.days, [date]: [...(s.days[date] ?? []), { id, parentId, title: clean, workItemId, done: false, createdAt: now, updatedAt: now }] } }));
+        return id;
+      },
 
       addTask: (date, parentId, title) => {
         const t = title.trim();
@@ -314,8 +324,9 @@ export const usePlans = create<PlansState>()(
 
       undo: () => {
         const cur = get();
-        const popped = popUndo(cur.history, cur.days);
+        const popped = popUndo(cur.history, cur.days, usePlansArchive.getState().days);
         if (!popped) return false;
+        if (popped.snapshot.archive) usePlansArchive.setState(s => ({ days: applyArchiveSnapshot(s.days, popped.snapshot) }));
         set((s) => ({
           days: applySnapshot(s.days, popped.snapshot),
           history: popped.next,
@@ -325,8 +336,9 @@ export const usePlans = create<PlansState>()(
 
       redo: () => {
         const cur = get();
-        const popped = popRedo(cur.history, cur.days);
+        const popped = popRedo(cur.history, cur.days, usePlansArchive.getState().days);
         if (!popped) return false;
+        if (popped.snapshot.archive) usePlansArchive.setState(s => ({ days: applyArchiveSnapshot(s.days, popped.snapshot) }));
         set((s) => ({
           days: applySnapshot(s.days, popped.snapshot),
           history: popped.next,
@@ -466,23 +478,35 @@ export function useNow(): Date {
 
 /** 归档某日（活跃 → 归档库） */
 export function archiveDay(date: string): boolean {
-  const tasks = usePlans.getState().takeDay(date);
+  const current = usePlans.getState(), archive = usePlansArchive.getState();
+  const tasks = current.days[date];
   if (!tasks) return false;
-  usePlansArchive.getState().putDay(date, tasks);
+  const history = pushBefore(current.history, current.days, [date], HISTORY_LABEL.archive, archive.days);
+  const days = { ...current.days }; delete days[date];
+  const merged = mergePlans(archive.days[date]?.tasks ?? [], tasks);
+  usePlansArchive.setState({ days: { ...archive.days, [date]: { archivedAt: Date.now(), tasks: merged } } });
+  usePlans.setState({ days, history });
   return true;
 }
 
 /** 恢复某日（归档库 → 活跃） */
 export function restoreDay(date: string): boolean {
-  const tasks = usePlansArchive.getState().takeDay(date);
-  if (!tasks) return false;
+  const current = usePlans.getState(), archive = usePlansArchive.getState();
+  const entry = archive.days[date];
+  if (!entry) return false;
+  const history = pushBefore(current.history, current.days, [date], HISTORY_LABEL.restore, archive.days);
+  const archivedDays = { ...archive.days }; delete archivedDays[date];
+  usePlansArchive.setState({ days: archivedDays });
   // 恢复也是可撤销的一步：走 set 而不是直接写 days，
   // 这样 Ctrl+Z 能把「恢复」退回去
-  usePlans.setState((s) => ({
-    history: pushBefore(s.history, s.days, [date], HISTORY_LABEL.restore),
-    days: { ...s.days, [date]: tasks },
-  }));
+  usePlans.setState({ history, days: { ...current.days, [date]: mergePlans(entry.tasks, current.days[date] ?? []) } });
   return true;
+}
+
+function mergePlans(a: PlanTask[], b: PlanTask[]): PlanTask[] {
+  const all = new Map(a.map(task => [task.id, task]));
+  for (const task of b) { const old = all.get(task.id); if (!old || task.updatedAt >= old.updatedAt) all.set(task.id, task); }
+  return [...all.values()];
 }
 
 /** 启动时自动归档过期日（date < today） */
@@ -505,6 +529,10 @@ onStorageSynced((key, value) => {
     const days = state.days as Record<string, PlanTask[]>;
     if (JSON.stringify(usePlans.getState().days) !== JSON.stringify(days)) usePlans.setState({ days, history: emptyHistory });
   } else if (key === "plans-archive") {
-    usePlansArchive.setState({ days: state.days as ReturnType<typeof usePlansArchive.getState>["days"] });
+    const days = state.days as ReturnType<typeof usePlansArchive.getState>["days"];
+    if (JSON.stringify(usePlansArchive.getState().days) !== JSON.stringify(days)) {
+      usePlans.setState({ history: emptyHistory });
+      usePlansArchive.setState({ days });
+    }
   }
 });

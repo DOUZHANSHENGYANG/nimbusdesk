@@ -29,6 +29,7 @@ import { useDismiss } from "@/lib/hooks/use-dismiss";
 import { TaskLinkBadge, TaskLinkPicker } from "@/features/plans/views/task-link";
 import { toast } from "sonner";
 import { TaskAttachments } from "@/features/plans/attachments";
+import { PlanBinding } from "@/features/projects/plan-binding";
 
 /** 每层缩进（树形引导线间距） */
 const INDENT = 20;
@@ -438,6 +439,7 @@ function TaskRow({ date, task, depth, searchTaskId, revealIds, searchToken }: { 
         {/* 操作与附件保持同行，便于直接发现入口。 */}
         {!editing && (
           <div className="flex shrink-0 items-center gap-0.5">
+            <PlanBinding date={date} task={task} />
             <TaskAttachments date={date} task={task} />
             <RowAction title={t("plans.editTip")} onClick={startEdit}>
               <Pencil className="size-3.5" />

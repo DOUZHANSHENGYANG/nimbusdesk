@@ -247,10 +247,42 @@ pub async fn write_json(
     value: Value,
     base: Option<ExpectedState>,
 ) -> Result<Value, String> {
-    let searchable=crate::search::sources_key(&key);
-    let refresh_files=key=="search-settings" || key=="knowledge-settings";
-    let result=blocking(move || blocking_write_json(key, value, base)).await?;
-    if result.is_ok()&&searchable{crate::search::runtime::request_refresh();}
-    if result.is_ok()&&refresh_files{crate::search::file_runtime::request_refresh();}
+    let searchable = crate::search::sources_key(&key);
+    let refresh_files = key == "search-settings" || key == "knowledge-settings";
+    let result = blocking(move || blocking_write_json(key, value, base)).await?;
+    if result.is_ok() && searchable {
+        crate::search::runtime::request_refresh();
+    }
+    if result.is_ok() && refresh_files {
+        crate::search::file_runtime::request_refresh();
+    }
+    result
+}
+
+/// Archive/restore changes both plan envelopes and their link indexes under one
+/// SQLite writer transaction, while sharing the relocation directory lock.
+#[command]
+pub async fn write_plan_pair(
+    plans: Value,
+    archive: Value,
+    base_plans: Value,
+    base_archive: Value,
+) -> Result<Value, String> {
+    let result = blocking(move || {
+        with_data_dir(|root| {
+            let (plans, archive) = database::write_plan_pair_with_base_at(
+                root,
+                &plans,
+                &archive,
+                &base_plans,
+                &base_archive,
+            )?;
+            Ok(serde_json::json!({ "plans": plans, "archive": archive }))
+        })
+    })
+    .await?;
+    if result.is_ok() {
+        crate::search::runtime::request_refresh();
+    }
     result
 }

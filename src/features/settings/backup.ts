@@ -41,7 +41,7 @@ import { collectAttachmentPaths, validateAttachmentFiles, type BackupAttachmentF
 export const BACKUP_SCHEMA = 2;
 
 /** 备份里会带上的数据 key。顺序即展示顺序 */
-export const BACKUP_KEYS = ["settings", "files", "fences", "plans", "plans-archive", "todo-papers", "reminders", "favorites", "custom-feeds", "feed-network", "ai-providers", "knowledge-settings"] as const;
+export const BACKUP_KEYS = ["settings", "files", "fences", "projects", "plans", "plans-archive", "todo-papers", "reminders", "favorites", "custom-feeds", "feed-network", "ai-providers", "knowledge-settings"] as const;
 export type BackupKey = (typeof BACKUP_KEYS)[number];
 
 export interface BackupFile {
@@ -204,9 +204,29 @@ export async function mergeBackup(
   opts: { overwriteSettings: boolean },
 ): Promise<MergeStats> {
   const stats: MergeStats = { added: 0, updated: 0, skipped: 0 };
+  // Validate project graphs and references before writing any attachment or module.
+  const incomingProjects = unwrapState(file.data.projects);
+  const hasProjectLinks = [file.data.plans, file.data["plans-archive"]].some(v => JSON.stringify(v ?? {}).includes('"workItemId"'));
+  let projectRestore: (() => Promise<void>) | undefined;
+  if (incomingProjects || hasProjectLinks) {
+    const { useProjects, projectData } = await import("@/features/projects/store");
+    const { mergeProjectBackup, assertPlanLinks } = await import("@/features/projects/backup");
+    if (!useProjects.persist.hasHydrated()) await useProjects.persist.rehydrate();
+    const local = projectData(useProjects.getState());
+    const merged = incomingProjects ? mergeProjectBackup(local, incomingProjects as unknown as typeof local, opts) : local;
+    const ids = new Set(merged.items.map(i => i.id));
+    assertPlanLinks(file.data.plans, ids); assertPlanLinks(file.data["plans-archive"], ids);
+    projectRestore = async () => {
+      stats.added += merged.items.filter(i => !local.items.some(x => x.id === i.id)).length;
+      stats.updated += merged.items.filter(i => local.items.some(x => x.id === i.id && x.updatedAt < i.updatedAt)).length;
+      useProjects.setState(merged); await flushAllStorage();
+    };
+  }
   // Material first: a missing, invalid or conflicting file must not leave dangling task metadata.
   const attachmentFiles = validateAttachmentFiles(file.data, file.attachments);
   if (attachmentFiles.length) await invoke("task_attachments_import", { files: attachmentFiles });
+  // Native FK validation requires projects to reach disk before linked plan writes.
+  await projectRestore?.();
 
   // —— files ——
   const files = unwrapState(file.data.files);

@@ -1,0 +1,80 @@
+<!doctype html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body><div id="root" style="height:100vh"></div><script type="module">
+import React from 'react';
+import {createRoot} from 'react-dom/client';
+import {HashRouter,Routes,Route,useLocation} from 'react-router-dom';
+import {mockIPC,mockWindows} from '@tauri-apps/api/mocks';
+const fixtures={},calls=[];
+const params=new URLSearchParams(location.search);
+let releaseRead;
+const readReady=params.has('hold')?new Promise(resolve=>{releaseRead=resolve;}):Promise.resolve();
+const fileIO={disk:{'project-portal':{'alpha.txt':'alpha base','beta.txt':'beta base','nested/child.txt':'nested base'},'project-second':{'gamma.txt':'gamma base'}},sources:{'E:/Imports/copied.txt':'copied source','E:/Imports/moved.txt':'moved source'},pickedFile:'E:/Imports/copied.txt',holdReadPath:null,readWaiting:false,releaseFileRead:null,holdWrite:false,writeWaiting:false,releaseFileWrite:null};
+window.projectsReview={fixtures,calls,fileIO,failProjectWrite:false,releaseRead:()=>releaseRead?.()};
+mockIPC(async(cmd,args)=>{
+ calls.push({cmd,args});
+ if(cmd==='read_json'){
+  if(args.key==='projects'){await readReady;if(params.has('failRead'))throw Error('FIXTURE_PROJECT_READ_FAILED');}
+  return structuredClone(fixtures[args.key]??null);
+ }
+ if(cmd==='write_json'){
+  if(args.key==='projects'&&window.projectsReview.failProjectWrite)throw Error('FIXTURE_PROJECT_WRITE_FAILED');
+  if(args.key==='plans')for(const tasks of Object.values(args.value.state.days))for(const task of tasks)if(task.workItemId&&!fixtures.projects.state.items.some(item=>item.id===task.workItemId))throw Error('FIXTURE_FOREIGN_KEY_ORDER');
+  fixtures[args.key]=structuredClone(args.value);return args.value;
+ }
+ if(cmd==='write_plan_pair'){fixtures.plans=structuredClone(args.plans);fixtures['plans-archive']=structuredClone(args.archive);return {plans:args.plans,archive:args.archive};}
+ if(cmd==='pick_file')return fileIO.pickedFile;
+ if(cmd==='pick_folder')return 'E:/ProjectFilesFixture/picked';
+ if(cmd.startsWith('project_')){
+  if(!fixtures.projects.state.projects.some(p=>p.id===args.projectId&&p.folder))throw Error('FIXTURE_PROJECT_NOT_BOUND');
+  const disk=fileIO.disk[args.projectId]??{};
+  if(cmd==='project_list_files'){
+   const prefix=args.path?args.path+'/':'';const entries=new Map();
+   for(const [path,content]of Object.entries(disk)){if(!path.startsWith(prefix))continue;const name=path.slice(prefix.length).split('/')[0];entries.set(name,{name,path:prefix+name,directory:path.slice(prefix.length).includes('/'),size:content.length});}
+   return [...entries.values()];
+  }
+  if(cmd==='project_read_file'){
+   if(fileIO.holdReadPath===args.path){fileIO.readWaiting=true;await new Promise(resolve=>{fileIO.releaseFileRead=resolve;});fileIO.holdReadPath=null;fileIO.readWaiting=false;}
+   if(!(args.path in disk))throw Error('not-found');return {kind:args.path.endsWith('.md')?'markdown':'text',content:disk[args.path],dataUrl:null};
+  }
+  if(cmd==='project_write_text'){
+   if(fileIO.holdWrite){fileIO.writeWaiting=true;await new Promise(resolve=>{fileIO.releaseFileWrite=resolve;});fileIO.holdWrite=false;fileIO.writeWaiting=false;}
+   if(disk[args.path]!==args.expected)throw Error('file-conflict');disk[args.path]=args.content;return null;
+  }
+  if(cmd==='project_create_entry'){const name=args.name+(args.kind==='text'&&!args.name.endsWith('.txt')?'.txt':args.kind==='markdown'&&!args.name.endsWith('.md')?'.md':'');const path=[args.path,name].filter(Boolean).join('/');if(path in disk)throw Error('already-exists');disk[path]='';return path;}
+  if(cmd==='project_import_file'){const path=[args.path,args.source.split('/').at(-1)].filter(Boolean).join('/');if(path in disk)throw Error('already-exists');disk[path]=fileIO.sources[args.source];if(args.moveSource)delete fileIO.sources[args.source];return path;}
+  if(cmd==='project_open_file')return null;
+ }
+ if(cmd==='plugin:event|listen')return 1;
+ if(cmd==='get_data_dir')return 'E:/ProjectsFixture';
+ return null;
+});
+mockWindows('main');
+const {todayStr,addDays}=await import('/src/features/plans/types.ts');
+const {emptyProjectData}=await import('/src/features/projects/types.ts');
+const today=todayStr(),stamp={createdAt:1,updatedAt:1},data=emptyProjectData();
+data.areas=[{...stamp,id:'area-work',name:'业务开发'}];
+data.projects=[{...stamp,id:'project-portal',name:'业务门户',areaId:'area-work',note:'项目说明',status:'active',folder:null}];
+if(params.has('files')){data.projects[0].folder='E:/ProjectFilesFixture/portal';data.projects.push({...stamp,id:'project-second',name:'对照项目',areaId:'area-work',note:'',status:'active',folder:'E:/ProjectFilesFixture/second'});}
+data.iterations=[{...stamp,id:'iteration-old',name:'上一迭代',start:addDays(today,-21),end:addDays(today,-8)},{...stamp,id:'iteration-now',name:'本周迭代',start:addDays(today,-3),end:addDays(today,10)},{...stamp,id:'iteration-next',name:'下一迭代',start:addDays(today,11),end:addDays(today,24)}];
+data.items=[{...stamp,id:'item-portal',title:'完善采购页面',projectId:'project-portal',areaId:null,note:'保留已有操作路径',status:'doing',deadline:null,activeIterationId:'iteration-now'},{...stamp,id:'item-small',title:'临时小需求',projectId:null,areaId:null,note:'无需建立项目',status:'todo',deadline:today,activeIterationId:null}];
+data.memberships=[{id:'membership-now',itemId:'item-portal',iterationId:'iteration-now',joinedAt:1,leftAt:null,carriedFrom:null,updatedAt:1}];
+fixtures.projects={version:1,state:data};
+fixtures.settings={version:3,state:{theme:'dark',lang:'zh',sidebarCollapsed:true}};
+const tasks=[{...stamp,id:'plan-parent',parentId:null,title:'已有每日计划',done:false,workItemId:'item-portal'},{...stamp,id:'plan-child',parentId:'plan-parent',title:'继承关联的子计划',done:false}];
+fixtures.plans={version:4,state:{days:{[today]:tasks}}};
+fixtures['plans-archive']={version:3,state:{days:{[addDays(today,-1)]:{archivedAt:1,tasks:[{...stamp,id:'plan-archived',parentId:null,title:'归档的关联计划',done:true,workItemId:'item-portal'}]}}}};
+await import('/src/index.css');
+const {i18n,I18nextProvider}=await import('/src/lib/i18n.ts');
+const {ModalProvider}=await import('/src/components/shell/modal-host.tsx');
+const {ProjectsPage}=await import('/src/features/projects/page.tsx');
+const {Toaster}=await import('/src/components/ui/sonner.tsx');
+const {useProjects}=await import('/src/features/projects/store.ts');
+const {usePlans}=await import('/src/features/plans/store.ts');
+const {useSettings}=await import('/src/stores/settings.ts');
+const {flushAllStorage}=await import('/src/lib/storage.ts');
+window.projectsReview.stores={useProjects,usePlans,useSettings};
+window.projectsReview.flush=flushAllStorage;
+document.documentElement.classList.add('dark');
+function Destination(){const loc=useLocation();return React.createElement('div',{'data-plan-destination':true},loc.pathname+loc.search)}
+history.replaceState(null,'','#/projects');
+createRoot(document.getElementById('root')).render(React.createElement(I18nextProvider,{i18n},React.createElement(ModalProvider,null,React.createElement(HashRouter,null,React.createElement(Routes,null,React.createElement(Route,{path:'/projects',element:React.createElement(ProjectsPage)}),React.createElement(Route,{path:'/plans',element:React.createElement(Destination)}))),React.createElement(Toaster))));
+</script></body></html>

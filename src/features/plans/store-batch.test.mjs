@@ -108,3 +108,34 @@ test("clearing a completed parent also removes descendants instead of leaving in
   store.getState().undo();
   assert.deepEqual(store.getState().days[date], tasks);
 });
+
+test("linked plan creation is one complete undoable operation and deletion restores the binding", () => {
+  const store = setup([]);
+  assert.equal(typeof store.getState().addLinkedTask, "function", "linked plans must be created atomically");
+  const id = store.getState().addLinkedTask(date, null, "Derived plan", "work-item");
+  assert.equal(store.getState().days[date][0].workItemId, "work-item");
+  assert.equal(store.getState().history.past.length, 1);
+  store.getState().undo(); assert.deepEqual(store.getState().days[date], []);
+  store.getState().redo(); assert.equal(store.getState().days[date][0].workItemId, "work-item");
+  store.getState().removeTask(date,id);store.getState().undo();
+  assert.equal(store.getState().days[date][0].workItemId,"work-item");
+});
+
+test("child association overrides and explicit standalone markers survive undo and automatic removal", () => {
+  const tasks=[task("p",null,{workItemId:"work"}),task("c","p",{workItemId:null})];
+  const store=setup(tasks,{autoClear:true,autoSortDone:true});
+  store.getState().updateTask(date,"c",{workItemId:"other"});store.getState().undo();
+  assert.equal(store.getState().days[date][1].workItemId,null);
+  store.getState().toggleDone(date,"p");store.getState().undo();assert.deepEqual(store.getState().days[date],tasks);
+});
+
+test("archive/restore undo and redo restore both stores with task bindings, never duplicates or loss", () => {
+  const module=loadStore(), store=module.usePlans, archive=module.usePlansArchive;
+  const tasks=[task('linked',null,{workItemId:'work',attachments:[{id:'a',path:'owned/a'}]})];
+  store.setState({days:{[date]:tasks},history:{past:[],future:[]}});archive.setState({days:{}});
+  module.archiveDay(date);assert.equal(store.getState().days[date],undefined);assert.deepEqual(archive.getState().days[date].tasks,tasks);
+  store.getState().undo();assert.deepEqual(store.getState().days[date],tasks);assert.equal(archive.getState().days[date],undefined);
+  store.getState().redo();assert.equal(store.getState().days[date],undefined);assert.deepEqual(archive.getState().days[date].tasks,tasks);
+  module.restoreDay(date);store.getState().undo();assert.equal(store.getState().days[date],undefined);assert.deepEqual(archive.getState().days[date].tasks,tasks);
+  store.getState().redo();assert.deepEqual(store.getState().days[date],tasks);assert.equal(archive.getState().days[date],undefined);
+});

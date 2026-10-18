@@ -39,6 +39,7 @@ fn namespace(key: &str) -> (&str, &str) {
         "settings" => ("core", "settings"),
         "plans" => ("plans", "tasks"),
         "plans-archive" => ("plans", "archive"),
+        "projects" => ("projects", "state"),
         "todo-papers" => ("plans", "papers"),
         "reminders" => ("plans", "reminders"),
         "files" => ("files", "catalog"),
@@ -182,7 +183,7 @@ fn open(root: &Path) -> Result<Connection, String> {
     let app_id: i64 = conn
         .pragma_query_value(None, "application_id", |r| r.get(0))
         .map_err(sqlite_error)?;
-    if version > 1 || (app_id != 0 && app_id != APPLICATION_ID) {
+    if version > 2 || (app_id != 0 && app_id != APPLICATION_ID) {
         return Err("unsupported SQLite database schema; original database retained".into());
     }
     if version == 0 {
@@ -203,6 +204,8 @@ fn open(root: &Path) -> Result<Connection, String> {
         .map_err(sqlite_error)?;
     conn.pragma_update(None, "synchronous", "FULL")
         .map_err(sqlite_error)?;
+    conn.pragma_update(None, "foreign_keys", true)
+        .map_err(sqlite_error)?;
     let tx = conn
         .transaction_with_behavior(TransactionBehavior::Immediate)
         .map_err(sqlite_error)?;
@@ -211,7 +214,7 @@ fn open(root: &Path) -> Result<Connection, String> {
     let version: i64 = tx
         .pragma_query_value(None, "user_version", |r| r.get(0))
         .map_err(sqlite_error)?;
-    if version > 1 {
+    if version > 2 {
         return Err("unsupported SQLite database schema; original database retained".into());
     }
     if version == 0 {
@@ -249,6 +252,17 @@ fn open(root: &Path) -> Result<Connection, String> {
             return Err("SQLite migration marker missing; original database retained".into());
         }
     }
+    if version < 2 {
+        crate::project_database::create_schema(&tx)?;
+        crate::project_database::rebuild(&tx)?;
+        tx.execute(
+            "UPDATE module_state SET module='projects',feature='state' WHERE key='projects'",
+            [],
+        )
+        .map_err(sqlite_error)?;
+        tx.pragma_update(None, "user_version", 2)
+            .map_err(sqlite_error)?;
+    }
     tx.commit().map_err(sqlite_error)?;
     Ok(conn)
 }
@@ -280,6 +294,7 @@ pub fn write_at(root: &Path, key: &str, value: &Value) -> Result<(), String> {
         .transaction_with_behavior(TransactionBehavior::Immediate)
         .map_err(sqlite_error)?;
     upsert(&tx, key, value)?;
+    crate::project_database::project_write(&tx, key, value)?;
     tx.commit().map_err(sqlite_error)
 }
 
@@ -301,11 +316,41 @@ pub fn write_with_base_at(
         crate::state_merge::merge(base, value, &remote)?
     };
     upsert(&tx, key, &merged)?;
+    crate::project_database::project_write(&tx, key, &merged)?;
     tx.commit().map_err(sqlite_error)?;
     Ok(merged)
 }
 
-fn collect_owned_files(
+pub fn write_plan_pair_with_base_at(
+    root: &Path,
+    plans: &Value,
+    archive: &Value,
+    base_plans: &Value,
+    base_archive: &Value,
+) -> Result<(Value, Value), String> {
+    let mut conn = open(root)?;
+    let tx = conn
+        .transaction_with_behavior(TransactionBehavior::Immediate)
+        .map_err(sqlite_error)?;
+    let merge = |key: &str, value: &Value, base: &Value| -> Result<Value, String> {
+        let remote = read_value(&tx, key)?.unwrap_or(Value::Null);
+        if &remote == base {
+            Ok(value.clone())
+        } else {
+            crate::state_merge::merge(base, value, &remote)
+        }
+    };
+    let plans = merge("plans", plans, base_plans)?;
+    let archive = merge("plans-archive", archive, base_archive)?;
+    upsert(&tx, "plans", &plans)?;
+    upsert(&tx, "plans-archive", &archive)?;
+    crate::project_database::project_write(&tx, "plans", &plans)?;
+    crate::project_database::project_write(&tx, "plans-archive", &archive)?;
+    tx.commit().map_err(sqlite_error)?;
+    Ok((plans, archive))
+}
+
+fn collect_owned_entries(
     root: &Path,
     directory: &Path,
     result: &mut Vec<PathBuf>,
@@ -318,7 +363,12 @@ fn collect_owned_files(
             return Err("module files cannot contain links or junctions".into());
         }
         if metadata.is_dir() {
-            collect_owned_files(root, &path, result)?;
+            result.push(
+                path.strip_prefix(root)
+                    .map_err(|e| e.to_string())?
+                    .to_owned(),
+            );
+            collect_owned_entries(root, &path, result)?;
         } else if metadata.is_file() {
             result.push(
                 path.strip_prefix(root)
@@ -368,7 +418,8 @@ pub fn snapshot_to(source: &Path, target: &Path) -> Result<Vec<String>, String> 
     let modules = source.join("modules");
     if modules.exists() {
         reject_link_components(&modules)?;
-        collect_owned_files(&source, &modules, &mut files)?;
+        files.push(PathBuf::from("modules"));
+        collect_owned_entries(&source, &modules, &mut files)?;
     }
     let conn = open(&source)?;
     let database_target = target.join(DATABASE_FILE);
@@ -400,6 +451,14 @@ pub fn snapshot_to(source: &Path, target: &Path) -> Result<Vec<String>, String> 
         let to = target.join(&relative);
         reject_link_components(&from)?;
         reject_link_components(&to)?;
+        if fs::symlink_metadata(&from)
+            .map_err(|e| e.to_string())?
+            .is_dir()
+        {
+            fs::create_dir_all(&to).map_err(|e| format!("copy module directory: {e}"))?;
+            copied.push(relative.to_string_lossy().into_owned());
+            continue;
+        }
         if let Some(parent) = to.parent() {
             fs::create_dir_all(parent).map_err(|e| e.to_string())?;
         }
@@ -447,6 +506,465 @@ mod tests {
         fn drop(&mut self) {
             let _ = fs::remove_dir_all(&self.0);
         }
+    }
+
+    #[test]
+    fn project_schema_migrates_fresh_and_v1_databases_without_rewriting_json() {
+        for existing_v1 in [false, true] {
+            let root = Fixture::new();
+            let original = json!({"state":{"days":{"2026-10-18":[{"id":"old"}]}},"version":3});
+            if existing_v1 {
+                let conn = Connection::open(root.0.join(DATABASE_FILE)).unwrap();
+                conn.execute_batch("CREATE TABLE module_state(module TEXT NOT NULL,feature TEXT NOT NULL,key TEXT PRIMARY KEY,value_json TEXT NOT NULL,revision INTEGER NOT NULL,updated_at INTEGER NOT NULL); CREATE TABLE storage_meta(key TEXT PRIMARY KEY,value TEXT NOT NULL); INSERT INTO storage_meta VALUES('legacy_json_imported','1');").unwrap();
+                conn.pragma_update(None, "application_id", APPLICATION_ID)
+                    .unwrap();
+                conn.pragma_update(None, "user_version", 1).unwrap();
+                upsert(&conn, "plans", &original).unwrap();
+            } else {
+                fs::write(root.0.join("plans.json"), original.to_string()).unwrap();
+            }
+            assert_eq!(read_at(&root.0, "plans").unwrap(), Some(original));
+            let conn = Connection::open(root.0.join(DATABASE_FILE)).unwrap();
+            assert_eq!(
+                conn.pragma_query_value(None, "user_version", |r| r.get::<_, i64>(0))
+                    .unwrap(),
+                2
+            );
+            assert_eq!(
+                conn.query_row("SELECT count(*) FROM project_work_items", [], |r| r
+                    .get::<_, i64>(0))
+                    .unwrap(),
+                0
+            );
+        }
+    }
+
+    fn project_envelope() -> Value {
+        json!({"version":1,"state":{
+            "areas":[{"id":"area","name":"Area","createdAt":1,"updatedAt":1}],
+            "projects":[{"id":"project","areaId":"area","name":"Project","note":"","status":"active","folder":null,"createdAt":1,"updatedAt":1}],
+            "iterations":[{"id":"iteration","name":"Cycle","start":"2026-10-18","end":"2026-10-31","createdAt":1,"updatedAt":1}],
+            "items":[{"id":"item","projectId":"project","areaId":null,"title":"Work","note":"","status":"todo","deadline":"2026-10-31","activeIterationId":"iteration","createdAt":1,"updatedAt":1}],
+            "memberships":[{"id":"membership","itemId":"item","iterationId":"iteration","joinedAt":1,"leftAt":null,"carriedFrom":null,"snapshot":null,"updatedAt":1}],
+            "reminderRule":{"enabled":true,"times":["09:00","16:50"],"advanceDays":0,"weekdays":[1,2,3,4,5],"nonWorkingDay":"same","timezone":"Asia/Shanghai"},
+            "deliveries":[]
+        }})
+    }
+
+    #[test]
+    fn project_writes_validate_and_project_atomically() {
+        let root = Fixture::new();
+        let valid = project_envelope();
+        write_at(&root.0, "projects", &valid).unwrap();
+        let conn = Connection::open(root.0.join(DATABASE_FILE)).unwrap();
+        assert_eq!(
+            conn.query_row(
+                "SELECT title FROM project_work_items WHERE id='item'",
+                [],
+                |r| r.get::<_, String>(0)
+            )
+            .unwrap(),
+            "Work"
+        );
+        assert_eq!(
+            conn.query_row(
+                "SELECT module FROM module_state WHERE key='projects'",
+                [],
+                |r| r.get::<_, String>(0)
+            )
+            .unwrap(),
+            "projects"
+        );
+        for (field, value) in [
+            ("deadline", json!("2026-02-30")),
+            ("projectId", json!("missing")),
+            ("activeIterationId", json!("missing")),
+            ("status", json!("unknown")),
+        ] {
+            let mut invalid = valid.clone();
+            invalid["state"]["items"][0][field] = value;
+            assert!(
+                write_at(&root.0, "projects", &invalid).is_err(),
+                "accepted {field}"
+            );
+            assert_eq!(read_at(&root.0, "projects").unwrap(), Some(valid.clone()));
+        }
+        let mut invalid = valid.clone();
+        invalid["state"]["iterations"][0]["end"] = json!("2026-10-01");
+        assert!(write_at(&root.0, "projects", &invalid).is_err());
+        let mut invalid = valid.clone();
+        invalid["state"]["memberships"] = json!([]);
+        assert!(write_at(&root.0, "projects", &invalid).is_err());
+        let mut invalid = valid.clone();
+        let mut duplicate = invalid["state"]["memberships"][0].clone();
+        duplicate["id"] = json!("duplicate");
+        invalid["state"]["memberships"]
+            .as_array_mut()
+            .unwrap()
+            .push(duplicate);
+        assert!(write_at(&root.0, "projects", &invalid).is_err());
+        assert_eq!(
+            conn.query_row(
+                "SELECT revision FROM module_state WHERE key='projects'",
+                [],
+                |r| r.get::<_, i64>(0)
+            )
+            .unwrap(),
+            1
+        );
+    }
+
+    #[test]
+    fn project_plan_links_survive_archive_overlap_and_undo_and_reject_dangling_ids() {
+        let root = Fixture::new();
+        write_at(&root.0, "projects", &project_envelope()).unwrap();
+        let linked = json!({"state":{"days":{"2026-10-18":[{"id":"parent","workItemId":"item"},{"id":"child","parentId":"parent"},{"id":"unbound","parentId":"parent","workItemId":null}]}},"version":3});
+        write_at(&root.0, "plans", &linked).unwrap();
+        let conn = Connection::open(root.0.join(DATABASE_FILE)).unwrap();
+        assert_eq!(
+            conn.query_row("SELECT count(*) FROM project_plan_links", [], |r| r
+                .get::<_, i64>(0))
+                .unwrap(),
+            2
+        );
+        let archived = json!({"state":{"days":{"2026-10-18":{"archivedAt":2,"tasks":linked["state"]["days"]["2026-10-18"].clone()}}},"version":3});
+        write_at(&root.0, "plans-archive", &archived).unwrap();
+        write_at(&root.0, "plans", &json!({"state":{"days":{}},"version":3})).unwrap();
+        write_at(&root.0, "plans", &linked).unwrap();
+        assert_eq!(
+            conn.query_row("SELECT count(*) FROM project_plan_links", [], |r| r
+                .get::<_, i64>(0))
+                .unwrap(),
+            4
+        );
+        let mut bad = linked.clone();
+        bad["state"]["days"]["2026-10-18"][0]["workItemId"] = json!("missing");
+        assert!(write_at(&root.0, "plans", &bad).is_err());
+        assert_eq!(read_at(&root.0, "plans").unwrap(), Some(linked));
+        let mut without_item = project_envelope();
+        without_item["state"]["items"] = json!([]);
+        without_item["state"]["memberships"] = json!([]);
+        assert!(write_at(&root.0, "projects", &without_item).is_err());
+    }
+
+    #[test]
+    fn project_reminder_rules_reject_empty_slots_and_invalid_limits_without_overwriting() {
+        let root = Fixture::new();
+        let valid = project_envelope();
+        write_at(&root.0, "projects", &valid).unwrap();
+        for (field, value) in [
+            ("times", json!([])),
+            ("weekdays", json!([])),
+            ("advanceDays", json!(366)),
+            ("times", json!(["24:00"])),
+        ] {
+            let mut bad = valid.clone();
+            bad["state"]["reminderRule"][field] = value;
+            assert!(
+                write_at(&root.0, "projects", &bad).is_err(),
+                "accepted reminder {field}"
+            );
+        }
+        assert_eq!(read_at(&root.0, "projects").unwrap(), Some(valid));
+    }
+
+    #[test]
+    fn project_malformed_v1_migration_retains_json_version_and_can_retry() {
+        let root = Fixture::new();
+        let conn = Connection::open(root.0.join(DATABASE_FILE)).unwrap();
+        conn.execute_batch("CREATE TABLE module_state(module TEXT NOT NULL,feature TEXT NOT NULL,key TEXT PRIMARY KEY,value_json TEXT NOT NULL,revision INTEGER NOT NULL,updated_at INTEGER NOT NULL); CREATE TABLE storage_meta(key TEXT PRIMARY KEY,value TEXT NOT NULL); INSERT INTO storage_meta VALUES('legacy_json_imported','1');").unwrap();
+        conn.pragma_update(None, "application_id", APPLICATION_ID)
+            .unwrap();
+        conn.pragma_update(None, "user_version", 1).unwrap();
+        let mut bad = project_envelope();
+        bad["state"]["items"][0]["deadline"] = json!("2026-02-30");
+        upsert(&conn, "projects", &bad).unwrap();
+        assert!(read_at(&root.0, "projects").is_err());
+        assert_eq!(
+            conn.pragma_query_value(None, "user_version", |r| r.get::<_, i64>(0))
+                .unwrap(),
+            1
+        );
+        assert_eq!(read_value(&conn, "projects").unwrap(), Some(bad));
+        assert_eq!(
+            conn.query_row(
+                "SELECT count(*) FROM sqlite_schema WHERE name='project_work_items'",
+                [],
+                |r| r.get::<_, i64>(0)
+            )
+            .unwrap(),
+            0
+        );
+        upsert(&conn, "projects", &project_envelope()).unwrap();
+        assert_eq!(
+            read_at(&root.0, "projects").unwrap(),
+            Some(project_envelope())
+        );
+        assert_eq!(
+            conn.query_row("SELECT count(*) FROM project_work_items", [], |r| r
+                .get::<_, i64>(0))
+                .unwrap(),
+            1
+        );
+    }
+
+    #[test]
+    fn project_closed_memberships_are_unique_and_active_membership_cannot_disagree() {
+        let root = Fixture::new();
+        let valid = project_envelope();
+        write_at(&root.0, "projects", &valid).unwrap();
+        let mut bad = valid.clone();
+        bad["state"]["memberships"][0]["leftAt"] = json!(2);
+        assert!(write_at(&root.0, "projects", &bad).is_err());
+        bad["state"]["items"][0]["activeIterationId"] = Value::Null;
+        let mut duplicate = bad["state"]["memberships"][0].clone();
+        duplicate["id"] = json!("duplicate");
+        bad["state"]["memberships"]
+            .as_array_mut()
+            .unwrap()
+            .push(duplicate);
+        assert!(write_at(&root.0, "projects", &bad).is_err());
+        let mut bad = valid.clone();
+        bad["state"]["items"][0]["activeIterationId"] = Value::Null;
+        assert!(write_at(&root.0, "projects", &bad).is_err());
+        let mut bad = valid.clone();
+        bad["state"]["memberships"][0]["carriedFrom"] = json!("missing");
+        assert!(write_at(&root.0, "projects", &bad).is_err());
+        assert_eq!(read_at(&root.0, "projects").unwrap(), Some(valid));
+    }
+
+    #[test]
+    fn project_merge_write_projects_merged_payload_and_rolls_back_invalid_links() {
+        let root = Fixture::new();
+        let base = project_envelope();
+        write_at(&root.0, "projects", &base).unwrap();
+        let mut remote = base.clone();
+        remote["state"]["projects"][0]["note"] = json!("remote note");
+        write_with_base_at(&root.0, "projects", &remote, &base).unwrap();
+        let mut local = base.clone();
+        local["state"]["items"][0]["title"] = json!("Merged work");
+        let merged = write_with_base_at(&root.0, "projects", &local, &base).unwrap();
+        assert_eq!(merged["state"]["projects"][0]["note"], "remote note");
+        let conn = Connection::open(root.0.join(DATABASE_FILE)).unwrap();
+        assert_eq!(
+            conn.query_row(
+                "SELECT title FROM project_work_items WHERE id='item'",
+                [],
+                |r| r.get::<_, String>(0)
+            )
+            .unwrap(),
+            "Merged work"
+        );
+        let plans = json!({"state":{"days":{"2026-10-18":[{"id":"plan","workItemId":"item"}]}},"version":3});
+        write_at(&root.0, "plans", &plans).unwrap();
+        let mut bad = plans.clone();
+        bad["state"]["days"]["2026-10-18"][0]["workItemId"] = json!("missing");
+        assert!(write_with_base_at(&root.0, "plans", &bad, &plans).is_err());
+        assert_eq!(read_at(&root.0, "plans").unwrap(), Some(plans));
+    }
+
+    #[test]
+    fn project_snapshot_retains_projection_and_unrelated_writes_do_not_rebuild_it() {
+        let source = Fixture::new();
+        let target = Fixture::new();
+        let state = project_envelope();
+        write_at(&source.0, "projects", &state).unwrap();
+        write_at(&source.0,"plans",&json!({"state":{"days":{"2026-10-18":[{"id":"plan","workItemId":"item"}]}},"version":3})).unwrap();
+        snapshot_to(&source.0, &target.0).unwrap();
+        assert_eq!(read_at(&target.0, "projects").unwrap(), Some(state));
+        let conn = Connection::open(target.0.join(DATABASE_FILE)).unwrap();
+        assert_eq!(
+            conn.query_row(
+                "SELECT work_item_id FROM project_plan_links WHERE plan_id='plan'",
+                [],
+                |r| r.get::<_, String>(0)
+            )
+            .unwrap(),
+            "item"
+        );
+        // A trigger makes an accidental rebuild observable on unrelated saves.
+        conn.execute_batch("CREATE TRIGGER prevent_project_scan BEFORE DELETE ON project_work_items BEGIN SELECT RAISE(ABORT,'unexpected project rebuild'); END;").unwrap();
+        write_at(&target.0, "settings", &json!({"state":{"theme":"dark"}})).unwrap();
+    }
+
+    #[test]
+    fn project_snapshot_preserves_empty_managed_root_and_nested_directories() {
+        let source = Fixture::new();
+        let target = Fixture::new();
+        let nested = "modules/projects/materials/id/root/nested";
+        let second = "modules/projects/materials/empty/root";
+        fs::create_dir_all(source.0.join(nested)).unwrap();
+        fs::create_dir_all(source.0.join(second)).unwrap();
+        write_at(&source.0, "settings", &json!({"state":{}})).unwrap();
+        snapshot_to(&source.0, &target.0).unwrap();
+        assert!(
+            target.0.join(nested).is_dir(),
+            "empty nested material directory must survive relocation"
+        );
+        assert!(
+            target.0.join(second).is_dir(),
+            "empty managed project root must survive relocation"
+        );
+        assert!(source.0.join(nested).is_dir());
+    }
+
+    #[test]
+    fn project_plan_pair_moves_links_between_active_and_archive_atomically() {
+        let root = Fixture::new();
+        write_at(&root.0, "projects", &project_envelope()).unwrap();
+        let active = json!({"version":4,"state":{"days":{"2026-10-18":[{"id":"p","workItemId":"item"},{"id":"c","parentId":"p","workItemId":null}]}}});
+        let empty_active = json!({"version":4,"state":{"days":{}}});
+        let empty_archive = json!({"version":3,"state":{"days":{}}});
+        let archive = json!({"version":3,"state":{"days":{"2026-10-18":{"archivedAt":5,"tasks":active["state"]["days"]["2026-10-18"].clone()}}}});
+        write_at(&root.0, "plans", &active).unwrap();
+        write_at(&root.0, "plans-archive", &empty_archive).unwrap();
+        let actual =
+            write_plan_pair_with_base_at(&root.0, &empty_active, &archive, &active, &empty_archive)
+                .unwrap();
+        assert_eq!(actual, (empty_active.clone(), archive.clone()));
+        let conn = Connection::open(root.0.join(DATABASE_FILE)).unwrap();
+        assert_eq!(
+            conn.query_row(
+                "SELECT count(*) FROM project_plan_links WHERE source_key='plans'",
+                [],
+                |r| r.get::<_, i64>(0)
+            )
+            .unwrap(),
+            0
+        );
+        assert_eq!(
+            conn.query_row(
+                "SELECT count(*) FROM project_plan_links WHERE source_key='plans-archive'",
+                [],
+                |r| r.get::<_, i64>(0)
+            )
+            .unwrap(),
+            2
+        );
+        write_plan_pair_with_base_at(&root.0, &active, &empty_archive, &empty_active, &archive)
+            .unwrap();
+        assert_eq!(read_at(&root.0, "plans").unwrap(), Some(active));
+        assert_eq!(
+            read_at(&root.0, "plans-archive").unwrap(),
+            Some(empty_archive)
+        );
+        assert_eq!(
+            conn.query_row(
+                "SELECT count(*) FROM project_plan_links WHERE source_key='plans'",
+                [],
+                |r| r.get::<_, i64>(0)
+            )
+            .unwrap(),
+            2
+        );
+        assert_eq!(
+            conn.query_row(
+                "SELECT count(*) FROM project_plan_links WHERE source_key='plans-archive'",
+                [],
+                |r| r.get::<_, i64>(0)
+            )
+            .unwrap(),
+            0
+        );
+    }
+
+    #[test]
+    fn project_plan_pair_second_key_sql_failure_rolls_back_first_json_and_revision() {
+        let root = Fixture::new();
+        let original = json!({"state":{"days":{}},"version":4});
+        write_at(&root.0, "plans", &original).unwrap();
+        write_at(&root.0, "plans-archive", &original).unwrap();
+        let conn = Connection::open(root.0.join(DATABASE_FILE)).unwrap();
+        conn.execute_batch("CREATE TRIGGER reject_archive BEFORE UPDATE ON module_state WHEN NEW.key='plans-archive' BEGIN SELECT RAISE(ABORT,'archive write rejected'); END;").unwrap();
+        let changed = json!({"state":{"days":{"2026-10-18":[]}},"version":4});
+        assert!(
+            write_plan_pair_with_base_at(&root.0, &changed, &changed, &original, &original)
+                .is_err()
+        );
+        assert_eq!(read_at(&root.0, "plans").unwrap(), Some(original.clone()));
+        assert_eq!(read_at(&root.0, "plans-archive").unwrap(), Some(original));
+        assert_eq!(
+            conn.query_row(
+                "SELECT sum(revision) FROM module_state WHERE key IN ('plans','plans-archive')",
+                [],
+                |r| r.get::<_, i64>(0)
+            )
+            .unwrap(),
+            2
+        );
+    }
+
+    #[test]
+    fn project_plan_pair_invalid_archive_link_rolls_back_json_and_link_changes() {
+        let root = Fixture::new();
+        write_at(&root.0, "projects", &project_envelope()).unwrap();
+        let active =
+            json!({"version":4,"state":{"days":{"2026-10-18":[{"id":"p","workItemId":"item"}]}}});
+        let empty = json!({"state":{"days":{}},"version":3});
+        write_at(&root.0, "plans", &active).unwrap();
+        write_at(&root.0, "plans-archive", &empty).unwrap();
+        let bad = json!({"state":{"days":{"2026-10-18":{"tasks":[{"id":"p","workItemId":"missing"}],"archivedAt":5}}},"version":3});
+        assert!(write_plan_pair_with_base_at(&root.0, &empty, &bad, &active, &empty).is_err());
+        assert_eq!(read_at(&root.0, "plans").unwrap(), Some(active));
+        assert_eq!(read_at(&root.0, "plans-archive").unwrap(), Some(empty));
+        let conn = Connection::open(root.0.join(DATABASE_FILE)).unwrap();
+        assert_eq!(
+            conn.query_row(
+                "SELECT source_key FROM project_plan_links WHERE plan_id='p'",
+                [],
+                |r| r.get::<_, String>(0)
+            )
+            .unwrap(),
+            "plans"
+        );
+        assert_eq!(
+            conn.query_row(
+                "SELECT sum(revision) FROM module_state WHERE key IN ('plans','plans-archive')",
+                [],
+                |r| r.get::<_, i64>(0)
+            )
+            .unwrap(),
+            2
+        );
+    }
+
+    #[test]
+    fn project_plan_pair_merges_each_stale_base_and_rejects_second_conflict() {
+        let root = Fixture::new();
+        let base = json!({"state":{"days":{},"one":false,"two":false},"version":4});
+        let mut remote = base.clone();
+        remote["state"]["one"] = json!(true);
+        write_at(&root.0, "plans", &remote).unwrap();
+        write_at(&root.0, "plans-archive", &remote).unwrap();
+        let mut local = base.clone();
+        local["state"]["two"] = json!(true);
+        let (active, archive) =
+            write_plan_pair_with_base_at(&root.0, &local, &local, &base, &base).unwrap();
+        assert_eq!(active["state"]["one"], true);
+        assert_eq!(active["state"]["two"], true);
+        assert_eq!(active, archive);
+        let mut remote_archive = archive.clone();
+        remote_archive["state"]["one"] = json!("other");
+        write_at(&root.0, "plans-archive", &remote_archive).unwrap();
+        let mut new_active = active.clone();
+        new_active["state"]["two"] = json!(false);
+        let mut conflicting_archive = archive.clone();
+        conflicting_archive["state"]["one"] = json!("mine");
+        assert!(
+            write_plan_pair_with_base_at(
+                &root.0,
+                &new_active,
+                &conflicting_archive,
+                &active,
+                &archive
+            )
+            .is_err()
+        );
+        assert_eq!(read_at(&root.0, "plans").unwrap(), Some(active));
+        assert_eq!(
+            read_at(&root.0, "plans-archive").unwrap(),
+            Some(remote_archive)
+        );
     }
 
     #[test]
@@ -548,7 +1066,7 @@ mod tests {
         assert_eq!(
             conn.pragma_query_value(None, "user_version", |r| r.get::<_, i64>(0))
                 .unwrap(),
-            1
+            2
         );
         assert_eq!(
             conn.query_row(

@@ -7,6 +7,7 @@ import { cn } from "@/lib/utils";
 import { ArrowDown, ArrowUp, ChevronDown, GripVertical, Paperclip, Trash2 } from "lucide-react";
 import { TimeRangePicker } from "./time-range";
 import { TaskAttachments } from "@/features/plans/attachments";
+import { PlanBinding } from "@/features/projects/plan-binding";
 import { usePlanCopy } from "@/features/plans/copy";
 
 /**
@@ -237,6 +238,7 @@ export function PaperRow({
         </div>
       )}
       {detailsOpen && <div id={detailsId} className="paper-task-details" role="region" aria-label={`${copy.details}: ${task.title}`}>
+        {editable && <PlanBinding date={date} task={task} />}
         <div className="paper-task-time"><span>{copy.link}</span>
           <TaskLinkPicker link={task.link} onChange={link => usePlans.getState().updateTask(date, task.id, { link })}/>
         </div>

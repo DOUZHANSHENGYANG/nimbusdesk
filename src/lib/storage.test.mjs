@@ -16,10 +16,10 @@ function deferred() {
 const state = (count) => ({ state: { count }, version: 1 });
 const copy = (value) => value === undefined ? undefined : structuredClone(value);
 
-async function loadStorage({ initial = state(0), read, write } = {}) {
+async function loadStorage({ initial = state(0), initialArchive = state(10), read, write, pair } = {}) {
   const key = `__storageTest${++sequence}`;
-  const calls = { reads: [], writes: [], emits: [], reports: [], clears: [] };
-  const persisted = new Map([["plans", copy(initial)]]);
+  const calls = { reads: [], writes: [], pairs: [], emits: [], reports: [], clears: [] };
+  const persisted = new Map([["plans", copy(initial)], ["plans-archive", copy(initialArchive)]]);
   const timers = new Map();
   let timerId = 0;
   let listener;
@@ -41,6 +41,15 @@ async function loadStorage({ initial = state(0), read, write } = {}) {
       persisted.set(name, copy(canonical));
       return copy(canonical);
     },
+    writePlanPair: async (plans, archive, basePlans, baseArchive) => {
+      const entry = { plans: copy(plans), archive: copy(archive), basePlans: copy(basePlans), baseArchive: copy(baseArchive) };
+      calls.pairs.push(entry);
+      const canonical = pair ? await pair(entry, calls.pairs.length) : { plans, archive };
+      // A native transaction publishes both values only after it succeeds.
+      persisted.set("plans", copy(canonical.plans));
+      persisted.set("plans-archive", copy(canonical.archive));
+      return copy(canonical);
+    },
     useStorageHealth: { getState: () => ({
       report: (problem, name, error) => calls.reports.push({ problem, name, error }),
       clear: (name) => calls.clears.push(name),
@@ -51,7 +60,7 @@ async function loadStorage({ initial = state(0), read, write } = {}) {
     .replace(/^import .*;\r?\n/gm, "");
   let api;
   try {
-    api = await import(`data:text/javascript;base64,${Buffer.from(`const { emit, listen, readJson, writeJson, inTauri, useStorageHealth, crypto, setTimeout, clearTimeout } = globalThis.${key};\n${code}`).toString("base64")}`);
+    api = await import(`data:text/javascript;base64,${Buffer.from(`const { emit, listen, readJson, writeJson, writePlanPair, inTauri, useStorageHealth, crypto, setTimeout, clearTimeout } = globalThis.${key};\n${code}`).toString("base64")}`);
   } finally { delete globalThis[key]; }
   return {
     ...api,
@@ -59,6 +68,7 @@ async function loadStorage({ initial = state(0), read, write } = {}) {
     calls,
     persisted,
     origin,
+    fireTimers: async () => { for (const callback of [...timers.values()]) callback(); await turn(); },
     remote: async (name = "plans", eventSource = "other-view") => {
       assert.equal(typeof listener, "function", "the native storage listener must be installed");
       await listener({ payload: { key: name, source: eventSource } });
@@ -254,4 +264,144 @@ test("a remote read started before a local commit cannot undo that commit", asyn
   await api.flushAllStorage();
   stale.resolve(state(1)); await reading;
   assert.deepEqual(applied.at(-1), state(2));
+});
+
+
+async function hydratePlanPair(api) {
+  await Promise.all([api.storage.getItem("plans"), api.storage.getItem("plans-archive")]);
+}
+async function enqueuePlanPair(api, plans, archive) {
+  await api.storage.setItem("plans", JSON.stringify(plans));
+  await api.storage.setItem("plans-archive", JSON.stringify(archive));
+}
+
+test("queued plan and archive edits commit together exactly once", async () => {
+  const api = await loadStorage();
+  await hydratePlanPair(api);
+  await enqueuePlanPair(api, state(1), state(11));
+  await api.flushAllStorage();
+  assert.deepEqual(api.calls.pairs, [{ plans: state(1), archive: state(11), basePlans: state(0), baseArchive: state(10) }]);
+  assert.deepEqual(api.calls.writes, []);
+  assert.deepEqual(api.persisted.get("plans"), state(1));
+  assert.deepEqual(api.persisted.get("plans-archive"), state(11));
+  assert.deepEqual(api.calls.emits.map(event => event.payload.key), ["plans", "plans-archive"]);
+});
+
+for (const newer of [false, true]) {
+  test(`failed plan pair retains both ${newer ? "newer edits" : "original edits"} and their original merge bases`, async () => {
+    const saving = deferred();
+    const api = await loadStorage({ pair: (entry, index) => index === 1 ? saving.promise : entry });
+    await hydratePlanPair(api);
+    await enqueuePlanPair(api, state(1), state(11));
+    const failure = assert.rejects(api.flushAllStorage(), /pair disk full/);
+    await turn();
+    if (newer) await enqueuePlanPair(api, state(2), state(12));
+    saving.reject(new Error("pair disk full"));
+    await failure;
+    assert.deepEqual(api.persisted.get("plans"), state(0));
+    assert.deepEqual(api.persisted.get("plans-archive"), state(10));
+    assert.deepEqual(api.calls.reports.map(({name}) => name), ["plans", "plans-archive"]);
+    assert.equal(api.calls.emits.length, 0);
+    await api.flushAllStorage();
+    assert.deepEqual(api.calls.pairs[1], { plans: state(newer ? 2 : 1), archive: state(newer ? 12 : 11), basePlans: state(0), baseArchive: state(10) });
+    assert.deepEqual(api.calls.writes, []);
+  });
+}
+
+test("plan pair edits queued in flight stay serial and use the in-flight values as merge bases", async () => {
+  const first = deferred(); const second = deferred();
+  let concurrent = 0; let maximum = 0;
+  const api = await loadStorage({ pair: async (_entry, index) => {
+    concurrent++; maximum = Math.max(maximum, concurrent);
+    try { return await (index === 1 ? first.promise : second.promise); }
+    finally { concurrent--; }
+  } });
+  await hydratePlanPair(api);
+  await enqueuePlanPair(api, state(1), state(11));
+  const flushing = api.flushAllStorage(); await turn();
+  await enqueuePlanPair(api, state(2), state(12));
+  const overlapping = api.flushAllStorage(); await turn();
+  assert.equal(api.calls.pairs.length, 1);
+  first.resolve({plans: state(1), archive: state(11)}); await turn();
+  assert.deepEqual(api.calls.pairs[1], {plans: state(2), archive: state(12), basePlans: state(1), baseArchive: state(11)});
+  second.resolve({plans: state(2), archive: state(12)});
+  await Promise.all([flushing, overlapping]);
+  assert.equal(maximum, 1);
+  assert.deepEqual(api.calls.writes, []);
+  assert.deepEqual(api.persisted.get("plans"), state(2));
+  assert.deepEqual(api.persisted.get("plans-archive"), state(12));
+});
+
+for (const failedKey of ["plans", "plans-archive"]) {
+  test(`a blocked ${failedKey} read blocks the whole paired commit`, async () => {
+    const api = await loadStorage({ read: name => { if (name === failedKey) throw new Error("unreadable"); return state(name === "plans" ? 0 : 10); } });
+    await hydratePlanPair(api);
+    await enqueuePlanPair(api, state(1), state(11));
+    await assert.rejects(api.flushAllStorage(), /paused|暂停/);
+    assert.deepEqual(api.calls.writes, []);
+    assert.deepEqual(api.calls.pairs, []);
+    assert.deepEqual(api.persisted.get("plans"), state(0));
+    assert.deepEqual(api.persisted.get("plans-archive"), state(10));
+  });
+}
+
+test("a paired edit arriving behind an active single-plan write still commits as one pair", async () => {
+  const first = deferred();
+  const api = await loadStorage({ write: (_key, value, _baseline, index) => index === 1 ? first.promise : value });
+  await hydratePlanPair(api);
+  await api.storage.setItem("plans", JSON.stringify(state(1)));
+  const flushing = api.flushAllStorage(); await turn();
+  await enqueuePlanPair(api, state(2), state(12));
+  const overlapping = api.flushAllStorage();
+  first.resolve(state(1));
+  await Promise.all([flushing, overlapping]);
+  assert.equal(api.calls.writes.length, 1, "the paired edit must not be split into later single-store writes");
+  assert.deepEqual(api.calls.pairs, [{plans: state(2), archive: state(12), basePlans: state(1), baseArchive: state(10)}]);
+});
+
+for (const failedKey of ["plans", "plans-archive"]) {
+  test(`a blocked ${failedKey} read also blocks a single pending edit of its paired store`, async () => {
+    const healthyKey = failedKey === "plans" ? "plans-archive" : "plans";
+    const api = await loadStorage({ read: name => { if (name === failedKey) throw new Error("unreadable"); return state(name === "plans" ? 0 : 10); } });
+    await hydratePlanPair(api);
+    await api.storage.setItem(healthyKey, JSON.stringify(state(20)));
+    await assert.rejects(api.flushAllStorage(), /paused|暂停/);
+    assert.deepEqual(api.calls.writes, []);
+    assert.deepEqual(api.calls.pairs, []);
+  });
+}
+
+test("an archive-first active write cannot split the following paired edit", async () => {
+  const first = deferred();
+  const api = await loadStorage({ write: (_key, value, _baseline, index) => index === 1 ? first.promise : value });
+  await hydratePlanPair(api);
+  await api.storage.setItem("plans-archive", JSON.stringify(state(11)));
+  const flushing = api.flushAllStorage(); await turn();
+  await enqueuePlanPair(api, state(2), state(12));
+  const overlapping = api.flushAllStorage();
+  first.resolve(state(11));
+  await Promise.all([flushing, overlapping]);
+  assert.equal(api.calls.writes.length, 1, "the archive-first case must retain the same transaction guarantee");
+  assert.deepEqual(api.calls.pairs, [{plans: state(2), archive: state(12), basePlans: state(0), baseArchive: state(11)}]);
+});
+
+
+test("timer-only paired edits cannot get stranded behind two independent in-flight writes", async () => {
+  const savingPlans = deferred(); const savingArchive = deferred();
+  const api = await loadStorage({ write: name => name === "plans" ? savingPlans.promise : savingArchive.promise });
+  await hydratePlanPair(api);
+  await api.storage.setItem("plans", JSON.stringify(state(1)));
+  await api.fireTimers();
+  await api.storage.setItem("plans-archive", JSON.stringify(state(11)));
+  await api.fireTimers();
+  assert.equal(api.calls.writes.length, 2);
+  await enqueuePlanPair(api, state(2), state(12));
+  // Both debounce callbacks run while both keys are active. No caller invokes
+  // flushAllStorage: ordinary background persistence must still drain the pair.
+  await api.fireTimers();
+  savingPlans.resolve(state(1)); savingArchive.resolve(state(11));
+  await turn(); await turn();
+  assert.deepEqual(api.calls.pairs, [{ plans: state(2), archive: state(12), basePlans: state(1), baseArchive: state(11) }]);
+  assert.deepEqual(api.persisted.get("plans"), state(2));
+  assert.deepEqual(api.persisted.get("plans-archive"), state(12));
 });

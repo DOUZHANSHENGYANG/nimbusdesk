@@ -1,4 +1,5 @@
 pub mod backup;
+pub mod projects;
 pub mod task_attachments;
 pub mod ai;
 pub mod capture;
