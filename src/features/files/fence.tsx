@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { getCurrentWebviewWindow, getAllWebviewWindows } from "@tauri-apps/api/webviewWindow";
 import { cursorPosition, monitorFromPoint, currentMonitor } from "@tauri-apps/api/window";
 import { PhysicalPosition } from "@tauri-apps/api/dpi";
-import { Eye, EyeOff, X, Pin, PinOff, PanelRightClose, ArrowLeftRight, Expand } from "lucide-react";
+import { Eye, EyeOff, X, Pin, PinOff, PanelRightClose, ArrowLeftRight, Expand, List, LayoutGrid, LockKeyhole, UnlockKeyhole, MoreHorizontal } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Providers } from "@/app/providers";
@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 import { flushAllStorage } from "@/lib/storage";
 import { EdgeDockFrame, useEdgeDock, queueWindowOperation } from "@/features/desktop/edge-dock";
 import { logicalFenceGeometry, dragDockEdge } from "./fence-geometry";
+import { fenceLayout, fenceInsertionBefore, FENCE_GAP as GAP } from "./fence-presentation";
 
 const win = inTauri ? getCurrentWebviewWindow() : null;
 
@@ -41,7 +42,6 @@ const SCALE_MIN = 0.7;
 /** 吸附阈值（逻辑像素，按显示器缩放换算为物理像素） */
 const SNAP_TOLERANCE = 12;
 const SCALE_MAX = 1.6;
-const GAP = 6;
 
 function FencePanel({ categoryId }: { categoryId: string }) {
   const { t, i18n } = useTranslation();
@@ -65,15 +65,20 @@ function FencePanel({ categoryId }: { categoryId: string }) {
   const setForm = useFences((s) => s.setForm);
   const setEdge = useFences((s) => s.setEdge);
   const setEdgeY = useFences((s) => s.setEdgeY);
+  const setViewMode = useFences((s) => s.setViewMode);
+  const setLocked = useFences((s) => s.setLocked);
   const docked = fence.form === "capsule";
   const pinned = fence.pinned ?? false;
+  const locked = fence.locked ?? false;
+  const viewMode = fence.viewMode ?? "icons";
+  const listView = viewMode === "list";
   const dockingBusy = useRef(false);
   const modeRef = useRef(docked);
   modeRef.current = docked || dockingBusy.current;
   const dock = useEdgeDock({
     active: docked, edge: fence.edge ?? "right", edgeY: fence.edgeY,
     normal: () => { const {x,y,w,h} = useFences.getState().fences[categoryId] ?? DEFAULT_FENCE; return {x,y,w,h}; },
-    pinned,
+    pinned, locked,
     onEdgeChange: edge => setEdge(categoryId, edge),
     onEdgeYChange: y => setEdgeY(categoryId, y),
     onUndock: () => setForm(categoryId, "paper"),
@@ -89,6 +94,9 @@ function FencePanel({ categoryId }: { categoryId: string }) {
   const [hover, setHover] = useState(false);
   const [focusWithin, setFocusWithin] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [controlsOpen, setControlsOpen] = useState(false);
+  const controlsRef = useRef<HTMLDivElement>(null);
+  const controlsButtonRef = useRef<HTMLButtonElement>(null);
   const [renaming, setRenaming] = useState(false);
   const [draft, setDraft] = useState("");
   const renameRef = useRef<HTMLInputElement>(null);
@@ -107,7 +115,7 @@ function FencePanel({ categoryId }: { categoryId: string }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [dragId, setDragId] = useState<string | null>(null);
   /** 落点竖线：插入位 + 相对网格容器的坐标 */
-  const [drop, setDrop] = useState<{ anchorId: string | null; x: number; y: number; h: number } | null>(null);
+  const [drop, setDrop] = useState<{ anchorId: string | null; x: number; y: number; h: number; w: number } | null>(null);
 
   const actions = useFileActions();
   /** 就地重命名的条目 id（与分类改名互不影响） */
@@ -167,6 +175,22 @@ function FencePanel({ categoryId }: { categoryId: string }) {
   useEffect(() => { dock.hold("rename-category", renaming); }, [renaming, dock.hold]);
   useEffect(() => { dock.hold("rename-item", !!renameItemId); }, [renameItemId, dock.hold]);
   useEffect(() => { dock.hold("file-drop", dropActive || dropBusy); }, [dropActive, dropBusy, dock.hold]);
+  useEffect(() => { dock.hold("controls", controlsOpen); }, [controlsOpen, dock.hold]);
+  useEffect(() => {
+    if (!controlsOpen) return;
+    const closeOutside = (event: PointerEvent) => {
+      if (!controlsRef.current?.contains(event.target as Node)) setControlsOpen(false);
+    };
+    const closeWithEscape = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.stopPropagation();
+      setControlsOpen(false);
+      controlsButtonRef.current?.focus();
+    };
+    window.addEventListener("pointerdown", closeOutside);
+    window.addEventListener("keydown", closeWithEscape, true);
+    return () => { window.removeEventListener("pointerdown", closeOutside); window.removeEventListener("keydown", closeWithEscape, true); };
+  }, [controlsOpen]);
 
   /** 右键：命中条目 → 条目菜单；否则空白菜单（坐标为窗口内 CSS 像素） */
   const onContextMenu = (e: React.MouseEvent) => {
@@ -180,6 +204,16 @@ function FencePanel({ categoryId }: { categoryId: string }) {
     ).catch(error => toast.error(String(error)));
   };
   const scale = fence.scale ?? 1;
+
+  // Capsule placement owns native sizing while docked. Reapply the saved lock on return.
+  useEffect(() => {
+    if (!win || docked) return;
+    let cancelled = false;
+    void queueWindowOperation(win.label, async () => {
+      if (!cancelled && !modeRef.current) await win.setResizable(!(useFences.getState().fences[categoryId]?.locked ?? false));
+    }).catch(error => toast.error(String(error)));
+    return () => { cancelled = true; };
+  }, [locked, docked]);
 
   /* ── 置顶状态应用（启动/切换时） ── */
   useEffect(() => {
@@ -235,12 +269,13 @@ function FencePanel({ categoryId }: { categoryId: string }) {
     let settling = false;
 
     const snap = async () => {
+      if (useFences.getState().fences[categoryId]?.locked) { userTitleDrag.current = false; return; }
       const [self, size, scale] = await Promise.all([
         win.outerPosition(),
         win.outerSize(),
         win.scaleFactor(),
       ]);
-      if (cancelled || modeRef.current || closeBusy.current) return;
+      if (cancelled || modeRef.current || closeBusy.current || useFences.getState().fences[categoryId]?.locked) return;
       const cursor = await cursorPosition().catch(() => null);
       const monitor = cursor
         ? await monitorFromPoint(cursor.x, cursor.y).catch(() => null)
@@ -313,10 +348,10 @@ function FencePanel({ categoryId }: { categoryId: string }) {
 
       const dx = best([self.x, self.x + Math.round(w / 2), self.x + w], vLines);
       const dy = best([self.y, self.y + Math.round(h / 2), self.y + h], hLines);
-      if (!cancelled && !modeRef.current && (dx !== 0 || dy !== 0)) {
+      if (!cancelled && !modeRef.current && !useFences.getState().fences[categoryId]?.locked && (dx !== 0 || dy !== 0)) {
         settling = true;
         await queueWindowOperation(win.label, async () => {
-          if (!cancelled && !modeRef.current) await win.setPosition(new PhysicalPosition(self.x + dx, self.y + dy));
+          if (!cancelled && !modeRef.current && !useFences.getState().fences[categoryId]?.locked) await win.setPosition(new PhysicalPosition(self.x + dx, self.y + dy));
         });
       }
     };
@@ -367,17 +402,13 @@ function FencePanel({ categoryId }: { categoryId: string }) {
     return () => ro.disconnect();
   }, [docked]);
 
-  const cellW = Math.max(64, Math.round(78 * scale));
-  const cellH = Math.max(80, Math.round(94 * scale));
-  const cols = Math.max(1, Math.floor((gridSize.w + GAP) / (cellW + GAP)));
-  const rows = Math.max(1, Math.floor((gridSize.h + GAP) / (cellH + GAP)));
-  const pageSize = Math.max(1, cols * rows);
+  const { cellW, cellH, cols, pageSize, iconSize } = fenceLayout(viewMode, scale, gridSize.w, gridSize.h);
 
   const pages = Math.max(1, Math.ceil(items.length / pageSize));
   const safePage = Math.min(page, pages - 1);
   const pageItems = items.slice(safePage * pageSize, safePage * pageSize + pageSize);
   const focusableId = pageItems.some(item => item.id === selectedId) ? selectedId : pageItems[0]?.id;
-  const ghosted = fence.ghost && !hover && !focusWithin && !renaming && !renameItemId && !menuOpen;
+  const ghosted = fence.ghost && !hover && !focusWithin && !renaming && !renameItemId && !menuOpen && !controlsOpen;
 
   /* ── 拖入收集：桌面/资源管理器 → 栅栏 ── */
   useEffect(() => {
@@ -457,7 +488,7 @@ function FencePanel({ categoryId }: { categoryId: string }) {
       if (!el) continue;
       const r = el.getBoundingClientRect();
       // 行主序：先看是否落在该行之前，再看是否在该行中线左侧
-      if (cy < r.bottom && (cy < r.top || cx < r.left + r.width / 2)) {
+      if (fenceInsertionBefore(viewMode, r, cx, cy)) {
         local = i;
         break;
       }
@@ -473,9 +504,10 @@ function FencePanel({ categoryId }: { categoryId: string }) {
     const anchorId = items[globalIdx]?.id ?? null;
     return {
       anchorId,
-      x: (atEnd ? ar.right : ar.left) - gr.left + (atEnd ? GAP / 2 : -GAP / 2),
-      y: ar.top - gr.top,
-      h: ar.height,
+      x: listView ? ar.left - gr.left : (atEnd ? ar.right : ar.left) - gr.left + (atEnd ? GAP / 2 : -GAP / 2),
+      y: listView ? (atEnd ? ar.bottom : ar.top) - gr.top + (atEnd ? GAP / 2 : -GAP / 2) : ar.top - gr.top,
+      h: listView ? 2 : ar.height,
+      w: listView ? ar.width : 2,
     };
   };
 
@@ -490,7 +522,7 @@ function FencePanel({ categoryId }: { categoryId: string }) {
     dockRef.current.hold("item-drag", true);
     const isLocal = item.type !== "url";
     let mode: "idle" | "reorder" | "out" = "idle";
-    let pending: { anchorId: string | null; x: number; y: number; h: number } | null = null;
+    let pending: { anchorId: string | null; x: number; y: number; h: number; w: number } | null = null;
 
     const isOutside = (cx: number, cy: number) => {
       const p = panelRef.current?.getBoundingClientRect();
@@ -600,7 +632,7 @@ function FencePanel({ categoryId }: { categoryId: string }) {
      不用 data-tauri-drag-region：它把双击实现为「切换最大化」，
      而这里双击要用于改名。改为按下后位移超过阈值才发起系统拖动。 */
   const startTitleDrag = (e: React.PointerEvent) => {
-    if (e.button !== 0 || !win) return;
+    if (e.button !== 0 || !win || useFences.getState().fences[categoryId]?.locked) return;
     // 落在按钮/输入框上时不拖
     if ((e.target as HTMLElement).closest("button,input")) return;
     if (docked) { dock.startDrag(e); return; }
@@ -611,6 +643,7 @@ function FencePanel({ categoryId }: { categoryId: string }) {
     const el = e.currentTarget as HTMLElement;
 
     const onMove = (ev: PointerEvent) => {
+      if (useFences.getState().fences[categoryId]?.locked) { cleanup(); return; }
       if (dragging) return;
       if (Math.hypot(ev.clientX - sx, ev.clientY - sy) < 4) return;
       dragging = true;
@@ -683,7 +716,7 @@ function FencePanel({ categoryId }: { categoryId: string }) {
           ) : (
             <span
               onDoubleClick={startRename}
-              title={t("files.renameHint")}
+              title={t(locked ? "files.renameLockedHint" : "files.renameHint")}
               className="min-w-0 flex-1 cursor-default truncate text-[12px] font-semibold text-foreground/90"
             >
               {category?.name ?? "…"}
@@ -692,7 +725,7 @@ function FencePanel({ categoryId }: { categoryId: string }) {
           {/* 计数与按钮区不参与拖动，避免点按钮时误拖窗口 */}
           <span data-tauri-drag-region="false" className="flex shrink-0 items-center gap-1.5">
             <span className="text-[10px] text-muted-foreground">{items.length}</span>
-            {docked && <TitleBtn title={t("plans.capsuleSwitchEdge")} onClick={() => void dock.switchEdge()}><ArrowLeftRight className="size-3.5" /></TitleBtn>}
+            {docked && <TitleBtn title={t("plans.capsuleSwitchEdge")} disabled={locked} onClick={() => void dock.switchEdge()}><ArrowLeftRight className="size-3.5" /></TitleBtn>}
             <TitleBtn title={t(docked ? "plans.capsuleExpand" : "plans.capsuleToEdge")}
               onClick={() => {
                 if (docked) { void dock.undock(); return; }
@@ -710,19 +743,31 @@ function FencePanel({ categoryId }: { categoryId: string }) {
               }}>
               {docked ? <Expand className="size-3.5" /> : <PanelRightClose className="size-3.5" />}
             </TitleBtn>
-            <TitleBtn
-              title={pinned ? t("files.unpin") : t("files.pin")}
-              active={pinned}
-              onClick={() => setPinned(categoryId, !pinned)}
-            >
-              {pinned ? <Pin className="size-3.5" /> : <PinOff className="size-3.5" />}
+            <TitleBtn title={t(listView ? "files.iconView" : "files.listView")} active={listView}
+              onClick={() => { setViewMode(categoryId, listView ? "icons" : "list"); setPage(0); }}>
+              {listView ? <LayoutGrid className="size-3.5" /> : <List className="size-3.5" />}
             </TitleBtn>
-            <TitleBtn
-              title={t("files.ghostToggle")}
-              onClick={() => setGhost(categoryId, !fence.ghost)}
-            >
-              {fence.ghost ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
+            <TitleBtn title={t(locked ? "files.unlockPosition" : "files.lockPosition")} active={locked}
+              onClick={() => setLocked(categoryId, !locked)}>
+              {locked ? <LockKeyhole className="size-3.5" /> : <UnlockKeyhole className="size-3.5" />}
             </TitleBtn>
+            <div ref={controlsRef} className="relative">
+              <button ref={controlsButtonRef} type="button" aria-label={t("files.fenceOptions")} title={t("files.fenceOptions")}
+                aria-expanded={controlsOpen} onClick={() => setControlsOpen(open => !open)}
+                className="grid size-6 place-items-center rounded text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring">
+                <MoreHorizontal className="size-3.5" />
+              </button>
+              {controlsOpen && <div className="absolute right-0 top-8 z-30 w-44 rounded-xl border border-border bg-popover p-1.5 shadow-lg">
+                <button type="button" aria-pressed={pinned} onClick={() => setPinned(categoryId, !pinned)}
+                  className="flex min-h-9 w-full items-center gap-2 rounded-lg px-2 text-left text-xs text-foreground hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring">
+                  {pinned ? <Pin className="size-3.5 shrink-0 text-brand" /> : <PinOff className="size-3.5 shrink-0" />}{t(pinned ? "files.unpin" : "files.pin")}
+                </button>
+                <button type="button" aria-pressed={fence.ghost} onClick={() => setGhost(categoryId, !fence.ghost)}
+                  className="flex min-h-9 w-full items-center gap-2 rounded-lg px-2 text-left text-xs text-foreground hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring">
+                  {fence.ghost ? <EyeOff className="size-3.5 shrink-0 text-brand" /> : <Eye className="size-3.5 shrink-0" />}{t("files.ghostToggle")}
+                </button>
+              </div>}
+            </div>
             <TitleBtn danger title={t("titlebar.close")} onClick={() => void win?.close().catch(error => toast.error(String(error)))}>
               <X className="size-3.5" />
             </TitleBtn>
@@ -733,6 +778,7 @@ function FencePanel({ categoryId }: { categoryId: string }) {
         <div
           ref={gridWrapRef}
           role="listbox"
+          data-view-mode={viewMode}
           aria-label={category?.name ?? t("files.title")}
           onMouseDown={(e) => {
             // 点空白处取消选中（条目上带 data-item 标记）
@@ -752,7 +798,7 @@ function FencePanel({ categoryId }: { categoryId: string }) {
               style={{
                 gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
                 gap: GAP,
-                maxWidth: cols * (cellW + GAP),
+                maxWidth: listView ? "100%" : cols * (cellW + GAP),
               }}
             >
               {pageItems.map((item) => {
@@ -783,7 +829,8 @@ function FencePanel({ categoryId }: { categoryId: string }) {
                     onDoubleClick={() => openItem(item.path, item.type)}
                     title={t("files.itemHint")}
                     className={cn(
-                      "group relative flex touch-none flex-col items-center justify-center gap-1 rounded-lg p-1 transition-colors select-none",
+                      "group relative flex min-w-0 touch-none items-center rounded-lg transition-colors select-none focus-visible:outline-2 focus-visible:outline-ring",
+                      listView ? "flex-row justify-start gap-2 px-2" : "flex-col justify-center gap-1 p-1",
                       isSelected
                         ? "cursor-grab bg-brand/12 ring-1 ring-brand/60 active:cursor-grabbing"
                         : "cursor-pointer hover:bg-surface-hover",
@@ -792,14 +839,14 @@ function FencePanel({ categoryId }: { categoryId: string }) {
                     style={{ height: cellH }}
                   >
                     <span
-                      className="grid place-items-center"
-                      style={{ width: Math.round(34 * scale), height: Math.round(34 * scale) }}
+                      className="grid shrink-0 place-items-center"
+                      style={{ width: iconSize, height: iconSize }}
                     >
                       <ItemIcon
                         type={item.type}
                         path={item.path}
                         iconUrl={item.iconUrl}
-                        size={Math.round(34 * scale)}
+                        size={iconSize}
                         className="size-full"
                       />
                     </span>
@@ -822,12 +869,12 @@ function FencePanel({ categoryId }: { categoryId: string }) {
                             requestAnimationFrame(() => itemRefs.current.get(item.id)?.focus());
                           }
                         }}
-                        className="w-full rounded border border-brand/60 bg-card px-1 py-0.5 text-center text-[10px] outline-none"
+                        className={cn("min-w-0 w-full rounded border border-brand/60 bg-card px-1 py-0.5 text-[10px] outline-none", !listView && "text-center")}
                       />
                     ) : (
                       <span
-                        className="line-clamp-2 w-full break-all text-center leading-tight text-foreground/85"
-                        style={{ fontSize: Math.max(9, Math.round(10 * scale)) }}
+                        className={cn("w-full leading-tight text-foreground/85", listView ? "min-w-0 truncate text-left" : "line-clamp-2 break-all text-center")}
+                        style={{ fontSize: Math.max(listView ? 11 : 9, Math.round((listView ? 12 : 10) * scale)) }}
                       >
                         {item.title}
                       </span>
@@ -840,7 +887,7 @@ function FencePanel({ categoryId }: { categoryId: string }) {
               {drop && (
                 <div
                   className="pointer-events-none absolute z-20 w-0.5 rounded-full bg-brand shadow-[0_0_6px_var(--brand)]"
-                  style={{ left: drop.x, top: drop.y, height: drop.h }}
+                  style={{ left: drop.x, top: drop.y, height: drop.h, width: drop.w }}
                 />
               )}
             </div>
@@ -867,19 +914,21 @@ function FencePanel({ categoryId }: { categoryId: string }) {
       </div>
     </div>
   );
-  return docked ? <EdgeDockFrame dock={dock} label={category?.name ?? "…"} summary={String(items.length)} en={i18n.language.startsWith("en")}>{card}</EdgeDockFrame> : card;
+  return docked ? <EdgeDockFrame dock={dock} label={category?.name ?? "…"} summary={String(items.length)} en={i18n.language.startsWith("en")} locked={locked} onToggleLock={() => setLocked(categoryId, !locked)}>{card}</EdgeDockFrame> : card;
 }
 
 function TitleBtn({
   title,
   active,
   danger,
+  disabled,
   onClick,
   children,
 }: {
   title: string;
   active?: boolean;
   danger?: boolean;
+  disabled?: boolean;
   onClick: () => void;
   children: React.ReactNode;
 }) {
@@ -888,9 +937,11 @@ function TitleBtn({
       type="button"
       title={title}
       aria-label={title}
+      disabled={disabled}
+      aria-pressed={active}
       onClick={onClick}
       className={cn(
-        "grid size-6 shrink-0 place-items-center rounded transition-colors",
+        "grid size-6 shrink-0 place-items-center rounded transition-colors focus-visible:outline-2 focus-visible:outline-ring disabled:pointer-events-none disabled:opacity-35",
         danger
           ? "text-muted-foreground hover:bg-[var(--close-hover-bg)] hover:text-[var(--close-hover-fg)]"
           : active

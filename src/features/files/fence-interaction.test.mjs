@@ -6,16 +6,21 @@ import ts from "typescript";
 // Exercise the real component handlers. Only React's renderer, store and native
 // boundaries are substituted; no browser or Tauri process is needed.
 let moduleId = 0;
-async function harness({ ghost = false } = {}) {
-  const state = [], refs = [], calls = { open: [], rename: [], categoryRename: [], menu: [], move: [], hold: [] };
+async function harness({ ghost = false, viewMode = 'icons', locked = false, native = false } = {}) {
+  const state = [], refs = [], calls = { open: [], rename: [], categoryRename: [], menu: [], move: [], hold: [], windowDrag: [] };
   let stateIndex = 0, refIndex = 0, tree, menuOptions;
   const items = Array.from({ length: 14 }, (_, i) => ({ id: `item-${i}`, title: `File ${i}`, path: `/files/${i}`, type: "file", categoryId: "a" }));
   const files = { items, categories: [{ id: "a", name: "Documents" }], moveItemBefore: (...args) => calls.move.push(args), renameCategory: (...args) => calls.categoryRename.push(args) };
-  const fences = { fences: { a: { x: 10, y: 10, w: 300, h: 300, form: "paper", scale: 1, ghost } } };
+  const fences = { fences: { a: { x: 10, y: 10, w: 300, h: 300, form: "paper", scale: 1, ghost, viewMode, locked } } };
   for (const name of ["setGhost", "setGeometry", "setOpen", "setPinned", "setScale", "setForm", "setEdge", "setEdgeY"]) fences[name] = () => {};
+  fences.setViewMode = (id, value) => { fences.fences[id].viewMode = value; };
+  fences.setLocked = (id, value) => { fences.fences[id].locked = value; };
   const useFiles = selector => selector(files); useFiles.getState = () => files;
   const useFences = selector => selector(fences); useFences.getState = () => fences;
   const icon = () => null;
+  const presentation = ts.transpileModule(await readFile(new URL('./fence-presentation.ts', import.meta.url), 'utf8'), { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText;
+  const { fenceLayout, fenceInsertionBefore, FENCE_GAP: GAP } = await import(`data:text/javascript;base64,${Buffer.from(presentation).toString('base64')}`);
+  const windowEvents = new Map();
   const deps = {
     React: { createElement: (type, props, ...children) => ({ type, props: { ...props, children: children.flat(Infinity).filter(child => child !== false && child != null) } }) },
     useState: initial => {
@@ -26,7 +31,10 @@ async function harness({ ghost = false } = {}) {
     },
     useRef: initial => refs[refIndex++] ??= { current: initial }, useMemo: fn => fn(), useEffect: () => {},
     useTranslation: () => ({ t: key => key, i18n: { language: "en" } }),
-    useFiles, useFences, DEFAULT_FENCE: fences.fences.a, inTauri: false,
+    useFiles, useFences, DEFAULT_FENCE: fences.fences.a, inTauri: native,
+    getCurrentWebviewWindow: () => ({ startDragging: async () => calls.windowDrag.push(true) }),
+    window: { addEventListener: (key, fn) => windowEvents.set(key, fn), removeEventListener: key => windowEvents.delete(key) },
+    fenceLayout, fenceInsertionBefore, GAP,
     useFileActions: () => ({ rename: async (...args) => calls.rename.push(args) }),
     usePopupMenu: options => {
       menuOptions = options;
@@ -37,6 +45,7 @@ async function harness({ ghost = false } = {}) {
     cn: (...parts) => parts.filter(Boolean).join(" "), ITEM_ATTR: "data-item-id",
     requestAnimationFrame: () => {}, toast: { error: error => { throw new Error(error); } },
     Eye: icon, EyeOff: icon, X: icon, Pin: icon, PinOff: icon, PanelRightClose: icon, ArrowLeftRight: icon, Expand: icon, ItemIcon: icon,
+    List: icon, LayoutGrid: icon, LockKeyhole: icon, UnlockKeyhole: icon, MoreHorizontal: icon,
   };
   const source = await readFile(new URL("./fence.tsx", import.meta.url), "utf8");
   const code = ts.transpileModule(`${source}\nexport { FencePanel };`, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.React } }).outputText.replace(/^import[\s\S]*?;\s*/gm, "");
@@ -54,7 +63,8 @@ async function harness({ ghost = false } = {}) {
       const id = node.props[deps.ITEM_ATTR];
       if (!id) continue;
       const index = items.findIndex(item => item.id === id) % 6;
-      const left = 10 + index % 3 * 84, top = 50 + Math.floor(index / 3) * 100;
+      const list = fences.fences.a.viewMode === 'list';
+      const left = list ? 10 : 10 + index % 3 * 84, top = list ? 50 + index * 40 : 50 + Math.floor(index / 3) * 100;
       const handlers = new Map();
       const element = { getBoundingClientRect: () => ({ left, right: left + 78, top, bottom: top + 94, width: 78, height: 94 }),
         focus: () => node.props.onFocus?.(), closest: () => element,
@@ -74,8 +84,40 @@ async function harness({ ghost = false } = {}) {
     node.props.onKeyDown?.(event); return event;
   };
   render();
-  return { render, nodes, entry, key, elements, items, calls, menuChange: open => menuOptions.onOpenChange?.(open) };
+  return { render, nodes, entry, key, elements, items, calls, windowEvents, fences, menuChange: open => menuOptions.onOpenChange?.(open) };
 }
+
+test('list/icon switching changes the actual row layout and preserves keyboard opening', async () => {
+  const h = await harness();
+  const toggle = () => h.nodes(node => node.type?.name === 'TitleBtn' && /files\.(?:listView|iconView)/.test(node.props.title))[0];
+  assert.equal(toggle().props.title, 'files.listView');
+  toggle().props.onClick(); h.render();
+  assert.equal(h.nodes(node => node.props.role === 'listbox')[0].props['data-view-mode'], 'list');
+  assert.match(h.entry('item-0').props.className, /flex-row/);
+  assert.equal(h.nodes(node => node.props['data-item']).length, 5);
+  h.key(h.entry('item-0'), 'ArrowDown'); h.render();
+  assert.equal(h.entry('item-1').props.tabIndex, 0);
+  h.key(h.entry('item-1'), 'Enter');
+  assert.deepEqual(h.calls.open, ['/files/1']);
+  toggle().props.onClick(); h.render();
+  assert.equal(h.nodes(node => node.props.role === 'listbox')[0].props['data-view-mode'], 'icons');
+  assert.equal(h.nodes(node => node.props['data-item']).length, 6);
+});
+
+test('locked fence rejects title movement while leaving file opening and unlocking available', async () => {
+  const h = await harness({ locked: true, native: true });
+  const title = () => h.nodes(node => node.props.onPointerDown && !node.props['data-item'])[0];
+  const event = { button: 0, clientX: 10, clientY: 10, target: { closest: () => null }, currentTarget: { addEventListener() {}, removeEventListener() {} } };
+  title().props.onPointerDown(event);
+  assert.equal(h.windowEvents.has('pointermove'), false);
+  h.key(h.entry('item-0'), 'Enter');
+  assert.deepEqual(h.calls.open, ['/files/0']);
+  h.nodes(node => node.type?.name === 'TitleBtn' && node.props.title === 'files.unlockPosition')[0].props.onClick(); h.render();
+  title().props.onPointerDown(event);
+  h.windowEvents.get('pointermove')({ clientX: 20, clientY: 20 });
+  await Promise.resolve();
+  assert.deepEqual(h.calls.windowDrag, [true]);
+});
 
 test("visible fence items have one keyboard entry point and directional navigation", async () => {
   const h = await harness();

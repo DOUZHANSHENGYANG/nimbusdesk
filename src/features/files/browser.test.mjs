@@ -1,0 +1,62 @@
+import assert from 'node:assert/strict';
+import {pathToFileURL} from 'node:url';
+const {chromium}=await import(pathToFileURL(process.env.SEARCH_PLAYWRIGHT_PATH).href);
+const server=await(await import('vite')).createServer({server:{host:'127.0.0.1',port:17803,strictPort:true}});await server.listen();
+const browser=await chromium.launch({headless:true,executablePath:process.env.SEARCH_BROWSER_PATH});
+try{
+ const page=await browser.newPage({viewport:{width:1000,height:760}}),errors=[];page.on('pageerror',e=>errors.push(e.message));
+ const base='http://127.0.0.1:17803/src/features/files/fixtures/page.html';await page.goto(base);
+ const show=page.getByRole('button',{name:'全部显示到桌面',exact:true}),hide=page.getByRole('button',{name:'全部不显示到桌面',exact:true});
+ try { await show.waitFor({timeout:12000}); }
+ catch(error){console.error('Page errors:',errors,'Body:',await page.locator('body').innerText());throw error;}
+ await page.getByPlaceholder('搜索名称或路径…').fill('does-not-match');
+ await page.evaluate(()=>filesReview.fire('tauri://drag-enter',{paths:['E:/Downloads/example.txt'],position:{x:400,y:300}}));
+ await page.getByRole('status').filter({hasText:'松开添加到默认分类'}).waitFor();
+ await page.evaluate(()=>filesReview.fire('tauri://drag-leave',null));await page.getByRole('status').filter({hasText:'松开添加到默认分类'}).waitFor({state:'hidden'});
+ await page.evaluate(()=>filesReview.fire('tauri://drag-drop',{paths:['E:/Downloads/example.txt','E:/Downloads/项目','e:\\downloads\\ALREADY.txt','E:/Downloads/missing.txt'],position:{x:400,y:300}}));
+ await page.getByText('example.txt',{exact:true}).waitFor();await page.getByText('项目',{exact:true}).waitFor();
+ const imported=await page.evaluate(async()=>{const{useFiles}=await import('/src/stores/files.ts');return useFiles.getState();});
+ assert.equal(imported.items.length,3);const defaults=imported.categories.find(c=>c.name==='默认分类');assert.ok(defaults);assert.ok(imported.items.filter(i=>i.id!=='existing').every(i=>i.categoryId===defaults.id));
+ assert.equal(imported.items.find(i=>i.id==='existing').categoryId,'work');assert.deepEqual(imported.items.find(i=>i.id==='existing').tags,['保留']);
+ assert.equal(await page.getByPlaceholder('搜索名称或路径…').inputValue(),'');
+ await page.evaluate(()=>filesReview.fire('tauri://drag-drop',{paths:['e:\\DOWNLOADS\\example.txt','E:/Downloads/项目/'],position:{x:400,y:300}}));
+ await page.waitForTimeout(300);assert.equal(await page.evaluate(async()=>{const{useFiles}=await import('/src/stores/files.ts');return useFiles.getState().items.length;}),3);
+ const order=await page.evaluate(async()=>{const{useFiles}=await import('/src/stores/files.ts');return useFiles.getState().items.map(item=>item.id);});
+ const first=page.locator('[data-card]').filter({hasText:'example.txt'}),last=page.locator('[data-card]').filter({hasText:'项目'});
+ const a=await first.boundingBox(),b=await last.boundingBox();
+ await page.mouse.move(a.x+15,a.y+40);await page.mouse.down();await page.mouse.move(b.x+b.width-8,b.y+40,{steps:6});
+ await first.dispatchEvent('pointercancel',{pointerId:1});await page.mouse.up();
+ assert.deepEqual(await page.evaluate(async()=>{const{useFiles}=await import('/src/stores/files.ts');return useFiles.getState().items.map(item=>item.id);}),order,'cancelled drag must not commit a reorder');
+ await page.getByRole('button',{name:'添加条目',exact:true}).click();await page.getByRole('dialog').waitFor();
+ await page.evaluate(()=>filesReview.fire('tauri://drag-drop',{paths:['E:/Downloads/dialog-ignored.txt'],position:{x:400,y:300}}));
+ assert.equal(await page.evaluate(()=>filesReview.calls.some(c=>c.cmd==='probe_paths'&&c.args.paths.includes('E:/Downloads/dialog-ignored.txt'))),false);
+ await page.getByRole('button',{name:'取消',exact:true}).click();
+ await show.click();await page.waitForFunction(()=>Object.values(filesReview.fixtures.fences.state.fences).filter(f=>f.open).length===3);
+ assert.ok(await page.evaluate(()=>filesReview.windows.has('todo-2099-10-18')));
+ await hide.click();await page.waitForFunction(()=>[...filesReview.windows].filter(label=>label.startsWith('fence-')).length===0);
+ await page.waitForFunction(()=>Object.values(filesReview.fixtures.fences.state.fences).every(f=>!f.open));
+ assert.ok(await page.evaluate(()=>filesReview.windows.has('todo-2099-10-18')));
+ await page.evaluate(()=>{filesReview.failOpen='child';});await show.click();
+ await page.waitForFunction(()=>filesReview.fixtures.fences.state.fences.work?.open&&!filesReview.fixtures.fences.state.fences.child?.open);
+ await page.waitForTimeout(300);assert.equal(await page.evaluate(()=>filesReview.fixtures.fences.state.fences.child.open),false);
+ assert.equal(await page.evaluate(()=>filesReview.calls.some(c=>c.cmd==='move_fence_entries'||c.cmd==='delete_entries')),false,'collection only registers references');
+ await page.waitForFunction(()=>[...document.querySelectorAll('button')].find(button=>button.textContent.includes('全部显示到桌面'))?.disabled===false);
+ const opensBefore=await page.evaluate(()=>filesReview.calls.filter(c=>c.cmd==='open_fence').length);
+ await page.evaluate(()=>{
+   filesReview.failOpen=null;filesReview.openDelay=80;
+   const buttons=[...document.querySelectorAll('button')];
+   const show=buttons.find(button=>button.textContent.includes('全部显示到桌面'));
+   const hide=buttons.find(button=>button.textContent.includes('全部不显示到桌面'));
+   show.click();show.click();hide.click();
+ });
+ assert.equal(await show.isDisabled(),true);assert.equal(await hide.isDisabled(),true);
+ await page.waitForFunction(()=>[...document.querySelectorAll('button')].find(button=>button.textContent.includes('全部显示到桌面'))?.disabled===false);
+ assert.equal(await page.evaluate(()=>filesReview.calls.filter(c=>c.cmd==='open_fence').length)-opensBefore,3,'rapid clicks run one batch');
+ assert.equal(await page.evaluate(()=>Object.values(filesReview.fixtures.fences.state.fences).every(f=>f.open)),true);
+ await page.setViewportSize({width:760,height:680});assert.equal(await show.isVisible(),true);assert.equal(await hide.isVisible(),true);
+ assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'no horizontal overflow at narrow width');
+ await page.screenshot({path:'Temp/files-collection-dark.png'});
+ await page.evaluate(async()=>{const{useSettings}=await import('/src/stores/settings.ts');useSettings.getState().setTheme('light');});
+ await page.waitForTimeout(200);await page.screenshot({path:'Temp/files-collection-light.png'});
+ assert.deepEqual(errors,[]);console.log('PASS Files: native mixed drops, default/duplicate/filter behavior, modal guard, cancelled reorder, persistent batch on/off, partial failure, rapid clicks, narrow controls, light/dark and todo isolation');
+}finally{await browser.close();await server.close();}

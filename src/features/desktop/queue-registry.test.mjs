@@ -17,3 +17,12 @@ test('moving the first implicit member down materializes the whole derived queue
 test('moving a middle implicit member down preserves all other members in order',()=>{const h=harness();h.reserveQueue('b',area,'right');h.moveDockItem('b',area,'right',undefined,2);assert.deepEqual(h.queueSnapshot('b',area,'right').layout.order,['a','c','b']);});
 test('dragging to a new queue inserts after its implicit members rather than jumping to the top',()=>{const h=harness();h.entries[2].edge='left';h.reserveQueue('a',area,'right');h.moveDockItem('c',area,'right',700);assert.deepEqual(h.queueSnapshot('c',area,'right').layout.order,['a','b','c']);});
 test('moving a whole implicit queue preserves its visible order independent of creation order',()=>{const h=harness();h.entries.reverse();h.reserveQueue('a',area,'right');const key=core.groupKey(area.id,'right');h.moveDockGroup(key,area,'left',80);assert.deepEqual(h.queueSnapshot('a',area,'left').layout.order,['a','b','c']);});
+
+test('a locked member prevents direct item movement and group relocation without changing queue state',()=>{
+ const h=harness();h.entries[1].locked=true;h.reserveQueue('a',area,'right');
+ const before=JSON.stringify(h.store.getState().groups),positions=JSON.stringify(h.entries);
+ assert.equal(h.moveDockItem('b',area,'left',200),false);
+ assert.equal(h.moveDockItem('a',area,'right',200),false,'reorder cannot indirectly displace a locked neighbor');
+ assert.equal(h.moveDockGroup(core.groupKey(area.id,'right'),area,'left',80),false);
+ assert.equal(JSON.stringify(h.store.getState().groups),before);assert.equal(JSON.stringify(h.entries),positions);
+});

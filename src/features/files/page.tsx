@@ -6,6 +6,9 @@ import {
   Trash2,
   ExternalLink,
   Monitor,
+  MonitorOff,
+  FolderInput,
+  Loader2,
   X,
   MoreHorizontal,
   FolderOpen,
@@ -17,7 +20,6 @@ import { toast } from "sonner";
 import {
   useFiles,
   useFences,
-  DEFAULT_FENCE,
   type FileItem,
   type ItemType,
 } from "@/stores/files";
@@ -25,8 +27,6 @@ import {
   openPath,
   openUrl,
   revealInExplorer,
-  openFence,
-  closeFence,
   pickFolder,
   pickFile,
   fetchSiteMeta,
@@ -38,6 +38,9 @@ import { ItemIcon } from "@/features/files/icons";
 import { useFileActions, type FileActions } from "@/features/files/actions";
 import { usePopupMenu } from "@/features/files/use-popup-menu";
 import { ITEM_ATTR } from "@/features/files/menu-model";
+import { importDroppedFiles } from "./import-files";
+import { useFileDrop } from "./use-file-drop";
+import { restoreFenceOnDesktop, setAllFencesOnDesktop, setFenceOnDesktop } from "./desktop-actions";
 
 /** 分类 chip 上的标记：右键时据此判断命中了哪个分类 */
 const CAT_ATTR = "data-cat-id";
@@ -78,9 +81,8 @@ export function FilesPage() {
   const removeCategory = useFiles((s) => s.removeCategory);
   const moveItemBefore = useFiles((s) => s.moveItemBefore);
   const fences = useFences((s) => s.fences);
-  const setOpen = useFences((s) => s.setOpen);
-  const filesHydrated = useFiles.persist.hasHydrated();
-  const fencesHydrated = useFences.persist.hasHydrated();
+  const [filesHydrated, setFilesHydrated] = useState(useFiles.persist.hasHydrated);
+  const [fencesHydrated, setFencesHydrated] = useState(useFences.persist.hasHydrated);
 
   const [selected, setSelected] = useState<string | null>(null); // null = 全部
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
@@ -91,10 +93,41 @@ export function FilesPage() {
     editing: null,
   });
   const restored = useRef(new Set<string>());
+  const mounted = useRef(false);
+  const desktopLock = useRef(false);
+  const [desktopBusy, setDesktopBusy] = useState(false);
+  const [desktopProgress, setDesktopProgress] = useState({ done: 0, total: 0 });
   /** 浮窗菜单触发的分类改名目标 */
   const [renamingCategoryId, setRenamingCategoryId] = useState<string | null>(null);
 
   const actions = useFileActions();
+
+  useEffect(() => {
+    mounted.current = true;
+    const offFiles = useFiles.persist.onFinishHydration(() => setFilesHydrated(true));
+    const offFences = useFences.persist.onFinishHydration(() => setFencesHydrated(true));
+    setFilesHydrated(useFiles.persist.hasHydrated());
+    setFencesHydrated(useFences.persist.hasHydrated());
+    return () => { mounted.current = false; offFiles(); offFences(); };
+  }, []);
+
+  const { dragging, busy: importing } = useFileDrop({
+    enabled: filesHydrated && !modal.open,
+    onDrop: async paths => {
+      const result = await importDroppedFiles(paths, t("files.defaultCategory"));
+      if (!mounted.current) return;
+      if (result.categoryId) {
+        setSelected(result.categoryId);
+        setSearch("");
+        setActiveTags([]);
+      }
+      const message = t("files.dropResult", { ...result });
+      if (result.added) toast.success(message);
+      else if (result.missing) toast.error(message);
+      else toast.message(message);
+    },
+    onError: error => { if (mounted.current) toast.error(String(error)); },
+  });
 
   // 首次使用：默认分类
   useEffect(() => {
@@ -110,7 +143,7 @@ export function FilesPage() {
       const f = fences[cat.id];
       if (f?.open && !restored.current.has(cat.id)) {
         restored.current.add(cat.id);
-        void openFence(cat.id, cat.name, f).catch(() => undefined);
+        void restoreFenceOnDesktop(cat.id).catch(error => toast.error(String(error)));
       }
     }
   }, [filesHydrated, fencesHydrated, categories, fences]);
@@ -260,7 +293,7 @@ export function FilesPage() {
     const cleanup = () => {
       el.removeEventListener("pointermove", onMove);
       el.removeEventListener("pointerup", onUp);
-      el.removeEventListener("pointercancel", onUp);
+      el.removeEventListener("pointercancel", onCancel);
       if (el.hasPointerCapture(pointerId)) el.releasePointerCapture(pointerId);
     };
 
@@ -278,6 +311,10 @@ export function FilesPage() {
       if (dragging && pending) {
         moveItemBefore(item.id, pending.anchorId);
       }
+      onCancel();
+    };
+
+    const onCancel = () => {
       pending = null;
       setDrop(null);
       setDragId(null);
@@ -287,25 +324,41 @@ export function FilesPage() {
     el.setPointerCapture(pointerId);
     el.addEventListener("pointermove", onMove);
     el.addEventListener("pointerup", onUp);
-    el.addEventListener("pointercancel", onUp);
+    el.addEventListener("pointercancel", onCancel);
   };
 
   // 删除统一走 actions（本地文件进回收站，网址仅移出列表）
   const onDeleteItem = (item: FileItem) => void actions.remove(item);
 
-  const toggleFence = async (catId: string, name: string) => {
-    const f = fences[catId] ?? DEFAULT_FENCE;
-    if (f.open) {
-      await closeFence(catId).catch(() => undefined);
-      setOpen(catId, false);
-    } else {
-      const n = Object.keys(fences).length;
-      const geo = f.w > 0 ? f : { ...DEFAULT_FENCE, x: 220 + ((n * 56) % 420), y: 140 + ((n * 40) % 260) };
-      await openFence(catId, name, geo).catch((e) => toast.error(String(e)));
-      setOpen(catId, true);
-      toast.success(t("files.fenceOpened"));
+  const updateDesktop = async (operation: () => Promise<void>, total = 1) => {
+    if (desktopLock.current || !filesHydrated || !fencesHydrated) return;
+    desktopLock.current = true;
+    setDesktopBusy(true);
+    setDesktopProgress({ done: 0, total });
+    try { await operation(); }
+    catch (error) { toast.error(String(error)); }
+    finally {
+      desktopLock.current = false;
+      if (mounted.current) setDesktopBusy(false);
     }
   };
+
+  const toggleFence = (catId: string) => updateDesktop(async () => {
+    restored.current.add(catId);
+    await setFenceOnDesktop(catId, !useFences.getState().fences[catId]?.open);
+  });
+
+  const toggleAllFences = (visible: boolean) => updateDesktop(async () => {
+    for (const category of useFiles.getState().categories) restored.current.add(category.id);
+    const result = await setAllFencesOnDesktop(visible, (done, total) => {
+      if (mounted.current) setDesktopProgress({ done, total });
+    });
+    if (result.failed.length) {
+      toast.error(t("files.desktopPartial", { count: result.done, failed: result.failed.length }), {
+        description: result.failed.map(item => `${item.name}: ${String(item.error)}`).join("\n"),
+      });
+    } else toast.success(t(visible ? "files.desktopShown" : "files.desktopHidden", { count: result.done }));
+  }, categories.length);
 
   const onAddCategory = async () => {
     const name = await prompt({ title: t("files.addCategory") });
@@ -349,12 +402,16 @@ export function FilesPage() {
       title: t("files.deleteCategoryConfirm", { name: cat.name }),
       danger: true,
     });
-    if (ok) {
-      void closeFence(catId).catch(() => undefined);
-      setOpen(catId, false);
+    if (ok) await updateDesktop(async () => {
+      restored.current.add(catId);
+      await setFenceOnDesktop(catId, false);
+      // A drop may finish while confirmation or native close is pending.
+      const latest = useFiles.getState();
+      if (latest.categories.some(c => c.parentId === catId)) throw new Error(t("files.categoryHasChildren"));
+      if (latest.items.some(item => item.categoryId === catId)) throw new Error(t("files.categoryHasItems"));
       removeCategory(catId);
-      if (selected === catId) setSelected(null);
-    }
+      if (mounted.current) setSelected(current => current === catId ? null : current);
+    });
   };
 
   /** 顶级分类 / 子分类查询（单层：只查直接子级） */
@@ -400,7 +457,7 @@ export function FilesPage() {
     actions,
     onToggleFence: (id) => {
       const cat = categories.find((c) => c.id === id);
-      if (cat) void toggleFence(cat.id, cat.name);
+      if (cat) void toggleFence(cat.id);
     },
     onCategoryRename: (id) => setRenamingCategoryId(id),
     onCategoryDelete: (id) => void onDeleteCategory(id),
@@ -429,7 +486,14 @@ export function FilesPage() {
   };
 
   return (
-    <div className="h-full overflow-y-auto">
+    <div className="relative h-full overflow-y-auto">
+      {(dragging || importing) && (
+        <div role="status" className="pointer-events-none absolute inset-3 z-30 flex min-h-48 flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-brand bg-background/95 text-center shadow-lg">
+          {importing ? <Loader2 className="size-7 animate-spin text-brand" /> : <FolderInput className="size-7 text-brand" />}
+          <p className="text-sm font-medium">{t(importing ? "files.dropWorking" : "files.dropReady")}</p>
+          <p className="text-xs text-muted-foreground">{t("files.dropHint")}</p>
+        </div>
+      )}
       <div className="mx-auto flex w-full max-w-4xl flex-col gap-4 p-6 pb-10">
         {/* 分类 chip 右键由该容器统一处理（浮窗菜单） */}
         {/* ── 分类 rail ── */}
@@ -454,7 +518,7 @@ export function FilesPage() {
                   forceRename={renamingCategoryId === cat.id}
                   actions={actions}
                   onClick={() => setSelected(cat.id)}
-                  onToggleFence={() => void toggleFence(cat.id, cat.name)}
+                  onToggleFence={() => void toggleFence(cat.id)}
                   onRenameConfirm={onRenameConfirm}
                   onDelete={() => void onDeleteCategory(cat.id)}
                   onCopyPaths={() => void copyCategoryPaths(cat.id)}
@@ -473,7 +537,7 @@ export function FilesPage() {
                         actions={actions}
                         sub
                         onClick={() => setSelected(kid.id)}
-                        onToggleFence={() => void toggleFence(kid.id, kid.name)}
+                        onToggleFence={() => void toggleFence(kid.id)}
                         onRenameConfirm={onRenameConfirm}
                         onDelete={() => void onDeleteCategory(kid.id)}
                         onCopyPaths={() => void copyCategoryPaths(kid.id)}
@@ -491,6 +555,24 @@ export function FilesPage() {
             className="grid size-7 place-items-center rounded-full border border-dashed border-border text-muted-foreground transition-colors hover:border-brand/50 hover:text-brand"
           >
             <Plus className="size-4" />
+          </button>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2 border-b border-border/60 pb-3">
+          <span className="mr-auto text-xs text-muted-foreground" role="status" aria-live="polite">
+            {desktopBusy
+              ? t("files.desktopUpdating", desktopProgress)
+              : t("files.desktopCount", { count: categories.filter(cat => fences[cat.id]?.open).length, total: categories.length })}
+          </span>
+          <button type="button" disabled={desktopBusy || !filesHydrated || !fencesHydrated || !categories.length}
+            onClick={() => void toggleAllFences(true)}
+            className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-border px-3 text-xs transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-brand disabled:pointer-events-none disabled:opacity-45">
+            <Monitor className="size-3.5" />{t("files.showAllDesktop")}
+          </button>
+          <button type="button" disabled={desktopBusy || !filesHydrated || !fencesHydrated || !categories.length}
+            onClick={() => void toggleAllFences(false)}
+            className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-border px-3 text-xs transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-brand disabled:pointer-events-none disabled:opacity-45">
+            <MonitorOff className="size-3.5" />{t("files.hideAllDesktop")}
           </button>
         </div>
 

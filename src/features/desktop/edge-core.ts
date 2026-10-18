@@ -1,8 +1,8 @@
 export interface NormalRect { x: number; y: number; w: number; h: number }
 export interface WorkArea extends NormalRect { scale: number }
 export type Edge = "left" | "right";
-export const EDGE_TAB_W = 24;
-export const EDGE_TAB_H = 64;
+export const EDGE_TAB_W = 112;
+export const EDGE_TAB_H = 44;
 export function allocateEdgeY(id: string, slots: { id: string; y?: number }[], preferred?: number): number {
   const used = slots.filter(slot => slot.id !== id && slot.y !== undefined).map(slot => slot.y!);
   if (preferred !== undefined && !used.some(y => Math.abs(y - preferred) < EDGE_TAB_H + 4)) return preferred;
@@ -33,6 +33,11 @@ export function edgeBounds(area: WorkArea, edge: Edge, y: number, opened: boolea
   return { x: Math.round(edge === "left" ? area.x : area.x + area.w - w), y: Math.round(clamp(area.y + y * s, area.y, area.y + area.h - h)), w, h };
 }
 
+/** Keep the sticky arrow under a stationary pointer when a bottom preview grows upward. */
+export function edgeTabOffset(area: WorkArea, y: number, normal: NormalRect, tabHeight = EDGE_TAB_H): number {
+  return (edgeBounds(area, "left", y, false, normal, tabHeight).y - edgeBounds(area, "left", y, true, normal, tabHeight).y) / area.scale;
+}
+
 export interface EdgePort {
   label: string;
   monitor(): Promise<WorkArea | null>;
@@ -40,6 +45,7 @@ export interface EdgePort {
   size(rect: NormalRect): Promise<void>;
   position(rect: NormalRect): Promise<void>;
   layer(pinned: boolean, valid: () => boolean): Promise<void>;
+  resize?(allowed: boolean): Promise<void>;
   show(mode?: "dock" | "normal"): Promise<void>;
 }
 
@@ -58,6 +64,7 @@ export class EdgeController {
       if (!this.area) throw new Error("Cannot locate the screen work area");
       const rect = edgeBounds(this.area, edge, y, opened, this.normal(), tabHeight);
       await this.port.ignore(false); if (!valid()) return;
+      await this.port.resize?.(false); if (!valid()) return;
       await this.port.layer(true, valid); if (!valid()) return;
       await this.port.size(rect); if (!valid()) return;
       await this.port.position(rect); if (!valid()) return;
@@ -72,6 +79,7 @@ export class EdgeController {
       const rect = { x: Math.round(n.x * s), y: Math.round(n.y * s), w: Math.round(n.w * s), h: Math.round(n.h * s) };
       if (a) { rect.w = Math.min(rect.w, a.w); rect.h = Math.min(rect.h, a.h); rect.x = clamp(rect.x, a.x, a.x + a.w - rect.w); rect.y = clamp(rect.y, a.y, a.y + a.h - rect.h); }
       await this.port.ignore(false); if (!valid()) return;
+      await this.port.resize?.(true); if (!valid()) return;
       await this.port.size(rect); if (!valid()) return;
       await this.port.position(rect); if (!valid()) return;
       await this.port.layer(pinned, valid); if (!valid()) return;

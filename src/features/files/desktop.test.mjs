@@ -26,6 +26,6 @@ test('newly moved paths are registered, Windows case is ignored, and retained or
 test('desktop toggle hides visible fences and shows enabled ones without changing persistent open flags',async()=>{
  const state={fences:{a:{open:true,x:10,y:20,w:200,h:300},b:{open:false}}};const calls=[];let visible=true;
  const window={label:'fence-a',isVisible:async()=>visible,hide:async()=>{visible=false;calls.push('hide');}};
- const {toggleDesktopFences}=await load('./desktop-runtime.tsx',{useEffect:()=>{},emitTo:async()=>{},inTauri:true,getAllWebviewWindows:async()=>[window],useFiles:{getState:()=>({categories:[{id:'a',name:'One'},{id:'b',name:'Two'}]})},useFences:{getState:()=>state},openFence:async(id)=>{calls.push(id);visible=true;},DEFAULT_FENCE:{x:0,y:0,w:300,h:200}});
+ const {toggleDesktopFences}=await load('./desktop-runtime.tsx',{useEffect:()=>{},emitTo:async()=>{},inTauri:true,getAllWebviewWindows:async()=>[window],useFiles:{getState:()=>({categories:[{id:'a',name:'One'},{id:'b',name:'Two'}]})},useFences:{getState:()=>state},restoreFenceOnDesktop:async(id)=>{calls.push(id);visible=true;},hideFenceTemporarily:async()=>window.hide()});
  await toggleDesktopFences();assert.deepEqual(calls,['hide']);await toggleDesktopFences();assert.deepEqual(calls,['hide','a']);assert.equal(state.fences.a.open,true);assert.equal(state.fences.b.open,false);
 });

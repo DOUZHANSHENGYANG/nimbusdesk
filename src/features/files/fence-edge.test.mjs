@@ -8,7 +8,7 @@ async function load(path,deps={}){const key='__fenceEdgeTest';const code=ts.tran
 test('docking and restoring fences preserves normal geometry and prior settings',async()=>{
  const {useFences}=await load('../../stores/files.ts',{create,persist,createJSONStorage,tauriJsonStorage:{getItem:()=>null,setItem:()=>{}}});
  const store=useFences.getState();store.setGeometry('a',{x:-800,y:50,w:320,h:400});store.setPinned('a',true);store.setEdge('a','left');store.setEdgeY('a',240);store.setForm('a','capsule');
- assert.deepEqual(useFences.getState().fences.a,{x:-800,y:50,w:320,h:400,ghost:true,open:false,pinned:true,edge:'left',edgeY:240,form:'capsule'});
+ assert.deepEqual(useFences.getState().fences.a,{x:-800,y:50,w:320,h:400,ghost:true,open:false,viewMode:'icons',locked:false,pinned:true,edge:'left',edgeY:240,form:'capsule'});
  useFences.getState().setForm('a','paper');assert.equal(useFences.getState().fences.a.w,320);assert.equal(useFences.getState().fences.a.edgeY,240);
 });
 test('automatic edge docking requires real drag and left/right outer edges only',async()=>{

@@ -24,12 +24,14 @@ export interface QueueMember {
   edge?: QueueEdge;
   edgeMonitor?: string;
   edgeY?: number;
+  locked?: boolean;
 }
 
 const GAP = 4;
 const HUB_HEIGHT = 40;
-const MIN_TAB_HEIGHT = 32;
-const MAX_TAB_HEIGHT = 64;
+export const HUB_WIDTH = 44;
+const MIN_TAB_HEIGHT = 40;
+const MAX_TAB_HEIGHT = 44;
 const clamp = (value: number, low: number, high: number) => Math.min(Math.max(value, low), high);
 
 /** Reversible UTF-8 hex avoids unsafe Tauri label characters and hash collisions. */

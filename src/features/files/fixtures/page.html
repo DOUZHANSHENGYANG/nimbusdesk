@@ -1,0 +1,33 @@
+<!doctype html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head><body><div id="root"></div><script type="module">
+import {mockIPC,mockWindows} from '@tauri-apps/api/mocks';
+import {emitTo} from '@tauri-apps/api/event';
+const params=new URLSearchParams(location.search);
+const fixtures={settings:{version:3,state:{theme:params.get('theme')||'dark',lang:'zh',sidebarCollapsed:true}},files:{version:2,state:{categories:[{id:'work',name:'工作项目',createdAt:1},{id:'child',name:'子分类',parentId:'work',createdAt:1}],items:[{id:'existing',title:'既有文件',path:'E:/Downloads/already.txt',type:'file',categoryId:'work',tags:['保留'],createdAt:1}]}},fences:{version:1,state:{fences:{}}},'todo-papers':{version:1,state:{papers:{'2099-10-18':{open:true,form:'paper',x:100,y:100,w:300,h:400}},order:['2099-10-18']}},'search-settings':{version:1,state:{shortcut:'',documentIndexEnabled:false,pinyinEnabled:false,nameRoots:[],documentRoots:[]}},'knowledge-settings':{version:1,state:{vaultRoot:null,shortcut:''}},'quick-tools-settings':{version:1,state:{shortcut:''}}};
+const listeners=new Map(),windows=new Set(['main','todo-2099-10-18']);
+window.filesReview={fixtures,windows,calls:[],failOpen:null,probeDelay:0,openDelay:0,fire:(event,payload,label='main')=>emitTo(label,event,payload)};
+mockIPC(async(cmd,args)=>{
+ const r=window.filesReview;r.calls.push({cmd,args});
+ if(cmd==='plugin:event|listen'){listeners.set(args.handler,args);return args.handler;}
+ if(cmd==='plugin:event|unlisten'){listeners.delete(args.eventId);return null;}
+ if(cmd==='plugin:event|emit'||cmd==='plugin:event|emit_to'){
+  for(const [id,listener]of listeners)if(listener.event===args.event&&(!args.target?.label||listener.target.kind==='Any'||listener.target.label===args.target.label)&&window.__TAURI_INTERNALS__.callbacks.has(id))window.__TAURI_INTERNALS__.runCallback(id,{event:args.event,payload:args.payload,id});
+  return null;
+ }
+ if(cmd==='read_json')return structuredClone(fixtures[args.key]??null);
+ if(cmd==='write_json'){fixtures[args.key]=structuredClone(args.value);return args.value;}
+ if(cmd==='get_data_dir')return 'E:/OwnedFilesFixture';
+ if(cmd==='probe_paths'){if(r.probeDelay)await new Promise(resolve=>setTimeout(resolve,r.probeDelay));return args.paths.map(path=>({path,name:path.replaceAll('\\','/').split('/').filter(Boolean).at(-1),kind:path.includes('missing')?'missing':path.endsWith('项目')?'folder':'file'}));}
+ if(cmd==='open_fence'){if(r.openDelay)await new Promise(resolve=>setTimeout(resolve,r.openDelay));if(r.failOpen===args.categoryId)throw Error('OWNED_OPEN_FAILURE');windows.add('fence-'+args.categoryId);return null;}
+ if(cmd==='close_fence'){windows.delete('fence-'+args.categoryId);await emitTo('fence-'+args.categoryId,'tauri://destroyed',null);return null;}
+ if(cmd==='open_todo_paper'){windows.add('todo-'+args.date);return null;}
+ if(cmd==='plugin:window|get_all_windows')return [...windows];
+ if(cmd==='plugin:window|available_monitors')return [];
+ if(cmd==='search_status')return {count:0,indexing:false,backend:'windows',everythingAvailable:false,files:{running:false,paused:false,total:0,processed:0,indexed:0,failed:0}};
+ if(cmd==='search_document_defaults')return [];
+ return null;
+});
+mockWindows('main');
+const {SOURCE_LIST}=await import('/src/sources/registry.ts');for(const source of SOURCE_LIST)source.fetch=async()=>[];
+history.replaceState(null,'','#/files');
+await import('/src/main.tsx');
+</script></body></html>

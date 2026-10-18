@@ -25,7 +25,7 @@ export function synchronizeDockMonitors(monitors: MonitorArea[]) {
       if (migrated.has(oldKey)) continue;
       const oldGroup = useEdgeWorkspace.getState().groups[oldKey];
       if (oldGroup) {
-        moveDockGroup(oldKey, area, edge, oldGroup.offset);
+        moveDockGroup(oldKey, area, edge, oldGroup.offset, "monitor-recovery");
         migrated.add(oldKey);
       } else saveDockPosition(entry.id, { edge, edgeMonitor: area.id });
     } else if (!entry.edgeMonitor) saveDockPosition(entry.id, { edge, edgeMonitor: area.id });

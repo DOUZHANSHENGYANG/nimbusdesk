@@ -8,8 +8,14 @@ const fixtures={settings:{state:{theme:'dark',lang:'zh',autoClearDone:false,auto
 const monitor={name:'Owned monitor',position:{x:0,y:0},size:{width:1280,height:800},workArea:{position:{x:0,y:0},size:{width:1280,height:760}},scaleFactor:1};
 const monitorId='Owned monitor@0,0',key=groupKey(monitorId,'right');
 fixtures['edge-workspace']={state:{groups:{[key]:{monitorId,edge:'right',offset:48,collapsed:false,order:[]}}},version:1};
+if(params.has('bottom'))fixtures['edge-workspace'].state.groups[key].offset=600;
+if(params.has('locked'))fixtures.fences.state.fences.fixture.locked=true;
+if(params.has('items'))fixtures.files.state.items=Array.from({length:15},(_,index)=>({id:'fixture-item-'+index,categoryId:'fixture',type:index===0?'folder':'file',title:index===0?'项目资料':index===1?'很长的文件名称用于验证列表不会挤在一起.md':`文档-${index}.txt`,path:`E:/OwnedFixture/${index}.txt`,tags:[],createdAt:1}));
 if(params.has('occupied'))fixtures['todo-papers'].state.papers['2099-10-19']={...normal,open:true,form:'capsule',edge:'left',edgeY:48,edgeMonitor:monitorId};
-if(params.has('crowded'))for(let i=0;i<40;i++)fixtures.fences.state.fences['crowded-'+i]={...normal,open:true,form:'capsule',edge:'right',edgeMonitor:monitorId};
+if(params.has('crowded'))for(let i=0;i<40;i++){
+ fixtures.files.state.categories.push({id:'crowded-'+i,name:'crowded-'+i,createdAt:1});
+ fixtures.fences.state.fences['crowded-'+i]={...normal,open:true,form:'capsule',edge:'right',edgeMonitor:monitorId};
+}
 if(params.has('hub')){fixtures['todo-papers'].state.papers[date].open=false;fixtures.fences.state.fences.fixture.open=false;}
 const label=params.has('hub')?'edge-hub-'+key:fence?'fence-fixture':`todo-${date}`;
 window.edgeReview={fixtures,calls:[],position:{x:normal.x,y:normal.y},size:{width:normal.w,height:normal.h},monitor,monitors:[monitor],visible:false,delay:0,fail:null,emit:(action)=>emitTo(label,'desktop://window-action',{action}),fire:(event,payload)=>emitTo(label,event,payload)};

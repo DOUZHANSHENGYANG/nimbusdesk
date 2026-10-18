@@ -39,7 +39,7 @@ function fixture(initialEntries, initialGroups = {}) {
 test('removed-monitor migration transfers the whole ordered group before individual tabs re-reserve', () => {
   const oldKey = queueCore.groupKey('removed', 'right'), targetKey = queueCore.groupKey(first.id, 'right');
   const f = fixture([
-    { id: 'a', form: 'capsule', edge: 'right', edgeMonitor: 'removed', normal },
+    { id: 'a', form: 'capsule', edge: 'right', edgeMonitor: 'removed', normal, locked: true },
     { id: 'b', form: 'capsule', edge: 'right', edgeMonitor: 'removed', normal },
     { id: 'local', form: 'capsule', edge: 'right', edgeMonitor: first.id, normal },
   ], { [oldKey]: group('removed', ['b', 'a'], { offset: 88, collapsed: true }), [targetKey]: group(first.id, ['local']) });

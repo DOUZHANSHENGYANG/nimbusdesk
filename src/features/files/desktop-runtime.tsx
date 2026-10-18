@@ -1,10 +1,11 @@
 import { useEffect } from "react";
 import { getAllWebviewWindows, getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
-import { emitTo, listen } from "@tauri-apps/api/event";
+import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/core";
 import { toast } from "sonner";
-import { inTauri, openFence } from "@/lib/tauri";
-import { useFiles, useFences, DEFAULT_FENCE } from "@/stores/files";
+import { inTauri } from "@/lib/tauri";
+import { useFiles, useFences } from "@/stores/files";
+import { hideFenceTemporarily, restoreFenceOnDesktop } from "./desktop-actions";
 import { useSettings } from "@/stores/settings";
 
 let toggling: Promise<void> | null = null;
@@ -14,14 +15,12 @@ export function toggleDesktopFences(): Promise<void> {
         if (!inTauri) return;
         const windows = (await getAllWebviewWindows()).filter(window => window.label.startsWith('fence-'));
         const visibility = await Promise.all(windows.map(window => window.isVisible()));
-        if (visibility.some(Boolean)) { await Promise.all(windows.map(window => window.hide())); return; }
+        if (visibility.some(Boolean)) { await Promise.all(windows.map(window => hideFenceTemporarily(window.label.slice(6)))); return; }
         const { fences } = useFences.getState();
         const categories = useFiles.getState().categories.filter(category => fences[category.id]?.open);
         if (!categories.length) throw new Error(useSettings.getState().lang === 'en' ? 'Enable a desktop fence in Files first.' : '请先在文件管理中启用一个桌面栅格。');
         for (const category of categories) {
-            const geometry = fences[category.id] ?? DEFAULT_FENCE;
-            await openFence(category.id, category.name, geometry);
-            if (windows.some(window => window.label === `fence-${category.id}`)) await emitTo(`fence-${category.id}`, 'desktop://window-action', { action: 'show' });
+            await restoreFenceOnDesktop(category.id, true);
         }
     })();
     toggling = request;

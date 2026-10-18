@@ -265,6 +265,9 @@ export interface FenceState {
   pinned?: boolean;
   /** 内容缩放（Ctrl+滚轮，0.7–1.6） */
   scale?: number;
+  /** Per-fence presentation; legacy records retain icon view and remain movable. */
+  viewMode?: "icons" | "list";
+  locked?: boolean;
 }
 
 interface FencesStoreState {
@@ -278,14 +281,21 @@ interface FencesStoreState {
   setOpen: (categoryId: string, open: boolean) => void;
   setPinned: (categoryId: string, pinned: boolean) => void;
   setScale: (categoryId: string, scale: number) => void;
+  setViewMode: (categoryId: string, mode: "icons" | "list") => void;
+  setLocked: (categoryId: string, locked: boolean) => void;
 }
 
-export const DEFAULT_FENCE: FenceState = { x: 180, y: 160, w: 280, h: 340, ghost: true, open: false };
+export const DEFAULT_FENCE: FenceState = { x: 180, y: 160, w: 280, h: 340, ghost: true, open: false, viewMode: "icons", locked: false };
 
 export const useFences = create<FencesStoreState>()(
   persist(
     (set) => ({
       fences: {},
+
+      setViewMode: (categoryId, viewMode) => set(s => ({ fences: { ...s.fences,
+        [categoryId]: { ...(s.fences[categoryId] ?? DEFAULT_FENCE), viewMode } } })),
+      setLocked: (categoryId, locked) => set(s => ({ fences: { ...s.fences,
+        [categoryId]: { ...(s.fences[categoryId] ?? DEFAULT_FENCE), locked } } })),
 
       setForm: (categoryId, form) => set((s) => ({ fences: { ...s.fences,
         [categoryId]: { ...(s.fences[categoryId] ?? DEFAULT_FENCE), form } } })),

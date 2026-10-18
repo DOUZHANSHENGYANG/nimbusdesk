@@ -4,8 +4,8 @@ import { invoke } from "@tauri-apps/api/core";
 import { currentMonitor } from "@tauri-apps/api/window";
 import { emit, listen } from "@tauri-apps/api/event";
 import { PhysicalPosition, PhysicalSize } from "@tauri-apps/api/dpi";
-import { ChevronLeft, ChevronRight, Expand, ArrowLeftRight, ArrowUp, ArrowDown, EyeOff, Minimize2 } from "lucide-react";
-import { EdgeController, EDGE_TAB_W, queueWindowOperation, type Edge, type NormalRect } from "./edge-core";
+import { ChevronLeft, ChevronRight, Expand, ArrowLeftRight, ArrowUp, ArrowDown, EyeOff, Minimize2, LockKeyhole, UnlockKeyhole } from "lucide-react";
+import { EdgeController, EDGE_TAB_W, EDGE_TAB_H, edgeTabOffset, queueWindowOperation, type Edge, type NormalRect } from "./edge-core";
 import { inTauri } from "@/lib/tauri";
 import { onStorageSynced } from "@/lib/storage";
 import { desktopEntries, useDesktopEntries, setDesktopForm } from "./registry";
@@ -17,7 +17,7 @@ import { isDesktopVisible, setDesktopVisibility } from "./visibility";
 export { queueWindowOperation } from "./edge-core";
 
 interface DockOptions {
-  active: boolean; edge: Edge; edgeY?: number; normal: () => NormalRect; pinned: boolean;
+  active: boolean; edge: Edge; edgeY?: number; normal: () => NormalRect; pinned: boolean; locked?: boolean;
   onEdgeChange(edge: Edge): void; onEdgeYChange(y: number): void; onUndock(): void; onError?(error: unknown): void;
 }
 
@@ -61,7 +61,7 @@ export function useEdgeDock(options: DockOptions) {
       const edge = entry?.edge ?? latest.current.edge;
       if (entry?.edgeMonitor !== area.id) reserveQueue(label, area, edge);
       const { slot } = queueSnapshot(label, area, edge);
-      await native.place(open, edge, slot?.y ?? latest.current.edgeY ?? 48, slot?.h || 64);
+      await native.place(open, edge, slot?.y ?? latest.current.edgeY ?? 48, slot?.h || EDGE_TAB_H);
       if (serial !== intent.current) return;
       if (activate) await getCurrentWebviewWindow().setFocus();
       if (serial === intent.current) { readyRef.current = true; setReady(true); }
@@ -105,6 +105,7 @@ export function useEdgeDock(options: DockOptions) {
       // Restore can still show the saved normal window when monitor discovery fails.
       monitor: async () => { try { return await resolveArea(); } catch { return null; } },
       ignore: value => win.setIgnoreCursorEvents(value),
+      resize: allowed => win.setResizable(allowed && !latest.current.locked),
       size: rect => win.setSize(new PhysicalSize(rect.w, rect.h)),
       position: rect => win.setPosition(new PhysicalPosition(rect.x, rect.y)),
       layer: async (pinned, valid) => { await win.setAlwaysOnBottom(false); if (!valid()) return; await win.setAlwaysOnTop(pinned); if (!valid()) return; if (!pinned) await win.setAlwaysOnBottom(true); },
@@ -129,7 +130,7 @@ export function useEdgeDock(options: DockOptions) {
       const area = await resolveArea(); if (!current()) return;
       const snapshot = reserveQueue(label, area, latest.current.edge);
       const slot = snapshot.slot;
-      await native.place(false, latest.current.edge, slot?.y ?? 48, slot?.h || 64);
+      await native.place(false, latest.current.edge, slot?.y ?? 48, slot?.h || EDGE_TAB_H);
       if (current()) { readyRef.current = true; setReady(true); }
     })().catch(async cause => {
       if (!current()) return; report(cause);
@@ -196,20 +197,22 @@ export function useEdgeDock(options: DockOptions) {
   useEffect(() => { if (opened && monitor) void emit("desktop://preview-open", { id: label, monitorId: monitor.id, edge: options.edge }); }, [opened, monitor?.id, options.edge, label]);
 
   const switchEdge = useCallback(async () => {
-    if (restoring.current || dragging.current) return;
+    if (restoring.current || dragging.current || latest.current.locked) return;
     const area = await resolveArea(), edge = latest.current.edge === "left" ? "right" : "left";
-    moveDockItem(label, area, edge);
+    if (!moveDockItem(label, area, edge)) return;
     latest.current.onEdgeChange(edge); latest.current = { ...latest.current, edge };
     await place(openedRef.current);
   }, [label, place, resolveArea]);
   const moveInQueue = useCallback(async (direction: number) => {
+    if (latest.current.locked) return;
     const area = await resolveArea(), snapshot = queueSnapshot(label, area, latest.current.edge);
     const index = snapshot.layout.order.indexOf(label);
     moveDockItem(label, area, latest.current.edge, undefined, Math.max(0, index + direction));
   }, [label, resolveArea]);
 
   const startDrag = useCallback((event: PointerEvent, tab = false) => {
-    if (event.button !== 0 || !inTauri || restoring.current || dragging.current) return;
+    if (event.button !== 0 || !inTauri || restoring.current || dragging.current || latest.current.locked) return;
+    if (monitorRef.current && queueSnapshot(label, monitorRef.current, latest.current.edge).members.some(member => member.locked)) return;
     if (!tab && (event.target as HTMLElement).closest("button,input,textarea,select,[role=button],[role=checkbox]")) return;
     const win = getCurrentWebviewWindow(), sx = event.clientX, sy = event.clientY, owner = controller.current;
     if (!owner) return;
@@ -227,7 +230,7 @@ export function useEdgeDock(options: DockOptions) {
           if (area) {
             const edge = pos.x + size.width / 2 < area.x + area.w / 2 ? "left" : "right";
             monitorRef.current = area; setMonitor(area);
-            moveDockItem(label, area, edge, (pos.y - area.y) / area.scale);
+            if (!moveDockItem(label, area, edge, (pos.y - area.y) / area.scale)) return;
             latest.current.onEdgeChange(edge); latest.current = { ...latest.current, edge };
           }
         }
@@ -236,13 +239,15 @@ export function useEdgeDock(options: DockOptions) {
     };
     const move = (e: globalThis.PointerEvent) => {
       if (started || Math.hypot(e.clientX - sx, e.clientY - sy) < 5) return;
+      if (latest.current.locked || (monitorRef.current && queueSnapshot(label, monitorRef.current, latest.current.edge).members.some(member => member.locked))) { canceled = true; cleanup(); return; }
       started = true; dragging.current = true; suppressClickUntil.current = Date.now() + 350; hold("edge-drag", true); clearTimer(); openedRef.current = false; setOpened(false);
       const native = controller.current;
       if (!native) { cleanup(); dragging.current = false; hold("edge-drag", false); return; }
       const area = monitorRef.current;
       const slot = area ? queueSnapshot(label, area, latest.current.edge).slot : undefined;
-      void native.place(false, latest.current.edge, slot?.y ?? 48, slot?.h || 64).then(async () => {
-        if (released || canceled || controller.current !== native) { canceled = true; return; }
+      void native.place(false, latest.current.edge, slot?.y ?? 48, slot?.h || EDGE_TAB_H).then(async () => {
+        if (released || canceled || controller.current !== native || latest.current.locked
+          || (monitorRef.current && queueSnapshot(label, monitorRef.current, latest.current.edge).members.some(member => member.locked))) { canceled = true; return; }
         handedOff = true;
         await win.startDragging();
         if (!await invoke<boolean>("desktop_wait_drag_end")) canceled = true;
@@ -256,12 +261,14 @@ export function useEdgeDock(options: DockOptions) {
   }, [clearTimer, hold, label, place, report]);
 
   const snapshot = monitor ? queueSnapshot(label, monitor, options.edge) : null;
-  return { ready, opened, busy, error, edge: options.edge, tabHeight: snapshot?.slot?.h || 64, open, close, dismiss, undock, switchEdge, moveInQueue, enter, leave, hold,
+  const tabHeight = snapshot?.slot?.h || EDGE_TAB_H;
+  const tabTop = monitor && opened ? edgeTabOffset(monitor, snapshot?.slot?.y ?? options.edgeY ?? 48, options.normal(), tabHeight) : 0;
+  return { ready, opened, busy, error, edge: options.edge, tabHeight, tabTop, movementLocked: !!options.locked || !!snapshot?.members.some(member => member.locked), open, close, dismiss, undock, switchEdge, moveInQueue, enter, leave, hold,
     startDrag: (event: PointerEvent) => startDrag(event), startTabDrag: (event: PointerEvent) => startDrag(event, true),
     hide: async () => { setDesktopVisibility(label, false); ++intent.current; restoring.current = false; await getCurrentWebviewWindow().hide().catch(report); }, report };
 }
 
-export function EdgeDockFrame({ dock, label, summary, en = false, children }: { dock: ReturnType<typeof useEdgeDock>; label: string; summary?: string; en?: boolean; children: ReactNode }) {
+export function EdgeDockFrame({ dock, label, summary, en = false, children, locked = false, onToggleLock }: { dock: ReturnType<typeof useEdgeDock>; label: string; summary?: string; en?: boolean; children: ReactNode; locked?: boolean; onToggleLock?: () => void }) {
   const left = dock.edge === "left", [menu, setMenu] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const tabRef = useRef<HTMLButtonElement>(null), menuWasOpen = useRef(false);
@@ -277,10 +284,10 @@ export function EdgeDockFrame({ dock, label, summary, en = false, children }: { 
     document.addEventListener("pointerdown", outside); return () => document.removeEventListener("pointerdown", outside);
   }, [menu]);
   const openMenu = async () => { await dock.open(true); setMenu(true); };
-  const item = (name: string, icon: ReactNode, action: () => unknown) => <button role="menuitem" type="button" className="flex min-h-8 w-full items-center gap-2 rounded-md px-2.5 text-left text-xs hover:bg-muted focus-visible:bg-muted focus-visible:outline-none" onClick={() => { setMenu(false); void Promise.resolve().then(action).catch(dock.report); }}>{icon}{name}</button>;
+  const item = (name: string, icon: ReactNode, action: () => unknown, disabled = false) => <button role="menuitem" type="button" disabled={disabled} className="flex min-h-8 w-full items-center gap-2 rounded-md px-2.5 text-left text-xs hover:bg-muted focus-visible:bg-muted focus-visible:outline-none disabled:opacity-40" onClick={() => { setMenu(false); void Promise.resolve().then(action).catch(dock.report); }}>{icon}{name}</button>;
   return <div className="fixed inset-0 select-none" style={{ opacity: dock.ready ? 1 : 0 }} onPointerEnter={dock.enter} onPointerLeave={dock.leave}
     onKeyDown={event => { if (event.defaultPrevented || event.nativeEvent.isComposing) return; if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); if (menu) setMenu(false); else void dock.dismiss(); } }}>
-    <button ref={tabRef} type="button" aria-label={en ? `Open ${label}` : `展开${label}`} title={`${label}${summary ? ` · ${summary}` : ""}${en ? " · Drag to reorder / move to another screen; double-click to restore" : " · 拖动排序或跨屏，双击恢复窗口"}`}
+    <button ref={tabRef} type="button" aria-label={en ? `Open ${label}` : `展开${label}`} title={`${label}${summary ? ` · ${summary}` : ""}${dock.movementLocked ? (en ? " · Position locked; right-click to unlock" : " · 位置或队列已锁定；右键可解锁") : (en ? " · Drag to reorder / move to another screen; double-click to restore" : " · 拖动排序或跨屏，双击恢复窗口")}`}
       aria-expanded={dock.opened} onClick={() => void dock.open(true)} onDoubleClick={() => void dock.undock()} onPointerDown={dock.startTabDrag}
       onContextMenu={event => { event.preventDefault(); void openMenu(); }}
       onKeyDown={event => {
@@ -288,29 +295,34 @@ export function EdgeDockFrame({ dock, label, summary, en = false, children }: { 
         if (event.ctrlKey && event.key === "Enter") { event.preventDefault(); void dock.undock(); }
         if (event.altKey && (event.key === "ArrowUp" || event.key === "ArrowDown")) { event.preventDefault(); void dock.moveInQueue(event.key === "ArrowUp" ? -1 : 1); }
       }}
-      className="absolute top-0 z-20 flex flex-col items-center justify-center gap-1 overflow-hidden border border-brand/30 bg-popover text-brand shadow-sm outline-none transition-colors hover:bg-brand/15 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand"
-      style={{ width: EDGE_TAB_W, height: dock.tabHeight, [left ? "left" : "right"]: 0, borderRadius: left ? "0 9px 9px 0" : "9px 0 0 9px" }}>
-      {left ? <ChevronRight className="size-3 shrink-0" /> : <ChevronLeft className="size-3 shrink-0" />}
-      <span className="overflow-hidden text-[10px] font-medium leading-none" style={{ writingMode: "vertical-rl", maxHeight: Math.max(14, dock.tabHeight - 24) }}>{label.replace(/日$/, "").slice(0, 12)}</span>
+      className="group/arrow absolute z-20 flex items-center justify-center gap-1.5 overflow-hidden border border-brand/35 bg-popover px-2.5 text-brand shadow-sm outline-none transition-colors duration-100 hover:bg-brand/15 active:bg-brand/25 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand"
+      style={{ top: dock.tabTop, width: EDGE_TAB_W, height: dock.tabHeight, [left ? "left" : "right"]: 0, borderRadius: left ? "0 10px 10px 0" : "10px 0 0 10px", flexDirection: left ? "row-reverse" : "row" }}>
+      <span aria-hidden="true" className="absolute inset-1 bg-brand/10" style={{ clipPath: left ? "polygon(0 0,85% 0,100% 50%,85% 100%,0 100%)" : "polygon(15% 0,100% 0,100% 100%,15% 100%,0 50%)" }} />
+      {left ? <ChevronRight className="relative size-4 shrink-0" /> : <ChevronLeft className="relative size-4 shrink-0" />}
+      <span className="relative flex min-w-0 flex-1 flex-col items-start gap-0.5 text-left">
+        <span className="w-full truncate text-[11px] font-semibold leading-4">{label}</span>
+        {summary && <span className="w-full truncate text-[10px] leading-3 text-muted-foreground tabular-nums">{summary}</span>}
+      </span>
     </button>
     <div aria-hidden={!dock.opened} inert={!dock.opened} className="absolute inset-y-0 overflow-hidden rounded-xl border border-border bg-background text-foreground shadow-xl motion-safe:transition-opacity motion-safe:duration-150"
       style={{ left: left ? EDGE_TAB_W : 0, right: left ? 0 : EDGE_TAB_W, visibility: dock.opened ? "visible" : "hidden", opacity: dock.opened ? 1 : 0 }}
       onDoubleClick={event => { if (!(event.target as HTMLElement).closest("button,input,textarea,select,a,[role],.daily-paper-row,[data-item],[data-item-id]")) void dock.undock(); }}>{children}</div>
-    {menu && <div ref={menuRef} role="menu" aria-label={en ? "Window actions" : "窗口操作"} className="absolute top-2 z-40 w-48 rounded-xl border border-border bg-popover p-1.5 text-popover-foreground shadow-lg" style={{ [left ? "left" : "right"]: EDGE_TAB_W + 6 }}
+    {menu && <div ref={menuRef} role="menu" aria-label={en ? "Window actions" : "窗口操作"} className="absolute z-40 w-48 overflow-y-auto rounded-xl border border-border bg-popover p-1.5 text-popover-foreground shadow-lg" style={{ top: Math.max(8, Math.min(dock.tabTop, window.innerHeight - 280)), maxHeight: "calc(100% - 16px)", [left ? "left" : "right"]: EDGE_TAB_W + 6 }}
       onKeyDown={event => {
         if (event.key === "Tab") { event.preventDefault(); setMenu(false); return; }
         if (!["ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) return;
         event.preventDefault(); event.stopPropagation();
-        const buttons = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>("button"));
+        const buttons = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>("button:not(:disabled)"));
         const current = buttons.indexOf(document.activeElement as HTMLButtonElement);
         const index = event.key === "Home" ? 0 : event.key === "End" ? buttons.length - 1 : (current + (event.key === "ArrowUp" ? -1 : 1) + buttons.length) % buttons.length;
         buttons[index]?.focus();
       }}>
       {item(en ? "Restore window" : "恢复完整窗口", <Expand className="size-3.5" />, () => dock.undock())}
       {item(en ? "Fold preview" : "收起预览", <Minimize2 className="size-3.5" />, () => dock.dismiss())}
-      {item(en ? "Move to other side" : "移到另一侧", <ArrowLeftRight className="size-3.5" />, () => dock.switchEdge())}
-      {item(en ? "Move up" : "上移一个位置", <ArrowUp className="size-3.5" />, () => dock.moveInQueue(-1))}
-      {item(en ? "Move down" : "下移一个位置", <ArrowDown className="size-3.5" />, () => dock.moveInQueue(1))}
+      {onToggleLock && item(locked ? (en ? "Unlock position" : "解锁位置与大小") : (en ? "Lock position" : "锁定位置与大小"), locked ? <UnlockKeyhole className="size-3.5" /> : <LockKeyhole className="size-3.5" />, onToggleLock)}
+      {item(en ? "Move to other side" : "移到另一侧", <ArrowLeftRight className="size-3.5" />, () => dock.switchEdge(), dock.movementLocked)}
+      {item(en ? "Move up" : "上移一个位置", <ArrowUp className="size-3.5" />, () => dock.moveInQueue(-1), dock.movementLocked)}
+      {item(en ? "Move down" : "下移一个位置", <ArrowDown className="size-3.5" />, () => dock.moveInQueue(1), dock.movementLocked)}
       {item(en ? "Hide until recalled" : "隐藏（可从队列找回）", <EyeOff className="size-3.5" />, () => dock.hide())}
     </div>}
     {dock.error && <button type="button" onClick={() => void dock.undock()} className="absolute inset-0 z-50 bg-popover text-[10px] text-destructive" title={dock.error}>{en ? "Restore" : "恢复"}</button>}

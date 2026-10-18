@@ -56,7 +56,7 @@ test('12 tabs shrink to fit 768px with a reachable hub and no overlaps', () => {
   assert.equal(plan.slots.filter(slot => slot.visible).length, 12);
   assert.equal(plan.overflow.length, 0);
   assert.equal(plan.hubY, 48);
-  assert.ok(plan.slots.every(slot => slot.h >= 32 && slot.h <= 64));
+  assert.ok(plan.slots.every(slot => slot.h >= 40 && slot.h <= 44));
   assertBounded(plan, 768);
 });
 

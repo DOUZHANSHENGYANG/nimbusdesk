@@ -66,7 +66,7 @@ async function fixture({ collapsed = true, active = true } = {}) {
   const queue = load('./queue-registry.ts', { './registry': registry, './edge-workspace': { useEdgeWorkspace: workspace }, './queue-core': core });
   let visible = false, desktopVisible = true;
   const win = { label: owner };
-  for (const method of ['setIgnoreCursorEvents', 'setAlwaysOnBottom', 'setAlwaysOnTop', 'setSize', 'setPosition', 'setFocus']) {
+  for (const method of ['setIgnoreCursorEvents', 'setResizable', 'setAlwaysOnBottom', 'setAlwaysOnTop', 'setSize', 'setPosition', 'setFocus']) {
     win[method] = async value => { trace.push({ method, value }); };
   }
   win.show = async () => { visible = true; trace.push({ method: 'show' }); };
@@ -128,8 +128,8 @@ test('a hidden dock wakes from remote queue expansion without a React rerender a
     assert.equal(h.visible, true, 'the independent storage listener must call native.show before React can repaint');
     const position = h.trace.findLast(call => call.method === 'setPosition').value;
     const size = h.trace.findLast(call => call.method === 'setSize').value;
-    assert.deepEqual({ x: position.x, y: position.y }, { x: 1256, y: 232 });
-    assert.deepEqual({ width: size.width, height: size.height }, { width: 24, height: 64 });
+    assert.deepEqual({ x: position.x, y: position.y }, { x: 1168, y: 212 });
+    assert.deepEqual({ width: size.width, height: size.height }, { width: 112, height: 44 });
     assert.equal(h.trace.some(call => call.method === 'setFocus'), false, 'queue expansion must not steal focus');
     assert.equal(h.undocked, 0);
     assert.deepEqual(h.entries[0].normal, normal, 'queue synchronization cannot overwrite ordinary geometry');
