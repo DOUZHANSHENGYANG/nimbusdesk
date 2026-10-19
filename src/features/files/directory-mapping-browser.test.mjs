@@ -1,0 +1,30 @@
+import assert from 'node:assert/strict';
+import {pathToFileURL} from 'node:url';
+const {chromium}=await import(pathToFileURL(process.env.SEARCH_PLAYWRIGHT_PATH).href);
+const server=await(await import('vite')).createServer({server:{host:'127.0.0.1',port:17814,strictPort:true}});await server.listen();
+const browser=await chromium.launch({headless:true,executablePath:process.env.SEARCH_BROWSER_PATH});
+try {
+ const page=await browser.newPage({viewport:{width:1100,height:780}}),errors=[];page.setDefaultTimeout(12000);page.on('pageerror',e=>errors.push(e.message));
+ await page.goto('http://127.0.0.1:17814/src/features/files/fixtures/page.html');
+ const map=page.getByRole('button',{name:'映射文件夹',exact:true});await map.waitFor();
+ await page.evaluate(()=>{filesReview.pickFolder='E:/Mapped';filesReview.snapshots['E:/Mapped']={root:'E:/Mapped',entries:[{path:'E:/Mapped/说明.md',name:'说明.md',kind:'file'},{path:'E:/Mapped/资料',name:'资料',kind:'folder'}]};});
+ await map.click();await page.getByText('说明.md',{exact:true}).waitFor();await page.getByText('资料',{exact:true}).waitFor();
+ const category=await page.evaluate(async()=>{const{useFiles}=await import('/src/stores/files.ts');return useFiles.getState().categories.find(c=>c.dir==='E:/Mapped'&&c.syncDir);});assert.ok(category);
+ assert.equal(await page.evaluate(async()=>{const{useFiles}=await import('/src/stores/files.ts');return useFiles.getState().items.find(i=>i.id==='existing').title;}),'既有文件');
+ await page.evaluate(()=>{filesReview.snapshots['E:/Mapped'].entries=[{path:'E:/Mapped/新增.txt',name:'新增.txt',kind:'file'}];});
+ await page.getByRole('button',{name:'刷新映射',exact:true}).click();await page.getByText('新增.txt',{exact:true}).waitFor();await page.getByText('说明.md',{exact:true}).waitFor({state:'hidden'});
+ await page.evaluate(()=>{filesReview.snapshotError='directory-map:not-found';});await page.getByRole('button',{name:'刷新映射',exact:true}).click();
+ await page.getByText('刷新失败，已保留上次内容',{exact:true}).waitFor();assert.equal(await page.getByText('新增.txt',{exact:true}).isVisible(),true);
+ await page.evaluate(()=>{filesReview.snapshotError=null;filesReview.snapshots['E:/Mapped'].entries.push({path:'E:/Mapped/后台同步.md',name:'后台同步.md',kind:'file'});});
+ await page.getByText('后台同步.md',{exact:true}).waitFor({timeout:10000});
+ await page.evaluate(()=>{filesReview.pickFolder='E:/Broken';filesReview.snapshots['E:/Broken']={root:'E:/Broken',entries:[{path:'E:/Outside/a.txt',name:'a.txt',kind:'file'}]};});
+ await page.getByRole('button',{name:'映射选项',exact:true}).click();await page.getByRole('menuitem',{name:'更换文件夹',exact:true}).click();
+ await page.getByText('无法映射文件夹',{exact:true}).waitFor();
+ assert.equal(await page.evaluate(async(id)=>{const{useFiles}=await import('/src/stores/files.ts');return useFiles.getState().categories.find(c=>c.id===id)?.dir;},category.id),'E:/Mapped');
+ assert.equal(await page.getByText('后台同步.md',{exact:true}).isVisible(),true);
+ await page.getByRole('button',{name:'映射选项',exact:true}).click();await page.getByRole('menuitem',{name:'解除映射',exact:true}).click();
+ await page.getByText('后台同步.md',{exact:true}).waitFor({state:'hidden'});
+ assert.equal(await page.evaluate(async(id)=>{const{useFiles}=await import('/src/stores/files.ts');return useFiles.getState().categories.find(c=>c.id===id)?.syncDir;},category.id),undefined);
+ assert.equal(await page.evaluate(()=>filesReview.calls.some(c=>['delete_entry','delete_entries','move_fence_entries'].includes(c.cmd))),false);
+ assert.deepEqual(errors,[]);console.log('PASS folder mapping, immediate/manual/background sync, offline cache preservation, unmap without deleting source files or manual records');
+} finally {await browser.close();await server.close();}

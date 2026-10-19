@@ -1,7 +1,8 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import { tauriJsonStorage } from "@/lib/storage";
-import type { MovedFenceEntry } from "@/lib/tauri";
+import type { DirectorySnapshot, MovedFenceEntry } from "@/lib/tauri";
+import { normalizedMappingPath, reconcileDirectoryItems } from "@/features/files/directory-mapping-core";
 
 /* ── 文件条目库：files.json ───────────────────────────── */
 
@@ -13,6 +14,8 @@ export interface FileCategory {
   createdAt: number;
   /** 绑定的真实磁盘目录：右键「新建文件/文件夹」在此目录中创建 */
   dir?: string;
+  /** Opt-in live folder mapping. A legacy dir alone is only a creation destination. */
+  syncDir?: boolean;
   /** 父分类 id。单层子分类：有父的分类不能再有子分类（由 UI 保证） */
   parentId?: string;
   /** 最后修改时间 —— 仅供备份合并判断「同 id 谁更新」 */
@@ -26,6 +29,8 @@ export interface FileItem {
   title: string;
   /** 本地路径或网址 */
   path: string;
+  /** Generated reference owned by this folder mapping; manual references omit it. */
+  mappedRoot?: string;
   tags: string[];
   /** 网站图标 URL（favicon，可空 → 扩展名兜底图标） */
   iconUrl?: string;
@@ -47,6 +52,8 @@ interface FilesState {
   setCategoryParent: (id: string, parentId: string | null) => void;
   /** 绑定/更换分类的真实磁盘目录（null = 解绑） */
   setCategoryDir: (id: string, dir: string | null) => void;
+  setCategoryMapping: (id: string, root: string | null) => void;
+  reconcileDirectory: (categoryId: string, requestedRoot: string, snapshot: DirectorySnapshot) => boolean;
   addItem: (item: Omit<FileItem, "id" | "createdAt">) => void;
   addItems: (items: Omit<FileItem, "id" | "createdAt">[]) => void;
   applyMovedEntries: (categoryId: string, entries: MovedFenceEntry[]) => void;
@@ -59,6 +66,11 @@ interface FilesState {
 function uid() {
   return crypto.randomUUID();
 }
+
+// Transient generations reject in-flight results after unmap/remap without
+// invalidating a scan whenever SQLite echoes a fresh category object.
+const mappingEpochs = new Map<string, number>();
+export function directoryMappingEpoch(id: string): number { return mappingEpochs.get(id) ?? 0; }
 
 export const useFiles = create<FilesState>()(
   persist(
@@ -82,7 +94,11 @@ export const useFiles = create<FilesState>()(
               if (path !== source && !(entry.kind === "folder" && path.startsWith(source + "/"))) return item;
               const exact = path === source;
               if (exact && !reusableId) reusableId = item.id;
+              const mapped = item.mappedRoot ? normalized(item.mappedRoot) : undefined;
+              const movedMapping = mapped && (mapped === source || mapped.startsWith(source + "/"))
+                ? entry.path + item.mappedRoot!.replace(/\\/g, "/").slice(sourceLength) : undefined;
               return { ...item, path: entry.path + item.path.replace(/\\/g, "/").slice(sourceLength),
+                ...(movedMapping ? { mappedRoot: movedMapping } : {}),
                 ...(exact && item.title === item.path.split(/[\\/]/).pop() ? { title: entry.name } : {}), updatedAt: Date.now() };
             });
           }
@@ -95,7 +111,8 @@ export const useFiles = create<FilesState>()(
             });
           }
           if (items.some(item => item.categoryId === categoryId && normalized(item.path) === normalized(entry.path))) continue;
-          if (reusableId) items = items.map(item => item.id === reusableId ? { ...item, categoryId } : item);
+          if (reusableId) items = items.map(item => item.id === reusableId
+            ? { ...item, categoryId, ...(item.categoryId !== categoryId ? { mappedRoot: undefined } : {}) } : item);
           else items.push({ id: uid(), categoryId, type: entry.kind, path: entry.path, title: entry.name, tags: [], createdAt: Date.now(), updatedAt: Date.now() });
         }
         return { items, categories };
@@ -158,13 +175,39 @@ export const useFiles = create<FilesState>()(
         }),
 
       setCategoryDir: (id, dir) =>
-        set((s) => ({
+        get().categories.find(category => category.id === id)?.syncDir
+          ? get().setCategoryMapping(id, dir)
+          : set((s) => ({
           categories: s.categories.map((c) =>
             c.id === id
               ? { ...c, dir: dir?.trim() || undefined, updatedAt: Date.now() }
               : c,
           ),
         })),
+
+      setCategoryMapping: (id, root) => set(state => {
+        const category = state.categories.find(entry => entry.id === id);
+        if (!category) return state;
+        const dir = root?.trim() || undefined;
+        const sameRoot = Boolean(dir && category.syncDir && category.dir && normalizedMappingPath(category.dir) === normalizedMappingPath(dir));
+        if (sameRoot) return state;
+        mappingEpochs.set(id, directoryMappingEpoch(id) + 1);
+        return {
+          categories: state.categories.map(entry => entry.id === id
+            ? { ...entry, dir, syncDir: dir ? true : undefined, updatedAt: Date.now() } : entry),
+          items: state.items.filter(item => item.categoryId !== id || !item.mappedRoot),
+        };
+      }),
+
+      reconcileDirectory: (categoryId, requestedRoot, snapshot) => {
+        const state = get();
+        const category = state.categories.find(entry => entry.id === categoryId);
+        if (!category?.syncDir || !category.dir || normalizedMappingPath(category.dir) !== normalizedMappingPath(requestedRoot)) return false;
+        const items = reconcileDirectoryItems(state.items, categoryId, requestedRoot, snapshot, uid, Date.now());
+        // Avoid even calling persist's setter for an unchanged periodic snapshot.
+        if (items !== state.items) set({ items });
+        return true;
+      },
 
       // 删除分类时，其子分类一并删除（避免留下悬空的 parentId）
       removeCategory: (id) =>
@@ -192,9 +235,16 @@ export const useFiles = create<FilesState>()(
 
       updateItem: (id, patch) =>
         set((s) => ({
-          items: s.items.map((i) =>
-            i.id === id ? { ...i, ...patch, updatedAt: Date.now() } : i,
-          ),
+          items: s.items.map((item) => {
+            if (item.id !== id) return item;
+            const updated = { ...item, ...patch, updatedAt: Date.now() };
+            const path = normalizedMappingPath(updated.path);
+            if (updated.mappedRoot && (updated.categoryId !== item.categoryId || updated.type === "url"
+              || path.slice(0, path.lastIndexOf("/")) !== normalizedMappingPath(updated.mappedRoot))) {
+              updated.mappedRoot = undefined;
+            }
+            return updated;
+          }),
         })),
 
 

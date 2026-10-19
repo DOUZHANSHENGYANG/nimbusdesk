@@ -16,6 +16,7 @@ import { Toaster } from "@/components/ui/sonner";
 import { useReminderLoop } from "@/features/plans/reminder";
 import { FeedsRuntime } from "@/features/feeds/runtime";
 import { DesktopRuntime } from "@/features/files/desktop-runtime";
+import { DirectoryMappingRuntime } from "@/features/files/directory-mapping-runtime";
 import { EdgeRuntime } from "@/features/desktop/edge-runtime";
 import { KnowledgeRuntime } from "@/features/knowledge/runtime";
 import { SearchRuntime } from "@/features/search";
@@ -47,6 +48,7 @@ export function Providers({ children }: { children: ReactNode }) {
             <SearchRuntime />
             <FeedsRuntime />
             <DesktopRuntime />
+            <DirectoryMappingRuntime />
             <EdgeRuntime />
           </>}
           {children}

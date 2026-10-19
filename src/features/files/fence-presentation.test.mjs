@@ -12,7 +12,7 @@ function load(file, deps = {}) {
   return module.exports;
 }
 function store(storage = { getItem: () => null, setItem: () => {} }) {
-  return load('../../stores/files.ts', { '@/lib/storage': { tauriJsonStorage: storage } });
+  return load('../../stores/files.ts', { '@/lib/storage': { tauriJsonStorage: storage }, '@/features/desktop/sticky-presentation': load('../desktop/sticky-presentation.ts'), '@/features/files/directory-mapping-core': load('./directory-mapping-core.ts') });
 }
 test('legacy fences default to icons and unlocked while changing one preference preserves geometry and other fences', () => {
   const { useFences, DEFAULT_FENCE } = store();

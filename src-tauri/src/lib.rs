@@ -116,6 +116,7 @@ pub fn run() {
             commands::sys::hide_popup_menu,
             commands::sys::prepare_popup_menu,
             commands::fs::probe_paths,
+            commands::directory_map::file_directory_snapshot,
             commands::fileops::create_entry,
             commands::fileops::rename_entry,
             commands::fileops::delete_entry,

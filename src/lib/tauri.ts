@@ -85,6 +85,16 @@ export async function probePaths(paths: string[]): Promise<PathKind[]> {
   return invoke<PathKind[]>("probe_paths", { paths });
 }
 
+/** Complete immediate-child snapshot. Failed scans preserve the caller's last good cache. */
+export interface DirectorySnapshot {
+  root: string;
+  entries: { path: string; name: string; kind: "file" | "folder" }[];
+}
+
+export async function fileDirectorySnapshot(root: string): Promise<DirectorySnapshot> {
+  return invoke<DirectorySnapshot>("file_directory_snapshot", { root });
+}
+
 /** 发起 OLE 系统拖拽（阻塞至释放/取消） */
 export async function dragOut(paths: string[]): Promise<void> {
   await invoke("drag_out", { paths });

@@ -41,6 +41,7 @@ import { ITEM_ATTR } from "@/features/files/menu-model";
 import { importDroppedFiles } from "./import-files";
 import { useFileDrop } from "./use-file-drop";
 import { restoreFenceOnDesktop, setAllFencesOnDesktop, setFenceOnDesktop } from "./desktop-actions";
+import { MapFolderButton, CategoryMappingBar } from "./directory-mapping-controls";
 
 /** 分类 chip 上的标记：右键时据此判断命中了哪个分类 */
 const CAT_ATTR = "data-cat-id";
@@ -577,7 +578,7 @@ export function FilesPage() {
         </div>
 
         {/* ── 搜索 + 添加 ── */}
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <div className="flex min-w-0 flex-1 items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 focus-within:border-brand/50">
             <Search className="size-4 shrink-0 text-muted-foreground" />
             <input
@@ -592,6 +593,7 @@ export function FilesPage() {
               </button>
             )}
           </div>
+          <MapFolderButton onMapped={id => { setSelected(id); setSearch(""); setActiveTags([]); }} />
           <button
             type="button"
             onClick={() => setModal({ open: true, editing: null })}
@@ -601,6 +603,8 @@ export function FilesPage() {
             {t("files.addItem")}
           </button>
         </div>
+
+        {selected && <CategoryMappingBar key={selected} categoryId={selected} />}
 
         {/* ── 标签筛选 ── */}
         {allTags.length > 0 && (
