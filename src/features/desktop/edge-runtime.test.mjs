@@ -12,7 +12,7 @@ function load(file, dependencies = {}) {
   return module.exports;
 }
 const queueCore = load('./queue-core.ts');
-const runtimeCore = load('./edge-runtime-core.ts', { './queue-core': queueCore });
+const runtimeCore = load('./edge-runtime-core.ts', { './queue-core': queueCore, './edge-core': load('./edge-core.ts') });
 const first = { id: 'primary', x: 0, y: 0, w: 1366, h: 768, scale: 1 };
 const normal = { x: -1000, y: 90, w: 320, h: 400 };
 const group = (monitorId, order, extra = {}) => ({ monitorId, edge: 'right', order, collapsed: false, offset: 48, ...extra });
@@ -76,4 +76,20 @@ test('empty monitor snapshots preserve queues for the next successful display re
   f.synchronize([]);
   assert.deepEqual(f.writes, []);
   assert.equal(f.entries[0].edgeMonitor, 'removed');
+});
+
+test('display recovery preserves the top edge and its horizontal group anchor', () => {
+  const oldKey = queueCore.groupKey('removed', 'top'), targetKey = queueCore.groupKey(first.id, 'top');
+  const f = fixture([
+    { id: 'a', form: 'capsule', edge: 'top', edgeMonitor: 'removed', dockOffset: 300, normal },
+    { id: 'b', form: 'capsule', edge: 'top', edgeMonitor: 'removed', dockOffset: 500, normal },
+  ], { [oldKey]: group('removed', ['b', 'a'], { edge: 'top', offset: 170 }) });
+  f.synchronize([first]);
+  assert.equal(f.state.groups[targetKey].edge, 'top');
+  assert.equal(f.state.groups[targetKey].offset, 170);
+  assert.deepEqual(f.state.groups[targetKey].order, ['b', 'a']);
+  assert.ok(f.entries.every(entry => entry.edge === 'top' && entry.edgeMonitor === first.id && entry.normal === normal));
+  const count = f.writes.length;
+  f.synchronize([first]);
+  assert.equal(f.writes.length, count, 'stable display snapshots must not rewrite placements');
 });

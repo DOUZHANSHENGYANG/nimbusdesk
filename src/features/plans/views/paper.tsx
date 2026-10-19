@@ -5,7 +5,9 @@ import { LogicalSize } from "@tauri-apps/api/dpi";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { listen } from "@tauri-apps/api/event";
 import { PhysicalPosition } from "@tauri-apps/api/dpi";
+import { invoke } from "@tauri-apps/api/core";
 import { readMonitors } from "@/features/desktop/monitors";
+import { dragDockEdge } from "@/features/files/fence-geometry";
 import { isDesktopVisible, setDesktopVisibility } from "@/features/desktop/visibility";
 import {
   childrenOf,
@@ -204,6 +206,7 @@ function PaperPanel({ date }: { date: string }) {
   const generation = useRef(0);
   const resizing = useRef(0);
   const titleDragCleanup = useRef<(() => void) | null>(null);
+  const titleDragging = useRef(false);
   useEffect(() => {
     generation.current++;
     return () => {
@@ -308,7 +311,7 @@ function PaperPanel({ date }: { date: string }) {
    * 触发系统拖动，鼠标一动窗口就跑了。
    */
   const startTitleDrag = (e: React.PointerEvent) => {
-    if (e.button !== 0 || !inTauri) return;
+    if (e.button !== 0 || !inTauri || titleDragging.current) return;
     if ((e.target as HTMLElement).closest("button,input")) return;
     const sx = e.clientX;
     const sy = e.clientY;
@@ -322,7 +325,37 @@ function PaperPanel({ date }: { date: string }) {
       if (Math.hypot(ev.clientX - sx, ev.clientY - sy) < 4) return;
       dragging = true;
       cleanup();
-      void win.startDragging().catch(() => undefined);
+      titleDragging.current = true;
+      const epoch = generation.current;
+      const active = () => current(epoch) && usePapers.getState().papers[date]?.open !== false;
+      void (async () => {
+        await win.startDragging();
+        const released = await invoke<boolean>("desktop_wait_drag_end");
+        if (!released || !active()) return;
+        await queueWindowOperation(win.label, async () => {
+          if (!active()) return;
+          const [geometry, areas, factor] = await Promise.all([
+            normalPaperGeometry(win, () => ({ active: active(), collapsed: usePapers.getState().papers[date]?.collapsed ?? false })),
+            readMonitors(), win.scaleFactor(),
+          ]);
+          if (!geometry || !active() || !Number.isFinite(factor) || factor <= 0) return;
+          const rect = { ...geometry, h: geometry.h ?? COLLAPSED_PAPER_H };
+          const cx = (rect.x + rect.w / 2) * factor, cy = (rect.y + rect.h / 2) * factor;
+          const distance = (area: (typeof areas)[number]) => Math.hypot(
+            cx - Math.max(area.x, Math.min(cx, area.x + area.w)),
+            cy - Math.max(area.y, Math.min(cy, area.y + area.h)),
+          );
+          const area = areas.reduce<(typeof areas)[number] | undefined>((best, candidate) => !best || distance(candidate) < distance(best) ? candidate : best, undefined);
+          if (!active()) return;
+          if (!area) { setGeometry(date, geometry); return; }
+          const logicalArea = { x: area.x / factor, y: area.y / factor, w: area.w / factor, h: area.h / factor };
+          const edge = dragDockEdge(rect, logicalArea, true);
+          if (!edge) { setGeometry(date, geometry); return; }
+          const offset = Math.max(0, edge === "top" ? rect.x - logicalArea.x : rect.y - logicalArea.y);
+          setGeometry(date, { ...geometry, edge, edgeY: offset, dockOffset: offset, edgeMonitor: area.id, form: "capsule" });
+        });
+        if (active()) setOperationError("");
+      })().catch(error => { if (active()) setOperationError(String(error)); }).finally(() => { titleDragging.current = false; });
     };
     const cleanup = () => {
       window.removeEventListener("pointermove", onMove);

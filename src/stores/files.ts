@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import { tauriJsonStorage } from "@/lib/storage";
 import type { DirectorySnapshot, MovedFenceEntry } from "@/lib/tauri";
+import { stickyAppearancePatch, type StickyAppearance } from "@/features/desktop/sticky-presentation";
 import { normalizedMappingPath, reconcileDirectoryItems } from "@/features/files/directory-mapping-core";
 
 /* ── 文件条目库：files.json ───────────────────────────── */
@@ -299,11 +300,12 @@ export const useFiles = create<FilesState>()(
 
 /* ── 栅栏几何/开关：fences.json ───────────────────────── */
 
-export interface FenceState {
+export interface FenceState extends StickyAppearance {
   /** Edge mode is independent of the saved normal rectangle. Missing values are legacy paper mode. */
   form?: "paper" | "capsule";
-  edge?: "left" | "right";
+  edge?: "left" | "right" | "top";
   edgeY?: number;
+  dockOffset?: number;
   edgeMonitor?: string;
   x: number;
   y: number;
@@ -323,9 +325,9 @@ export interface FenceState {
 interface FencesStoreState {
   fences: Record<string, FenceState>;
   setForm: (categoryId: string, form: "paper" | "capsule") => void;
-  setEdge: (categoryId: string, edge: "left" | "right") => void;
+  setEdge: (categoryId: string, edge: "left" | "right" | "top") => void;
   setEdgeY: (categoryId: string, edgeY: number) => void;
-  setDockPosition: (categoryId: string, position: { edge?: "left" | "right"; edgeY?: number; edgeMonitor?: string }) => void;
+  setDockPosition: (categoryId: string, position: { edge?: "left" | "right" | "top"; edgeY?: number; edgeMonitor?: string; dockOffset?: number }) => void;
   setGeometry: (categoryId: string, geo: { x: number; y: number; w: number; h: number }) => void;
   setGhost: (categoryId: string, ghost: boolean) => void;
   setOpen: (categoryId: string, open: boolean) => void;
@@ -333,6 +335,7 @@ interface FencesStoreState {
   setScale: (categoryId: string, scale: number) => void;
   setViewMode: (categoryId: string, mode: "icons" | "list") => void;
   setLocked: (categoryId: string, locked: boolean) => void;
+  setStickyAppearance: (categoryId: string, patch: Partial<StickyAppearance>) => void;
 }
 
 export const DEFAULT_FENCE: FenceState = { x: 180, y: 160, w: 280, h: 340, ghost: true, open: false, viewMode: "icons", locked: false };
@@ -341,6 +344,9 @@ export const useFences = create<FencesStoreState>()(
   persist(
     (set) => ({
       fences: {},
+
+      setStickyAppearance: (categoryId, patch) => set(s => ({ fences: { ...s.fences,
+        [categoryId]: { ...(s.fences[categoryId] ?? DEFAULT_FENCE), ...stickyAppearancePatch(patch) } } })),
 
       setViewMode: (categoryId, viewMode) => set(s => ({ fences: { ...s.fences,
         [categoryId]: { ...(s.fences[categoryId] ?? DEFAULT_FENCE), viewMode } } })),

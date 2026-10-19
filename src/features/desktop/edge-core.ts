@@ -1,6 +1,6 @@
 export interface NormalRect { x: number; y: number; w: number; h: number }
 export interface WorkArea extends NormalRect { scale: number }
-export type Edge = "left" | "right";
+export type Edge = "left" | "right" | "top";
 export const EDGE_TAB_W = 112;
 export const EDGE_TAB_H = 44;
 export function allocateEdgeY(id: string, slots: { id: string; y?: number }[], preferred?: number): number {
@@ -26,16 +26,34 @@ export function queueWindowOperation(label: string, operation: () => Promise<voi
 }
 
 const clamp = (n: number, min: number, max: number) => Math.min(Math.max(n, min), Math.max(min, max));
-export function edgeBounds(area: WorkArea, edge: Edge, y: number, opened: boolean, normal: NormalRect, tabHeight = EDGE_TAB_H): NormalRect {
+export function edgeBounds(area: WorkArea, edge: Edge, y: number, opened: boolean, normal: NormalRect, tabHeight = EDGE_TAB_H, tabWidth = EDGE_TAB_W): NormalRect {
   const s = area.scale;
-  const w = Math.min(area.w, Math.round((opened ? clamp(normal.w, 280, 480) + EDGE_TAB_W : EDGE_TAB_W) * s));
-  const h = Math.min(area.h, Math.round((opened ? clamp(normal.h, 240, 640) : tabHeight) * s));
+  const width = clamp(Number.isFinite(tabWidth) ? tabWidth : EDGE_TAB_W, 96, 280);
+  if (edge === "top") {
+    const w = Math.min(area.w, Math.round((opened ? Math.max(width, clamp(normal.w, 280, 900)) : width) * s));
+    const h = Math.min(area.h, Math.round((opened ? clamp(normal.h, 240, 1000) + tabHeight : tabHeight) * s));
+    return { x: Math.round(clamp(area.x + y * s, area.x, area.x + area.w - w)), y: Math.round(area.y), w, h };
+  }
+  const w = Math.min(area.w, Math.round((opened ? clamp(normal.w, 280, 900) + width : width) * s));
+  const h = Math.min(area.h, Math.round((opened ? clamp(normal.h, 240, 1000) : tabHeight) * s));
   return { x: Math.round(edge === "left" ? area.x : area.x + area.w - w), y: Math.round(clamp(area.y + y * s, area.y, area.y + area.h - h)), w, h };
 }
 
 /** Keep the sticky arrow under a stationary pointer when a bottom preview grows upward. */
-export function edgeTabOffset(area: WorkArea, y: number, normal: NormalRect, tabHeight = EDGE_TAB_H): number {
-  return (edgeBounds(area, "left", y, false, normal, tabHeight).y - edgeBounds(area, "left", y, true, normal, tabHeight).y) / area.scale;
+export function edgeTabOffset(area: WorkArea, y: number, normal: NormalRect, tabHeight = EDGE_TAB_H, edge: Edge = "left", tabWidth = EDGE_TAB_W): number {
+  const closed = edgeBounds(area, edge, y, false, normal, tabHeight, tabWidth);
+  const opened = edgeBounds(area, edge, y, true, normal, tabHeight, tabWidth);
+  return (edge === "top" ? closed.x - opened.x : closed.y - opened.y) / area.scale;
+}
+
+/** All coordinates are physical; the bottom edge intentionally remains unsupported. */
+export function nearestDockEdge(rect: NormalRect, area: NormalRect): Edge {
+  const candidates: { edge: Edge; distance: number }[] = [
+    { edge: "top", distance: Math.abs(rect.y - area.y) },
+    { edge: "left", distance: Math.abs(rect.x - area.x) },
+    { edge: "right", distance: Math.abs(rect.x + rect.w - area.x - area.w) },
+  ];
+  return candidates.reduce((nearest, candidate) => candidate.distance < nearest.distance ? candidate : nearest).edge;
 }
 
 export interface EdgePort {
@@ -54,15 +72,19 @@ export class EdgeController {
   private generation = 0;
   private disposed = false;
   private area: WorkArea | null = null;
-  constructor(private port: EdgePort, private normal: () => NormalRect) {}
+  constructor(private port: EdgePort, private normal: () => NormalRect,
+    private appearance: () => { tabWidth?: number; tabHeight?: number; previewWidth?: number; previewHeight?: number } = () => ({})) {}
   dispose() { this.disposed = true; this.generation++; }
 
-  place(opened: boolean, edge: Edge, y: number, tabHeight = EDGE_TAB_H): Promise<void> {
+  place(opened: boolean, edge: Edge, y: number, span?: number): Promise<void> {
     return this.perform(async valid => {
       this.area = await this.port.monitor() ?? this.area;
       if (!valid()) return;
       if (!this.area) throw new Error("Cannot locate the screen work area");
-      const rect = edgeBounds(this.area, edge, y, opened, this.normal(), tabHeight);
+      const normal = this.normal(), appearance = this.appearance();
+      const tabHeight = edge === "top" ? appearance.tabHeight ?? EDGE_TAB_H : span ?? appearance.tabHeight ?? EDGE_TAB_H;
+      const tabWidth = edge === "top" ? span ?? appearance.tabWidth : appearance.tabWidth;
+      const rect = edgeBounds(this.area, edge, y, opened, { ...normal, w: appearance.previewWidth ?? normal.w, h: appearance.previewHeight ?? normal.h }, tabHeight, tabWidth);
       await this.port.ignore(false); if (!valid()) return;
       await this.port.resize?.(false); if (!valid()) return;
       await this.port.layer(true, valid); if (!valid()) return;

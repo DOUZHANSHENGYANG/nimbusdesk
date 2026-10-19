@@ -18,11 +18,30 @@ test('moving a middle implicit member down preserves all other members in order'
 test('dragging to a new queue inserts after its implicit members rather than jumping to the top',()=>{const h=harness();h.entries[2].edge='left';h.reserveQueue('a',area,'right');h.moveDockItem('c',area,'right',700);assert.deepEqual(h.queueSnapshot('c',area,'right').layout.order,['a','b','c']);});
 test('moving a whole implicit queue preserves its visible order independent of creation order',()=>{const h=harness();h.entries.reverse();h.reserveQueue('a',area,'right');const key=core.groupKey(area.id,'right');h.moveDockGroup(key,area,'left',80);assert.deepEqual(h.queueSnapshot('a',area,'left').layout.order,['a','b','c']);});
 
-test('a locked member prevents direct item movement and group relocation without changing queue state',()=>{
+test('a locked member blocks its own drag and group relocation while an unlocked neighbor may move independently',()=>{
  const h=harness();h.entries[1].locked=true;h.reserveQueue('a',area,'right');
  const before=JSON.stringify(h.store.getState().groups),positions=JSON.stringify(h.entries);
  assert.equal(h.moveDockItem('b',area,'left',200),false);
- assert.equal(h.moveDockItem('a',area,'right',200),false,'reorder cannot indirectly displace a locked neighbor');
  assert.equal(h.moveDockGroup(core.groupKey(area.id,'right'),area,'left',80),false);
  assert.equal(JSON.stringify(h.store.getState().groups),before);assert.equal(JSON.stringify(h.entries),positions);
+ const lockedBefore=h.queueSnapshot('b',area,'right').slot.y;
+ assert.equal(h.moveDockItem('a',area,'right',400),true);
+ assert.equal(h.queueSnapshot('b',area,'right').slot.y,lockedBefore,'locked neighbor retains its exact visible anchor');
+ assert.equal(h.queueSnapshot('a',area,'right').slot.y,400);
+});
+
+test('dropping one sticky at a free height persists that anchor rather than returning to the queue start',()=>{
+ const h=harness();h.reserveQueue('a',area,'right');
+ assert.equal(h.moveDockItem('a',area,'right',440),true);
+ assert.equal(h.entries[0].dockOffset,440);
+ assert.equal(h.queueSnapshot('a',area,'right').slot.y,440);
+ assert.notEqual(h.queueSnapshot('b',area,'right').slot.y,440);
+});
+
+test('moving a folded group retains independently positioned members and its folded preference',()=>{
+ const h=harness();h.entries[0].dockOffset=440;h.reserveQueue('a',area,'right');
+ const key=core.groupKey(area.id,'right');h.store.getState().setCollapsed(key,true);
+ assert.equal(h.moveDockGroup(key,area,'left',100),true);
+ assert.equal(h.entries[0].dockOffset,492);
+ assert.equal(h.queueSnapshot('a',area,'left').group.collapsed,true);
 });

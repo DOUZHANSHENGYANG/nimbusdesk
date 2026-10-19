@@ -1,0 +1,52 @@
+import assert from 'node:assert/strict';
+import { pathToFileURL } from 'node:url';
+const { chromium } = await import(pathToFileURL(process.env.SEARCH_PLAYWRIGHT_PATH).href);
+const server = process.env.SEARCH_REVIEW_ORIGIN ? null : await (await import('vite')).createServer({ server: { host: '127.0.0.1', port: 17807, strictPort: true } });
+await server?.listen();
+const browser = await chromium.launch({ headless: true, executablePath: process.env.SEARCH_BROWSER_PATH });
+try {
+  const page = await browser.newPage({ viewport: { width: 44, height: 40 } }), errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  // Reuse the native fixture without adding another boot path or modifying its saved side defaults.
+  await page.route('**/fixtures/edge.html*', async route => {
+    const response = await route.fetch();
+    const source = (await response.text()).replace(/edge:\s*['"]right['"]/g, 'edge: "top"').replace(/groupKey\(monitorId,\s*['"]right['"]\)/g, 'groupKey(monitorId, "top")');
+    await route.fulfill({ response, body: source });
+  });
+  const base = `${process.env.SEARCH_REVIEW_ORIGIN || 'http://127.0.0.1:17807'}/src/features/desktop/fixtures/edge.html`;
+  await page.goto(base + '?hub&crowded&docked');
+  const hub = page.getByRole('button', { name: '桌面队列，40个窗口', exact: true });
+  await hub.waitFor();
+  await page.waitForFunction(() => edgeReview.visible && edgeReview.size.width === 44 && edgeReview.size.height === 40);
+  assert.equal(await page.evaluate(() => edgeReview.position.y), 0, 'top handle touches the work-area top');
+  assert.ok(await page.evaluate(() => edgeReview.position.x < 1200), 'handle uses horizontal queue coordinates');
+  assert.equal(await hub.evaluate(element => getComputedStyle(element).borderTopLeftRadius), '0px');
+  assert.equal(await hub.evaluate(element => getComputedStyle(element).borderBottomLeftRadius), '10px');
+  assert.equal(await page.evaluate(() => edgeReview.calls.some(call => call.cmd.endsWith('|set_focus'))), false);
+  await hub.click();
+  assert.equal(await hub.getAttribute('aria-expanded'), 'false');
+  await hub.click();
+  assert.equal(await hub.getAttribute('aria-expanded'), 'true');
+  await hub.click({ button: 'right' });
+  const menu = page.getByRole('menu', { name: '桌面队列操作', exact: true });
+  await menu.waitFor();
+  await page.waitForFunction(() => edgeReview.size.width === 280 && edgeReview.size.height >= 264);
+  await page.setViewportSize({ width: 280, height: 560 });
+  assert.equal(await page.evaluate(() => edgeReview.position.y), 0, 'menu opens below the top edge');
+  await page.getByRole('menuitem', { name: '整列吸附到左侧', exact: true }).waitFor();
+  await page.getByRole('menuitem', { name: '整列吸附到右侧', exact: true }).waitFor();
+  assert.ok(await page.evaluate(() => edgeReview.position.x >= 0 && edgeReview.position.x + edgeReview.size.width <= 1280));
+  await page.keyboard.press('Escape');
+  await menu.waitFor({ state: 'hidden' });
+  await page.waitForFunction(() => edgeReview.size.width === 44);
+  await page.waitForFunction(() => document.activeElement?.getAttribute('aria-label') === '桌面队列，40个窗口');
+  assert.equal(await page.evaluate(() => document.activeElement?.getAttribute('aria-label')), '桌面队列，40个窗口');
+  await page.setViewportSize({ width: 44, height: 40 });
+  await hub.click({ button: 'right' });
+  await page.setViewportSize({ width: 280, height: 560 });
+  await page.getByRole('menuitem', { name: '整列吸附到左侧', exact: true }).click();
+  await page.waitForFunction(() => Object.values(edgeReview.fixtures['edge-workspace'].state.groups).some(group => group.edge === 'left' && group.order.length === 40));
+  await page.waitForFunction(() => !edgeReview.visible);
+  assert.deepEqual(errors, []);
+  console.log('PASS top queue handle, fold, in-bounds menu, keyboard dismissal and transfer to left edge');
+} finally { await browser.close(); await server?.close(); }

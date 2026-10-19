@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { getCurrentWebviewWindow, getAllWebviewWindows } from "@tauri-apps/api/webviewWindow";
 import { cursorPosition, monitorFromPoint, currentMonitor } from "@tauri-apps/api/window";
 import { PhysicalPosition } from "@tauri-apps/api/dpi";
-import { Eye, EyeOff, X, Pin, PinOff, PanelRightClose, ArrowLeftRight, Expand, List, LayoutGrid, LockKeyhole, UnlockKeyhole, MoreHorizontal } from "lucide-react";
+import { Eye, EyeOff, X, Pin, PinOff, PanelRightClose, ArrowLeftRight, Expand, List, LayoutGrid, LockKeyhole, UnlockKeyhole, MoreHorizontal, Palette } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Providers } from "@/app/providers";
@@ -79,6 +79,8 @@ function FencePanel({ categoryId }: { categoryId: string }) {
     active: docked, edge: fence.edge ?? "right", edgeY: fence.edgeY,
     normal: () => { const {x,y,w,h} = useFences.getState().fences[categoryId] ?? DEFAULT_FENCE; return {x,y,w,h}; },
     pinned, locked,
+    appearance: fence,
+    onAppearanceChange: patch => useFences.getState().setStickyAppearance(categoryId, patch),
     onEdgeChange: edge => setEdge(categoryId, edge),
     onEdgeYChange: y => setEdgeY(categoryId, y),
     onUndock: () => setForm(categoryId, "paper"),
@@ -287,9 +289,9 @@ function FencePanel({ categoryId }: { categoryId: string }) {
       const edge = dragDockEdge(normal, logicalArea, userTitleDrag.current);
       userTitleDrag.current = false;
       if (edge) {
+        const offset = Math.max(0, (edge === "top" ? self.x - monitor.workArea.position.x : self.y - monitor.workArea.position.y) / scale);
         setGeometry(categoryId, normal);
-        setEdge(categoryId, edge);
-        setEdgeY(categoryId, Math.max(0, (self.y - monitor.workArea.position.y) / scale));
+        useFences.getState().setDockPosition(categoryId, { edge, edgeY: offset, dockOffset: offset, edgeMonitor: `${monitor.name ?? "display"}@${monitor.position.x},${monitor.position.y}` });
         modeRef.current = true;
         setForm(categoryId, "capsule");
         return;
@@ -693,6 +695,7 @@ function FencePanel({ categoryId }: { categoryId: string }) {
         <div
           onPointerDown={startTitleDrag}
           className="flex h-9 shrink-0 cursor-default items-center gap-1.5 border-b border-border/60 px-3 select-none"
+          style={docked && dock.tabTop > 0 ? { [dock.edge === "right" ? "paddingLeft" : "paddingRight"]: 24 } : undefined}
         >
           {renaming ? (
             <input
@@ -751,6 +754,7 @@ function FencePanel({ categoryId }: { categoryId: string }) {
               onClick={() => setLocked(categoryId, !locked)}>
               {locked ? <LockKeyhole className="size-3.5" /> : <UnlockKeyhole className="size-3.5" />}
             </TitleBtn>
+            {docked && <TitleBtn title={i18n.language.startsWith("en") ? "Sticky appearance and size" : "便签外观与大小"} onClick={() => void dock.openAppearance()}><Palette className="size-3.5" /></TitleBtn>}
             <div ref={controlsRef} className="relative">
               <button ref={controlsButtonRef} type="button" aria-label={t("files.fenceOptions")} title={t("files.fenceOptions")}
                 aria-expanded={controlsOpen} onClick={() => setControlsOpen(open => !open)}

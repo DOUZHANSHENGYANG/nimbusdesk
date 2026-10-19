@@ -6,7 +6,7 @@
   "scripts": {
     "check:tools": "node --test src/features/tools/core.test.mjs src/features/quick-tools/core.test.mjs",
     "check:search": "node --test src/features/search/core.test.mjs",
-    "check:projects": "node --test src/features/projects/core.test.mjs src/features/projects/store.test.mjs src/features/projects/runtime-core.test.mjs src/features/projects/backup.test.mjs src/features/projects/project-files.test.mjs",
+    "check:projects": "node --test src/features/projects/core.test.mjs src/features/projects/store.test.mjs src/features/projects/runtime-core.test.mjs src/features/projects/backup.test.mjs src/features/projects/project-files.test.mjs src/features/projects/zentao-core.test.mjs src/features/projects/zentao-controller.test.mjs src/features/projects/zentao-store.test.mjs src/features/projects/zentao-runtime.test.mjs src/features/projects/zentao-writeback-core.test.mjs src/features/projects/zentao-writeback-controller.test.mjs",
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
@@ -20,7 +20,7 @@
     "build:preview": "node scripts/build-preview.mjs",
     "check:preview": "node scripts/check-preview-sync.mjs",
     "check:plans": "node --test src/features/plans/attachment-api.test.mjs src/features/settings/backup.test.mjs src/lib/storage.test.mjs src/features/plans/paper-window.test.mjs src/features/plans/paper-interactions.test.mjs src/features/plans/store-batch.test.mjs src/features/plans/paper-row.test.mjs",
-    "check:desktop": "node --test src/features/files/desktop.test.mjs src/features/files/fence-edge.test.mjs src/features/desktop/edge-core.test.mjs src/features/files/fence-interaction.test.mjs src/features/files/menu-popup-interaction.test.mjs src/features/desktop/queue-core.test.mjs src/features/desktop/queue-registry.test.mjs src/features/desktop/edge-runtime-core.test.mjs src/features/desktop/edge-runtime.test.mjs src/features/desktop/edge-dock.test.mjs src/features/files/import-files.test.mjs src/features/files/use-file-drop.test.mjs src/features/files/desktop-actions.test.mjs src/features/files/fence-presentation.test.mjs"
+    "check:desktop": "node --test src/features/files/desktop.test.mjs src/features/files/fence-edge.test.mjs src/features/desktop/edge-core.test.mjs src/features/files/fence-interaction.test.mjs src/features/files/menu-popup-interaction.test.mjs src/features/desktop/queue-core.test.mjs src/features/desktop/queue-registry.test.mjs src/features/desktop/edge-runtime-core.test.mjs src/features/desktop/edge-runtime.test.mjs src/features/desktop/edge-dock.test.mjs src/features/files/import-files.test.mjs src/features/files/use-file-drop.test.mjs src/features/files/desktop-actions.test.mjs src/features/files/fence-presentation.test.mjs src/features/desktop/sticky-presentation.test.mjs src/features/files/directory-mapping-core.test.mjs src/features/files/directory-mapping.test.mjs"
   },
   "dependencies": {
     "@floating-ui/dom": "^1.8.0",

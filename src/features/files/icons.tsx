@@ -19,12 +19,23 @@ import { cn } from "@/lib/utils";
 
 /* ── 原生图标缓存（按「路径 + 目标尺寸」，模块级；栅栏与文件页共享） ── */
 
-const nativeCache = new Map<string, string | null>();
+const CACHE_LIMIT = 512;
+const nativeCache = new Map<string, { value: string | null; expires: number }>();
 const pending = new Map<string, Promise<string | null>>();
-const subscribers = new Set<() => void>();
 
-function notify() {
-  for (const fn of subscribers) fn();
+function cachedIcon(key: string) {
+  const hit = nativeCache.get(key);
+  if (hit && hit.expires <= Date.now()) {
+    nativeCache.delete(key);
+    return undefined;
+  }
+  return hit;
+}
+
+function rememberIcon(key: string, value: string | null) {
+  nativeCache.delete(key);
+  nativeCache.set(key, { value, expires: Date.now() + (value ? 300_000 : 2_000) });
+  while (nativeCache.size > CACHE_LIMIT) nativeCache.delete(nativeCache.keys().next().value!);
 }
 
 /** 目标位图边长（物理像素）。取到 16 的整数倍，让缩小落在整数比例上 */
@@ -42,7 +53,7 @@ function targetSize(cssSize: number): number {
  * 是 6 倍以上的降采样，会丢掉细节显得发糊。Rust 侧做盒式滤波
  * （预乘 alpha 平均）质量更好，也顺带把 data URL 从 ~200KB 降到几 KB。
  *
- * 同一「路径 + 尺寸」只请求一次，结果模块级缓存；
+ * 同一「路径 + 尺寸」合并并发请求，成功短期缓存，失败允许稍后重试；
  * 取不到返回 null → 调用方回退 lucide 图标。
  */
 export function useNativeIcon(
@@ -51,48 +62,45 @@ export function useNativeIcon(
   cssSize = 20,
 ): string | null {
   const size = targetSize(cssSize);
-  const key = path ? `${path}\u{1}${size}` : "";
+  const key = enabled && path ? `${path}\u{1}${size}` : "";
 
-  const [icon, setIcon] = useState<string | null>(() =>
-    key ? (nativeCache.get(key) ?? null) : null,
+  const [icon, setIcon] = useState<{ key: string; value: string | null }>(() =>
+    ({ key, value: key ? cachedIcon(key)?.value ?? null : null }),
   );
 
   useEffect(() => {
     if (!key) {
-      setIcon(null);
+      setIcon({ key, value: null });
       return;
     }
-    if (nativeCache.has(key)) {
-      setIcon(nativeCache.get(key) ?? null);
+    const cached = cachedIcon(key);
+    if (cached) {
+      setIcon({ key, value: cached.value });
       return;
     }
     let alive = true;
-    const sub = () => {
-      if (alive) setIcon(nativeCache.get(key) ?? null);
-    };
-    subscribers.add(sub);
 
     const task =
       pending.get(key) ??
       nativeIcon(path as string, size)
         .catch(() => null)
         .then((v) => {
-          nativeCache.set(key, v);
+          rememberIcon(key, v);
           pending.delete(key);
-          notify();
           return v;
         });
     pending.set(key, task);
-    void task.then(() => sub());
+    void task.then((value) => {
+      if (alive) setIcon({ key, value });
+    });
 
     return () => {
       alive = false;
-      subscribers.delete(sub);
     };
   }, [key, path, size, enabled]);
 
   // enabled=false（非 Tauri 环境或调用方显式关闭）时不使用原生图标
-  return enabled ? icon : null;
+  return enabled && icon.key === key ? icon.value : null;
 }
 /**
  * 扩展名 → 专属图标 + 颜色（默认图标兜底）。
@@ -187,16 +195,16 @@ export function ItemIcon({
   /** 显示尺寸（CSS 像素），用于按 DPR 取合适分辨率的原生图标 */
   size?: number;
 }) {
-  const [broken, setBroken] = useState(false);
+  const [brokenUrl, setBrokenUrl] = useState<string | null>(null);
   const nativeUrl = useNativeIcon(type === "url" ? undefined : path, native && inTauri, size);
   if (type === "url") {
-    if (iconUrl && !broken) {
+    if (iconUrl && iconUrl !== brokenUrl) {
       return (
         <img
           src={iconUrl}
           alt=""
           loading="lazy"
-          onError={() => setBroken(true)}
+          onError={() => setBrokenUrl(iconUrl)}
           className={cn("shrink-0 rounded object-contain", className)}
         />
       );
@@ -205,12 +213,16 @@ export function ItemIcon({
   }
 
   // 本地条目：优先原生图标（与资源管理器/桌面一致），取不到再回退
-  if (nativeUrl) {
+  if (nativeUrl && nativeUrl !== brokenUrl) {
     return (
       <img
         src={nativeUrl}
         alt=""
         draggable={false}
+        onError={() => {
+          nativeCache.delete(`${path}\u{1}${targetSize(size)}`);
+          setBrokenUrl(nativeUrl);
+        }}
         className={cn("shrink-0 object-contain", className)}
       />
     );

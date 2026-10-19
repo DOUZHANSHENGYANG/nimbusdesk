@@ -102,7 +102,7 @@ try{
  await page.keyboard.press('Escape');await page.waitForFunction(()=>edgeReview.size.width===112);
  await activeTab.click({button:'right'});await page.getByRole('menu',{name:'窗口操作',exact:true}).waitFor();
  assert.equal(await page.getByRole('menuitem',{name:'恢复完整窗口',exact:true}).evaluate(element=>element===document.activeElement),true);
- await page.keyboard.press('End');assert.equal(await page.getByRole('menuitem',{name:'隐藏（可从队列找回）',exact:true}).evaluate(element=>element===document.activeElement),true);
+ await page.keyboard.press('End');assert.equal(await page.getByRole('menuitem',{name:'便签外观与大小',exact:true}).evaluate(element=>element===document.activeElement),true);
  await page.keyboard.press('Escape');await page.getByRole('menu',{name:'窗口操作',exact:true}).waitFor({state:'hidden'});await activeTab.focus();await page.keyboard.press('Escape');await page.waitForFunction(()=>edgeReview.size.width===112);
  await page.evaluate(()=>{edgeReview.monitors.push({name:'Second',position:{x:-1920,y:0},size:{width:1920,height:1080},workArea:{position:{x:-1920,y:0},size:{width:1920,height:1040}},scaleFactor:1.5});edgeReview.dragTarget={x:-1850,y:200};edgeReview.holdDragWait=true;});
  const box=await activeTab.boundingBox();await page.mouse.move(box.x+10,box.y+10);await page.mouse.down();await page.mouse.move(box.x+17,box.y+17);

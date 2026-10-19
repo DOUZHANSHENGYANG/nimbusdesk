@@ -15,7 +15,7 @@ const emptyGroup = (): QueueGroup => ({ monitorId: "", edge: "right", order: [],
 const isRecord = (value: unknown): value is Record<string, unknown> => !!value && typeof value === "object" && !Array.isArray(value);
 
 function cleanGroup(value: unknown): QueueGroup | null {
-  if (!isRecord(value) || typeof value.monitorId !== "string" || (value.edge !== "left" && value.edge !== "right")) return null;
+  if (!isRecord(value) || typeof value.monitorId !== "string" || (value.edge !== "left" && value.edge !== "right" && value.edge !== "top")) return null;
   return {
     monitorId: value.monitorId,
     edge: value.edge,

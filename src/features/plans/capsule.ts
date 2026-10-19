@@ -1,7 +1,7 @@
 import { childrenOf, type PlanTask } from "@/features/plans/types";
 
 /** PaperTodo inspired the edge-preview interaction. Placement is implemented by desktop/edge-dock. */
-export type CapsuleEdge = "left" | "right";
+export type CapsuleEdge = "left" | "right" | "top";
 export type PaperForm = "paper" | "capsule";
 
 /** Preserve the main task order and expose subtasks without recursing through corrupt identifiers. */

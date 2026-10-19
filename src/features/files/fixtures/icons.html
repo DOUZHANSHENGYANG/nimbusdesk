@@ -1,0 +1,22 @@
+<!doctype html><html><head><meta charset="UTF-8"></head><body><div id="root"></div><script type="module">
+import React,{useLayoutEffect,useState} from 'react';
+import {createRoot} from 'react-dom/client';
+import {mockIPC} from '@tauri-apps/api/mocks';
+const png='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScLbtAAAAABJRU5ErkJggg==';
+window.iconReview={calls:[],results:{good:png,other:png,bad:'data:image/png;base64,invalid',retry:null},snapshots:[],pending:{},png,imageErrors:[]};
+document.addEventListener('error',event=>{if(event.target instanceof HTMLImageElement)window.iconReview.imageErrors.push(event.target.src);},true);
+mockIPC(async(cmd,args)=>{
+ if(cmd!=='native_icon')return null;
+ const r=window.iconReview;r.calls.push(args);
+ if(args.path==='pending')return await new Promise(resolve=>r.pending.resolve=resolve);
+ return r.results[args.path]??null;
+});
+const {ItemIcon}=await import('/src/features/files/icons.tsx');
+function Fixture(){
+ const [state,setState]=useState({path:'disabled',native:false,mount:0});
+ window.iconReview.render=(next)=>setState(old=>({...old,...next}));
+ useLayoutEffect(()=>{window.iconReview.snapshots.push({path:state.path,src:document.querySelector('img')?.getAttribute('src')??null});});
+ return React.createElement(ItemIcon,{key:state.mount,type:'file',size:24,...state});
+}
+createRoot(document.getElementById('root')).render(React.createElement(Fixture));
+</script></body></html>

@@ -4,6 +4,46 @@ import {readFile} from 'node:fs/promises';
 import ts from 'typescript';
 const load=async()=>import('data:text/javascript;base64,'+Buffer.from(ts.transpileModule(await readFile(new URL('./edge-core.ts',import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText).toString('base64'));
 const area={x:-1920,y:0,w:1920,h:1080,scale:1.5};
+test('top dock expands below its tab while preserving its horizontal anchor on scaled monitors',async()=>{
+ const {edgeBounds,edgeTabOffset}=await load();
+ const monitor={x:-2400,y:-300,w:2400,h:1500,scale:1.5},normal={x:30,y:50,w:700,h:600};
+ const closed=edgeBounds(monitor,'top',1500,false,normal,70,180);
+ const opened=edgeBounds(monitor,'top',1500,true,normal,70,180);
+ assert.deepEqual(closed,{x:-270,y:-300,w:270,h:105});
+ assert.deepEqual(opened,{x:-1050,y:-300,w:1050,h:1005});
+ const offset=edgeTabOffset(monitor,1500,normal,70,'top',180);
+ assert.equal(opened.x+offset*monitor.scale,closed.x);
+ assert.equal(opened.y,closed.y);
+});
+test('nearest supported docking edge follows the dropped rectangle rather than its previous side',async()=>{
+ const {nearestDockEdge}=await load();
+ assert.equal(typeof nearestDockEdge,'function');
+ const a={x:-1920,y:-100,w:1920,h:1080};
+ assert.equal(nearestDockEdge({x:-1910,y:500,w:112,h:44},a),'left');
+ assert.equal(nearestDockEdge({x:-120,y:500,w:112,h:44},a),'right');
+ assert.equal(nearestDockEdge({x:-900,y:-90,w:112,h:44},a),'top');
+ assert.equal(nearestDockEdge({x:-1300,y:850,w:112,h:44},a),'left');
+});
+test('top controller treats queued span as width and keeps appearance height and normal restore intact',async()=>{
+ const {EdgeController}=await load();const normal={x:40,y:80,w:300,h:400},calls=[];
+ const controller=new EdgeController({label:'top-span',monitor:async()=>({x:0,y:0,w:1800,h:1200,scale:1.5}),ignore:async()=>{},size:async r=>calls.push(r),position:async()=>{},layer:async()=>{},show:async()=>{}},()=>normal,()=>({tabWidth:200,tabHeight:70}));
+ await controller.place(false,'top',300,150);
+ assert.deepEqual(calls.at(-1),{x:450,y:0,w:225,h:105});
+ await controller.restore(false);assert.equal(calls.at(-1).w,450);assert.equal(calls.at(-1).h,600);
+});
+test('custom sticky sizes and expanded preview remain independent from ordinary restoration',async()=>{
+ const {edgeBounds,EdgeController}=await load();
+ const normal={x:-900,y:100,w:300,h:400};
+ const tab=edgeBounds(area,'right',80,false,normal,80,200);
+ assert.equal(tab.w,300); assert.equal(tab.h,120);
+ const calls=[];
+ const port={label:'custom-sticky',monitor:async()=>area,ignore:async()=>{},size:async b=>calls.push(b),position:async()=>{},layer:async()=>{},show:async()=>{}};
+ const c=new EdgeController(port,()=>normal,()=>({tabWidth:200,previewWidth:700,previewHeight:650}));
+ await c.place(true,'right',80,80);
+ assert.equal(calls.at(-1).w,1350);assert.equal(calls.at(-1).h,975);
+ await c.restore(false);assert.equal(calls.at(-1).w,450);assert.equal(calls.at(-1).h,600);
+ assert.deepEqual(normal,{x:-900,y:100,w:300,h:400});
+});
 test('new papers and fences receive distinct persistent slots, including undefined prior positions',async()=>{
  const {allocateEdgeY}=await load();const slots=[{id:'todo-a'},{id:'todo-b'},{id:'fence-a'}];
  assert.equal(new Set(slots.map(slot=>allocateEdgeY(slot.id,slots))).size,3);

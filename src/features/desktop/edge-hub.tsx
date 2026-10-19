@@ -3,17 +3,17 @@ import { invoke } from "@tauri-apps/api/core";
 import { emitTo, listen } from "@tauri-apps/api/event";
 import { PhysicalPosition, PhysicalSize } from "@tauri-apps/api/dpi";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
-import { ArrowLeftRight, ChevronDown, ChevronUp, EyeOff, GripVertical, LayoutGrid, Monitor, X } from "lucide-react";
+import { ArrowLeftRight, ChevronDown, ChevronUp, EyeOff, GripHorizontal, GripVertical, LayoutGrid, Monitor, X } from "lucide-react";
 import { inTauri } from "@/lib/tauri";
 import { useSettings } from "@/stores/settings";
 import { queueWindowOperation } from "./edge-core";
 import { useEdgeWorkspace } from "./edge-workspace";
 import { useDesktopHydrated } from "./edge-runtime";
-import { planQueue, HUB_WIDTH, type MonitorArea, type QueueEdge } from "./queue-core";
+import { planQueue, type MonitorArea, type QueueEdge } from "./queue-core";
 import { desktopAction, desktopEntries, useDesktopEntries, type DesktopAction } from "./registry";
 import { moveDockGroup } from "./queue-registry";
 import { readMonitors } from "./monitors";
-import { groupDragDestination, hubKeyFromLabel, sameMonitors } from "./edge-runtime-core";
+import { groupDragDestination, hubBounds, hubKeyFromLabel, sameMonitors } from "./edge-runtime-core";
 
 /** One small native window controls a single monitor/side queue. */
 export function EdgeHub() {
@@ -61,16 +61,12 @@ export function EdgeHub() {
         await win.hide();
         return;
       }
-      const area = state.area, scale = area.scale, logicalH = area.h / scale;
-      const w = Math.min(state.menu ? 280 : HUB_WIDTH, area.w / scale);
-      const h = Math.min(state.menu ? Math.max(264, Math.min(560, 176 + state.layout.order.length * 32)) : 40, logicalH);
-      const y = Math.max(0, Math.min(state.layout.hubY, logicalH - h));
-      const x = state.group.edge === "left" ? area.x : area.x + area.w - w * scale;
+      const bounds = hubBounds(state.area, state.group.edge, state.layout.hubY, state.menu, state.layout.order.length);
       await win.setAlwaysOnBottom(false); if (!current()) return;
       await win.setAlwaysOnTop(true); if (!current()) return;
       await win.setResizable(false); if (!current()) return;
-      await win.setSize(new PhysicalSize(Math.max(1, Math.round(w * scale)), Math.max(1, Math.round(h * scale)))); if (!current()) return;
-      await win.setPosition(new PhysicalPosition(Math.round(x), Math.round(area.y + y * scale))); if (!current()) return;
+      await win.setSize(new PhysicalSize(bounds.w, bounds.h)); if (!current()) return;
+      await win.setPosition(new PhysicalPosition(bounds.x, bounds.y)); if (!current()) return;
       await win.show(); if (!current()) return;
       if (activate) await win.setFocus();
     }).catch(report);
@@ -143,7 +139,7 @@ export function EdgeHub() {
   };
   const transfer = (target: MonitorArea, edge: QueueEdge) => {
     closeMenu();
-    if (key && group) moveDockGroup(key, target, edge, group.offset);
+    if (key && group) moveDockGroup(key, target, edge, group.offset, "user", area);
   };
   const main = async (route: string) => {
     closeMenu();
@@ -182,7 +178,7 @@ export function EdgeHub() {
         const destination = groupDragDestination({ x: pos.x, y: pos.y, w: size.width, h: size.height }, available);
         if (destination) {
           const source = latest.current.group;
-          if (moveDockGroup(key, destination.area, destination.edge, destination.offset)
+          if (moveDockGroup(key, destination.area, destination.edge, destination.offset, "user", latest.current.area)
             && source && (source.monitorId !== destination.area.id || source.edge !== destination.edge)) hidden.current = true;
         }
       }).catch(report).finally(() => {
@@ -223,9 +219,10 @@ export function EdgeHub() {
         if (event.nativeEvent.isComposing) return;
         if (event.key === "ContextMenu" || (event.shiftKey && event.key === "F10") || event.key === "ArrowDown") { event.preventDefault(); openMenu(); }
       }}
-      className="flex h-10 flex-col items-center justify-center gap-0.5 overflow-hidden border border-brand/40 bg-popover text-brand outline-none hover:bg-brand/15 active:bg-brand/25 focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand"
-      style={{ width: HUB_WIDTH, borderRadius: group.edge === "left" ? "0 10px 10px 0" : "10px 0 0 10px" }}>
-      <GripVertical className="size-3" aria-hidden="true" /><span className="text-[10px] font-medium tabular-nums">{members.length}</span>
+      className="group/queue relative flex h-full w-full flex-col items-center justify-center gap-0.5 overflow-hidden border border-brand/40 bg-popover text-brand outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand"
+      style={{ borderRadius: group.edge === "top" ? "0 0 10px 10px" : group.edge === "left" ? "0 10px 10px 0" : "10px 0 0 10px" }}>
+      <span aria-hidden="true" className="pointer-events-none absolute inset-0 bg-current opacity-0 group-hover/queue:opacity-15 group-active/queue:opacity-25" />
+      {group.edge === "top" ? <GripHorizontal className="relative size-3" aria-hidden="true" /> : <GripVertical className="relative size-3" aria-hidden="true" />}<span className="relative text-[10px] font-medium tabular-nums">{members.length}</span>
     </button>}
     {menu && <div ref={menuRef} role="menu" aria-label={en ? "Desktop queue actions" : "桌面队列操作"} onKeyDown={menuKeyboard} className="flex h-full w-full flex-col overflow-hidden rounded-lg border border-border bg-popover p-1 text-popover-foreground shadow-xl">
       <div className="flex h-8 shrink-0 items-center gap-1 px-2 text-xs font-medium"><span className="min-w-0 flex-1 truncate">{en ? `Desktop windows (${members.length})` : `桌面窗口（${members.length}）`}</span><button type="button" aria-label={en ? "Close menu" : "关闭菜单"} className="flex size-6 items-center justify-center rounded hover:bg-muted focus-visible:outline focus-visible:outline-2 focus-visible:outline-brand" onClick={closeMenu}><X className="size-3.5" /></button></div>
@@ -233,7 +230,8 @@ export function EdgeHub() {
         {menuItem(group.collapsed ? (en ? "Expand queue" : "展开整列胶囊") : (en ? "Collapse queue" : "收起整列胶囊"), group.collapsed ? <ChevronDown className="size-3.5" /> : <ChevronUp className="size-3.5" />, () => { toggle(); closeMenu(); })}
         {menuItem(en ? "Restore all windows" : "恢复整列窗口", <LayoutGrid className="size-3.5" />, () => void act("restore"))}
         {menuItem(en ? "Hide queue until recalled" : "隐藏整列（托盘可找回）", <EyeOff className="size-3.5" />, () => void act("hide"))}
-        {area && menuItem(en ? "Move to opposite edge" : "移到屏幕另一侧", <ArrowLeftRight className="size-3.5" />, () => transfer(area, group.edge === "left" ? "right" : "left"), movementLocked)}
+        {area && group.edge !== "top" && menuItem(en ? "Move to opposite edge" : "移到屏幕另一侧", <ArrowLeftRight className="size-3.5" />, () => transfer(area, group.edge === "left" ? "right" : "left"), movementLocked)}
+        {area && (group.edge === "top" ? ["left", "right"] as const : ["top"] as const).map(edge => <div key={edge}>{menuItem(en ? `Dock queue to ${edge} edge` : `整列吸附到${edge === "top" ? "顶部" : edge === "left" ? "左侧" : "右侧"}`, <ArrowLeftRight className="size-3.5" />, () => transfer(area, edge), movementLocked)}</div>)}
         {monitors.filter(monitor => monitor.id !== group.monitorId).map(monitor => <div key={monitor.id}>{menuItem(en ? `Move to ${monitor.name ?? monitor.id}` : `移到${monitor.name ?? monitor.id}`, <Monitor className="size-3.5" />, () => transfer(monitor, group.edge), movementLocked)}</div>)}
         <div role="separator" className="my-1 h-px bg-border" />
         {layout?.order.map(id => {

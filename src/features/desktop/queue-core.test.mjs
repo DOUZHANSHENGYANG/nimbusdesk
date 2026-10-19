@@ -27,6 +27,53 @@ function assertBounded(plan, height) {
   for (let i = 1; i < visible.length; i++) assert.ok(visible[i].y >= visible[i - 1].y + visible[i - 1].h + 4 - 1e-8);
 }
 
+test('independent offsets survive free moves without snapping all tabs into a compact queue',()=>{
+ const plan=core().planQueue(area,group(),[{id:'a',dockOffset:180},{id:'b',dockOffset:530}]);
+ assert.equal(plan.slots.find(s=>s.id==='a').y,180);
+ assert.equal(plan.slots.find(s=>s.id==='b').y,530);
+ assertBounded(plan,768);
+});
+test('colliding moved tabs avoid locked individual anchors and keep the hub reachable',()=>{
+ const plan=core().planQueue(area,group({order:['moving','locked']}),[{id:'moving',dockOffset:320},{id:'locked',dockOffset:320,locked:true}]);
+ assert.equal(plan.slots.find(s=>s.id==='locked').y,320);
+ assert.notEqual(plan.slots.find(s=>s.id==='moving').y,320);
+ assertBounded(plan,768);
+});
+test('top queue uses horizontal logical positions, custom widths and a bounded hub',()=>{
+ const top={...area,w:1800,h:900,scale:1.5};
+ const plan=core().planQueue(top,group({edge:'top'}),[{id:'a',edge:'top',dockOffset:150,tabWidth:180},{id:'b',edge:'top',dockOffset:800,tabWidth:200}]);
+ assert.equal(plan.hubH,44);
+ assert.deepEqual(plan.slots.map(s=>[s.y,s.h]),[[150,180],[800,200]]);
+ assertBounded(plan,1200);
+ const overflow=core().planQueue({...top,w:300},group({edge:'top'}),Array.from({length:20},(_,i)=>({id:`top-${i}`,edge:'top',dockOffset:i*10,tabWidth:180})));
+ assert.ok(overflow.overflow.length>0);assertBounded(overflow,200);
+});
+test('locked anchors take precedence over the hub and survive high-DPI monitor coordinates',()=>{
+ const plan=core().planQueue({...area,x:-2560,y:-200,h:1152,scale:1.5},group(),[{id:'locked',dockOffset:48,locked:true},{id:'bottom',dockOffset:700}]);
+ assert.equal(plan.slots.find(s=>s.id==='locked').y,48);
+ assert.equal(plan.slots.find(s=>s.id==='bottom').y,700);
+ assert.notEqual(plan.hubY,48);assertBounded(plan,768);
+});
+test('anchored overflow remains complete, bounded and deterministic for crowded and tiny work areas',()=>{
+ const {planQueue}=core();
+ for(const edge of ['left','right','top'])for(const extent of [0,24,150,220,768]){
+  const input=Array.from({length:25},(_,i)=>({id:`${i}`,edge,dockOffset:(i*113)%900-40,locked:i%4===0,tabHeight:40+i*3,tabWidth:96+i*7}));
+  const monitor={...area,w:extent*1.5,h:extent*1.5,scale:1.5},prefs=group({edge});
+  const before=structuredClone(input),plan=planQueue(monitor,prefs,input);
+  assertBounded(plan,extent);
+  const represented=[...plan.slots.filter(s=>s.visible).map(s=>s.id),...plan.overflow];
+  assert.equal(new Set(represented).size,input.length);assert.equal(represented.length,input.length);
+  assert.deepEqual(plan,planQueue(monitor,prefs,input));assert.deepEqual(input,before);
+ }
+});
+test('collapsed anchored groups keep all entries accessible and clamp invalid offsets safely',()=>{
+ const {planQueue}=core(),input=[{id:'a',dockOffset:600},{id:'b',dockOffset:NaN}];
+ const collapsed=planQueue(area,group({collapsed:true}),input);
+ assert.deepEqual(collapsed.overflow,collapsed.order);assertBounded(collapsed,768);
+ const invalid=planQueue(area,group(),[{id:'a',dockOffset:NaN},{id:'b',dockOffset:Infinity}]);
+ assert.deepEqual(invalid.slots.map(s=>s.y),[92,140]);
+});
+
 test('group keys are stable hex and distinguish side, Unicode and delimiter-like monitor IDs', () => {
   const { groupKey } = core();
   const keys = ['显示器/1', 'primary', 'primary:right', ''].flatMap(id => ['left', 'right'].map(edge => groupKey(id, edge)));
@@ -103,6 +150,17 @@ test('offset survives when possible and clamps at both bounds after work area ch
   const plan = planQueue({ ...area, h: 200 }, group({ offset: 9999 }), members(3));
   assert.ok(plan.hubY < 200);
   assertBounded(plan, 200);
+});
+
+test('individual sticky heights persist without overlap and compress safely on a small screen', () => {
+ const input=[{id:'a',tabHeight:90},{id:'b',tabHeight:60},{id:'c'}];
+ const plan=core().planQueue(area,group({order:['a','b','c']}),input);
+ assert.deepEqual(plan.slots.map(s=>s.h),[90,60,44]);assertBounded(plan,768);
+ const small=core().planQueue({...area,h:200},group({order:['a','b','c']}),input);
+ assert.equal(small.slots.filter(s=>s.visible).length,3);assertBounded(small,200);
+ assert.ok(small.slots.every(s=>s.h>=40));
+ const invalid=core().planQueue(area,group(),[{id:'bad',tabHeight:NaN}]);
+ assert.equal(invalid.slots[0].h,44);
 });
 
 test('tiny work areas keep the hub bounded and expose all tabs as overflow', () => {

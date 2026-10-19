@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import { tauriJsonStorage, onStorageSynced } from "@/lib/storage";
 import type { CapsuleEdge, PaperForm } from "@/features/plans/capsule";
+import { stickyAppearancePatch, type StickyAppearance } from "@/features/desktop/sticky-presentation";
 
 /**
  * 桌面「待办纸片」窗口。
@@ -16,7 +17,7 @@ import type { CapsuleEdge, PaperForm } from "@/features/plans/capsule";
  *   "2026-03-10"）。分开存还能让「清空所有纸片」不影响文件栅栏。
  */
 
-export interface PaperState {
+export interface PaperState extends StickyAppearance {
   x: number;
   y: number;
   w: number;
@@ -45,6 +46,8 @@ export interface PaperState {
   edge?: CapsuleEdge;
   /** 胶囊沿边位置：相对**工作区顶**的逻辑像素（不是屏幕绝对坐标，换显示器才不会漂） */
   edgeY?: number;
+  /** User-dropped coordinate along the edge: y at the sides, x at the top. */
+  dockOffset?: number;
   /** Stable display identity for edge queues; ordinary geometry remains independent. */
   edgeMonitor?: string;
 }
@@ -54,6 +57,7 @@ interface PapersStoreState {
   /** 打开顺序（最近打开的排后面，用于纸片层叠时的层级） */
   order: string[];
   setGeometry: (date: string, geo: Partial<PaperState>) => void;
+  setStickyAppearance: (date: string, patch: Partial<StickyAppearance>) => void;
   setCollapsed: (date: string, collapsed: boolean) => void;
   setOpen: (date: string, open: boolean) => void;
   setPinned: (date: string, pinned: boolean) => void;
@@ -83,6 +87,11 @@ export const usePapers = create<PapersStoreState>()(
     (set) => ({
       papers: {},
       order: [],
+
+      setStickyAppearance: (date, patch) =>
+        set((s) => ({ papers: { ...s.papers,
+          [date]: { ...(s.papers[date] ?? DEFAULT_PAPER), ...stickyAppearancePatch(patch) },
+        } })),
 
       setGeometry: (date, geo) =>
         set((s) => ({

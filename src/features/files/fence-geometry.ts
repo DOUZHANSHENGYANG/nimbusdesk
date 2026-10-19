@@ -7,10 +7,12 @@ export function logicalFenceGeometry(position: { x: number; y: number }, size: {
 }
 
 /** Only an actual title drag can opt into docking, never resize or own programmatic moves. */
-export function dragDockEdge(rect: Rect, area: Rect, userDragged: boolean): "left" | "right" | null {
+export function dragDockEdge(rect: Rect, area: Rect, userDragged: boolean): "left" | "right" | "top" | null {
   if (!userDragged) return null;
   const left = Math.abs(rect.x - area.x);
   const right = Math.abs(rect.x + rect.w - area.x - area.w);
-  if (Math.min(left, right) > 12) return null;
+  const top = Math.abs(rect.y - area.y);
+  if (Math.min(left, right, top) > 12) return null;
+  if (top < Math.min(left, right)) return "top";
   return left <= right ? "left" : "right";
 }

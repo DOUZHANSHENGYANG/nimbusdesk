@@ -11,13 +11,19 @@ test('docking and restoring fences preserves normal geometry and prior settings'
  assert.deepEqual(useFences.getState().fences.a,{x:-800,y:50,w:320,h:400,ghost:true,open:false,viewMode:'icons',locked:false,pinned:true,edge:'left',edgeY:240,form:'capsule'});
  useFences.getState().setForm('a','paper');assert.equal(useFences.getState().fences.a.w,320);assert.equal(useFences.getState().fences.a.edgeY,240);
 });
-test('automatic edge docking requires real drag and left/right outer edges only',async()=>{
+test('automatic edge docking requires a real drag and chooses the closest supported work-area edge',async()=>{
  const {dragDockEdge,logicalFenceGeometry}=await load('./fence-geometry.ts');
  const area={x:-1920,y:0,w:1920,h:1080};
  assert.equal(dragDockEdge({x:-1910,y:20,w:300,h:400},area,true),'left');
  assert.equal(dragDockEdge({x:-308,y:20,w:300,h:400},area,true),'right');
  assert.equal(dragDockEdge({x:-1910,y:20,w:300,h:400},area,false),null);
- assert.equal(dragDockEdge({x:-1100,y:0,w:300,h:400},area,true),null);
+ assert.equal(dragDockEdge({x:-1100,y:0,w:300,h:400},area,true),'top');
+ assert.equal(dragDockEdge({x:-1910,y:3,w:300,h:400},area,true),'top');
+ assert.equal(dragDockEdge({x:-1918,y:3,w:300,h:400},area,true),'left');
+ assert.equal(dragDockEdge({x:-1100,y:13,w:300,h:400},area,true),null);
+ assert.equal(dragDockEdge({x:-1100,y:0,w:300,h:400},area,false),null);
+ assert.equal(dragDockEdge({x:-1100,y:680,w:300,h:400},area,true),null);
+ assert.equal(dragDockEdge({x:0,y:0,w:300,h:400},{x:0,y:0,w:300,h:1080},true),'left');
  assert.deepEqual(logicalFenceGeometry({x:-1200,y:150},{width:600,height:750},1.5),{x:-800,y:100,w:400,h:500});
 });
 

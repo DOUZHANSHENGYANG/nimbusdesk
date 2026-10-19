@@ -92,6 +92,7 @@ async function fixture({ collapsed = true, active = true } = {}) {
       PhysicalSize: class { constructor(width, height) { this.width = width; this.height = height; } },
     },
     './edge-core': edgeCore, '@/lib/tauri': { inTauri: true }, '@/lib/storage': storage,
+    './sticky-presentation': load('./sticky-presentation.ts'), './sticky-settings': { StickySettings: () => null },
     './registry': registry, './edge-workspace': { useEdgeWorkspace: workspace },
     './monitors': { readMonitors: async () => [area], monitorArea: value => value },
     './queue-core': core, './queue-registry': queue,
@@ -99,6 +100,7 @@ async function fixture({ collapsed = true, active = true } = {}) {
   }, { document: { activeElement: null }, HTMLElement: class {} });
   let undocked = 0;
   const dock = useEdgeDock({ active, edge: 'right', edgeY: 999, pinned: false, normal: () => normal,
+    onAppearanceChange: patch => { entries[0].appearance = { ...entries[0].appearance, ...patch }; },
     onEdgeChange: () => {}, onEdgeYChange: () => {}, onUndock: () => undocked++, onError: error => errors.push(error) });
   const cleanups = effects.map(effect => effect());
   const settle = async () => {
@@ -150,6 +152,25 @@ test('the same storage listener can fold and wake the hidden member repeatedly u
     h.sync({ collapsed: false, offset: 300 }); await h.settle();
     assert.equal(h.visible, true);
     assert.equal(h.trace.findLast(call => call.method === 'setPosition').value.y, 344);
+  } finally { await h.dispose(); }
+});
+
+test('hidden native placement reads changed sticky dimensions directly from the registry without a render', async () => {
+  const h = await fixture();
+  try {
+    h.entries[0].appearance = { tabWidth: 200 };
+    h.sync({ collapsed: false }); await h.settle();
+    const size = h.trace.findLast(call => call.method === 'setSize').value;
+    assert.equal(size.width, 200);
+  } finally { await h.dispose(); }
+});
+
+test('changing appearance cannot indirectly reposition a locked queue neighbor', async () => {
+  const h = await fixture();
+  try {
+    h.entries[1].locked = true;
+    h.dock.changeAppearance({ tabHeight: 100, tabWidth: 200, previewHeight: 500, stickyColor: '#f0d070' });
+    assert.deepEqual(h.entries[0].appearance, { tabWidth: 200, previewHeight: 500, stickyColor: '#f0d070' });
   } finally { await h.dispose(); }
 });
 
