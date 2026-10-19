@@ -33,3 +33,14 @@ test("editing a block tag list keeps the next property on its own line", () => {
   assert.deepEqual(tagsFromContent(updated), ["New"]);
   assert.match(updated, /\ncreated: 2020-01-01\n/);
 });
+test("a project folder name is never guessed from the path", () => {
+  // Only the managed folders and the inbox are scanned, so a project directory
+  // cannot reach this code. The old guess produced a tag no project row backed;
+  // linking a note to a work item is the supported path instead.
+  assert.equal(inferTags("06-项目研究/云台/搜索设计.md", "# 搜索设计\n正文").includes("项目研究"), false);
+  // A topic match keeps the last-resort folder fallback out of the result, so the
+  // only way "云台" could appear here was the removed project-directory rule.
+  const tags = inferTags("06-项目研究/云台/Oracle 排错.md", "# Oracle 排错\n检查 SQLPlus 连接。");
+  assert.ok(tags.includes("Oracle"));
+  assert.equal(tags.includes("云台"), false);
+});

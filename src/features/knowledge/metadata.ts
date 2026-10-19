@@ -72,14 +72,11 @@ export function inferTags(path: string, content: string): string[] {
   const strong = candidates.filter((item) => item.score >= 4);
   const scored = (strong.length ? strong : candidates.slice(0, 2)).slice(0, 4).map((item) => item.tag);
   const normalizedPath = path.replace(/\\/g, "/");
-  const project = /06-项目研究\/([^/]+)/.exec(normalizedPath)?.[1];
-  if (project) scored.unshift(project);
   const context = `${title}\n${content.match(/^#\s+.+/m)?.[0] || ""}`;
   if (/排错|排查|故障|报错|修复|debug/i.test(context)) scored.push("排错");
   else if (/部署|安装|搭建/i.test(context)) scored.push("部署");
   else if (/配置|设置/i.test(context)) scored.push("配置");
-  if (/项目研究/.test(path)) scored.push("项目研究");
-  else if (/项目经验|开发经验/.test(path)) scored.push("开发经验");
+  if (/项目经验|开发经验/.test(path)) scored.push("开发经验");
   else if (/资源收藏/.test(path)) scored.push("资源收藏");
   if (!scored.length) {
     const folder = normalizedPath.split("/").slice(-2, -1)[0]?.replace(/^\d+[-_]/, "");
