@@ -39,3 +39,8 @@ design-preview.html.check
 
 # Local browser fixtures, screenshots, logs and verification scratch files
 /Temp/
+/output/
+
+# 内部实现计划与验证记录（不随仓库公开）
+docs/superpowers/
+docs/reviews/
