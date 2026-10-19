@@ -1,8 +1,12 @@
 <!doctype html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body><div id="root" style="height:100vh"></div><script type="module">
 import React from 'react';
-import {createRoot} from 'react-dom/client';
+import ReactDOMClient from 'react-dom/client';
 import {HashRouter} from 'react-router-dom';
 import {mockIPC,mockWindows} from '@tauri-apps/api/mocks';
+// react-dom/client is pre-bundled by Vite with only a default export, so a named
+// import yields undefined and render silently leaves an empty page.
+const createRoot = ReactDOMClient.createRoot ?? ReactDOMClient.default?.createRoot;
+if (typeof createRoot !== 'function') throw new Error('react-dom/client did not expose createRoot');
 const fixtures={},calls=[];
 const stamp={createdAt:1,updatedAt:1},base={title:'原始标题',note:'原始说明',deadline:null,status:'doing'};
 let remote={id:'fixture:task:123',connectionId:'fixture',remoteId:123,...base,start:null,remoteProjectId:8,executionId:null,parentRemoteId:null,assignedTo:'fixture-user',teamAccounts:[],lastEditedDate:null,updatedAt:1};

@@ -76,16 +76,49 @@ fn linklike(metadata: &fs::Metadata) -> bool {
 /// Reject symlinks and Windows junctions before inspecting/copying app-owned data.
 pub fn reject_link_components(path: &Path) -> Result<(), String> {
     for ancestor in path.ancestors() {
-        match fs::symlink_metadata(ancestor) {
-            Ok(metadata) if linklike(&metadata) => {
-                return Err("data paths cannot traverse links or junctions".into());
-            }
-            Ok(_) => {}
-            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-            Err(error) => return Err(format!("inspect data path: {error}")),
+        match inspect(ancestor) {
+            Ok(true) => return Err("data paths cannot traverse links or junctions".into()),
+            Ok(false) => {}
+            Err(error) => return Err(format!("inspect data path {}: {error}", ancestor.display())),
         }
     }
     Ok(())
+}
+
+/// A missing path is fine (it is about to be created); anything else is reported.
+fn inspect(path: &Path) -> std::io::Result<bool> {
+    // SQLite removes -wal/-shm when the last connection closes. Another thread
+    // may be closing one while this thread stats it, which Windows reports as a
+    // transient access denial rather than a missing file. Retry briefly so a
+    // legitimate check is not turned into a spurious failure; a real denial
+    // still surfaces once the retries are exhausted.
+    let mut delay = std::time::Duration::from_millis(1);
+    for attempt in 0..6 {
+        match fs::symlink_metadata(path) {
+            Ok(metadata) => return Ok(linklike(&metadata)),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(false),
+            Err(error) if is_transient_denial(&error) && attempt < 5 => {
+                std::thread::sleep(delay);
+                delay *= 2;
+            }
+            Err(error) => return Err(error),
+        }
+    }
+    unreachable!("the retry loop returns on its last iteration")
+}
+
+fn is_transient_denial(error: &std::io::Error) -> bool {
+    if error.kind() == std::io::ErrorKind::PermissionDenied {
+        return true;
+    }
+    #[cfg(windows)]
+    {
+        // ERROR_ACCESS_DENIED / ERROR_SHARING_VIOLATION / ERROR_LOCK_VIOLATION
+        if matches!(error.raw_os_error(), Some(5) | Some(32) | Some(33)) {
+            return true;
+        }
+    }
+    false
 }
 
 fn legacy_keys(root: &Path) -> Result<BTreeSet<String>, String> {

@@ -3,10 +3,15 @@ import { loadPlaywright, resolveBrowser } from "./browser-harness.mjs";
 const { chromium } = await loadPlaywright();
 const browser = await chromium.launch({ executablePath: resolveBrowser(), headless: true });
 const page = await browser.newPage({ viewport: { width: 1360, height: 1000 } });
+// The fixtures pull their modules through Vite's dev server, which resolves the
+// whole dependency graph on first load; that regularly exceeds the 30s default.
+page.setDefaultTimeout(120000);
 const errors=[];page.on("pageerror",error=>errors.push(error.message));
 const button=name=>page.getByRole("button",{name,exact:true});
 try {
   await page.goto(`${process.env.ZENTAO_FIXTURE_ORIGIN ?? "http://127.0.0.1:17800"}/src/features/projects/fixtures/zentao-writeback.html`);
+  // React mounts asynchronously, so wait for the row before interacting.
+  await page.locator('[data-work-item="local-task"] button[aria-pressed]').waitFor({ state: "visible" });
   await page.locator('[data-work-item="local-task"] button[aria-pressed]').click();
   await button("待发送修改 · 1").click();
   await page.getByRole("dialog",{name:"核对禅道修改"}).waitFor();
