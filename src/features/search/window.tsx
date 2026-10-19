@@ -16,7 +16,7 @@ import { updateSearchStatus, useSearchStore } from "./store";
 import type { SearchAppsStatus, SearchHit, SearchHome, SearchKind, SearchPreview, SearchReply, SearchScope, SearchStatus } from "./types";
 import "./search.css";
 
-const scopes: SearchScope[] = ["all", "app", "file", "plan", "knowledge", "feed"];
+const scopes: SearchScope[] = ["all", "app", "file", "plan", "project", "knowledge", "feed"];
 const icons = { app: AppWindow, file: FileText, folder: Folder, plan: CalendarCheck, knowledge: BookOpen, feed: Rss, bookmark: Bookmark, project: FolderKanban };
 
 /** Standalone webview: no main-app Providers, stores or background runtimes. */

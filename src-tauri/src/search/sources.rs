@@ -10,6 +10,7 @@ pub const KEYS: &[&str] = &[
     "plans",
     "plans-archive",
     "files",
+    "projects",
     "feed-cache",
     "favorites",
     "custom-feeds",
@@ -267,6 +268,63 @@ pub fn from_states(states: &BTreeMap<String, Value>) -> Vec<SearchDocument> {
                 item.get("tags").unwrap_or(&Value::Null)
             ),
         });
+    }
+    if let Some(projects) = states.get("projects").map(state) {
+        let rows = |key: &str| projects.get(key).and_then(Value::as_array);
+        let name_of = |key: &str, id: &str| {
+            rows(key)
+                .and_then(|list| list.iter().find(|row| text(row, "id") == id))
+                .map(|row| text(row, "name"))
+                .unwrap_or_default()
+        };
+        for project in rows("projects").into_iter().flatten() {
+            let id = text(project, "id");
+            let name = text(project, "name");
+            if id.is_empty() || name.is_empty() {
+                continue;
+            }
+            let area = name_of("areas", &text(project, "areaId"));
+            docs.push(SearchDocument {
+                hit: hit(
+                    format!("project:{id}"),
+                    "project",
+                    name,
+                    area.clone(),
+                    route("/projects", &[("project", &id)]),
+                ),
+                body: format!("{} {area}", text(project, "note")),
+            });
+        }
+        for item in rows("items").into_iter().flatten() {
+            let id = text(item, "id");
+            let title = text(item, "title");
+            // Merged items are aliases of a surviving row; indexing both would duplicate every hit.
+            if id.is_empty() || title.is_empty() || !text(item, "mergedIntoId").is_empty() {
+                continue;
+            }
+            let project = name_of("projects", &text(item, "projectId"));
+            let status = match text(item, "status").as_str() {
+                "doing" => "进行中",
+                "done" => "已完成",
+                "cancelled" => "已取消",
+                _ => "待办",
+            };
+            let subtitle = if project.is_empty() {
+                status.to_string()
+            } else {
+                format!("{project} · {status}")
+            };
+            docs.push(SearchDocument {
+                hit: hit(
+                    format!("project-item:{id}"),
+                    "project",
+                    title,
+                    subtitle,
+                    route("/projects", &[("item", &id)]),
+                ),
+                body: format!("{} {project}", text(item, "note")),
+            });
+        }
     }
     docs
 }

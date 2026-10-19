@@ -1,5 +1,5 @@
 export type SearchKind = "app" | "file" | "folder" | "plan" | "knowledge" | "feed" | "project" | "bookmark";
-export type SearchScope = "all" | "app" | "file" | "plan" | "knowledge" | "feed";
+export type SearchScope = "all" | "app" | "file" | "plan" | "knowledge" | "feed" | "project";
 export interface SearchHit { id: string; kind: SearchKind; title: string; subtitle: string; snippet: string; path?: string; url?: string; route?: string; score: number }
 export interface SearchReply { results: SearchHit[]; total: number; indexing: boolean; warnings: string[]; elapsedMs: number }
 export interface FileIndexStatus { running: boolean; paused: boolean; total: number; processed: number; indexed: number; failed: number; current: string | null; error: string | null; updatedAt: number | null; nameRunning?: boolean; nameTotal?: number; nameIndexed?: number }

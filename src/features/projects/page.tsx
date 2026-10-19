@@ -1,4 +1,5 @@
-import { useDeferredValue, useEffect, useMemo, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Bell, CalendarDays, ChevronRight, Folder, FolderKanban, Layers3, ListTodo, LoaderCircle, Pencil, Plus, Search, Trash2, X, ArrowRightLeft } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -102,6 +103,28 @@ function ProjectsWorkspace() {
     return () => window.removeEventListener("keydown", keydown);
   }, [selectedId, editor]);
   useEffect(() => { if (scope.kind === "project" && !state.projects.some(p => p.id === scope.id) || scope.kind === "area" && !state.areas.some(a => a.id === scope.id)) setScope({ kind: "all" }); }, [scope, state.projects, state.areas]);
+  // A search hit opens the row it names. The row only renders when it survives the
+  // filters, so the target's own scope replaces the current narrow one, and the
+  // parameters are applied once so closing the details later keeps them closed.
+  const [deepLink] = useSearchParams();
+  const focusItem = deepLink.get("item") ?? "", focusProject = deepLink.get("project") ?? "";
+  const appliedLink = useRef("");
+  useEffect(() => {
+    if (!focusItem && !focusProject) return;
+    const link = `${focusProject}|${focusItem}`;
+    if (appliedLink.current === link) return;
+    const item = focusItem ? state.items.find(entry => entry.id === focusItem) : undefined;
+    if (focusProject && state.projects.some(project => project.id === focusProject)) {
+      appliedLink.current = link;
+      setScope({ kind: "project", id: focusProject });
+      setIterationFilter("all"); setStatusFilter("all"); setSelectedId(null); setTab("tasks");
+      return;
+    }
+    if (!item) return;
+    appliedLink.current = link;
+    setScope(item.projectId ? { kind: "project", id: item.projectId } : { kind: "all" });
+    setIterationFilter("all"); setStatusFilter("all"); setSelectedId(item.id); setTab("tasks");
+  }, [focusItem, focusProject, state.items, state.projects]);
   function chooseScope(next: Scope) { setScope(next); setTab("tasks"); setSelectedId(null); }
   async function editArea(id?: string) {
     const area = state.areas.find(a => a.id === id), name = await modal.prompt({ title: area ? c.editArea : c.newArea, initial: area?.name ?? "", confirmText: c.save });

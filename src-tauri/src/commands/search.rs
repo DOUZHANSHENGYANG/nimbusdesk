@@ -256,7 +256,7 @@ pub async fn search_query(
         if query.len() > 4096 || query.chars().any(char::is_control) {
             return Err("搜索词过长或包含控制字符".into());
         }
-        if !["all", "app", "file", "plan", "knowledge", "feed"].contains(&scope.as_str()) {
+        if !["all", "app", "file", "plan", "knowledge", "feed", "project"].contains(&scope.as_str()) {
             return Err("无效搜索分类".into());
         }
         let mut results = vec![];
@@ -349,7 +349,7 @@ pub(crate) fn allowed_route(route: &str) -> bool {
     if route.chars().any(char::is_control) || route.contains('\\') {
         return false;
     }
-    ["/plans", "/knowledge", "/feeds", "/files"]
+    ["/plans", "/knowledge", "/feeds", "/files", "/projects"]
         .contains(&route.split('?').next().unwrap_or_default())
 }
 #[tauri::command]
@@ -487,6 +487,8 @@ mod tests {
             "/knowledge?note=a.md",
             "/feeds?article=https%3A%2F%2Fa.test",
             "/files?item=1",
+            "/projects?project=1",
+            "/projects?item=1",
         ] {
             assert!(super::allowed_route(route));
         }

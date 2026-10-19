@@ -194,3 +194,42 @@ fn a_failed_index_replacement_retains_the_previous_searchable_snapshot() {
     );
     assert_eq!(index.query("keep", "all", 10).unwrap()[0].id, "old");
 }
+
+#[test]
+fn projects_and_their_work_items_are_searchable_with_a_focusing_route() {
+    let states = std::collections::BTreeMap::from([(
+        "projects".into(),
+        json!({"state":{
+            "areas":[{"id":"area","name":"平台"}],
+            "projects":[{"id":"proj","name":"云台","areaId":"area","note":"桌面工作台"}],
+            "items":[
+                {"id":"doing","title":"做搜索","projectId":"proj","areaId":null,"status":"doing","note":"接入项目"},
+                {"id":"done","title":"做导航","projectId":"proj","areaId":null,"status":"done"},
+                {"id":"loose","title":"零散事","projectId":null,"areaId":null,"status":"todo"},
+                {"id":"merged","title":"被合并","projectId":"proj","areaId":null,"status":"todo","mergedIntoId":"doing"}
+            ]
+        }}),
+    )]);
+    let docs = super::sources::from_states(&states);
+    // Merged items are aliases of a surviving row and must not add a second hit.
+    assert_eq!(docs.len(), 4);
+    assert!(docs.iter().all(|d| d.hit.kind == "project"));
+    assert!(docs.iter().all(|d| !d.hit.id.contains("merged")));
+
+    let project = docs.iter().find(|d| d.hit.id == "project:proj").unwrap();
+    assert_eq!(project.hit.title, "云台");
+    assert!(project.hit.route.as_ref().unwrap().starts_with("/projects?project=proj"));
+    // The area belongs in the subtitle so searching "平台" finds the project.
+    assert_eq!(project.hit.subtitle, "平台");
+    assert!(project.body.contains("桌面工作台"));
+
+    let item = docs.iter().find(|d| d.hit.id == "project-item:doing").unwrap();
+    assert_eq!(item.hit.title, "做搜索");
+    assert_eq!(item.hit.subtitle, "云台 · 进行中");
+    assert!(item.hit.route.as_ref().unwrap().starts_with("/projects?item=doing"));
+    assert!(item.body.contains("接入项目"));
+
+    // A project-less item still reports its status without inventing a name.
+    let loose = docs.iter().find(|d| d.hit.id == "project-item:loose").unwrap();
+    assert_eq!(loose.hit.subtitle, "待办");
+}
