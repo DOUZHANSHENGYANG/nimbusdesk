@@ -286,3 +286,35 @@ pub async fn write_plan_pair(
     }
     result
 }
+
+/// A binding/merge must publish all dependent envelopes together, including
+/// archived descendants. Resolve the root while holding the relocation lock.
+#[command]
+pub async fn project_apply_remote_binding(
+    projects: Value,
+    plans: Value,
+    archive: Value,
+    base_projects: Value,
+    base_plans: Value,
+    base_archive: Value,
+) -> Result<Value, String> {
+    let result = blocking(move || {
+        with_data_dir(|root| {
+            let (projects, plans, archive) = database::write_project_binding_with_base_at(
+                root,
+                &projects,
+                &plans,
+                &archive,
+                &base_projects,
+                &base_plans,
+                &base_archive,
+            )?;
+            Ok(serde_json::json!({ "projects": projects, "plans": plans, "archive": archive }))
+        })
+    })
+    .await?;
+    if result.is_ok() {
+        crate::search::runtime::request_refresh();
+    }
+    result
+}

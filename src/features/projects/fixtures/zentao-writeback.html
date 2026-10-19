@@ -1,0 +1,47 @@
+<!doctype html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body><div id="root" style="height:100vh"></div><script type="module">
+import React from 'react';
+import {createRoot} from 'react-dom/client';
+import {HashRouter} from 'react-router-dom';
+import {mockIPC,mockWindows} from '@tauri-apps/api/mocks';
+const fixtures={},calls=[];
+const stamp={createdAt:1,updatedAt:1},base={title:'原始标题',note:'原始说明',deadline:null,status:'doing'};
+let remote={id:'fixture:task:123',connectionId:'fixture',remoteId:123,...base,start:null,remoteProjectId:8,executionId:null,parentRemoteId:null,assignedTo:'fixture-user',teamAccounts:[],lastEditedDate:null,updatedAt:1};
+const review=window.zenWriteReview={fixtures,calls,writeError:null,setRemote:patch=>{remote={...remote,...patch,updatedAt:Date.now()};}};
+mockIPC(async(cmd,args)=>{
+  calls.push({cmd,args:cmd==='zentao_test_connection'?{connectionId:args.connectionId}:structuredClone(args)});
+  if(cmd==='read_json')return structuredClone(fixtures[args.key]??null);
+  if(cmd==='write_json'){fixtures[args.key]=structuredClone(args.value);return structuredClone(args.value);}
+  if(cmd==='zentao_secret_status')return {hasPassword:true,hasToken:false,apiVersion:'v1'};
+  if(cmd==='zentao_read_task')return structuredClone(remote);
+  if(cmd==='zentao_write_task'){
+    if(review.writeError)throw Error(review.writeError);
+    if(Object.keys(args.changes).some(key=>args.expected[key]!==remote[key]))throw Error('ZENTAO_REMOTE_CHANGED');
+    remote={...remote,...args.changes,updatedAt:Date.now()};return structuredClone(remote);
+  }
+  if(cmd==='plugin:event|listen')return 1;
+  if(cmd==='get_data_dir')return 'E:/ZenWriteFixture';
+  return null;
+});
+mockWindows('main');
+const {emptyProjectData}=await import('/src/features/projects/types.ts');
+const data=emptyProjectData();
+data.items=[{...stamp,id:'local-task',...base,title:'本地新标题',projectId:null,areaId:null,activeIterationId:null}];
+data.remoteTasks=[remote];
+data.remoteLinks=[{id:remote.id,connectionId:'fixture',remoteId:123,itemId:'local-task',baseline:base,divergedFields:['title'],updatedAt:1}];
+data.remoteChanges=[{id:remote.id,connectionId:'fixture',remoteId:123,itemId:'local-task',status:'pending',base,local:{...base,title:'本地新标题'},remote:base,fields:['title'],expected:base,lastError:null,updatedAt:1}];
+fixtures.projects={version:1,state:data};
+fixtures.zentao={version:1,state:{connections:[{...stamp,id:'fixture',name:'演示禅道',baseUrl:'https://fixture.example.test/zentao/',account:'fixture-user',apiVersion:'v1',executionIds:[],autoSync:false,syncMinutes:15}],syncStates:{}}};
+fixtures.settings={version:3,state:{theme:'dark',lang:'zh',sidebarCollapsed:true}};
+fixtures.plans={version:4,state:{days:{}}};fixtures['plans-archive']={version:3,state:{days:{}}};
+await import('/src/index.css');
+const {i18n,I18nextProvider}=await import('/src/lib/i18n.ts');
+const {ModalProvider}=await import('/src/components/shell/modal-host.tsx');
+const {ProjectsPage}=await import('/src/features/projects/page.tsx');
+const {Toaster}=await import('/src/components/ui/sonner.tsx');
+const {useProjects}=await import('/src/features/projects/store.ts');
+const {useZentao}=await import('/src/features/projects/zentao-store.ts');
+const {flushAllStorage}=await import('/src/lib/storage.ts');
+review.stores={useProjects,useZentao};review.flush=flushAllStorage;
+document.documentElement.classList.add('dark');
+createRoot(document.getElementById('root')).render(React.createElement(I18nextProvider,{i18n},React.createElement(ModalProvider,null,React.createElement(HashRouter,null,React.createElement(ProjectsPage)),React.createElement(Toaster))));
+</script></body></html>

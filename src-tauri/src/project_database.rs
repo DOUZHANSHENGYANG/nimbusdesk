@@ -24,6 +24,21 @@ pub fn create_schema(conn: &Connection) -> Result<(), String> {
     ).map_err(error)
 }
 
+pub fn create_remote_schema(conn: &Connection) -> Result<(), String> {
+    conn.execute_batch(
+        "CREATE TABLE project_remote_tasks(id TEXT PRIMARY KEY NOT NULL,connection_id TEXT NOT NULL,remote_id INTEGER NOT NULL CHECK(remote_id>0),updated_at INTEGER NOT NULL,value_json TEXT NOT NULL CHECK(json_valid(value_json)),UNIQUE(connection_id,remote_id));
+        CREATE TABLE project_remote_executions(id TEXT PRIMARY KEY NOT NULL,connection_id TEXT NOT NULL,remote_id INTEGER NOT NULL CHECK(remote_id>0),updated_at INTEGER NOT NULL,value_json TEXT NOT NULL CHECK(json_valid(value_json)),UNIQUE(connection_id,remote_id));
+        CREATE TABLE project_remote_links(id TEXT PRIMARY KEY NOT NULL,connection_id TEXT NOT NULL,remote_id INTEGER NOT NULL CHECK(remote_id>0),item_id TEXT NOT NULL UNIQUE REFERENCES project_work_items(id),updated_at INTEGER NOT NULL,value_json TEXT NOT NULL CHECK(json_valid(value_json)),UNIQUE(connection_id,remote_id),FOREIGN KEY(connection_id,remote_id) REFERENCES project_remote_tasks(connection_id,remote_id));",
+    ).map_err(error)
+}
+
+pub fn create_writeback_schema(conn: &Connection) -> Result<(), String> {
+    conn.execute_batch(
+        "CREATE UNIQUE INDEX project_remote_link_identity ON project_remote_links(id,connection_id,remote_id,item_id);
+        CREATE TABLE project_remote_changes(id TEXT PRIMARY KEY NOT NULL,connection_id TEXT NOT NULL,remote_id INTEGER NOT NULL CHECK(remote_id>0),item_id TEXT NOT NULL UNIQUE,status TEXT NOT NULL CHECK(status IN ('pending','conflict','sending','uncertain','failed')),updated_at INTEGER NOT NULL,value_json TEXT NOT NULL CHECK(json_valid(value_json)),UNIQUE(connection_id,remote_id),FOREIGN KEY(id,connection_id,remote_id,item_id) REFERENCES project_remote_links(id,connection_id,remote_id,item_id));",
+    ).map_err(error)
+}
+
 fn saved(conn: &Connection, key: &str) -> Result<Option<Value>, String> {
     let json: Option<String> = conn
         .query_row(
@@ -38,6 +53,9 @@ fn saved(conn: &Connection, key: &str) -> Result<Option<Value>, String> {
 }
 
 pub fn rebuild(conn: &Connection) -> Result<(), String> {
+    if let Some(config) = saved(conn, "zentao")? {
+        validate_zentao(&config)?;
+    }
     project_state(conn, saved(conn, "projects")?.as_ref())?;
     for key in ["plans", "plans-archive"] {
         plan_links(conn, key, saved(conn, key)?.as_ref())?;
@@ -49,6 +67,7 @@ pub fn project_write(conn: &Connection, key: &str, value: &Value) -> Result<(), 
     match key {
         "projects" => rebuild(conn),
         "plans" | "plans-archive" => plan_links(conn, key, Some(value)),
+        "zentao" => validate_zentao(value),
         _ => Ok(()),
     }
 }
@@ -233,9 +252,489 @@ fn note(v: &Value) -> Result<(), String> {
     Ok(())
 }
 
+fn bounded_text(value: &Value, key: &str, limit: usize, empty: bool) -> Result<String, String> {
+    value
+        .get(key)
+        .and_then(Value::as_str)
+        .filter(|s| s.len() <= limit && (empty || !s.trim().is_empty()) && !s.contains('\0'))
+        .map(str::to_owned)
+        .ok_or_else(|| error(format!("invalid {key}")))
+}
+
+fn optional_remote_id(value: &Value, key: &str) -> Result<(), String> {
+    match value.get(key) {
+        None | Some(Value::Null) => Ok(()),
+        Some(v)
+            if v.as_i64()
+                .is_some_and(|id| id > 0 && id <= 9_007_199_254_740_991) =>
+        {
+            Ok(())
+        }
+        _ => Err(error(format!("invalid {key}"))),
+    }
+}
+
+fn source_identity(value: &Value, kind: &str) -> Result<(String, String, i64), String> {
+    let connection = bounded_text(value, "connectionId", 200, false)?;
+    let remote = value
+        .get("remoteId")
+        .and_then(Value::as_i64)
+        .filter(|id| *id > 0 && *id <= 9_007_199_254_740_991)
+        .ok_or_else(|| error("invalid remoteId"))?;
+    let id = bounded_text(value, "id", 240, false)?;
+    if id != format!("{connection}:{kind}:{remote}") {
+        return Err(error("remote identity does not match source"));
+    }
+    epoch(value, "updatedAt")?;
+    Ok((id, connection, remote))
+}
+
+fn remote_array<'a>(state: &'a Value, key: &str, max: usize) -> Result<&'a [Value], String> {
+    match state.get(key) {
+        None => Ok(&[]),
+        Some(Value::Array(values)) if values.len() <= max => Ok(values),
+        _ => Err(error(format!("invalid {key}"))),
+    }
+}
+
+fn fields(value: &Value) -> Result<(), String> {
+    if value.get("deadline").is_none() {
+        return Err(error("missing baseline deadline"));
+    }
+    bounded_text(value, "title", 10_000, false)?;
+    bounded_text(value, "note", 1_000_000, true)?;
+    status(value, "status", &["todo", "doing", "done", "cancelled"])?;
+    optional_date(value, "deadline")?;
+    Ok(())
+}
+
+fn timestamp(value: &str) -> bool {
+    if !value.is_ascii() || value.len() < 10 || !date(&value[..10]) {
+        return false;
+    }
+    if value.len() == 10 {
+        return true;
+    }
+    let bytes = value.as_bytes();
+    if value.len() < 19
+        || !matches!(bytes[10], b' ' | b'T')
+        || !clock(&value[11..16])
+        || bytes[16] != b':'
+        || !value[17..19].parse::<u32>().is_ok_and(|s| s < 60)
+    {
+        return false;
+    }
+    let mut tail = &value[19..];
+    if let Some(fraction) = tail.strip_prefix('.') {
+        let digits = fraction.bytes().take_while(u8::is_ascii_digit).count();
+        if digits == 0 {
+            return false;
+        }
+        tail = &fraction[digits..];
+    }
+    tail.is_empty()
+        || tail == "Z"
+        || (tail.len() == 6 && matches!(tail.as_bytes()[0], b'+' | b'-') && clock(&tail[1..]))
+}
+
+fn remote_state(
+    conn: &Connection,
+    state: &Value,
+    items: &HashSet<String>,
+    merged: &HashMap<String, String>,
+) -> Result<(), String> {
+    for value in remote_array(state, "remoteTasks", 100_000)? {
+        if [
+            "deadline",
+            "start",
+            "remoteProjectId",
+            "executionId",
+            "parentRemoteId",
+            "lastEditedDate",
+        ]
+        .iter()
+        .any(|key| value.get(key).is_none())
+        {
+            return Err(error("incomplete remote task"));
+        }
+        let (id, connection, remote) = source_identity(value, "task")?;
+        bounded_text(value, "title", 10_000, false)?;
+        bounded_text(value, "note", 1_000_000, true)?;
+        bounded_text(value, "status", 100, false)?;
+        bounded_text(value, "assignedTo", 1_000, true)?;
+        optional_date(value, "deadline")?;
+        optional_date(value, "start")?;
+        for key in ["remoteProjectId", "executionId", "parentRemoteId"] {
+            optional_remote_id(value, key)?;
+        }
+        let team = value
+            .get("teamAccounts")
+            .and_then(Value::as_array)
+            .filter(|team| team.len() <= 1_000)
+            .ok_or_else(|| error("invalid teamAccounts"))?;
+        if team.iter().any(|account| {
+            !account
+                .as_str()
+                .is_some_and(|s| !s.is_empty() && s.len() <= 1_000 && !s.contains('\0'))
+        }) {
+            return Err(error("invalid team account"));
+        }
+        if let Some(edited) = optional_id(value, "lastEditedDate")? {
+            if edited.len() > 100 || !timestamp(&edited) {
+                return Err(error("invalid lastEditedDate"));
+            }
+        }
+        conn.execute(
+            "INSERT INTO project_remote_tasks VALUES(?1,?2,?3,?4,?5)",
+            params![
+                id,
+                connection,
+                remote,
+                epoch(value, "updatedAt")?,
+                value.to_string()
+            ],
+        )
+        .map_err(error)?;
+    }
+    for value in remote_array(state, "remoteExecutions", 10_000)? {
+        if value.get("start").is_none() || value.get("end").is_none() {
+            return Err(error("incomplete remote execution"));
+        }
+        let (id, connection, remote) = source_identity(value, "execution")?;
+        bounded_text(value, "name", 10_000, false)?;
+        bounded_text(value, "status", 100, false)?;
+        let start = optional_date(value, "start")?;
+        let end = optional_date(value, "end")?;
+        if start
+            .as_ref()
+            .zip(end.as_ref())
+            .is_some_and(|(start, end)| end < start)
+        {
+            return Err(error("invalid remote execution date range"));
+        }
+        conn.execute(
+            "INSERT INTO project_remote_executions VALUES(?1,?2,?3,?4,?5)",
+            params![
+                id,
+                connection,
+                remote,
+                epoch(value, "updatedAt")?,
+                value.to_string()
+            ],
+        )
+        .map_err(error)?;
+    }
+    for value in remote_array(state, "remoteLinks", 100_000)? {
+        let (id, connection, remote) = source_identity(value, "task")?;
+        let item = bounded_text(value, "itemId", 200, false)?;
+        if !items.contains(&item) || merged.contains_key(&item) {
+            return Err(error("invalid remote link work item"));
+        }
+        fields(
+            value
+                .get("baseline")
+                .ok_or_else(|| error("missing remote baseline"))?,
+        )?;
+        let mut seen = HashSet::new();
+        let divergence = value
+            .get("divergedFields")
+            .and_then(Value::as_array)
+            .ok_or_else(|| error("invalid divergedFields"))?;
+        for field in divergence {
+            let field = field
+                .as_str()
+                .filter(|field| ["title", "note", "deadline", "status"].contains(field))
+                .ok_or_else(|| error("invalid diverged field"))?;
+            if !seen.insert(field) {
+                return Err(error("duplicate diverged field"));
+            }
+        }
+        conn.execute(
+            "INSERT INTO project_remote_links VALUES(?1,?2,?3,?4,?5,?6)",
+            params![
+                id,
+                connection,
+                remote,
+                item,
+                epoch(value, "updatedAt")?,
+                value.to_string()
+            ],
+        )
+        .map_err(error)?;
+    }
+    for value in remote_array(state, "remoteChanges", 100_000)? {
+        known_keys(
+            value,
+            &[
+                "id",
+                "connectionId",
+                "remoteId",
+                "itemId",
+                "status",
+                "base",
+                "local",
+                "remote",
+                "expected",
+                "fields",
+                "lastError",
+                "updatedAt",
+            ],
+        )?;
+        let (id, connection, remote) = source_identity(value, "task")?;
+        let item = bounded_text(value, "itemId", 200, false)?;
+        let state = status(
+            value,
+            "status",
+            &["pending", "conflict", "sending", "uncertain", "failed"],
+        )?;
+        for key in ["base", "local", "remote", "expected"] {
+            let snapshot = value
+                .get(key)
+                .ok_or_else(|| error("missing writeback snapshot"))?;
+            known_keys(snapshot, &["title", "note", "deadline", "status"])?;
+            fields(snapshot)?;
+        }
+        write_fields(value.get("fields"), false)?;
+        match value.get("lastError") {
+            Some(Value::Null) => {}
+            Some(Value::String(message)) if message.len() <= 2_000 && !message.contains('\0') => {}
+            _ => return Err(error("invalid writeback error")),
+        }
+        conn.execute(
+            "INSERT INTO project_remote_changes VALUES(?1,?2,?3,?4,?5,?6,?7)",
+            params![
+                id,
+                connection,
+                remote,
+                item,
+                state,
+                epoch(value, "updatedAt")?,
+                value.to_string()
+            ],
+        )
+        .map_err(error)?;
+    }
+    Ok(())
+}
+
+fn write_fields(value: Option<&Value>, optional: bool) -> Result<(), String> {
+    let Some(value) = value else {
+        return if optional {
+            Ok(())
+        } else {
+            Err(error("missing write fields"))
+        };
+    };
+    let fields = value
+        .as_array()
+        .filter(|fields| fields.len() <= 3 && (optional || !fields.is_empty()))
+        .ok_or_else(|| error("invalid write fields"))?;
+    let mut seen = HashSet::new();
+    for field in fields {
+        let field = field
+            .as_str()
+            .filter(|field| ["title", "note", "deadline"].contains(field))
+            .ok_or_else(|| error("unsupported write field"))?;
+        if !seen.insert(field) {
+            return Err(error("duplicate write field"));
+        }
+    }
+    Ok(())
+}
+
+fn known_keys(value: &Value, allowed: &[&str]) -> Result<(), String> {
+    let object = value
+        .as_object()
+        .ok_or_else(|| error("invalid ZenTao metadata object"))?;
+    if object.keys().any(|key| !allowed.contains(&key.as_str())) {
+        return Err(error("unsupported ZenTao metadata field"));
+    }
+    Ok(())
+}
+
+/// Only public connection metadata belongs in module_state and its backups.
+pub fn validate_zentao(envelope: &Value) -> Result<(), String> {
+    known_keys(envelope, &["state", "version"])?;
+    if envelope
+        .get("version")
+        .is_some_and(|v| v.as_u64().is_none())
+    {
+        return Err(error("invalid ZenTao metadata version"));
+    }
+    let state = envelope
+        .get("state")
+        .ok_or_else(|| error("missing ZenTao metadata state"))?;
+    known_keys(state, &["connections", "syncStates"])?;
+    let connections = state
+        .get("connections")
+        .and_then(Value::as_array)
+        .filter(|v| v.len() <= 100)
+        .ok_or_else(|| error("invalid ZenTao connections"))?;
+    let mut ids = HashSet::new();
+    for connection in connections {
+        known_keys(
+            connection,
+            &[
+                "id",
+                "name",
+                "baseUrl",
+                "account",
+                "apiVersion",
+                "executionIds",
+                "autoSync",
+                "syncMinutes",
+                "createdAt",
+                "updatedAt",
+                "writeFields",
+            ],
+        )?;
+        let id = bounded_text(connection, "id", 200, false)?;
+        if !ids.insert(id) {
+            return Err(error("duplicate ZenTao connection"));
+        }
+        bounded_text(connection, "name", 1_000, false)?;
+        let url = bounded_text(connection, "baseUrl", 4_096, true)?;
+        if !url.is_empty() {
+            let parsed = reqwest::Url::parse(&url).map_err(|_| error("invalid ZenTao base URL"))?;
+            if !matches!(parsed.scheme(), "http" | "https")
+                || parsed.host_str().is_none()
+                || !parsed.username().is_empty()
+                || parsed.password().is_some()
+                || parsed.query().is_some()
+                || parsed.fragment().is_some()
+            {
+                return Err(error("invalid ZenTao base URL"));
+            }
+        }
+        bounded_text(connection, "account", 1_000, true)?;
+        write_fields(connection.get("writeFields"), true)?;
+        status(connection, "apiVersion", &["auto", "v1", "v2"])?;
+        let scope = connection
+            .get("executionIds")
+            .and_then(Value::as_array)
+            .filter(|v| v.len() <= 1_000)
+            .ok_or_else(|| error("invalid execution scope"))?;
+        let mut executions = HashSet::new();
+        for execution in scope {
+            let id = execution
+                .as_i64()
+                .filter(|id| *id > 0 && *id <= 9_007_199_254_740_991)
+                .ok_or_else(|| error("invalid execution scope ID"))?;
+            if !executions.insert(id) {
+                return Err(error("duplicate execution scope ID"));
+            }
+        }
+        if connection
+            .get("autoSync")
+            .and_then(Value::as_bool)
+            .is_none()
+            || !connection
+                .get("syncMinutes")
+                .and_then(Value::as_u64)
+                .is_some_and(|n| (1..=1_440).contains(&n))
+        {
+            return Err(error("invalid ZenTao synchronization settings"));
+        }
+        epoch(connection, "createdAt")?;
+        epoch(connection, "updatedAt")?;
+    }
+    let states = state
+        .get("syncStates")
+        .and_then(Value::as_object)
+        .ok_or_else(|| error("invalid ZenTao syncStates"))?;
+    for (id, meta) in states {
+        if !ids.contains(id) {
+            return Err(error("unknown ZenTao sync connection"));
+        }
+        known_keys(
+            meta,
+            &[
+                "lastSyncAt",
+                "lastError",
+                "lastCount",
+                "resolvedVersion",
+                "authRequired",
+            ],
+        )?;
+        if !matches!(meta.get("lastSyncAt"), Some(Value::Null)) {
+            epoch(meta, "lastSyncAt")?;
+        }
+        match meta.get("lastError") {
+            Some(Value::Null) => {}
+            Some(Value::String(message)) if message.len() <= 2_000 => {}
+            _ => return Err(error("invalid ZenTao sync error")),
+        }
+        if !meta
+            .get("lastCount")
+            .and_then(Value::as_u64)
+            .is_some_and(|n| n <= 100_000)
+        {
+            return Err(error("invalid ZenTao sync count"));
+        }
+        if !matches!(meta.get("resolvedVersion"), Some(Value::Null)) {
+            status(meta, "resolvedVersion", &["v1", "v2"])?;
+        }
+        if meta.get("authRequired").and_then(Value::as_bool).is_none() {
+            return Err(error("invalid ZenTao auth status"));
+        }
+    }
+    Ok(())
+}
+
+pub fn validate_zentao_change(conn: &Connection, envelope: &Value) -> Result<(), String> {
+    validate_zentao(envelope)?;
+    let Some(previous) = saved(conn, "zentao")? else {
+        return Ok(());
+    };
+    let Some(projects) = saved(conn, "projects")? else {
+        return Ok(());
+    };
+    let cached: HashSet<_> = projects
+        .pointer("/state/remoteTasks")
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|task| task.get("connectionId").and_then(Value::as_str))
+        .collect();
+    let old = previous
+        .pointer("/state/connections")
+        .and_then(Value::as_array)
+        .map(Vec::as_slice)
+        .unwrap_or_default();
+    let next = envelope
+        .pointer("/state/connections")
+        .and_then(Value::as_array)
+        .map(Vec::as_slice)
+        .unwrap_or_default();
+    for connection in next {
+        let id = connection["id"].as_str().unwrap_or_default();
+        if !cached.contains(id) {
+            continue;
+        }
+        let Some(prior) = old.iter().find(|v| v.get("id") == connection.get("id")) else {
+            continue;
+        };
+        let endpoint = |value: &Value| {
+            value.get("baseUrl").and_then(Value::as_str).map(|url| {
+                reqwest::Url::parse(url)
+                    .map(|url| url.to_string().trim_end_matches('/').to_owned())
+                    .unwrap_or_else(|_| url.to_owned())
+            })
+        };
+        if endpoint(prior) != endpoint(connection)
+            || prior.get("account") != connection.get("account")
+        {
+            return Err(error(
+                "cached source identity is immutable; create another connection",
+            ));
+        }
+    }
+    Ok(())
+}
+
 fn project_state(conn: &Connection, envelope: Option<&Value>) -> Result<(), String> {
     // Called only within the caller's SQLite write/migration transaction.
-    conn.execute_batch("DELETE FROM project_plan_links; DELETE FROM project_memberships; DELETE FROM project_work_items; DELETE FROM project_projects; DELETE FROM project_iterations; DELETE FROM project_areas;").map_err(error)?;
+    conn.execute_batch("DELETE FROM project_remote_changes; DELETE FROM project_remote_links; DELETE FROM project_remote_tasks; DELETE FROM project_remote_executions; DELETE FROM project_plan_links; DELETE FROM project_memberships; DELETE FROM project_work_items; DELETE FROM project_projects; DELETE FROM project_iterations; DELETE FROM project_areas;").map_err(error)?;
     let Some(envelope) = envelope.filter(|v| !v.is_null()) else {
         return Ok(());
     };
@@ -286,6 +785,7 @@ fn project_state(conn: &Connection, envelope: Option<&Value>) -> Result<(), Stri
     }
     let mut active = HashMap::new();
     let mut item_ids = HashSet::new();
+    let mut merged_items = HashMap::new();
     for (v, e) in entities(state, "items")? {
         note(v)?;
         override_rule(v)?;
@@ -294,6 +794,12 @@ fn project_state(conn: &Connection, envelope: Option<&Value>) -> Result<(), Stri
             active.insert(e.id.clone(), iteration.clone());
         }
         item_ids.insert(e.id.clone());
+        if let Some(target) = optional_id(v, "mergedIntoId")? {
+            if v.get("status").and_then(Value::as_str) != Some("cancelled") {
+                return Err(error("merged work item must be cancelled"));
+            }
+            merged_items.insert(e.id.clone(), target);
+        }
         conn.execute(
             "INSERT INTO project_work_items VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9)",
             params![
@@ -310,6 +816,12 @@ fn project_state(conn: &Connection, envelope: Option<&Value>) -> Result<(), Stri
         )
         .map_err(error)?;
     }
+    for (donor, target) in &merged_items {
+        if donor == target || !item_ids.contains(target) || merged_items.contains_key(target) {
+            return Err(error("invalid merged work item target"));
+        }
+    }
+    remote_state(conn, state, &item_ids, &merged_items)?;
     let mut ids = HashSet::new();
     let mut open = HashMap::new();
     for v in array(state, "memberships")? {
@@ -405,6 +917,15 @@ fn plan_links(conn: &Connection, key: &str, envelope: Option<&Value>) -> Result<
             }
             let id = nonempty(task, "id")?;
             let item = optional_id(task, "workItemId")?;
+            if let Some(item) = &item {
+                let merged: Option<String> = conn.query_row(
+                    "SELECT json_extract(value_json,'$.mergedIntoId') FROM project_work_items WHERE id=?1",
+                    [item], |row| row.get(0),
+                ).optional().map_err(error)?.flatten();
+                if merged.is_some() {
+                    return Err(error("plan cannot reference merged work item"));
+                }
+            }
             conn.execute(
                 "INSERT INTO project_plan_links VALUES(?1,?2,?3,?4)",
                 params![key, day, id, item],

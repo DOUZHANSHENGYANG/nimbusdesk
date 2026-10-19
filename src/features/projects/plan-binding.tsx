@@ -25,7 +25,7 @@ export function PlanBinding({ date, task }: { date: string; task: PlanTask }) {
     }}>
       <option value="__inherit">{task.parentId ? (en ? "Inherit parent" : "继承父计划") + (inherited ? ` · ${items.find(i => i.id === inherited)?.title ?? ""}` : "") : en ? "No project task" : "未关联任务"}</option>
       <option value="__none">{en ? "Standalone" : "保持游离"}</option>
-      {items.map(item => <option key={item.id} value={item.id}>{item.projectId ? `${projects.find(p => p.id === item.projectId)?.name ?? ""} / ` : ""}{item.title}{item.status === "cancelled" ? (en ? " (cancelled)" : "（已取消）") : ""}</option>)}
+      {items.filter(item => !item.mergedIntoId).map(item => <option key={item.id} value={item.id}>{item.projectId ? `${projects.find(p => p.id === item.projectId)?.name ?? ""} / ` : ""}{item.title}{item.status === "cancelled" ? (en ? " (cancelled)" : "（已取消）") : ""}</option>)}
     </select>
   </label>;
 }

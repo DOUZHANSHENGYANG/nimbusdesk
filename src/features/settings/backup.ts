@@ -31,17 +31,18 @@ import {
   writeJson,
   type BackupExport,
 } from "@/lib/tauri";
-import { flushAllStorage } from "@/lib/storage";
+import { acceptCommittedStorage, flushAllStorage } from "@/lib/storage";
 import { useSettings } from "@/stores/settings";
 import { invoke } from "@tauri-apps/api/core";
 import { cleanProvider, getProviderModels } from "@/features/ai/core";
 import { collectAttachmentPaths, validateAttachmentFiles, type BackupAttachmentFile } from "./backup-files";
+import { readZenBackup, mergeZenBackup, rewriteMergedPlanLinks, assertPlanLinks } from "@/features/projects/backup";
 
 /** 备份文件格式版本（与各 store 自己的 version 是两件事） */
 export const BACKUP_SCHEMA = 2;
 
 /** 备份里会带上的数据 key。顺序即展示顺序 */
-export const BACKUP_KEYS = ["settings", "files", "fences", "projects", "plans", "plans-archive", "todo-papers", "reminders", "favorites", "custom-feeds", "feed-network", "ai-providers", "knowledge-settings"] as const;
+export const BACKUP_KEYS = ["settings", "files", "fences", "projects", "zentao", "plans", "plans-archive", "todo-papers", "reminders", "favorites", "custom-feeds", "feed-network", "ai-providers", "knowledge-settings"] as const;
 export type BackupKey = (typeof BACKUP_KEYS)[number];
 
 export interface BackupFile {
@@ -90,6 +91,7 @@ export function parseBackup(text: string): BackupFile {
     throw new Error(`unsupported-schema:${String(file.schema)}`);
   }
   if (!file.data || typeof file.data !== "object" || Array.isArray(file.data)) throw new Error("no-data");
+  if (file.data.zentao != null) readZenBackup(file.data.zentao);
   validateAttachmentFiles(file.data, file.attachments);
   return file as BackupFile;
 }
@@ -204,29 +206,70 @@ export async function mergeBackup(
   opts: { overwriteSettings: boolean },
 ): Promise<MergeStats> {
   const stats: MergeStats = { added: 0, updated: 0, skipped: 0 };
+  let restoreZen: (() => void) | undefined;
+  if (file.data.zentao != null) {
+    const incoming = readZenBackup(file.data.zentao);
+    const { useZentao } = await import("@/features/projects/zentao-store");
+    if (!useZentao.persist.hasHydrated()) await useZentao.persist.rehydrate();
+    const current = useZentao.getState();
+    const local = { connections: current.connections, syncStates: current.syncStates };
+    mergeZenBackup(local, incoming);
+    restoreZen = () => {
+      // Material/SQLite work can yield to local profile edits. Keep those edits
+      // while enforcing the restored connection's manual-authentication gate.
+      const latest = useZentao.getState();
+      const merged = mergeZenBackup({ connections: latest.connections, syncStates: latest.syncStates }, incoming);
+      stats.added += merged.connections.filter(c => !latest.connections.some(p => p.id === c.id)).length;
+      stats.updated += merged.connections.filter(c => latest.connections.some(p => p.id === c.id && JSON.stringify(p) !== JSON.stringify(c))).length;
+      useZentao.setState(merged);
+    };
+  }
   // Validate project graphs and references before writing any attachment or module.
   const incomingProjects = unwrapState(file.data.projects);
   const hasProjectLinks = [file.data.plans, file.data["plans-archive"]].some(v => JSON.stringify(v ?? {}).includes('"workItemId"'));
   let projectRestore: (() => Promise<void>) | undefined;
   if (incomingProjects || hasProjectLinks) {
     const { useProjects, projectData } = await import("@/features/projects/store");
-    const { mergeProjectBackup, assertPlanLinks } = await import("@/features/projects/backup");
-    if (!useProjects.persist.hasHydrated()) await useProjects.persist.rehydrate();
-    const local = projectData(useProjects.getState());
+    const { mergeProjectBackup } = await import("@/features/projects/backup");
+    const { usePlans, usePlansArchive } = await import("@/features/plans/store");
+    for (const store of [useProjects, usePlans, usePlansArchive]) if (!store.persist.hasHydrated()) await store.persist.rehydrate();
+    await flushAllStorage();
+    const [baseProjects, basePlans, baseArchive] = await Promise.all([readJson<Record<string, unknown>>("projects"), readJson<Record<string, unknown>>("plans"), readJson<Record<string, unknown>>("plans-archive")]);
+    const savedProjects = unwrapState(baseProjects);
+    const local = savedProjects ? savedProjects as unknown as ReturnType<typeof projectData> : projectData(useProjects.getState());
     const merged = incomingProjects ? mergeProjectBackup(local, incomingProjects as unknown as typeof local, opts) : local;
     const ids = new Set(merged.items.map(i => i.id));
-    assertPlanLinks(file.data.plans, ids); assertPlanLinks(file.data["plans-archive"], ids);
+    const mergedIds = new Set(merged.items.filter(i => i.mergedIntoId).map(i => i.id));
+    const mergePlans = (base: unknown, incoming: unknown, days: Record<string, unknown>, version: number) => {
+      const current = unwrapState(base) ?? { days };
+      const restored = unwrapState(incoming);
+      const currentDays = (current.days ?? {}) as Record<string, unknown>;
+      const mergedDays = restored?.days && typeof restored.days === "object"
+        ? mergeDayTasks(currentDays, restored.days as Record<string, unknown>, stats)
+        : currentDays;
+      return rewriteMergedPlanLinks({
+        ...(base as object ?? {}),
+        version: (base as { version?: number } | null)?.version ?? version,
+        state: { ...current, days: mergedDays },
+      }, merged);
+    };
+    const nextPlans = mergePlans(basePlans, file.data.plans, usePlans.getState().days, 4);
+    const nextArchive = mergePlans(baseArchive, file.data["plans-archive"], usePlansArchive.getState().days, 3);
+    assertPlanLinks(nextPlans, ids, mergedIds); assertPlanLinks(nextArchive, ids, mergedIds);
+    const nextProjects = { ...(baseProjects ?? {}), version: (baseProjects as { version?: number } | null)?.version ?? 1, state: merged };
     projectRestore = async () => {
+      const saved = await invoke<{ projects: unknown; plans: unknown; archive: unknown }>("project_apply_remote_binding", { projects: nextProjects, plans: nextPlans, archive: nextArchive, baseProjects, basePlans, baseArchive });
+      await acceptCommittedStorage({ projects: saved.projects, plans: saved.plans, "plans-archive": saved.archive });
       stats.added += merged.items.filter(i => !local.items.some(x => x.id === i.id)).length;
       stats.updated += merged.items.filter(i => local.items.some(x => x.id === i.id && x.updatedAt < i.updatedAt)).length;
-      useProjects.setState(merged); await flushAllStorage();
     };
   }
   // Material first: a missing, invalid or conflicting file must not leave dangling task metadata.
   const attachmentFiles = validateAttachmentFiles(file.data, file.attachments);
   if (attachmentFiles.length) await invoke("task_attachments_import", { files: attachmentFiles });
-  // Native FK validation requires projects to reach disk before linked plan writes.
+  // Publish the whole project/plan graph only after material is available.
   await projectRestore?.();
+  restoreZen?.();
 
   // —— files ——
   const files = unwrapState(file.data.files);
@@ -268,7 +311,7 @@ export async function mergeBackup(
 
   // —— plans ——
   const plans = unwrapState(file.data.plans);
-  if (plans && plans.days && typeof plans.days === "object") {
+  if (!projectRestore && plans && plans.days && typeof plans.days === "object") {
     const { usePlans } = await import("@/features/plans/store");
     const cur = usePlans.getState().days as Record<string, unknown>;
     usePlans.setState({
@@ -278,7 +321,7 @@ export async function mergeBackup(
 
   // —— plans-archive ——
   const archive = unwrapState(file.data["plans-archive"]);
-  if (archive && archive.days && typeof archive.days === "object") {
+  if (!projectRestore && archive && archive.days && typeof archive.days === "object") {
     const { usePlansArchive } = await import("@/features/plans/store");
     const cur = usePlansArchive.getState().days as Record<string, unknown>;
     usePlansArchive.setState({
@@ -406,7 +449,8 @@ export async function buildBackup(opts: ExportOptions): Promise<BackupFile> {
         const state = unwrapState(v);
         const clean = { providers: (Array.isArray(state?.providers) ? state.providers : []).map((item) => cleanProvider(item)), defaultTextId: state?.defaultTextId ?? null, defaultVisionId: state?.defaultVisionId ?? null, defaultVisionModel: state?.defaultVisionModel ?? null };
         data[key] = { state: clean, version: (v as { version?: number }).version ?? 1 };
-      } else data[key] = v;
+      } else if (key === "zentao") data[key] = { state: readZenBackup(v), version: (v as { version?: number }).version ?? 1 };
+      else data[key] = v;
     }
   }
   const paths = collectAttachmentPaths(data);

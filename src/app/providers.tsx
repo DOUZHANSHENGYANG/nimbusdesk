@@ -21,6 +21,7 @@ import { EdgeRuntime } from "@/features/desktop/edge-runtime";
 import { KnowledgeRuntime } from "@/features/knowledge/runtime";
 import { SearchRuntime } from "@/features/search";
 import { ProjectRuntime } from "@/features/projects/runtime";
+import { ZentaoRuntime } from "@/features/projects/zentao-runtime";
 
 /**
  * 提醒调度包装：`useReminderLoop` 是 hook，不能直接当组件渲染。
@@ -44,6 +45,7 @@ export function Providers({ children }: { children: ReactNode }) {
             <PaperRestore />
             <ReminderLoop />
             <ProjectRuntime />
+            <ZentaoRuntime />
             <KnowledgeRuntime />
             <SearchRuntime />
             <FeedsRuntime />

@@ -4,6 +4,8 @@ import { onStorageSynced, tauriJsonStorage } from "@/lib/storage";
 import { useStorageHealth } from "@/stores/storage-health";
 import { carryItem, validateProjectData, validateReminderRule } from "./core";
 import { emptyProjectData, type ProjectData, type NewItem, type NewProject, type Project, type WorkItem, type Iteration, type ReminderRule, type ReminderDelivery } from "./types";
+import { useZentao } from "./zentao-store";
+import { reconcileZenChanges, recoverZenChanges } from "./zentao-writeback-core";
 
 interface ProjectStore extends ProjectData {
   addArea(name: string): string;
@@ -19,20 +21,26 @@ interface ProjectStore extends ProjectData {
   carryItem(id: string, iterationId: string | null): void;
   setReminderRule(rule: ReminderRule): void;
   markDelivered(delivery: ReminderDelivery): void;
+  refreshWriteback(): void;
 }
 const stamp = () => { const now = Date.now(); return { id: crypto.randomUUID(), createdAt: now, updatedAt: now }; };
 function nameOf(name: string): string { const v = name.trim(); if (!v || v.length > 500) throw new Error("Enter a name (1–500 characters)"); return v; }
 export function projectData(state: ProjectData): ProjectData {
-  const { areas, projects, iterations, items, memberships, reminderRule, deliveries } = state;
-  return { areas, projects, iterations, items, memberships, reminderRule, deliveries };
+  const { areas, projects, iterations, items, memberships, reminderRule, deliveries, remoteTasks = [], remoteExecutions = [], remoteLinks = [], remoteChanges = [] } = state;
+  return { areas, projects, iterations, items, memberships, reminderRule, deliveries, remoteTasks, remoteExecutions, remoteLinks, remoteChanges };
 }
 export const useProjects = create<ProjectStore>()(persist<ProjectStore, [], [], ProjectData>((set) => {
   const change = (fn: (data: ProjectData) => ProjectData) => set(current => {
     if (!useProjects.persist.hasHydrated()) throw new Error("Project data is still loading; please wait.");
-    const next = fn(projectData(current)); validateProjectData(next); return next;
+    const edited = fn(projectData(current));
+    // Reminder bookkeeping may run before connection hydration. Unknown policies
+    // must not be interpreted as deliberately disabling existing write intents.
+    const next = useZentao.persist.hasHydrated() ? reconcileZenChanges(edited, useZentao.getState().connections) : edited;
+    validateProjectData(next); return next;
   });
   return {
     ...emptyProjectData(),
+    refreshWriteback() { change(d => d); },
     addArea(name) { const entity = { ...stamp(), name: nameOf(name) }; change(d => ({ ...d, areas: [...d.areas, entity] })); return entity.id; },
     updateArea(id, name) { change(d => ({ ...d, areas: d.areas.map(a => a.id === id ? { ...a, name: nameOf(name), updatedAt: Date.now() } : a) })); },
     removeArea(id) { const now = Date.now(); change(d => ({ ...d, areas: d.areas.filter(a => a.id !== id), projects: d.projects.map(p => p.areaId === id ? { ...p, areaId: null, updatedAt: now } : p), items: d.items.map(i => i.areaId === id ? { ...i, areaId: null, updatedAt: now } : i) })); },
@@ -58,13 +66,14 @@ export const useProjects = create<ProjectStore>()(persist<ProjectStore, [], [], 
   };
 }, {
   name: "projects", version: 1, storage: createJSONStorage(() => tauriJsonStorage), partialize: projectData,
-  merge: (saved, current) => { if (!saved) return current; const data = { ...emptyProjectData(), ...(saved as ProjectData) }; validateProjectData(data); return { ...current, ...data }; },
+  merge: (saved, current) => { if (!saved) return current; const data = recoverZenChanges({ ...emptyProjectData(), ...(saved as ProjectData) }); validateProjectData(data); return { ...current, ...data }; },
   onRehydrateStorage: () => (_state, error) => { if (error) useStorageHealth.getState().report("unavailable", "projects", String(error)); },
 }));
 
 onStorageSynced((key, value) => {
   if (key !== "projects" || !value || typeof value !== "object") return;
-  const data = (value as { state?: ProjectData }).state; if (!data) return;
+  const saved = (value as { state?: ProjectData }).state; if (!saved) return;
+  const data = { ...emptyProjectData(), ...saved };
   try { validateProjectData(data); useProjects.setState(data); }
   catch (error) { useStorageHealth.getState().report("unavailable", "projects", String(error)); }
 });

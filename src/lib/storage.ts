@@ -33,6 +33,18 @@ function applyRemote(key: string, value: unknown) {
   finally { applying.delete(key); }
 }
 
+/** Publish the canonical result of a native transaction without echo-writing it.
+ * Edits queued during the transaction retain their original merge base. */
+export async function acceptCommittedStorage(values: Record<string, unknown>): Promise<void> {
+  for (const [key, value] of Object.entries(values)) {
+    reads.set(key, (reads.get(key) ?? 0) + 1);
+    known.set(key, value);
+    if (!pending.has(key) && !writing.has(key)) applyRemote(key, value);
+    useStorageHealth.getState().clear(key);
+  }
+  if (inTauri) for (const key of Object.keys(values)) await emit(EV_STORAGE, { key, source }).catch(() => undefined);
+}
+
 function clearTimer(key: string) {
   const timer = timers.get(key);
   if (timer) clearTimeout(timer);

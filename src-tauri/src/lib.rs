@@ -3,6 +3,7 @@ use tauri::Manager;
 mod atomic;
 mod database;
 mod project_database;
+mod zentao;
 mod task_attachments;
 mod state_merge;
 mod knowledge;
@@ -31,6 +32,13 @@ pub fn run() {
         .manage(commands::quick_tools::QuickToolsShortcut::default())
         .invoke_handler(tauri::generate_handler![
             commands::data::write_plan_pair,
+            commands::data::project_apply_remote_binding,
+            commands::zentao::zentao_secret_status,
+            commands::zentao::zentao_test_connection,
+            commands::zentao::zentao_forget_secret,
+            commands::zentao::zentao_fetch_tasks,
+            commands::zentao::zentao_read_task,
+            commands::zentao::zentao_write_task,
             commands::projects::project_create_root,
             commands::projects::project_list_files,
             commands::projects::project_read_file,

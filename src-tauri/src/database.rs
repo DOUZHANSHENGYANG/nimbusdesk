@@ -40,6 +40,7 @@ fn namespace(key: &str) -> (&str, &str) {
         "plans" => ("plans", "tasks"),
         "plans-archive" => ("plans", "archive"),
         "projects" => ("projects", "state"),
+        "zentao" => ("projects", "zentao"),
         "todo-papers" => ("plans", "papers"),
         "reminders" => ("plans", "reminders"),
         "files" => ("files", "catalog"),
@@ -134,6 +135,9 @@ fn read_legacy(root: &Path, key: &str) -> Result<Value, String> {
 }
 
 fn upsert(conn: &Connection, key: &str, value: &Value) -> Result<(), String> {
+    if key == "zentao" {
+        crate::project_database::validate_zentao_change(conn, value)?;
+    }
     let (module, feature) = namespace(key);
     let json = serde_json::to_string(value).map_err(|e| e.to_string())?;
     conn.execute(
@@ -183,7 +187,7 @@ fn open(root: &Path) -> Result<Connection, String> {
     let app_id: i64 = conn
         .pragma_query_value(None, "application_id", |r| r.get(0))
         .map_err(sqlite_error)?;
-    if version > 2 || (app_id != 0 && app_id != APPLICATION_ID) {
+    if version > 4 || (app_id != 0 && app_id != APPLICATION_ID) {
         return Err("unsupported SQLite database schema; original database retained".into());
     }
     if version == 0 {
@@ -214,7 +218,7 @@ fn open(root: &Path) -> Result<Connection, String> {
     let version: i64 = tx
         .pragma_query_value(None, "user_version", |r| r.get(0))
         .map_err(sqlite_error)?;
-    if version > 2 {
+    if version > 4 {
         return Err("unsupported SQLite database schema; original database retained".into());
     }
     if version == 0 {
@@ -254,13 +258,23 @@ fn open(root: &Path) -> Result<Connection, String> {
     }
     if version < 2 {
         crate::project_database::create_schema(&tx)?;
-        crate::project_database::rebuild(&tx)?;
         tx.execute(
             "UPDATE module_state SET module='projects',feature='state' WHERE key='projects'",
             [],
         )
         .map_err(sqlite_error)?;
         tx.pragma_update(None, "user_version", 2)
+            .map_err(sqlite_error)?;
+    }
+    if version < 3 {
+        crate::project_database::create_remote_schema(&tx)?;
+        tx.pragma_update(None, "user_version", 3)
+            .map_err(sqlite_error)?;
+    }
+    if version < 4 {
+        crate::project_database::create_writeback_schema(&tx)?;
+        crate::project_database::rebuild(&tx)?;
+        tx.pragma_update(None, "user_version", 4)
             .map_err(sqlite_error)?;
     }
     tx.commit().map_err(sqlite_error)?;
@@ -348,6 +362,41 @@ pub fn write_plan_pair_with_base_at(
     crate::project_database::project_write(&tx, "plans-archive", &archive)?;
     tx.commit().map_err(sqlite_error)?;
     Ok((plans, archive))
+}
+
+/// Late binding changes source links and explicit active/archived plan bindings
+/// together. Merge all bases under the writer lock, then validate the complete
+/// replacement graph; intermediate JSON must never be projected or committed.
+pub fn write_project_binding_with_base_at(
+    root: &Path,
+    projects: &Value,
+    plans: &Value,
+    archive: &Value,
+    base_projects: &Value,
+    base_plans: &Value,
+    base_archive: &Value,
+) -> Result<(Value, Value, Value), String> {
+    let mut conn = open(root)?;
+    let tx = conn
+        .transaction_with_behavior(TransactionBehavior::Immediate)
+        .map_err(sqlite_error)?;
+    let merge = |key: &str, value: &Value, base: &Value| -> Result<Value, String> {
+        let remote = read_value(&tx, key)?.unwrap_or(Value::Null);
+        if &remote == base {
+            Ok(value.clone())
+        } else {
+            crate::state_merge::merge(base, value, &remote)
+        }
+    };
+    let projects = merge("projects", projects, base_projects)?;
+    let plans = merge("plans", plans, base_plans)?;
+    let archive = merge("plans-archive", archive, base_archive)?;
+    upsert(&tx, "projects", &projects)?;
+    upsert(&tx, "plans", &plans)?;
+    upsert(&tx, "plans-archive", &archive)?;
+    crate::project_database::rebuild(&tx)?;
+    tx.commit().map_err(sqlite_error)?;
+    Ok((projects, plans, archive))
 }
 
 fn collect_owned_entries(
@@ -528,7 +577,7 @@ mod tests {
             assert_eq!(
                 conn.pragma_query_value(None, "user_version", |r| r.get::<_, i64>(0))
                     .unwrap(),
-                2
+                4
             );
             assert_eq!(
                 conn.query_row("SELECT count(*) FROM project_work_items", [], |r| r
@@ -549,6 +598,557 @@ mod tests {
             "reminderRule":{"enabled":true,"times":["09:00","16:50"],"advanceDays":0,"weekdays":[1,2,3,4,5],"nonWorkingDay":"same","timezone":"Asia/Shanghai"},
             "deliveries":[]
         }})
+    }
+
+    fn remote_project_envelope() -> Value {
+        let mut value = project_envelope();
+        value["state"]["remoteTasks"] = json!([{"id":"one:task:7","connectionId":"one","remoteId":7,"title":"Remote","note":"source","status":"wait","deadline":null,"start":null,"remoteProjectId":null,"executionId":null,"parentRemoteId":null,"assignedTo":"me","teamAccounts":[],"lastEditedDate":null,"updatedAt":1}]);
+        value["state"]["remoteExecutions"] = json!([{"id":"one:execution:9","connectionId":"one","remoteId":9,"name":"Sprint","start":null,"end":null,"status":"doing","updatedAt":1}]);
+        value["state"]["remoteLinks"] = json!([{"id":"one:task:7","connectionId":"one","remoteId":7,"itemId":"item","baseline":{"title":"Remote","note":"source","deadline":null,"status":"todo"},"divergedFields":[],"updatedAt":1}]);
+        value
+    }
+
+    fn queued_project_envelope() -> Value {
+        let mut value = remote_project_envelope();
+        let fields = json!({"title":"Remote","note":"source","deadline":null,"status":"todo"});
+        value["state"]["remoteChanges"] = json!([{"id":"one:task:7","connectionId":"one","remoteId":7,"itemId":"item","status":"pending","base":fields,"local":{"title":"Local","note":"source","deadline":null,"status":"todo"},"remote":fields,"expected":fields,"fields":["title"],"lastError":null,"updatedAt":2}]);
+        value
+    }
+
+    #[test]
+    fn remote_write_queue_migrates_v3_without_rewriting_authoritative_json() {
+        let root = Fixture::new();
+        let original = queued_project_envelope();
+        let conn = Connection::open(root.0.join(DATABASE_FILE)).unwrap();
+        conn.execute_batch("CREATE TABLE module_state(module TEXT NOT NULL,feature TEXT NOT NULL,key TEXT PRIMARY KEY,value_json TEXT NOT NULL,revision INTEGER NOT NULL,updated_at INTEGER NOT NULL); CREATE TABLE storage_meta(key TEXT PRIMARY KEY,value TEXT NOT NULL); INSERT INTO storage_meta VALUES('legacy_json_imported','1');").unwrap();
+        crate::project_database::create_schema(&conn).unwrap();
+        crate::project_database::create_remote_schema(&conn).unwrap();
+        upsert(&conn, "projects", &original).unwrap();
+        conn.pragma_update(None, "application_id", APPLICATION_ID)
+            .unwrap();
+        conn.pragma_update(None, "user_version", 3).unwrap();
+        drop(conn);
+        assert_eq!(read_at(&root.0, "projects").unwrap(), Some(original));
+        let conn = Connection::open(root.0.join(DATABASE_FILE)).unwrap();
+        assert_eq!(
+            conn.pragma_query_value(None, "user_version", |r| r.get::<_, i64>(0))
+                .unwrap(),
+            4
+        );
+        assert_eq!(
+            conn.query_row("SELECT count(*) FROM project_remote_changes", [], |r| r
+                .get::<_, i64>(0))
+                .unwrap(),
+            1
+        );
+        assert_eq!(
+            conn.query_row(
+                "SELECT revision FROM module_state WHERE key='projects'",
+                [],
+                |r| r.get::<_, i64>(0)
+            )
+            .unwrap(),
+            1
+        );
+    }
+
+    #[test]
+    fn remote_write_queue_rejects_invalid_intents_and_rolls_back_local_edit() {
+        let root = Fixture::new();
+        let valid = queued_project_envelope();
+        write_at(&root.0, "projects", &valid).unwrap();
+        let mut invalid = Vec::new();
+        for fields in [
+            json!([]),
+            json!(["status"]),
+            json!(["title", "title"]),
+            json!(["password"]),
+            json!("title"),
+        ] {
+            let mut value = valid.clone();
+            value["state"]["remoteChanges"][0]["fields"] = fields;
+            invalid.push(value);
+        }
+        for (field, value) in [
+            ("id", json!("different")),
+            ("itemId", json!("missing")),
+            ("connectionId", json!("two")),
+            ("remoteId", json!(8)),
+            ("status", json!("done")),
+            ("updatedAt", json!(-1)),
+            ("lastError", json!(false)),
+            ("token", json!("secret")),
+        ] {
+            let mut bad = valid.clone();
+            bad["state"]["remoteChanges"][0][field] = value;
+            invalid.push(bad);
+        }
+        for snapshot in ["base", "local", "remote", "expected"] {
+            let mut bad = valid.clone();
+            bad["state"]["remoteChanges"][0][snapshot]["password"] = json!("secret");
+            invalid.push(bad);
+            let mut bad = valid.clone();
+            bad["state"]["remoteChanges"][0][snapshot]["deadline"] = json!("bad");
+            invalid.push(bad);
+        }
+        let mut duplicate = valid.clone();
+        duplicate["state"]["remoteChanges"]
+            .as_array_mut()
+            .unwrap()
+            .push(valid["state"]["remoteChanges"][0].clone());
+        invalid.push(duplicate);
+        let mut wrong_item = valid.clone();
+        let mut other = wrong_item["state"]["items"][0].clone();
+        other["id"] = json!("other");
+        other["activeIterationId"] = Value::Null;
+        wrong_item["state"]["items"]
+            .as_array_mut()
+            .unwrap()
+            .push(other);
+        wrong_item["state"]["remoteChanges"][0]["itemId"] = json!("other");
+        invalid.push(wrong_item);
+        for mut bad in invalid {
+            bad["state"]["items"][0]["title"] = json!("Changed but invalid");
+            assert!(
+                write_at(&root.0, "projects", &bad).is_err(),
+                "accepted invalid queue: {bad}"
+            );
+            assert_eq!(read_at(&root.0, "projects").unwrap(), Some(valid.clone()));
+        }
+        let conn = Connection::open(root.0.join(DATABASE_FILE)).unwrap();
+        assert_eq!(
+            conn.query_row("SELECT count(*) FROM project_remote_changes", [], |r| r
+                .get::<_, i64>(0))
+                .unwrap(),
+            1
+        );
+        assert_eq!(
+            conn.query_row(
+                "SELECT revision FROM module_state WHERE key='projects'",
+                [],
+                |r| r.get::<_, i64>(0)
+            )
+            .unwrap(),
+            1
+        );
+    }
+
+    #[test]
+    fn invalid_write_queue_v3_migration_rolls_back_schema_and_keeps_json() {
+        let root = Fixture::new();
+        let mut original = queued_project_envelope();
+        original["state"]["remoteChanges"][0]["itemId"] = json!("missing");
+        let conn = Connection::open(root.0.join(DATABASE_FILE)).unwrap();
+        conn.execute_batch("CREATE TABLE module_state(module TEXT NOT NULL,feature TEXT NOT NULL,key TEXT PRIMARY KEY,value_json TEXT NOT NULL,revision INTEGER NOT NULL,updated_at INTEGER NOT NULL); CREATE TABLE storage_meta(key TEXT PRIMARY KEY,value TEXT NOT NULL); INSERT INTO storage_meta VALUES('legacy_json_imported','1');").unwrap();
+        crate::project_database::create_schema(&conn).unwrap();
+        crate::project_database::create_remote_schema(&conn).unwrap();
+        upsert(&conn, "projects", &original).unwrap();
+        conn.pragma_update(None, "application_id", APPLICATION_ID)
+            .unwrap();
+        conn.pragma_update(None, "user_version", 3).unwrap();
+        drop(conn);
+        assert!(read_at(&root.0, "projects").is_err());
+        let conn = Connection::open(root.0.join(DATABASE_FILE)).unwrap();
+        assert_eq!(
+            conn.pragma_query_value(None, "user_version", |r| r.get::<_, i64>(0))
+                .unwrap(),
+            3
+        );
+        assert_eq!(
+            conn.query_row(
+                "SELECT count(*) FROM sqlite_schema WHERE name='project_remote_changes'",
+                [],
+                |r| r.get::<_, i64>(0)
+            )
+            .unwrap(),
+            0
+        );
+        let retained: String = conn
+            .query_row(
+                "SELECT value_json FROM module_state WHERE key='projects'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(serde_json::from_str::<Value>(&retained).unwrap(), original);
+    }
+
+    #[test]
+    fn zentao_write_field_metadata_accepts_only_unique_ordinary_fields() {
+        let root = Fixture::new();
+        let valid = json!({"version":1,"state":{"connections":[{"id":"one","name":"Office","baseUrl":"","account":"","apiVersion":"auto","executionIds":[],"autoSync":false,"syncMinutes":15,"createdAt":1,"updatedAt":1,"writeFields":["title","note","deadline"]}],"syncStates":{}}});
+        write_at(&root.0, "zentao", &valid).unwrap();
+        for fields in [
+            json!(["status"]),
+            json!(["title", "title"]),
+            json!("title"),
+            json!(["password"]),
+            json!(null),
+        ] {
+            let mut bad = valid.clone();
+            bad["state"]["connections"][0]["writeFields"] = fields;
+            assert!(write_at(&root.0, "zentao", &bad).is_err());
+            assert_eq!(read_at(&root.0, "zentao").unwrap(), Some(valid.clone()));
+        }
+    }
+
+    #[test]
+    fn remote_schema_migrates_v2_without_rewriting_old_project_json() {
+        let root = Fixture::new();
+        let original = project_envelope();
+        let conn = Connection::open(root.0.join(DATABASE_FILE)).unwrap();
+        conn.execute_batch("CREATE TABLE module_state(module TEXT NOT NULL,feature TEXT NOT NULL,key TEXT PRIMARY KEY,value_json TEXT NOT NULL,revision INTEGER NOT NULL,updated_at INTEGER NOT NULL); CREATE TABLE storage_meta(key TEXT PRIMARY KEY,value TEXT NOT NULL); INSERT INTO storage_meta VALUES('legacy_json_imported','1');").unwrap();
+        crate::project_database::create_schema(&conn).unwrap();
+        upsert(&conn, "projects", &original).unwrap();
+        conn.pragma_update(None, "application_id", APPLICATION_ID)
+            .unwrap();
+        conn.pragma_update(None, "user_version", 2).unwrap();
+        drop(conn);
+        assert_eq!(read_at(&root.0, "projects").unwrap(), Some(original));
+        let conn = Connection::open(root.0.join(DATABASE_FILE)).unwrap();
+        assert_eq!(
+            conn.pragma_query_value(None, "user_version", |r| r.get::<_, i64>(0))
+                .unwrap(),
+            4
+        );
+        assert_eq!(
+            conn.query_row("SELECT count(*) FROM project_remote_links", [], |r| r
+                .get::<_, i64>(0))
+                .unwrap(),
+            0
+        );
+        assert_eq!(
+            conn.query_row(
+                "SELECT revision FROM module_state WHERE key='projects'",
+                [],
+                |r| r.get::<_, i64>(0)
+            )
+            .unwrap(),
+            1
+        );
+    }
+
+    #[test]
+    fn invalid_remote_v2_migration_rolls_back_tables_and_version_before_retry() {
+        let root = Fixture::new();
+        let mut original = remote_project_envelope();
+        original["state"]["remoteTasks"] = json!([]);
+        let conn = Connection::open(root.0.join(DATABASE_FILE)).unwrap();
+        conn.execute_batch("CREATE TABLE module_state(module TEXT NOT NULL,feature TEXT NOT NULL,key TEXT PRIMARY KEY,value_json TEXT NOT NULL,revision INTEGER NOT NULL,updated_at INTEGER NOT NULL); CREATE TABLE storage_meta(key TEXT PRIMARY KEY,value TEXT NOT NULL); INSERT INTO storage_meta VALUES('legacy_json_imported','1');").unwrap();
+        crate::project_database::create_schema(&conn).unwrap();
+        upsert(&conn, "projects", &original).unwrap();
+        conn.pragma_update(None, "application_id", APPLICATION_ID)
+            .unwrap();
+        conn.pragma_update(None, "user_version", 2).unwrap();
+        assert!(read_at(&root.0, "projects").is_err());
+        assert_eq!(
+            conn.pragma_query_value(None, "user_version", |row| row.get::<_, i64>(0))
+                .unwrap(),
+            2
+        );
+        assert_eq!(
+            conn.query_row(
+                "SELECT count(*) FROM sqlite_schema WHERE name='project_remote_links'",
+                [],
+                |row| row.get::<_, i64>(0)
+            )
+            .unwrap(),
+            0
+        );
+        assert_eq!(read_value(&conn, "projects").unwrap(), Some(original));
+        upsert(&conn, "projects", &remote_project_envelope()).unwrap();
+        assert_eq!(
+            read_at(&root.0, "projects").unwrap(),
+            Some(remote_project_envelope())
+        );
+    }
+
+    #[test]
+    fn remote_projection_enforces_identity_cache_and_unmerged_target_atomically() {
+        let root = Fixture::new();
+        let valid = remote_project_envelope();
+        write_at(&root.0, "projects", &valid).unwrap();
+        let mut cases = Vec::new();
+        for (field, bad) in [
+            ("id", json!("wrong")),
+            ("remoteId", json!(0)),
+            ("deadline", json!("2026-02-30")),
+            ("teamAccounts", json!([42])),
+            ("lastEditedDate", json!("bad")),
+        ] {
+            let mut value = valid.clone();
+            value["state"]["remoteTasks"][0][field] = bad;
+            cases.push(value);
+        }
+        for (field, bad) in [
+            ("itemId", json!("missing")),
+            ("remoteId", json!(8)),
+            ("divergedFields", json!(["projectId"])),
+            (
+                "baseline",
+                json!({"title":"Remote","note":"","deadline":null,"status":"wait"}),
+            ),
+        ] {
+            let mut value = valid.clone();
+            value["state"]["remoteLinks"][0][field] = bad;
+            cases.push(value);
+        }
+        let mut missing_cache = valid.clone();
+        missing_cache["state"]["remoteTasks"] = json!([]);
+        cases.push(missing_cache);
+        let mut duplicate = valid.clone();
+        let link = duplicate["state"]["remoteLinks"][0].clone();
+        duplicate["state"]["remoteLinks"]
+            .as_array_mut()
+            .unwrap()
+            .push(link);
+        cases.push(duplicate);
+        let mut merged = valid.clone();
+        merged["state"]["items"][0]["mergedIntoId"] = json!("missing");
+        merged["state"]["items"][0]["status"] = json!("cancelled");
+        cases.push(merged);
+        let mut execution = valid.clone();
+        execution["state"]["remoteExecutions"][0]["id"] = json!("wrong");
+        cases.push(execution);
+        let mut incomplete = valid.clone();
+        incomplete["state"]["remoteLinks"][0]["baseline"]
+            .as_object_mut()
+            .unwrap()
+            .remove("deadline");
+        cases.push(incomplete);
+        let mut null_cache = valid.clone();
+        null_cache["state"]["remoteTasks"] = Value::Null;
+        cases.push(null_cache);
+        for bad in cases {
+            assert!(
+                write_at(&root.0, "projects", &bad).is_err(),
+                "accepted invalid state {bad}"
+            );
+            assert_eq!(read_at(&root.0, "projects").unwrap(), Some(valid.clone()));
+        }
+        let conn = Connection::open(root.0.join(DATABASE_FILE)).unwrap();
+        assert_eq!(
+            conn.query_row("SELECT count(*) FROM project_remote_links", [], |r| r
+                .get::<_, i64>(0))
+                .unwrap(),
+            1
+        );
+        assert_eq!(
+            conn.query_row(
+                "SELECT revision FROM module_state WHERE key='projects'",
+                [],
+                |r| r.get::<_, i64>(0)
+            )
+            .unwrap(),
+            1
+        );
+    }
+
+    #[test]
+    fn remote_instances_share_numeric_ids_but_each_item_has_one_source() {
+        let root = Fixture::new();
+        let mut value = remote_project_envelope();
+        let mut task = value["state"]["remoteTasks"][0].clone();
+        task["id"] = json!("two:task:7");
+        task["connectionId"] = json!("two");
+        value["state"]["remoteTasks"]
+            .as_array_mut()
+            .unwrap()
+            .push(task);
+        let mut item = value["state"]["items"][0].clone();
+        item["id"] = json!("second");
+        item["activeIterationId"] = Value::Null;
+        value["state"]["items"].as_array_mut().unwrap().push(item);
+        let mut link = value["state"]["remoteLinks"][0].clone();
+        link["id"] = json!("two:task:7");
+        link["connectionId"] = json!("two");
+        link["itemId"] = json!("second");
+        value["state"]["remoteLinks"]
+            .as_array_mut()
+            .unwrap()
+            .push(link);
+        write_at(&root.0, "projects", &value).unwrap();
+        value["state"]["remoteLinks"][1]["itemId"] = json!("item");
+        assert!(write_at(&root.0, "projects", &value).is_err());
+    }
+
+    #[test]
+    fn remote_binding_rewires_active_and_archived_links_as_one_transaction() {
+        let root = Fixture::new();
+        let mut base = remote_project_envelope();
+        let mut donor = base["state"]["items"][0].clone();
+        donor["id"] = json!("donor");
+        donor["activeIterationId"] = Value::Null;
+        base["state"]["items"].as_array_mut().unwrap().push(donor);
+        base["state"]["remoteLinks"][0]["itemId"] = json!("donor");
+        let plans = json!({"version":3,"state":{"days":{"2026-10-18":[{"id":"active","workItemId":"donor"}]}}});
+        let archive = json!({"version":1,"state":{"days":{"2026-10-17":{"tasks":[{"id":"archived","workItemId":"donor"}],"archivedAt":1}}}});
+        write_at(&root.0, "projects", &base).unwrap();
+        write_at(&root.0, "plans", &plans).unwrap();
+        write_at(&root.0, "plans-archive", &archive).unwrap();
+        let mut changed = base.clone();
+        changed["state"]["items"][1]["status"] = json!("cancelled");
+        changed["state"]["items"][1]["mergedIntoId"] = json!("item");
+        changed["state"]["remoteLinks"][0]["itemId"] = json!("item");
+        let mut next_plans = plans.clone();
+        next_plans["state"]["days"]["2026-10-18"][0]["workItemId"] = json!("item");
+        let mut next_archive = archive.clone();
+        next_archive["state"]["days"]["2026-10-17"]["tasks"][0]["workItemId"] = json!("item");
+        assert_eq!(
+            write_project_binding_with_base_at(
+                &root.0,
+                &changed,
+                &next_plans,
+                &next_archive,
+                &base,
+                &plans,
+                &archive
+            )
+            .unwrap(),
+            (changed.clone(), next_plans.clone(), next_archive.clone())
+        );
+        let conn = Connection::open(root.0.join(DATABASE_FILE)).unwrap();
+        assert_eq!(
+            conn.query_row(
+                "SELECT count(*) FROM project_plan_links WHERE work_item_id='item'",
+                [],
+                |r| r.get::<_, i64>(0)
+            )
+            .unwrap(),
+            2
+        );
+        // A concurrent archive edit conflicts after the first two envelopes have merged.
+        let mut remote = next_archive.clone();
+        remote["state"]["days"]["2026-10-17"]["tasks"][0]["title"] = json!("remote");
+        write_at(&root.0, "plans-archive", &remote).unwrap();
+        let mut bad = next_archive.clone();
+        bad["state"]["days"]["2026-10-17"]["tasks"][0]["title"] = json!("local");
+        assert!(
+            write_project_binding_with_base_at(
+                &root.0,
+                &base,
+                &plans,
+                &bad,
+                &changed,
+                &next_plans,
+                &next_archive
+            )
+            .is_err()
+        );
+        assert_eq!(read_at(&root.0, "projects").unwrap(), Some(changed.clone()));
+        assert_eq!(read_at(&root.0, "plans").unwrap(), Some(next_plans.clone()));
+        let mut dangling = remote.clone();
+        dangling["state"]["days"]["2026-10-17"]["tasks"][0]["workItemId"] = json!("missing");
+        assert!(
+            write_project_binding_with_base_at(
+                &root.0,
+                &base,
+                &plans,
+                &dangling,
+                &changed,
+                &next_plans,
+                &remote
+            )
+            .is_err()
+        );
+        assert_eq!(read_at(&root.0, "projects").unwrap(), Some(changed));
+        assert_eq!(read_at(&root.0, "plans-archive").unwrap(), Some(remote));
+        assert_eq!(
+            conn.query_row(
+                "SELECT revision FROM module_state WHERE key='projects'",
+                [],
+                |r| r.get::<_, i64>(0)
+            )
+            .unwrap(),
+            2
+        );
+    }
+
+    #[test]
+    fn zentao_metadata_rejects_secrets_and_unknown_contract_fields() {
+        let root = Fixture::new();
+        let valid = json!({"version":1,"state":{"connections":[{"id":"one","name":"Office","baseUrl":"https://example.test/zentao","account":"me","apiVersion":"auto","executionIds":[],"autoSync":false,"syncMinutes":15,"createdAt":1,"updatedAt":1}],"syncStates":{}}});
+        write_at(&root.0, "zentao", &valid).unwrap();
+        for field in ["password", "token", "credentialKey", "unrecognized"] {
+            let mut bad = valid.clone();
+            bad["state"]["connections"][0][field] = json!("private");
+            assert!(write_at(&root.0, "zentao", &bad).is_err());
+        }
+        write_at(&root.0, "projects", &remote_project_envelope()).unwrap();
+        let mut changed = valid.clone();
+        changed["state"]["connections"][0]["account"] = json!("another-user");
+        assert!(write_at(&root.0, "zentao", &changed).is_err());
+        assert_eq!(read_at(&root.0, "zentao").unwrap(), Some(valid));
+    }
+
+    #[test]
+    fn remote_binding_sql_failure_rolls_back_all_three_envelopes_and_revisions() {
+        let root = Fixture::new();
+        let projects = remote_project_envelope();
+        let plans = json!({"version":1,"state":{"days":{}}});
+        write_at(&root.0, "projects", &projects).unwrap();
+        write_at(&root.0, "plans", &plans).unwrap();
+        write_at(&root.0, "plans-archive", &plans).unwrap();
+        let conn = Connection::open(root.0.join(DATABASE_FILE)).unwrap();
+        conn.execute_batch("CREATE TRIGGER fail_binding_archive BEFORE UPDATE ON module_state WHEN NEW.key='plans-archive' BEGIN SELECT RAISE(ABORT,'archive fixture failure'); END;").unwrap();
+        let mut changed = projects.clone();
+        changed["state"]["items"][0]["title"] = json!("changed");
+        assert!(
+            write_project_binding_with_base_at(
+                &root.0, &changed, &plans, &plans, &projects, &plans, &plans
+            )
+            .is_err()
+        );
+        assert_eq!(read_at(&root.0, "projects").unwrap(), Some(projects));
+        assert_eq!(conn.query_row("SELECT sum(revision) FROM module_state WHERE key IN ('projects','plans','plans-archive')",[],|r|r.get::<_,i64>(0)).unwrap(),3);
+        assert_eq!(
+            conn.query_row(
+                "SELECT title FROM project_work_items WHERE id='item'",
+                [],
+                |r| r.get::<_, String>(0)
+            )
+            .unwrap(),
+            "Work"
+        );
+    }
+
+    #[test]
+    fn remote_binding_preserves_independent_concurrent_changes_before_validation() {
+        let root = Fixture::new();
+        let base = remote_project_envelope();
+        let plans = json!({"version":1,"state":{"days":{}}});
+        write_at(&root.0, "projects", &base).unwrap();
+        write_at(&root.0, "plans", &plans).unwrap();
+        write_at(&root.0, "plans-archive", &plans).unwrap();
+        let mut remote = base.clone();
+        remote["state"]["items"][0]["note"] = json!("another window");
+        write_at(&root.0, "projects", &remote).unwrap();
+        let mut local = base.clone();
+        local["state"]["items"][0]["title"] = json!("new title");
+        let (merged, _, _) = write_project_binding_with_base_at(
+            &root.0, &local, &plans, &plans, &base, &plans, &plans,
+        )
+        .unwrap();
+        assert_eq!(merged["state"]["items"][0]["title"], "new title");
+        assert_eq!(merged["state"]["items"][0]["note"], "another window");
+    }
+
+    #[test]
+    fn remote_link_cannot_target_a_recoverable_merged_donor() {
+        let root = Fixture::new();
+        let mut value = remote_project_envelope();
+        let mut survivor = value["state"]["items"][0].clone();
+        survivor["id"] = json!("survivor");
+        survivor["activeIterationId"] = Value::Null;
+        value["state"]["items"]
+            .as_array_mut()
+            .unwrap()
+            .push(survivor);
+        value["state"]["items"][0]["status"] = json!("cancelled");
+        value["state"]["items"][0]["mergedIntoId"] = json!("survivor");
+        assert!(write_at(&root.0, "projects", &value).is_err());
+        value["state"]["remoteLinks"][0]["itemId"] = json!("survivor");
+        write_at(&root.0, "projects", &value).unwrap();
     }
 
     #[test]
@@ -1066,7 +1666,7 @@ mod tests {
         assert_eq!(
             conn.pragma_query_value(None, "user_version", |r| r.get::<_, i64>(0))
                 .unwrap(),
-            2
+            4
         );
         assert_eq!(
             conn.query_row(

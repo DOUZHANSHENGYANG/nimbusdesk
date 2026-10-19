@@ -1,24 +1,24 @@
 //! 提取 Windows 原生图标（资源管理器/桌面同款），返回 PNG data URL。
 //!
-//! 用 `SHGetImageList(SHIL_JUMBO)` 拿系统「超大」图像列表，再按
-//! `SHGetFileInfoW(SHGFI_SYSICONINDEX)` 得到的索引取图标。
-//!
-//! 为什么不用 `SHGFI_ICON | SHGFI_LARGEICON`：那只给 32×32，
-//! 栅栏缩放（0.7×–1.6×）或高 DPI 下会被放大而发虚。
-//! JUMBO 列表是「多尺寸」的：Windows 按当前 DPI 往里填充
-//! 256 / 96 / 64 / 48 / 40 / 32 / 20 / 16 各档，索引一致，
-//! 所以取到的是与当前缩放匹配的那一档，而不是硬塞 256 再缩。
-//!
-//! 不使用 `SHGFI_USEFILEATTRIBUTES`：按真实路径取图标，.exe 能拿到自身图标。
+//! 按目标尺寸选择系统图像列表。JUMBO 的槽位固定为 256，旧图标可能
+//! 只占其中 32 像素，不能直接把整个槽位缩小。保留 alpha 并处理这类空边。
 
 use std::collections::HashMap;
 use std::sync::Mutex;
 use std::sync::OnceLock;
+use std::time::{Duration, Instant, SystemTime};
 
-/// 路径 → data URL 缓存（图标不会变，进程内复用）。
-/// key 含目标尺寸：同一文件在不同显示尺寸下是两份图。
-fn cache() -> &'static Mutex<HashMap<String, Option<String>>> {
-    static CACHE: OnceLock<Mutex<HashMap<String, Option<String>>>> = OnceLock::new();
+/// Bounded successful-icon cache, invalidated by file metadata and a short TTL.
+/// Failed/offline lookups must never become permanent negative entries.
+struct CachedIcon {
+    value: String,
+    modified: Option<SystemTime>,
+    len: u64,
+    stored: Instant,
+}
+
+fn cache() -> &'static Mutex<HashMap<String, CachedIcon>> {
+    static CACHE: OnceLock<Mutex<HashMap<String, CachedIcon>>> = OnceLock::new();
     CACHE.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
@@ -51,13 +51,44 @@ pub async fn native_icons(
 /// 取图标并写缓存
 #[cfg(windows)]
 fn extract_cached(path: &str, size: i32) -> Option<String> {
+    let size = size.clamp(0, 256);
+    let meta = std::fs::metadata(path).ok()?;
+    let modified = meta.modified().ok();
     let key = format!("{path}\u{1}{size}");
-    if let Some(hit) = cache().lock().ok().and_then(|c| c.get(&key).cloned()) {
-        return hit;
+    if let Some(hit) = cache().lock().ok().and_then(|c| {
+        c.get(&key)
+            .filter(|v| {
+                v.modified == modified
+                    && v.len == meta.len()
+                    && v.stored.elapsed() < Duration::from_secs(300)
+            })
+            .map(|v| v.value.clone())
+    }) {
+        return Some(hit);
     }
     let result = unsafe { extract(path, size) };
     if let Ok(mut c) = cache().lock() {
-        c.insert(key, result.clone());
+        c.remove(&key);
+        if let Some(value) = &result {
+            if c.len() >= 512 {
+                if let Some(oldest) = c
+                    .iter()
+                    .min_by_key(|(_, v)| v.stored)
+                    .map(|(k, _)| k.clone())
+                {
+                    c.remove(&oldest);
+                }
+            }
+            c.insert(
+                key,
+                CachedIcon {
+                    value: value.clone(),
+                    modified,
+                    len: meta.len(),
+                    stored: Instant::now(),
+                },
+            );
+        }
     }
     result
 }
@@ -68,32 +99,80 @@ fn extract_cached(_path: &str, _size: i32) -> Option<String> {
 }
 
 #[cfg(windows)]
+unsafe fn shortcut_default_icon_target(path: &str) -> Option<String> {
+    use std::os::windows::ffi::OsStrExt;
+    use windows::core::{Interface, PCWSTR};
+    use windows::Win32::System::Com::{CoCreateInstance, IPersistFile, CLSCTX_INPROC_SERVER, STGM_READ};
+    use windows::Win32::UI::Shell::{IShellLinkW, ShellLink};
+
+    if !std::path::Path::new(path).extension()?.eq_ignore_ascii_case("lnk") {
+        return None;
+    }
+    let link: IShellLinkW = unsafe { CoCreateInstance(&ShellLink, None, CLSCTX_INPROC_SERVER) }.ok()?;
+    let file: IPersistFile = link.cast().ok()?;
+    let wide: Vec<u16> = std::ffi::OsStr::new(path).encode_wide().chain(Some(0)).collect();
+    unsafe { file.Load(PCWSTR(wide.as_ptr()), STGM_READ) }.ok()?;
+    let mut icon = vec![0u16; 32768];
+    let mut index = 0;
+    unsafe { link.GetIconLocation(&mut icon, &mut index) }.ok()?;
+    // Respect user-selected shortcut icons; only inherit when no override exists.
+    if icon[0] != 0 { return None; }
+    let mut target = vec![0u16; 32768];
+    // Read the stored path only. Never Resolve/Save, launch, or modify the link.
+    unsafe { link.GetPath(&mut target, std::ptr::null_mut(), 0) }.ok()?;
+    let length = target.iter().position(|value| *value == 0)?;
+    let target = String::from_utf16(&target[..length]).ok()?;
+    if target.is_empty() || !std::path::Path::new(&target).exists() { return None; }
+    Some(target)
+}
+
+#[cfg(windows)]
 unsafe fn extract(path: &str, target: i32) -> Option<String> {
     use std::ffi::OsStr;
     use std::os::windows::ffi::OsStrExt;
     use windows::Win32::Storage::FileSystem::FILE_FLAGS_AND_ATTRIBUTES;
-    use windows::Win32::System::Com::{CoInitializeEx, CoUninitialize, COINIT_APARTMENTTHREADED};
+    use windows::Win32::System::Com::{COINIT_APARTMENTTHREADED, CoInitializeEx, CoUninitialize};
     use windows::Win32::UI::Controls::{IImageList, ILD_TRANSPARENT};
     use windows::Win32::UI::Shell::{
-        SHGetFileInfoW, SHGetImageList, SHFILEINFOW, SHGFI_SYSICONINDEX, SHIL_EXTRALARGE,
-        SHIL_JUMBO,
+        SHFILEINFOW, SHGFI_SYSICONINDEX, SHGetFileInfoW, SHGetImageList, SHDefExtractIconW, SHIL_EXTRALARGE,
+        SHIL_JUMBO, SHIL_LARGE, SHIL_SMALL,
     };
     use windows::Win32::UI::WindowsAndMessaging::DestroyIcon;
 
-    let wide: Vec<u16> = OsStr::new(path)
-        .encode_wide()
-        .chain(std::iter::once(0))
-        .collect();
-
+    // Shell APIs do not consistently accept canonicalized extended-length paths.
+    let shell_path = if let Some(unc) = path.strip_prefix(r"\\?\UNC\") {
+        format!(r"\\{unc}")
+    } else {
+        path.strip_prefix(r"\\?\").unwrap_or(path).to_owned()
+    };
     // SHGetFileInfoW / SHGetImageList 要求调用线程已初始化 COM。
     // spawn_blocking 的线程池线程没初始化过。S_FALSE（已初始化）和
     // RPC_E_CHANGED_MODE（已被别的模式占用）都算「可继续使用」，
-    // 但只有成功返回 S_OK 时才该配对调用 CoUninitialize。
+    // 成功（包括 S_FALSE）时配对 CoUninitialize，模式冲突时不配对。
     let mut need_uninit = false;
 
     let out = (|| -> Option<String> {
         let hr = unsafe { CoInitializeEx(None, COINIT_APARTMENTTHREADED) };
         need_uninit = hr.is_ok();
+
+        let inherited = unsafe { shortcut_default_icon_target(&shell_path) };
+        let icon_path = inherited.as_deref().unwrap_or(&shell_path).replace('/', "\\");
+        let wide: Vec<u16> = OsStr::new(&icon_path).encode_wide().chain(Some(0)).collect();
+
+        // The Shell image-list cache can retain a generic white-page icon for
+        // portable executables. Read their actual resource instead of that cache.
+        let resource = std::path::Path::new(&icon_path).extension().is_some_and(|ext|
+            ext.eq_ignore_ascii_case("exe") || ext.eq_ignore_ascii_case("ico"));
+        if resource {
+            let mut hicon = windows::Win32::UI::WindowsAndMessaging::HICON::default();
+            let hr = unsafe { SHDefExtractIconW(windows::core::PCWSTR(wide.as_ptr()), 0, 0,
+                Some(&mut hicon), None, if target > 0 { target as u32 } else { 256 }) };
+            if !hicon.is_invalid() {
+                let png = if hr.is_ok() { unsafe { draw_to_png(hicon, target) } } else { None };
+                let _ = unsafe { DestroyIcon(hicon) };
+                if png.is_some() { return png; }
+            }
+        }
 
         // 索引：SHGFI_SYSICONINDEX 让我们能用同一个索引去查 jumbo 列表
         let mut info = SHFILEINFOW::default();
@@ -111,10 +190,13 @@ unsafe fn extract(path: &str, target: i32) -> Option<String> {
         }
         let index = info.iIcon;
 
-        // 系统超大图标列表（多尺寸，按 DPI 填充）。
-        // 某些精简/Server 环境没有 jumbo 列表，退到 SHIL_EXTRALARGE（48），
-        // 仍比原来的 32 好，且不会因为拿不到 jumbo 就整个没有原生图标。
-        let list: IImageList = unsafe { SHGetImageList(SHIL_JUMBO as i32) }
+        let list_size = match target {
+            1..=16 => SHIL_SMALL,
+            17..=32 => SHIL_LARGE,
+            33..=48 => SHIL_EXTRALARGE,
+            _ => SHIL_JUMBO,
+        };
+        let list: IImageList = unsafe { SHGetImageList(list_size as i32) }
             .or_else(|_| unsafe { SHGetImageList(SHIL_EXTRALARGE as i32) })
             .ok()?;
 
@@ -142,9 +224,8 @@ unsafe fn extract(_path: &str, _target: i32) -> Option<String> {
 
 /// 把 HICON 画进 32 位 DIB，按需缩放后编码 PNG。
 ///
-/// 尺寸取自图标自身的颜色位图（`GetObjectW` + `BITMAP`），不用
-/// `IImageList::GetIconSize`：后者返回列表槽位尺寸（固定 256），
-/// 而图标内容可能是更小的档位，按槽位画会在四周留透明边，显示时显得偏小。
+/// Draw at the icon bitmap size, then normalize excessive transparent canvas.
+/// Even GetIconInfo may expose the full padded jumbo slot for a legacy icon.
 ///
 /// 缩小用自写的盒式滤波（见 `downsample`）而不是 GDI 的拉伸模式：
 /// DrawIconEx 的缩放质量受 DC 拉伸模式影响、行为不易验证，
@@ -155,12 +236,12 @@ unsafe fn draw_to_png(
     target: i32,
 ) -> Option<String> {
     use windows::Win32::Graphics::Gdi::{
-        BITMAP, BITMAPINFO, BITMAPINFOHEADER, BI_RGB, CreateCompatibleDC, CreateDIBSection,
-        DIB_RGB_COLORS, DeleteDC, DeleteObject, GetDC, GetObjectW, HBITMAP, HDC, HGDIOBJ,
+        BI_RGB, BITMAP, BITMAPINFO, BITMAPINFOHEADER, CreateCompatibleDC, CreateDIBSection,
+        DIB_RGB_COLORS, DeleteDC, DeleteObject, GdiFlush, GetDC, GetObjectW, HBITMAP, HDC, HGDIOBJ,
         ReleaseDC, SelectObject,
     };
     use windows::Win32::UI::WindowsAndMessaging::{
-        DI_NORMAL, DrawIconEx, GetIconInfo, ICONINFO,
+        DI_MASK, DI_NORMAL, DrawIconEx, GetIconInfo, ICONINFO,
     };
 
     // 图标自身的位图尺寸最可靠（jumbo 列表内容尺寸可能小于槽位）
@@ -230,29 +311,46 @@ unsafe fn draw_to_png(
         return None;
     }
 
+    // CreateDIBSection memory is not guaranteed to be initialized. Transparent pixels
+    // must start at zero rather than inheriting stale heap contents.
+    unsafe { std::ptr::write_bytes(bits as *mut u8, 0, (w * h * 4) as usize) };
     let old = unsafe { SelectObject(mem, HGDIOBJ(dib.0)) };
     let drawn = unsafe { DrawIconEx(mem, 0, 0, hicon, w, h, 0, None, DI_NORMAL) }.is_ok();
-    unsafe { SelectObject(mem, old) };
-
+    let _ = unsafe { GdiFlush() };
     let png = if drawn {
         let bgra = unsafe {
             std::slice::from_raw_parts(bits as *const u8, (w as usize) * (h as usize) * 4)
+        }
+        .to_vec();
+        // Old masked icons have no alpha. Read their AND mask rather than making
+        // the entire (possibly padded) bitmap opaque.
+        let mask = if bgra.chunks_exact(4).all(|p| p[3] == 0) {
+            let mask_drawn =
+                unsafe { DrawIconEx(mem, 0, 0, hicon, w, h, 0, None, DI_MASK) }.is_ok();
+            let _ = unsafe { GdiFlush() };
+            mask_drawn.then(|| unsafe {
+                std::slice::from_raw_parts(bits as *const u8, (w * h * 4) as usize).to_vec()
+            })
+        } else {
+            None
         };
-        let rgba = bgra_to_rgba(bgra);
+        let rgba = bgra_to_rgba(&bgra, mask.as_deref());
+        let (rgba, w, h) = normalize_icon_bounds(rgba, w as u32, h as u32);
 
         // 需要缩小且确实比目标大才缩；放大交给前端（放大只会更糊，没有收益）
         let t = target.clamp(0, 1024);
-        if t > 0 && t < w.max(h) {
+        if t > 0 && (t as u32) < w.max(h) {
             let (tw, th) = (t, t);
-            let small = downsample(&rgba, w as u32, h as u32, tw as u32, th as u32);
+            let small = downsample(&rgba, w, h, tw as u32, th as u32);
             encode_png(&small, tw as u32, th as u32)
         } else {
-            encode_png(&rgba, w as u32, h as u32)
+            encode_png(&rgba, w, h)
         }
     } else {
         None
     };
 
+    unsafe { SelectObject(mem, old) };
     let _ = unsafe { DeleteObject(HGDIOBJ(dib.0)) };
     let _ = unsafe { DeleteDC(mem) };
     unsafe { ReleaseDC(None, screen) };
@@ -261,18 +359,59 @@ unsafe fn draw_to_png(
 
 /// BGRA → RGBA。
 ///
-/// DrawIconEx 在 32 位 DIB 上输出 BGRA；不带 alpha 通道的图标 alpha 全为 0，
-/// 这类像素按不透明处理（否则整图透明不可见）。
-/// 这个判断必须在缩小之前做：否则无 alpha 的图标缩小后全透明。
+/// DrawIconEx outputs premultiplied BGRA. PNG expects straight RGBA; legacy
+/// icons without alpha use their AND mask instead of an opaque rectangle.
 #[cfg(windows)]
-fn bgra_to_rgba(bgra: &[u8]) -> Vec<u8> {
+fn bgra_to_rgba(bgra: &[u8], mask: Option<&[u8]>) -> Vec<u8> {
     let has_alpha = bgra.chunks_exact(4).any(|p| p[3] != 0);
     let mut rgba = Vec::with_capacity(bgra.len());
-    for p in bgra.chunks_exact(4) {
-        let a = if has_alpha { p[3] } else { 255 };
-        rgba.extend_from_slice(&[p[2], p[1], p[0], a]);
+    for (i, p) in bgra.chunks_exact(4).enumerate() {
+        let a = if has_alpha {
+            p[3]
+        } else {
+            mask.map(|m| 255 - m[i * 4]).unwrap_or(0)
+        };
+        let straight = |c: u8| {
+            if has_alpha && a > 0 {
+                ((c as u32 * 255) / a as u32).min(255) as u8
+            } else {
+                c
+            }
+        };
+        rgba.extend_from_slice(&[straight(p[2]), straight(p[1]), straight(p[0]), a]);
     }
     rgba
+}
+
+/// Legacy icons in a jumbo list occupy a small corner of a fixed-size slot.
+/// Only remove excessive empty canvas; retain ordinary icon padding.
+#[cfg(windows)]
+fn normalize_icon_bounds(rgba: Vec<u8>, w: u32, h: u32) -> (Vec<u8>, u32, u32) {
+    let (mut x0, mut y0, mut x1, mut y1) = (w, h, 0, 0);
+    for y in 0..h {
+        for x in 0..w {
+            if rgba[((y * w + x) * 4 + 3) as usize] > 8 {
+                x0 = x0.min(x);
+                y0 = y0.min(y);
+                x1 = x1.max(x + 1);
+                y1 = y1.max(y + 1);
+            }
+        }
+    }
+    if x1 <= x0 || y1 <= y0 || (x1 - x0) * 2 > w || (y1 - y0) * 2 > h {
+        return (rgba, w, h);
+    }
+    let side = (x1 - x0).max(y1 - y0);
+    let mut out = vec![0; (side * side * 4) as usize];
+    let ox = (side - (x1 - x0)) / 2;
+    let oy = (side - (y1 - y0)) / 2;
+    for y in y0..y1 {
+        let src = ((y * w + x0) * 4) as usize;
+        let dst = (((y - y0 + oy) * side + ox) * 4) as usize;
+        let len = ((x1 - x0) * 4) as usize;
+        out[dst..dst + len].copy_from_slice(&rgba[src..src + len]);
+    }
+    (out, side, side)
 }
 
 /// 盒式滤波缩小 RGBA 图。
@@ -323,6 +462,10 @@ fn downsample(src: &[u8], sw: u32, sh: u32, tw: u32, th: u32) -> Vec<u8> {
 fn encode_png(rgba: &[u8], w: u32, h: u32) -> Option<String> {
     use base64::Engine;
 
+    if !rgba.chunks_exact(4).any(|p| p[3] > 0) {
+        return None;
+    }
+
     let mut out = Vec::new();
     {
         let mut enc = png::Encoder::new(&mut out, w, h);
@@ -338,4 +481,126 @@ fn encode_png(rgba: &[u8], w: u32, h: u32) -> Option<String> {
 #[cfg(not(windows))]
 fn encode_png(_rgba: &[u8], _w: u32, _h: u32) -> Option<String> {
     None
+}
+
+#[cfg(all(test, windows))]
+mod tests {
+    use super::*;
+
+    struct ShortcutFixture(std::path::PathBuf);
+    impl ShortcutFixture {
+        fn create() -> Self {
+            let root = std::env::temp_dir().join(format!(
+                "nimbus-icon-test-{}-{}",
+                std::process::id(),
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_nanos()
+            ));
+            std::fs::create_dir(&root).unwrap();
+            let script = r#"
+Add-Type -AssemblyName System.Drawing
+$stream = [System.IO.File]::Create((Join-Path $env:NIMBUS_ICON_TEST_DIR 'small.ico'))
+[System.Drawing.SystemIcons]::Information.Save($stream)
+$stream.Dispose()
+$shell = New-Object -ComObject WScript.Shell
+$link = $shell.CreateShortcut((Join-Path $env:NIMBUS_ICON_TEST_DIR 'small.lnk'))
+$link.TargetPath = (Join-Path $env:WINDIR 'System32\notepad.exe')
+$link.IconLocation = (Join-Path $env:NIMBUS_ICON_TEST_DIR 'small.ico')
+$link.Save()
+$plain = $shell.CreateShortcut((Join-Path $env:NIMBUS_ICON_TEST_DIR 'plain.lnk'))
+$plain.TargetPath = (Join-Path $env:WINDIR 'System32\notepad.exe')
+$plain.Save()
+"#;
+            let output = std::process::Command::new("powershell.exe")
+                .args(["-NoProfile", "-NonInteractive", "-Command", script])
+                .env("NIMBUS_ICON_TEST_DIR", &root)
+                .output()
+                .unwrap();
+            assert!(
+                output.status.success(),
+                "owned Windows shortcut fixture must be created"
+            );
+            Self(root)
+        }
+    }
+    impl Drop for ShortcutFixture {
+        fn drop(&mut self) {
+            let _ = std::fs::remove_dir_all(&self.0);
+        }
+    }
+
+    #[test]
+    fn shortcut_without_custom_icon_uses_its_target_image() {
+        let fixture = ShortcutFixture::create();
+        let target = std::path::PathBuf::from(std::env::var_os("WINDIR").unwrap()).join("System32").join("notepad.exe");
+        let plain = fixture.0.join("plain.lnk");
+        let expected = unsafe { extract(&target.to_string_lossy(), 48) }.expect("target icon");
+        assert!(unsafe { extract(&plain.to_string_lossy(), 48) }.as_ref() == Some(&expected), "default shortcut must inherit its target icon");
+    }
+
+    #[test]
+    fn shortcut_small_resource_is_visible_at_requested_size() {
+        let fixture = ShortcutFixture::create();
+        let path = fixture.0.join("small.lnk").canonicalize().unwrap();
+        for size in [32, 64] {
+            let url = unsafe { extract(&path.to_string_lossy(), size) }
+                .expect("owned shortcut icon, including canonical paths");
+            use base64::Engine;
+            let bytes = base64::engine::general_purpose::STANDARD
+                .decode(url.split_once(',').unwrap().1)
+                .unwrap();
+            let mut reader = png::Decoder::new(std::io::Cursor::new(bytes))
+                .read_info()
+                .unwrap();
+            let mut pixels = vec![0; reader.output_buffer_size()];
+            let info = reader.next_frame(&mut pixels).unwrap();
+            let visible = pixels[..info.buffer_size()]
+                .chunks_exact(4)
+                .filter(|p| p[3] > 32)
+                .count();
+            let coverage = visible as f64 / (info.width * info.height) as f64;
+            println!("owned {size} px shortcut icon coverage: {coverage:.3}");
+            assert!(
+                coverage > 0.2,
+                "Shell jumbo padding must not shrink the actual icon into a dot"
+            );
+            assert!(info.width <= size as u32 && info.height <= size as u32);
+        }
+    }
+
+    #[test]
+    fn empty_icons_are_rejected_and_alpha_mask_is_preserved() {
+        assert!(encode_png(&[0, 0, 0, 0], 1, 1).is_none());
+        assert_eq!(bgra_to_rgba(&[0, 32, 64, 128], None), vec![127, 63, 0, 128]);
+        assert_eq!(
+            bgra_to_rgba(
+                &[0, 0, 0, 0, 0, 0, 255, 0],
+                Some(&[255, 255, 255, 0, 0, 0, 0, 0])
+            ),
+            vec![0, 0, 0, 0, 255, 0, 0, 255]
+        );
+        let mut pixels = vec![0; 256 * 256 * 4];
+        for y in 0..32 {
+            for x in 0..32 {
+                pixels[(y * 256 + x) * 4 + 3] = 255;
+            }
+        }
+        let (cropped, w, h) = normalize_icon_bounds(pixels, 256, 256);
+        assert_eq!((w, h), (32, 32));
+        assert_eq!(cropped.len(), 32 * 32 * 4);
+        let (ordinary, w, h) = normalize_icon_bounds(vec![255; 32 * 32 * 4], 32, 32);
+        assert_eq!((ordinary.len(), w, h), (32 * 32 * 4, 32, 32));
+    }
+
+    #[test]
+    fn missing_files_are_not_cached_as_permanent_failures() {
+        let path =
+            std::env::temp_dir().join(format!("nimbus-icon-missing-{}.txt", std::process::id()));
+        let _ = std::fs::remove_file(&path);
+        assert!(extract_cached(&path.to_string_lossy(), 32).is_none());
+        let key = format!("{}\u{1}32", path.to_string_lossy());
+        assert!(!cache().lock().unwrap().contains_key(&key));
+    }
 }

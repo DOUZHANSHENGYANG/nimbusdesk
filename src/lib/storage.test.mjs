@@ -76,6 +76,19 @@ async function loadStorage({ initial = state(0), initialArchive = state(10), rea
   };
 }
 
+test("externally committed batch updates baselines without echo writes and preserves queued edits", async () => {
+  const api = await loadStorage(), received = [];
+  await api.storage.getItem("plans");
+  api.onStorageSynced((key, value) => { received.push([key,value]); void api.storage.setItem(key,JSON.stringify(value)); });
+  await api.acceptCommittedStorage({ plans: state(4), projects: state(5) });
+  assert.deepEqual(received, [["plans",state(4)],["projects",state(5)]]);
+  await api.flushAllStorage();assert.equal(api.calls.writes.length,0);
+  await api.storage.setItem("plans",JSON.stringify(state(6)));
+  await api.acceptCommittedStorage({ plans: state(7) });
+  assert.equal(received.length,2,"queued local edits must not be visually overwritten");
+  await api.flushAllStorage();assert.deepEqual(api.calls.writes[0].baseline.value,state(4));
+});
+
 test("flush waits for every in-flight write and serializes later edits", async () => {
   const first = deferred();
   const second = deferred();

@@ -1,4 +1,5 @@
 import type { ProjectData, ReminderRule, Iteration, WorkItem, ReminderDelivery } from "./types";
+import { validateZenProjectData } from "./zentao-core";
 
 export function validDate(value: string): boolean {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
@@ -107,4 +108,5 @@ export function validateProjectData(data: ProjectData): void {
   }
   ids(data.deliveries, "delivery");
   for (const d of data.deliveries) if (!items.has(d.itemId) || !validDate(d.date) || !epoch(d.notifiedAt) || !Array.isArray(d.slots) || !d.slots.length || d.slots.some(s => typeof s !== "string" || !/^([01]\d|2[0-3]):[0-5]\d$/.test(s))) throw new Error("Invalid reminder delivery");
+  validateZenProjectData(data);
 }
