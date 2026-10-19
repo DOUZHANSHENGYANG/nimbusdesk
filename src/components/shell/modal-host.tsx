@@ -74,6 +74,7 @@ export function ModalProvider({ children }: { children: ReactNode }) {
   const dataRef = useRef<ModalRequest | null>(null);
   const [input, setInput] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
+  const closeTimer = useRef<number | null>(null);
 
   const confirm = useCallback(
     (options: ConfirmOptions = {}) =>
@@ -124,26 +125,42 @@ export function ModalProvider({ children }: { children: ReactNode }) {
   );
 
   function show(r: ModalRequest) {
+    if (closeTimer.current !== null) window.clearTimeout(closeTimer.current);
+    closeTimer.current = null;
+    // A replacement resolves the old request rather than leaving its caller waiting.
+    dataRef.current?.resolve(dataRef.current.kind === "prompt" ? null : false);
+    setInput(r.inputInitial ?? "");
     dataRef.current = r;
     setData(r);
     setOpen(true);
   }
 
   function close(value: unknown) {
-    dataRef.current?.resolve(value);
+    const request = dataRef.current;
+    if (!request) return;
     dataRef.current = null;
     setOpen(false);
     // 等退场动画结束后再清内容，避免内容瞬间消失
-    window.setTimeout(() => setData(null), 500);
+    closeTimer.current = window.setTimeout(() => {
+      closeTimer.current = null;
+      setData(current => current === request ? null : current);
+    }, 500);
+    request.resolve(value);
   }
 
-  // prompt 打开时预填并聚焦
+  // 输入初值在 show 中一次设置；打开时只选择文本，避免迟到的 effect 覆盖输入。
   useEffect(() => {
     if (open && data?.showInput) {
-      setInput(data.inputInitial ?? "");
-      requestAnimationFrame(() => inputRef.current?.select());
+      const frame = requestAnimationFrame(() => inputRef.current?.select());
+      return () => cancelAnimationFrame(frame);
     }
   }, [open, data]);
+
+  useEffect(() => () => {
+    if (closeTimer.current !== null) window.clearTimeout(closeTimer.current);
+    dataRef.current?.resolve(dataRef.current.kind === "prompt" ? null : false);
+    dataRef.current = null;
+  }, []);
 
   // 全局禁用原生弹框：统一走自建 Modal
   useEffect(() => {
@@ -174,6 +191,7 @@ export function ModalProvider({ children }: { children: ReactNode }) {
       >
         <CenterMorphModalContent
           ariaLabel={data?.title ?? "Dialog"}
+          initialFocusRef={isPrompt ? inputRef : undefined}
           className="max-w-[24rem] bg-popover text-popover-foreground"
         >
           {data && (
@@ -199,7 +217,13 @@ export function ModalProvider({ children }: { children: ReactNode }) {
                     placeholder={data.inputPlaceholder}
                     onChange={(e) => setInput(e.target.value)}
                     onKeyDown={(e) => {
-                      if (e.key === "Enter") close(input);
+                      if (e.key !== "Enter") return;
+                      if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229 || e.repeat) {
+                        e.preventDefault();
+                        return;
+                      }
+                      e.preventDefault();
+                      close(input);
                     }}
                   />
                 </div>

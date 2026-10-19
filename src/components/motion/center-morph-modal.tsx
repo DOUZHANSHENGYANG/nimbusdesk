@@ -9,6 +9,7 @@ import {
   isValidElement,
   type ReactElement,
   type ReactNode,
+  type RefObject,
   useCallback,
   useContext,
   useEffect,
@@ -147,6 +148,8 @@ export interface CenterMorphModalContentProps {
   ariaLabel: string;
   /** Optional id of descriptive content inside the modal. */
   ariaDescribedBy?: string;
+  /** Optional initial focus target; other modal consumers retain their current behavior. */
+  initialFocusRef?: RefObject<HTMLElement | null>;
   /** Close on Escape or backdrop press. Default true. */
   dismissible?: boolean;
   /** Render the close control inside the panel's top-right corner. Default true. */
@@ -189,6 +192,7 @@ export function CenterMorphModalContent({
   children,
   ariaLabel,
   ariaDescribedBy,
+  initialFocusRef,
   dismissible = true,
   showCloseButton = true,
   closeButtonLabel = "Close modal",
@@ -210,7 +214,7 @@ export function CenterMorphModalContent({
 
     const focusFrame = requestAnimationFrame(() => {
       const [firstFocusable] = getFocusableElements(panelRef.current);
-      (firstFocusable ?? panelRef.current)?.focus();
+      (initialFocusRef?.current ?? firstFocusable ?? panelRef.current)?.focus();
     });
 
     const onKeyDown = (event: KeyboardEvent) => {
@@ -246,7 +250,7 @@ export function CenterMorphModalContent({
       document.body.style.overflow = previousOverflow;
       document.getElementById(context.triggerId)?.focus();
     };
-  }, [context, dismissible]);
+  }, [context, dismissible, initialFocusRef]);
 
   if (!mounted) return null;
 
