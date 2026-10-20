@@ -124,12 +124,12 @@ export function DockWindow() {
   }, [applyMode, setPanel]);
 
   const nav = (route: string) => invoke("desktop_open_main", { route }).catch(report);
-  /** 快捷收集窗居中于工作区（跟随 Dock 所在显示器）。 */
+  /** 快捷收集窗默认粘附屏幕右缘，垂直居中（跟随 Dock 所在显示器）。 */
   const captureSpot = () => {
     const area = areaRef.current;
     if (!area) return {};
     return {
-      x: Math.round(area.x + (area.w - 400) / 2),
+      x: Math.round(area.x + area.w - 400),
       y: Math.round(area.y + (area.h - 600) / 2),
     };
   };
@@ -409,6 +409,10 @@ function ProjectsFlyout() {
   const items = useProjects((s) => s.items);
   const [query, setQuery] = useState("");
   const [openProject, setOpenProject] = useState<string | null>(null);
+  const [projectDraft, setProjectDraft] = useState("");
+  const [itemDraft, setItemDraft] = useState("");
+  const addProject = useProjects((s) => s.addProject);
+  const addItem = useProjects((s) => s.addItem);
   const needle = query.trim().toLocaleLowerCase();
   const active = useMemo(() =>
     projects
@@ -457,6 +461,16 @@ function ProjectsFlyout() {
                   </li>
                 ))}
               </ul>}
+          <form className="dock-panel-search dock-padd" onSubmit={(event) => {
+            event.preventDefault();
+            const title = itemDraft.trim();
+            if (!title || !openProject) return;
+            addItem({ title, projectId: openProject });
+            setItemDraft("");
+          }}>
+            <input className="dock-panel-input" value={itemDraft} placeholder={t("dock.projectsAddItem")}
+              maxLength={120} onChange={(event) => setItemDraft(event.target.value)} />
+          </form>
           <button type="button" className="dock-panel-link" onClick={() => invoke("desktop_open_main", { route: `/projects?project=${project.id}` }).catch(report)}>
             {t("dock.projectsOpen")}
           </button>
@@ -490,6 +504,17 @@ function ProjectsFlyout() {
                   );
                 })}
               </ul>}
+          <form className="dock-panel-search dock-padd" onSubmit={(event) => {
+            event.preventDefault();
+            const name = projectDraft.trim();
+            if (!name) return;
+            const id = addProject({ name });
+            setProjectDraft("");
+            setOpenProject(id);
+          }}>
+            <input className="dock-panel-input" value={projectDraft} placeholder={t("dock.projectsAdd")}
+              maxLength={60} onChange={(event) => setProjectDraft(event.target.value)} />
+          </form>
           <button type="button" className="dock-panel-link" onClick={() => invoke("desktop_open_main", { route: "/projects" }).catch(report)}>
             {t("dock.projectsOpen")}
           </button>

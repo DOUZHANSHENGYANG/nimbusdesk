@@ -54,8 +54,8 @@ test("spring pair passes both modes through unchanged", () => {
 test("short work areas clamp the dock height instead of overflowing", () => {
   const small = { x: 0, y: 0, w: 800, h: 300 };
   const bounds = dockBounds(small, "left", "flyout");
-  assert.equal(bounds.h, 300);
-  assert.equal(bounds.y, 0);
+  assert.equal(bounds.h, 288, "flyout shares the rail height: the bar never changes size");
+  assert.equal(bounds.y, 6);
 });
 
 test("top edge is a horizontal bar pinned to the top, centered, growing downward", () => {

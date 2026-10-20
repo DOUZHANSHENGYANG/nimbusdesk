@@ -118,6 +118,36 @@
   color: var(--brand);
 }
 
+/* 选中态动效：品牌色底 + 侧缘指示条，出现时滑入 */
+.dock-item { position: relative; }
+.dock-item.is-active {
+  background: color-mix(in srgb, var(--brand) 14%, transparent);
+  color: var(--brand);
+}
+.dock-item.is-active::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 18%;
+  bottom: 18%;
+  width: 2px;
+  border-radius: 999px;
+  background: var(--brand);
+  animation: dock-active-in 160ms ease;
+}
+.dock-root[data-edge="top"] .dock-item.is-active::before {
+  left: 18%;
+  right: 18%;
+  top: auto;
+  bottom: 0;
+  width: auto;
+  height: 2px;
+}
+@keyframes dock-active-in {
+  from { opacity: 0; transform: scaleY(0.3); }
+  to { opacity: 1; transform: scaleY(1); }
+}
+
 .dock-icon { width: 18px; height: 18px; flex: none; }
 
 /* 标签常驻：效率玩家不需要悬停展开这一步 */
@@ -495,4 +525,5 @@
 
 @media (prefers-reduced-motion: reduce) {
   .dock-item, .dock-close, .dock-grip { transition: none; }
+  .dock-item.is-active::before { animation: none; }
 }

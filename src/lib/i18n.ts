@@ -58,6 +58,8 @@ const zh = {
     projectsItemsEmpty: "该项目暂无未完成的工作项。",
     projectsDoing: "进行中",
     projectsTodo: "待办",
+    projectsAdd: "新建项目，回车确认",
+    projectsAddItem: "新建工作项，回车确认",
   },
   topbar: {
     themeToDark: "切换到暗色",
@@ -654,6 +656,8 @@ const en: typeof zh = {
     projectsItemsEmpty: "No open work items in this project.",
     projectsDoing: "Doing",
     projectsTodo: "Todo",
+    projectsAdd: "New project; Enter to confirm",
+    projectsAddItem: "New work item; Enter to confirm",
   },
   topbar: {
     themeToDark: "Switch to dark",
