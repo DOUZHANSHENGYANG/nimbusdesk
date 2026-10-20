@@ -13,9 +13,9 @@ function load(file) {
 const { dockBounds, dockSpringPair, DOCK_RAIL_W, DOCK_FLYOUT_W } = load("./dock-core.ts");
 const area = { x: -1920, y: 0, w: 1920, h: 1080 };
 
-test("the rail hugs the work-area edge and stays vertically centered", () => {
+test("the rail hugs the work-area edge, fits its content and stays centered", () => {
   const left = dockBounds(area, "left", "strip");
-  assert.deepEqual(left, { x: -1920, y: 280, w: DOCK_RAIL_W, h: 520 });
+  assert.deepEqual(left, { x: -1920, y: 396, w: DOCK_RAIL_W, h: 288 });
   const right = dockBounds(area, "right", "strip");
   assert.equal(right.x + right.w, area.x + area.w, "right edge must anchor to the border");
   assert.equal(right.y, left.y);
@@ -84,5 +84,5 @@ test("anchor pops the flyout next to the triggering icon, clamped to the work ar
   assert.equal(low.y, area.y + area.h - plain.h, "never below the work area");
   const topAnchored = dockBounds(area, "top", "flyout", 600);
   assert.equal(topAnchored.x, area.x + area.w - DOCK_FLYOUT_W, "top edge anchors horizontally, clamped");
-  assert.equal(dockBounds(area, "right", "strip", 400).y, 280, "non-flyout modes stay centered");
+  assert.equal(dockBounds(area, "right", "strip", 400).y, 396, "non-flyout modes stay centered");
 });

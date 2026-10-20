@@ -18,7 +18,7 @@ import { todayStr } from "@/features/plans/types";
 import { addTaskAttachment, attachmentSize, openTaskAttachment, unlinkTaskAttachment } from "@/features/plans/attachment-api";
 import { useProjects } from "@/features/projects/store";
 import { monitorArea } from "./monitors";
-import { DOCK_RAIL_W, dockBounds, dockSpringPair, type DockArea, type DockMode, type DockPanel } from "./dock-core";
+import { dockBounds, dockSpringPair, type DockArea, type DockMode, type DockPanel } from "./dock-core";
 import { nearestDockEdge } from "./edge-core";
 import { ItemIcon } from "@/features/files/icons";
 import "./dock.css";
@@ -34,7 +34,6 @@ export function DockWindow() {
   const edge = useSettings((s) => s.dockEdge);
   const areaRef = useRef<DockArea | null>(null);
   const modeRef = useRef<DockMode>("strip");
-  const panelAnchor = useRef<number | undefined>(undefined);
   const switchAt = useRef(0);
   const [panel, setPanelState] = useState<DockPanel | null>(null);
   const [mode, setModeState] = useState<DockMode>("strip");
@@ -45,7 +44,7 @@ export function DockWindow() {
     setModeState(next);
   }, []);
 
-  const applyMode = useCallback(async (mode: DockMode, anchor?: number) => {
+  const applyMode = useCallback(async (mode: DockMode) => {
     if (!inTauri) return;
     const monitor = await currentMonitor().catch(() => null);
     if (!monitor) return;
@@ -54,7 +53,7 @@ export function DockWindow() {
     // MonitorArea 是物理像素；dock-core 的口径是逻辑像素。
     const area: DockArea = { x: raw.x / scale, y: raw.y / scale, w: raw.w / scale, h: raw.h / scale };
     areaRef.current = area;
-    const bounds = dockBounds(area, edge, mode, anchor);
+    const bounds = dockBounds(area, edge, mode);
     const sameMode = mode === modeRef.current;
     // 顶缘的形变是高度变化，而 dock_spring 只做横向弹簧，故顶缘直接落位。
     if (sameMode || edge === "top") {
@@ -65,7 +64,7 @@ export function DockWindow() {
       if (!sameMode) setMode(mode);
       return;
     }
-    const { from, to } = dockSpringPair(area, edge, modeRef.current, mode, anchor);
+    const { from, to } = dockSpringPair(area, edge, modeRef.current, mode);
     setMode(mode);
     await invoke("dock_spring", {
       label: LABEL, fromX: from.x, toX: to.x, fromW: from.w, toW: to.w,
@@ -73,13 +72,12 @@ export function DockWindow() {
     });
   }, [edge, setMode]);
 
-  /** 面板与悬停互相独立。锚点让面板从触发图标旁弹出；关闭回到常驻侧栏。 */
-  const setPanel = useCallback((next: DockPanel | null, anchor?: number) => {
+  /** 面板开合；窗口位置固定，侧栏绝不因开面板而移动。 */
+  const setPanel = useCallback((next: DockPanel | null) => {
     panelRef.current = next;
-    panelAnchor.current = next ? anchor : undefined;
     switchAt.current = Date.now();
     setPanelState(next);
-    void applyMode(next ? "flyout" : "strip", panelAnchor.current).catch(report);
+    void applyMode(next ? "flyout" : "strip").catch(report);
   }, [applyMode]);
 
   /** 拖动 grip 松手后，按窗口落点吸附到最近的顶/左/右缘（复用 edge-core 口径）。 */
@@ -126,26 +124,14 @@ export function DockWindow() {
   }, [applyMode, setPanel]);
 
   const nav = (route: string) => invoke("desktop_open_main", { route }).catch(report);
-  /** 触发图标的屏幕逻辑坐标：面板前缘贴着它弹出（rect 是视口坐标，加窗口原点即得）。 */
-  const anchorFrom = (button: HTMLButtonElement) => {
-    const area = areaRef.current;
-    if (!area) return undefined;
-    const rect = button.getBoundingClientRect();
-    const origin = dockBounds(area, edge, modeRef.current);
-    return edge === "top"
-      ? origin.x + rect.left + rect.width / 2
-      : origin.y + rect.top + rect.height / 2;
-  };
-  /** 快捷收集窗贴着 Dock 停靠边，而不是屏幕中央。 */
+  /** 快捷收集窗居中于工作区（跟随 Dock 所在显示器）。 */
   const captureSpot = () => {
     const area = areaRef.current;
     if (!area) return {};
-    const gap = 10;
-    if (edge === "top") return { x: Math.round(area.x + 24), y: Math.round(area.y + 88 + gap) };
-    const x = edge === "right"
-      ? area.x + area.w - 400 - DOCK_RAIL_W - gap
-      : area.x + DOCK_RAIL_W + gap;
-    return { x: Math.round(x), y: Math.round(area.y + 24) };
+    return {
+      x: Math.round(area.x + (area.w - 400) / 2),
+      y: Math.round(area.y + (area.h - 600) / 2),
+    };
   };
   const actions = [
     { key: "search", icon: Search, run: () => invoke("search_open_window").catch(report) },
@@ -192,8 +178,8 @@ export function DockWindow() {
             <li key={key}>
               <button type="button" className={`dock-item${panel === actionPanel ? " is-active" : ""}`}
                 title={t(`dock.${key}`)} aria-label={t(`dock.${key}`)} aria-pressed={panel === actionPanel}
-                onClick={(event) => {
-                  if (actionPanel) { setPanel(panel === actionPanel ? null : actionPanel, anchorFrom(event.currentTarget)); return; }
+                onClick={() => {
+                  if (actionPanel) { setPanel(panel === actionPanel ? null : actionPanel); return; }
                   if (run) { void run(); return; }
                   if (route) nav(route);
                 }}>
@@ -416,7 +402,7 @@ function PlansFlyout() {
   );
 }
 
-/** 项目飞出：先选项目再看未完成工作项，点击深链到主窗口对应位置。 */
+/** 项目飞出：项目带进度与未完成数，钻取看工作项（状态 + 截止日），点击深链主窗口。 */
 function ProjectsFlyout() {
   const { t } = useTranslation();
   const projects = useProjects((s) => s.projects);
@@ -430,19 +416,23 @@ function ProjectsFlyout() {
       .sort((a, b) => b.updatedAt - a.updatedAt), [projects]);
   const visible = useMemo(() =>
     active.filter((project) => !needle || project.name.toLocaleLowerCase().includes(needle)), [active, needle]);
-  const openItems = useMemo(() => {
-    const map = new Map<string, typeof items>();
+  const stats = useMemo(() => {
+    const map = new Map<string, { done: number; total: number; open: typeof items }>();
     for (const item of items) {
-      if (!item.projectId || item.status === "done" || item.status === "cancelled") continue;
-      map.set(item.projectId, [...(map.get(item.projectId) ?? []), item]);
+      if (!item.projectId || item.status === "cancelled") continue;
+      const entry = map.get(item.projectId) ?? { done: 0, total: 0, open: [] as typeof items };
+      entry.total += 1;
+      if (item.status === "done") entry.done += 1;
+      else entry.open.push(item);
+      map.set(item.projectId, entry);
     }
-    for (const list of map.values()) {
-      list.sort((a, b) => (a.deadline ?? "9999").localeCompare(b.deadline ?? "9999"));
+    for (const entry of map.values()) {
+      entry.open.sort((a, b) => (a.deadline ?? "9999").localeCompare(b.deadline ?? "9999"));
     }
     return map;
   }, [items]);
   const project = openProject ? projects.find((entry) => entry.id === openProject) : null;
-  const projectItems = openProject ? openItems.get(openProject) ?? [] : [];
+  const projectItems = openProject ? stats.get(openProject)?.open ?? [] : [];
 
   return (
     <div className="dock-panel" role="region" aria-label={t("dock.projects")}>
@@ -458,6 +448,9 @@ function ProjectsFlyout() {
                   <li key={item.id}>
                     <button type="button" className="dock-prow" title={item.title}
                       onClick={() => invoke("desktop_open_main", { route: `/projects?item=${item.id}` }).catch(report)}>
+                      <span className={`dock-pchip${item.status === "doing" ? " is-doing" : ""}`}>
+                        {t(item.status === "doing" ? "dock.projectsDoing" : "dock.projectsTodo")}
+                      </span>
                       <span className="dock-prow-name">{item.title}</span>
                       {item.deadline && <span className="dock-prow-count">{item.deadline.slice(5)}</span>}
                     </button>
@@ -478,15 +471,24 @@ function ProjectsFlyout() {
           {visible.length === 0
             ? <p className="dock-panel-empty">{t("dock.projectsEmpty")}</p>
             : <ul className="dock-plist">
-                {visible.map((entry) => (
-                  <li key={entry.id}>
-                    <button type="button" className="dock-prow" title={entry.name}
-                      onClick={() => setOpenProject(entry.id)}>
-                      <span className="dock-prow-name">{entry.name}</span>
-                      <span className="dock-prow-count">{(openItems.get(entry.id) ?? []).length}</span>
-                    </button>
-                  </li>
-                ))}
+                {visible.map((entry) => {
+                  const stat = stats.get(entry.id);
+                  const pct = stat && stat.total > 0 ? Math.round((stat.done / stat.total) * 100) : 0;
+                  return (
+                    <li key={entry.id}>
+                      <button type="button" className="dock-prow" title={entry.name}
+                        onClick={() => setOpenProject(entry.id)}>
+                        <span className="dock-prow-main">
+                          <span className="dock-prow-head">
+                            <span className="dock-prow-name">{entry.name}</span>
+                            <span className="dock-prow-count">{stat?.open.length ?? 0}</span>
+                          </span>
+                          <span className="dock-prow-bar" aria-hidden="true"><i style={{ width: `${pct}%` }} /></span>
+                        </span>
+                      </button>
+                    </li>
+                  );
+                })}
               </ul>}
           <button type="button" className="dock-panel-link" onClick={() => invoke("desktop_open_main", { route: "/projects" }).catch(report)}>
             {t("dock.projectsOpen")}

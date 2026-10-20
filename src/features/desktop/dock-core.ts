@@ -8,23 +8,22 @@ export interface DockBounds { x: number; y: number; w: number; h: number }
 export type DockMode = "strip" | "expand" | "flyout";
 export type DockPanel = "fences" | "plans" | "projects";
 
-/** 侧边栏常驻「图标 + 文字」，不再有收起态；飞出面板再宽一档放下网格与搜索。 */
+/** 侧边栏常驻「图标 + 文字」，高度贴合内容（六个图标 + 关闭钮），不拉满工作区。 */
 export const DOCK_RAIL_W = 134;
+export const DOCK_RAIL_H = 288;
 export const DOCK_FLYOUT_W = 408;
-/** 高度最多占工作区的 80%，飞出面板可以更高一档。 */
-export const DOCK_MAX_H = 520;
 export const DOCK_FLYOUT_MAX_H = 640;
-/** 顶缘横排的尺寸：宽度自适应屏幕。 */
+/** 顶缘横排的尺寸：宽度自适应屏幕，高度贴合内容。 */
 export const DOCK_TOP_W = 560;
 const TOP_MODE_W: Record<DockMode, number> = { strip: DOCK_TOP_W, expand: DOCK_TOP_W, flyout: DOCK_FLYOUT_W };
-const TOP_MODE_H: Record<DockMode, number> = { strip: 88, expand: 88, flyout: DOCK_FLYOUT_MAX_H };
+const TOP_MODE_H: Record<DockMode, number> = { strip: 64, expand: 64, flyout: DOCK_FLYOUT_MAX_H };
 /** 展开面板里每行的高度，供图标布局对齐。 */
 export const DOCK_ROW_H = 44;
-/** 锚定弹出时，面板前缘与触发图标中心保持的距离（逻辑像素）。 */
+/** 锚定弹出时，面板前缘与触发图标中心保持的距离（逻辑像素）。保留给未来用。 */
 const ANCHOR_LEAD = 48;
 
 const MODE_W: Record<DockMode, number> = { strip: DOCK_RAIL_W, expand: DOCK_RAIL_W, flyout: DOCK_FLYOUT_W };
-const MODE_H: Record<DockMode, number> = { strip: DOCK_MAX_H, expand: DOCK_MAX_H, flyout: DOCK_FLYOUT_MAX_H };
+const MODE_H: Record<DockMode, number> = { strip: DOCK_RAIL_H, expand: DOCK_RAIL_H, flyout: DOCK_FLYOUT_MAX_H };
 
 /**
  * 三种形态的窗口矩形。侧边栏常驻「图标 + 文字」（strip 与 expand 同尺寸）；

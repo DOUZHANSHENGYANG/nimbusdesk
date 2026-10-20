@@ -459,6 +459,26 @@
   color: var(--muted-foreground);
   background: var(--accent);
 }
+/* 项目行：名称 + 进度条两行结构 */
+.dock-prow-main { display: flex; flex-direction: column; gap: 5px; min-width: 0; flex: 1; }
+.dock-prow-head { display: flex; align-items: center; gap: 8px; }
+.dock-prow-bar {
+  height: 3px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--muted-foreground) 25%, transparent);
+  overflow: hidden;
+}
+.dock-prow-bar i { display: block; height: 100%; border-radius: 999px; background: var(--brand); }
+/* 工作项状态角标 */
+.dock-pchip {
+  flex: none;
+  padding: 1px 6px;
+  border-radius: var(--radius-sm);
+  font-size: 10px;
+  color: var(--muted-foreground);
+  background: var(--accent);
+}
+.dock-pchip.is-doing { color: var(--brand); background: color-mix(in srgb, var(--brand) 14%, transparent); }
 
 .dock-panel-link {
   flex: none;
