@@ -135,6 +135,26 @@
   background: var(--brand);
   animation: dock-active-in 160ms ease;
 }
+
+/* 角标：计划未完成数 / 项目逾期数 */
+.dock-badge {
+  position: absolute;
+  top: 0;
+  right: 2px;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  border-radius: 999px;
+  background: var(--destructive);
+  color: var(--primary-foreground);
+  font-size: 9px;
+  font-style: normal;
+  line-height: 14px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+.dock-root[data-edge="top"] .dock-badge { top: -3px; right: 0; }
 .dock-root[data-edge="top"] .dock-item.is-active::before {
   left: 18%;
   right: 18%;

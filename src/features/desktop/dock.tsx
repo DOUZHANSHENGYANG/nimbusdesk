@@ -18,7 +18,8 @@ import { todayStr } from "@/features/plans/types";
 import { addTaskAttachment, attachmentSize, openTaskAttachment, unlinkTaskAttachment } from "@/features/plans/attachment-api";
 import { useProjects } from "@/features/projects/store";
 import { CaptureForm } from "@/features/knowledge/capture";
-import { monitorArea } from "./monitors";
+import { beginMenu, closeMenu, emitMenuRequest, ensurePopupReady, ownerLabel, revealMenu, subscribeMenuSize, useMenuActions, type MenuAction } from "@/features/files/popup";
+import type { MenuIconKey, MenuNode } from "@/features/files/menu-model";import { monitorArea } from "./monitors";
 import { dockBounds, dockSpringPair, type DockArea, type DockMode, type DockPanel } from "./dock-core";
 import { nearestDockEdge } from "./edge-core";
 import { ItemIcon } from "@/features/files/icons";
@@ -30,15 +31,30 @@ const LABEL = "desktop-dock";
 function report(error: unknown) { toast.error(String(error)); }
 
 export function DockWindow() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const modal = useModal();
   const edge = useSettings((s) => s.dockEdge);
+  const theme = useSettings((s) => s.theme);
+  const today = todayStr();
+  const todayTasks = usePlans((s) => s.days[today]);
+  const allItems = useProjects((s) => s.items);
+  const allProjects = useProjects((s) => s.projects);
   const areaRef = useRef<DockArea | null>(null);
   const modeRef = useRef<DockMode>("strip");
   const switchAt = useRef(0);
   const [panel, setPanelState] = useState<DockPanel | null>(null);
   const [mode, setModeState] = useState<DockMode>("strip");
   const panelRef = useRef<DockPanel | null>(null);
+
+  /** 角标：计划=今天未完成数；项目=逾期未完成数 */
+  const plansBadge = useMemo(() => (todayTasks ?? []).filter((task) => !task.done).length, [todayTasks]);
+  const overdueBadge = useMemo(() =>
+    allItems.filter((item) => item.status !== "done" && item.status !== "cancelled" && item.deadline && item.deadline < today).length,
+  [allItems, today]);
+  const activeProjects = useMemo(() =>
+    allProjects
+      .filter((project) => project.status === "active")
+      .sort((a, b) => b.updatedAt - a.updatedAt), [allProjects]);
 
   const setMode = useCallback((next: DockMode) => {
     modeRef.current = next;
@@ -125,6 +141,82 @@ export function DockWindow() {
   }, [applyMode, setPanel]);
 
   const nav = (route: string) => invoke("desktop_open_main", { route }).catch(report);
+
+  /** 右键菜单：复用 popup-menu 浮窗传输层，动作在 Dock 窗口内解释执行。 */
+  const menuRequest = useRef(0);
+  const menuUnlisten = useRef<(() => void) | null>(null);
+  const menuStop = useCallback(() => {
+    menuUnlisten.current?.();
+    menuUnlisten.current = null;
+  }, []);
+  useMenuActions((action: MenuAction) => {
+    switch (action.action) {
+      case "plans.open": nav("/plans"); break;
+      case "projects.open": if (action.value) nav(`/projects?project=${action.value}`); break;
+      case "projects.all": nav("/projects"); break;
+      case "fences.files": nav("/files"); break;
+      case "knowledge.panel": setPanel("capture"); break;
+      case "knowledge.window": invoke("open_capture").catch(report); break;
+      case "settings.open": nav("/settings"); break;
+    }
+  });
+  const openMenu = useCallback(async (nodes: MenuNode[], at: { x: number; y: number }) => {
+    menuStop();
+    const request = ++menuRequest.current;
+    switchAt.current = Date.now(); // 菜单夺焦不收面板
+    try {
+      if (!(await ensurePopupReady())) return;
+      const seq = beginMenu();
+      const owner = ownerLabel();
+      let revealed = false;
+      const unlisten = await subscribeMenuSize(seq, (s) => {
+        if (request !== menuRequest.current) return;
+        revealed = true;
+        void revealMenu({ ...at, w: 0, h: 0 }, s, () => request === menuRequest.current).catch(() => {
+          if (request !== menuRequest.current) return;
+          menuStop();
+          void closeMenu(owner);
+        });
+      });
+      if (request !== menuRequest.current) { unlisten(); return; }
+      menuUnlisten.current = unlisten;
+      await emitMenuRequest(seq, owner, nodes, i18n.language, theme);
+      setTimeout(() => {
+        if (!revealed && request === menuRequest.current) { void closeMenu(owner); menuStop(); }
+      }, 1500);
+    } catch { /* 菜单失败静默：右键是增强路径 */ }
+  }, [i18n.language, theme, menuStop]);
+  const menuFor = useCallback((key: string): MenuNode[] => {
+    const item = (action: string, label: string, icon: MenuIconKey = "open", value?: string): MenuNode =>
+      ({ kind: "item", action, label, icon, value });
+    const sep = (cond: boolean): MenuNode[] => (cond ? [{ kind: "sep" }] : []);
+    if (key === "plans") {
+      const open = (todayTasks ?? []).filter((task) => !task.done).slice(0, 8);
+      return [
+        ...open.map((task): MenuNode => ({ kind: "item", action: "plans.none", label: task.title, disabled: true })),
+        ...sep(open.length > 0),
+        item("plans.open", t("dock.menuPlans")),
+      ];
+    }
+    if (key === "projects") {
+      const list = activeProjects.slice(0, 8);
+      return [
+        ...list.map((project): MenuNode => item("projects.open", project.name, "folder", project.id)),
+        ...sep(list.length > 0),
+        item("projects.all", t("dock.menuProjects")),
+      ];
+    }
+    if (key === "fences") return [item("fences.files", t("dock.menuFiles"))];
+    if (key === "knowledge") {
+      return [
+        item("knowledge.panel", t("dock.knowledge")),
+        item("knowledge.window", t("dock.captureDetach")),
+      ];
+    }
+    if (key === "settings") return [item("settings.open", t("dock.menuSettings"))];
+    return [];
+  }, [activeProjects, t, todayTasks]);
+
   const actions = [
     { key: "search", icon: Search, run: () => invoke("search_open_window").catch(report) },
     { key: "fences", icon: LayoutGrid, panel: "fences" as const },
@@ -167,20 +259,31 @@ export function DockWindow() {
         </div>
         <ul className="dock-list" role="toolbar" aria-label={t("dock.title")}
           aria-orientation={edge === "top" ? "horizontal" : "vertical"}>
-          {actions.map(({ key, icon: Icon, route, run, panel: actionPanel }) => (
-            <li key={key}>
-              <button type="button" className={`dock-item${panel === actionPanel ? " is-active" : ""}`}
-                title={t(`dock.${key}`)} aria-label={t(`dock.${key}`)} aria-pressed={panel === actionPanel}
-                onClick={() => {
-                  if (actionPanel) { setPanel(panel === actionPanel ? null : actionPanel); return; }
-                  if (run) { void run(); return; }
-                  if (route) nav(route);
-                }}>
-                <Icon className="dock-icon" aria-hidden="true" />
-                <span className="dock-label">{t(`dock.${key}`)}</span>
-              </button>
-            </li>
-          ))}
+          {actions.map(({ key, icon: Icon, route, run, panel: actionPanel }) => {
+            const badge = key === "plans" ? plansBadge : key === "projects" ? overdueBadge : 0;
+            const menuNodes = menuFor(key);
+            return (
+              <li key={key}>
+                <button type="button" className={`dock-item${panel === actionPanel ? " is-active" : ""}`}
+                  title={t(`dock.${key}`)} aria-label={t(`dock.${key}`)} aria-pressed={panel === actionPanel}
+                  onClick={() => {
+                    if (actionPanel) { setPanel(panel === actionPanel ? null : actionPanel); return; }
+                    if (run) { void run(); return; }
+                    if (route) nav(route);
+                  }}
+                  onContextMenu={(event) => {
+                    if (menuNodes.length === 0) return;
+                    event.preventDefault();
+                    event.stopPropagation();
+                    void openMenu(menuNodes, { x: event.clientX, y: event.clientY });
+                  }}>
+                  <Icon className="dock-icon" aria-hidden="true" />
+                  <span className="dock-label">{t(`dock.${key}`)}</span>
+                  {badge > 0 && <i className="dock-badge" aria-hidden="true">{badge > 99 ? "99+" : badge}</i>}
+                </button>
+              </li>
+            );
+          })}
         </ul>
         <button type="button" className="dock-close" title={t("dock.close")} aria-label={t("dock.close")} onClick={close}>
           <X className="size-3" aria-hidden="true" />
