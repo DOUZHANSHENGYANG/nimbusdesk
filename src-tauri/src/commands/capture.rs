@@ -13,8 +13,12 @@ pub(crate) fn parse_shortcut(value: &str) -> Result<Shortcut, String> {
 }
 
 #[tauri::command]
-pub async fn open_capture(app: AppHandle) -> Result<(), String> {
+pub async fn open_capture(app: AppHandle, x: Option<f64>, y: Option<f64>) -> Result<(), String> {
     if let Some(window) = app.get_webview_window("capture") {
+        if let (Some(x), Some(y)) = (x, y) {
+            window.set_position(tauri::Position::Logical(tauri::LogicalPosition::new(x, y)))
+                .map_err(|e| e.to_string())?;
+        }
         window.show().map_err(|e| e.to_string())?;
         window.set_focus().map_err(|e| e.to_string())?;
         return Ok(());
@@ -23,15 +27,18 @@ pub async fn open_capture(app: AppHandle) -> Result<(), String> {
         .and_then(|window| window.additional_browser_args.clone());
     let mut builder = tauri::WebviewWindowBuilder::new(&app, "capture", tauri::WebviewUrl::App("index.html".into()))
         .title("快速收集 · 云台")
-        .inner_size(480.0, 600.0)
-        .min_inner_size(430.0, 420.0)
-        .center()
+        .inner_size(400.0, 600.0)
+        .min_inner_size(360.0, 420.0)
         .decorations(false)
         .disable_drag_drop_handler()
         .always_on_top(true)
         .skip_taskbar(true)
         .background_color(tauri::window::Color(16, 16, 20, 255))
         .visible(false);
+    match (x, y) {
+        (Some(x), Some(y)) => { builder = builder.position(x, y); }
+        _ => { builder = builder.center(); }
+    }
     if let Some(args) = browser_args { builder = builder.additional_browser_args(&args); }
     builder.build()
         .map_err(|e| e.to_string())?;
@@ -49,7 +56,7 @@ pub async fn set_capture_shortcut(app: AppHandle, state: State<'_, CaptureShortc
     app.global_shortcut().on_shortcut(next, |app, _, event| {
         if event.state() == tauri_plugin_global_shortcut::ShortcutState::Pressed {
             let app = app.clone();
-            tauri::async_runtime::spawn(async move { let _ = open_capture(app).await; });
+            tauri::async_runtime::spawn(async move { let _ = open_capture(app, None, None).await; });
         }
     }).map_err(|_| "快捷键被占用或无法注册，请更换组合键".to_string())?;
     if let Some(previous) = *current {

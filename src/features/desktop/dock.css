@@ -20,16 +20,16 @@
 .dock-strip {
   display: flex;
   flex-direction: column;
-  width: 56px;
+  width: 45px;
   flex: none;
-  padding: 10px 8px;
+  padding: 8px 6px;
   background: color-mix(in srgb, var(--popover) 88%, transparent);
   backdrop-filter: blur(18px);
   border: 1px solid var(--border);
   box-shadow: var(--shadow-lg);
 }
 
-.dock-root[data-mode="expand"] .dock-strip { width: 168px; }
+.dock-root[data-mode="expand"] .dock-strip { width: 134px; }
 
 .dock-root[data-edge="left"] .dock-strip {
   margin-right: auto;
@@ -112,8 +112,8 @@
   align-items: center;
   gap: 10px;
   width: 100%;
-  height: 40px;
-  padding: 0 8px;
+  height: 36px;
+  padding: 0 7px;
   border-radius: var(--radius-md);
   color: var(--muted-foreground);
   outline: none;
@@ -125,7 +125,7 @@
   color: var(--brand);
 }
 
-.dock-icon { width: 20px; height: 20px; flex: none; }
+.dock-icon { width: 18px; height: 18px; flex: none; }
 
 /* 标签只在悬停态出现；strip/flyout 形态下溢出隐藏。 */
 .dock-label {
@@ -225,11 +225,11 @@
 }
 .dock-chip-sort button:hover { background: var(--accent); color: var(--brand); }
 
-/* 收纳盒磁贴：iOS 主屏式，圆角图标 + 下方标签 */
+/* 收纳盒磁贴：桌面文件夹九宫格式，3 列圆角图标 + 下方标签 */
 .dock-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 10px 6px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px 8px;
   align-content: start;
   flex: 1;
   min-height: 0;

@@ -48,7 +48,7 @@ pub fn create(app: &tauri::App) -> tauri::Result<()> {
             "capture" => {
                 let app = app.clone();
                 tauri::async_runtime::spawn(async move {
-                    let _ = crate::commands::capture::open_capture(app).await;
+                    let _ = crate::commands::capture::open_capture(app, None, None).await;
                 });
             }
             "search" => {

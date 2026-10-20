@@ -18,7 +18,7 @@ import { todayStr } from "@/features/plans/types";
 import { addTaskAttachment, attachmentSize, openTaskAttachment, unlinkTaskAttachment } from "@/features/plans/attachment-api";
 import { useProjects } from "@/features/projects/store";
 import { monitorArea } from "./monitors";
-import { dockBounds, dockSpringPair, type DockArea, type DockMode, type DockPanel } from "./dock-core";
+import { DOCK_STRIP_W, dockBounds, dockSpringPair, type DockArea, type DockMode, type DockPanel } from "./dock-core";
 import { nearestDockEdge } from "./edge-core";
 import { ItemIcon } from "@/features/files/icons";
 import "./dock.css";
@@ -34,6 +34,8 @@ export function DockWindow() {
   const edge = useSettings((s) => s.dockEdge);
   const areaRef = useRef<DockArea | null>(null);
   const modeRef = useRef<DockMode>("strip");
+  const panelAnchor = useRef<number | undefined>(undefined);
+  const switchAt = useRef(0);
   const [panel, setPanelState] = useState<DockPanel | null>(null);
   const [mode, setModeState] = useState<DockMode>("strip");
   const panelRef = useRef<DockPanel | null>(null);
@@ -43,7 +45,7 @@ export function DockWindow() {
     setModeState(next);
   }, []);
 
-  const applyMode = useCallback(async (mode: DockMode) => {
+  const applyMode = useCallback(async (mode: DockMode, anchor?: number) => {
     if (!inTauri) return;
     const monitor = await currentMonitor().catch(() => null);
     if (!monitor) return;
@@ -52,7 +54,7 @@ export function DockWindow() {
     // MonitorArea 是物理像素；dock-core 的口径是逻辑像素。
     const area: DockArea = { x: raw.x / scale, y: raw.y / scale, w: raw.w / scale, h: raw.h / scale };
     areaRef.current = area;
-    const bounds = dockBounds(area, edge, mode);
+    const bounds = dockBounds(area, edge, mode, anchor);
     const sameMode = mode === modeRef.current;
     // 顶缘的形变是高度变化，而 dock_spring 只做横向弹簧，故顶缘直接落位。
     if (sameMode || edge === "top") {
@@ -63,7 +65,7 @@ export function DockWindow() {
       if (!sameMode) setMode(mode);
       return;
     }
-    const { from, to } = dockSpringPair(area, edge, modeRef.current, mode);
+    const { from, to } = dockSpringPair(area, edge, modeRef.current, mode, anchor);
     setMode(mode);
     await invoke("dock_spring", {
       label: LABEL, fromX: from.x, toX: to.x, fromW: from.w, toW: to.w,
@@ -71,11 +73,13 @@ export function DockWindow() {
     });
   }, [edge, setMode]);
 
-  /** 面板与悬停互相独立：面板开着时悬停不再改变形态。 */
-  const setPanel = useCallback((next: DockPanel | null) => {
+  /** 面板与悬停互相独立：面板开着时悬停不再改变形态。锚点让面板从触发图标旁弹出。 */
+  const setPanel = useCallback((next: DockPanel | null, anchor?: number) => {
     panelRef.current = next;
+    panelAnchor.current = next ? anchor : undefined;
+    switchAt.current = Date.now();
     setPanelState(next);
-    void applyMode(next ? "flyout" : "expand").catch(report);
+    void applyMode(next ? "flyout" : next === null && modeRef.current === "flyout" ? "expand" : modeRef.current, panelAnchor.current).catch(report);
   }, [applyMode]);
 
   /** 拖动 grip 松手后，按窗口落点吸附到最近的顶/左/右缘（复用 edge-core 口径）。 */
@@ -113,20 +117,42 @@ export function DockWindow() {
       await invoke("window_show_no_activate", { label: LABEL });
     })().catch(report);
     // 失焦即收起面板：点击了外部应用或打开了文件后，面板不该留在原地。
+    // 切换面板的点击会引发瞬时失焦，宽限期内忽略，否则第一次点击只收不放。
     const webview = getCurrentWebviewWindow();
     const offFocus = webview.onFocusChanged(({ payload: focused }) => {
-      if (!focused && panelRef.current) setPanel(null);
+      if (!focused && panelRef.current && Date.now() - switchAt.current > 400) setPanel(null);
     });
     return () => { void offFocus.then((off) => off()).catch(() => undefined); };
   }, [applyMode, setPanel]);
 
   const nav = (route: string) => invoke("desktop_open_main", { route }).catch(report);
+  /** 触发图标的屏幕逻辑坐标：面板前缘贴着它弹出（rect 是视口坐标，加窗口原点即得）。 */
+  const anchorFrom = (button: HTMLButtonElement) => {
+    const area = areaRef.current;
+    if (!area) return undefined;
+    const rect = button.getBoundingClientRect();
+    const origin = dockBounds(area, edge, modeRef.current);
+    return edge === "top"
+      ? origin.x + rect.left + rect.width / 2
+      : origin.y + rect.top + rect.height / 2;
+  };
+  /** 快捷收集窗贴着 Dock 停靠边，而不是屏幕中央。 */
+  const captureSpot = () => {
+    const area = areaRef.current;
+    if (!area) return {};
+    const gap = 10;
+    if (edge === "top") return { x: Math.round(area.x + 24), y: Math.round(area.y + DOCK_STRIP_W + gap) };
+    const x = edge === "right"
+      ? area.x + area.w - 400 - DOCK_STRIP_W - gap
+      : area.x + DOCK_STRIP_W + gap;
+    return { x: Math.round(x), y: Math.round(area.y + 24) };
+  };
   const actions = [
     { key: "search", icon: Search, run: () => invoke("search_open_window").catch(report) },
     { key: "fences", icon: LayoutGrid, panel: "fences" as const },
     { key: "plans", icon: CalendarCheck, panel: "plans" as const },
     { key: "projects", icon: FolderKanban, panel: "projects" as const },
-    { key: "knowledge", icon: BookOpen, run: () => invoke("open_capture").catch(report) },
+    { key: "knowledge", icon: BookOpen, run: () => invoke("open_capture", captureSpot()).catch(report) },
     { key: "settings", icon: Settings2, route: "/settings" },
   ];
 
@@ -173,8 +199,8 @@ export function DockWindow() {
             <li key={key}>
               <button type="button" className={`dock-item${panel === actionPanel ? " is-active" : ""}`}
                 title={t(`dock.${key}`)} aria-label={t(`dock.${key}`)} aria-pressed={panel === actionPanel}
-                onClick={() => {
-                  if (actionPanel) { setPanel(panel === actionPanel ? null : actionPanel); return; }
+                onClick={(event) => {
+                  if (actionPanel) { setPanel(panel === actionPanel ? null : actionPanel, anchorFrom(event.currentTarget)); return; }
                   if (run) { void run(); return; }
                   if (route) nav(route);
                 }}>
@@ -254,7 +280,7 @@ function FencesFlyout() {
             {visible.map((item) => (
               <button type="button" key={item.id} className="dock-tile" title={item.path}
                 onClick={() => void open(item)}>
-                <ItemIcon type={item.type} path={item.path} iconUrl={item.iconUrl} size={40} />
+                <ItemIcon type={item.type} path={item.path} iconUrl={item.iconUrl} size={46} />
                 <span className="dock-tile-label">{item.title}</span>
               </button>
             ))}

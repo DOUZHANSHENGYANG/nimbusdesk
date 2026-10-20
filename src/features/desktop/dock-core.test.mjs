@@ -10,8 +10,7 @@ function load(file) {
   return module.exports;
 }
 
-const { dockBounds, dockSpringPair, DOCK_STRIP_W, DOCK_EXPAND_W, DOCK_FLYOUT_W } = load("./dock-core.ts");
-const area = { x: -1920, y: 0, w: 1920, h: 1080 };
+const { dockBounds, dockSpringPair, DOCK_STRIP_W, DOCK_EXPAND_W, DOCK_FLYOUT_W } = load("./dock-core.ts");const area = { x: -1920, y: 0, w: 1920, h: 1080 };
 
 test("strip hugs the work-area edge and stays vertically centered", () => {
   const left = dockBounds(area, "left", "strip");
@@ -73,4 +72,17 @@ test("top edge is a horizontal bar pinned to the top, centered, growing downward
   assert.ok(expand.h > strip.h && flyout.h > expand.h);
   const clamped = dockBounds({ x: 0, y: 0, w: 400, h: 300 }, "top", "strip");
   assert.equal(clamped.w, 400, "narrow work areas clamp the width");
+});
+
+test("anchor pops the flyout next to the triggering icon, clamped to the work area", () => {
+  const anchored = dockBounds(area, "right", "flyout", 400);
+  assert.equal(anchored.y, 352, "panel leads the icon by the fixed distance");
+  const high = dockBounds(area, "right", "flyout", -500);
+  assert.equal(high.y, area.y, "never above the work area");
+  const plain = dockBounds(area, "right", "flyout");
+  const low = dockBounds(area, "right", "flyout", 99999);
+  assert.equal(low.y, area.y + area.h - plain.h, "never below the work area");
+  const topAnchored = dockBounds(area, "top", "flyout", 600);
+  assert.equal(topAnchored.x, area.x + area.w - DOCK_FLYOUT_W, "top edge anchors horizontally, clamped");
+  assert.equal(dockBounds(area, "right", "strip", 400).y, 280, "non-flyout modes stay centered");
 });
