@@ -329,6 +329,25 @@
 .dock-capture-bar-title { font-size: 12px; font-weight: 500; color: var(--foreground/90); }
 .dock-capture-form { flex: 1; min-height: 0; overflow-y: auto; }
 .dock-capture-form .capture-composer { padding: 0; }
+/* 关联信息两栏在窄面板里改为独立描边输入，避免容器内嵌 ring 叠影 */
+.dock-capture-form .capture-context-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  overflow: visible;
+}
+.dock-capture-form .capture-context-fields label {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--background);
+  padding-left: 8px;
+}
+.dock-capture-form .capture-context-fields label + label { border-left: 1px solid var(--border); }
+.dock-capture-form .capture-context-fields label:focus-within { border-color: var(--ring); box-shadow: none; background: var(--background); }
+.dock-capture-form .capture-context-fields input { box-shadow: none !important; }
 .dock-capture-form .capture-footer {
   position: sticky;
   bottom: 0;

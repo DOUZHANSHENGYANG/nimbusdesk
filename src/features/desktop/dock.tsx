@@ -162,8 +162,8 @@ export function DockWindow() {
         }}>
         <div className="dock-grip" title={t("dock.grip")} aria-hidden="true">
           {edge === "top"
-            ? <GripHorizontal className="size-3.5" aria-hidden="true" />
-            : <GripVertical className="size-3.5" aria-hidden="true" />}
+            ? <GripVertical className="size-3.5" aria-hidden="true" />
+            : <GripHorizontal className="size-3.5" aria-hidden="true" />}
         </div>
         <ul className="dock-list" role="toolbar" aria-label={t("dock.title")}
           aria-orientation={edge === "top" ? "horizontal" : "vertical"}>
@@ -292,7 +292,7 @@ function FencesFlyout() {
       {visible.length === 0
         ? <p className="dock-panel-empty">{t("dock.fencesEmpty")}</p>
         : view === "grid"
-          ? <div className="dock-grid" style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${tileSize + 26}px, 1fr))` }}
+          ? <div className="dock-grid" style={{ gridTemplateColumns: "repeat(4, minmax(0, 1fr))" }}
               ref={(node) => { gridRef.current = node; }}>
               {visible.map((item) => (
                 <button type="button" key={item.id} className="dock-tile" title={item.path}

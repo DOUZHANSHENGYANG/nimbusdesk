@@ -70,7 +70,7 @@ export const useSettings = create<SettingsState>()(
       autoClearDone: false,
       dockEdge: "right",
       dockOpen: true,
-      dockTileSize: 46,
+      dockTileSize: 36,
       setTheme: (theme) => set({ theme }),
       setLang: (lang) => set({ lang }),
       setSidebarCollapsed: (sidebarCollapsed) => set({ sidebarCollapsed }),
@@ -99,7 +99,11 @@ export const useSettings = create<SettingsState>()(
       migrate: (persisted, version) => {
         const s = persisted as Partial<SettingsState> | undefined;
         if (!s) return persisted as SettingsState;
-        if (version >= 3) return persisted as SettingsState;
+        if (version >= 3) {
+          // 旧默认磁贴 46 偏大：静默并入新默认 36（用户手动调过的值不动）
+          if (s.dockTileSize === 46) s.dockTileSize = 36;
+          return persisted as SettingsState;
+        }
         return {
           ...s,
           plansView: isPlansView(s.plansView) ? s.plansView : "outline",
