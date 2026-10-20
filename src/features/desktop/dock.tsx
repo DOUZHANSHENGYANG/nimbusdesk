@@ -4,9 +4,9 @@ import { currentMonitor } from "@tauri-apps/api/window";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import {
   BookOpen, CalendarCheck, ChevronLeft, ChevronRight, FolderKanban, GripHorizontal,
-  GripVertical, LayoutGrid, Search, Settings2, X,
+  GripVertical, LayoutGrid, List, Search, Settings2, X,
 } from "lucide-react";
-import { RiAddLine, RiAttachment2, RiCloseLine, RiDeleteBinLine } from "@remixicon/react";
+import { RiAddLine, RiAttachment2, RiCloseLine, RiDeleteBinLine, RiPushpinLine } from "@remixicon/react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { useModal } from "@/components/shell/modal-host";
@@ -17,6 +17,8 @@ import { usePlans } from "@/features/plans/store";
 import { todayStr } from "@/features/plans/types";
 import { addTaskAttachment, attachmentSize, openTaskAttachment, unlinkTaskAttachment } from "@/features/plans/attachment-api";
 import { useProjects } from "@/features/projects/store";
+import { useKnowledge } from "@/features/knowledge/store";
+import { saveCapture } from "@/features/knowledge/api";
 import { monitorArea } from "./monitors";
 import { dockBounds, dockSpringPair, type DockArea, type DockMode, type DockPanel } from "./dock-core";
 import { nearestDockEdge } from "./edge-core";
@@ -124,21 +126,12 @@ export function DockWindow() {
   }, [applyMode, setPanel]);
 
   const nav = (route: string) => invoke("desktop_open_main", { route }).catch(report);
-  /** 快捷收集窗默认粘附屏幕右缘，垂直居中（跟随 Dock 所在显示器）。 */
-  const captureSpot = () => {
-    const area = areaRef.current;
-    if (!area) return {};
-    return {
-      x: Math.round(area.x + area.w - 400),
-      y: Math.round(area.y + (area.h - 600) / 2),
-    };
-  };
   const actions = [
     { key: "search", icon: Search, run: () => invoke("search_open_window").catch(report) },
     { key: "fences", icon: LayoutGrid, panel: "fences" as const },
     { key: "plans", icon: CalendarCheck, panel: "plans" as const },
     { key: "projects", icon: FolderKanban, panel: "projects" as const },
-    { key: "knowledge", icon: BookOpen, run: () => invoke("open_capture", captureSpot()).catch(report) },
+    { key: "knowledge", icon: BookOpen, panel: "capture" as const },
     { key: "settings", icon: Settings2, route: "/settings" },
   ];
 
@@ -160,6 +153,7 @@ export function DockWindow() {
       {panel === "fences" && <FencesFlyout />}
       {panel === "plans" && <PlansFlyout />}
       {panel === "projects" && <ProjectsFlyout />}
+      {panel === "capture" && <CapturePanel setPanel={setPanel} />}
       <div className="dock-strip"
         onPointerDown={(event) => {
           // 空白处与 grip 都能拖动换边；按钮和输入框照常点击
@@ -197,12 +191,14 @@ export function DockWindow() {
   );
 }
 
-/** 栅格飞出：全部分类的条目按手机桌面式网格平铺，可搜索、可按分类筛选与排序。 */
+/** 收纳盒飞出：宫格/列表两种展示，Ctrl+滚轮调图标大小，拖拽排序。 */
 function FencesFlyout() {
   const { t } = useTranslation();
   const categories = useFiles((s) => s.categories);
   const items = useFiles((s) => s.items);
   const moveCategory = useFiles((s) => s.moveCategory);
+  const moveItemBefore = useFiles((s) => s.moveItemBefore);
+  const tileSize = useSettings((s) => s.dockTileSize);
   const tops = useMemo(() => sortedTopCategories(categories), [categories]);
   const childrenOf = useMemo(() => {
     const map = new Map<string, string[]>();
@@ -214,7 +210,24 @@ function FencesFlyout() {
   }, [categories]);
   const [chip, setChip] = useState<string | null>(null);
   const [query, setQuery] = useState("");
+  const [view, setView] = useState<"grid" | "list">("grid");
+  const draggingId = useRef<string | null>(null);
+  const gridRef = useRef<HTMLElement | null>(null);
   const needle = query.trim().toLocaleLowerCase();
+
+  // Ctrl+滚轮调节磁贴大小：React 的 wheel 是被动监听，阻止页面缩放需原生监听
+  useEffect(() => {
+    const node = gridRef.current;
+    if (!node) return;
+    const onWheel = (event: WheelEvent) => {
+      if (!event.ctrlKey) return;
+      event.preventDefault();
+      const store = useSettings.getState();
+      store.setDockTileSize(store.dockTileSize + (event.deltaY < 0 ? 4 : -4));
+    };
+    node.addEventListener("wheel", onWheel, { passive: false });
+    return () => node.removeEventListener("wheel", onWheel);
+  }, []);
 
   const visible = useMemo(() => {
     const ids = chip === null ? null : new Set([chip, ...(childrenOf.get(chip) ?? [])]);
@@ -227,12 +240,36 @@ function FencesFlyout() {
   const open = (item: typeof items[number]) =>
     (item.type === "url" ? openUrl(item.path) : openPath(item.path)).catch(report);
 
+  const dragProps = (id: string) => ({
+    draggable: true,
+    onDragStart: () => { draggingId.current = id; },
+    onDragOver: (event: React.DragEvent) => event.preventDefault(),
+    onDrop: (event: React.DragEvent) => {
+      event.preventDefault();
+      if (draggingId.current && draggingId.current !== id) moveItemBefore(draggingId.current, id);
+      draggingId.current = null;
+    },
+  });
+
+  const itemBody = (item: typeof items[number]) => (
+    <>
+      <ItemIcon type={item.type} path={item.path} iconUrl={item.iconUrl} size={view === "grid" ? tileSize : 18} />
+      <span className="dock-tile-label">{item.title}</span>
+    </>
+  );
+
   return (
     <div className="dock-panel" role="region" aria-label={t("dock.fences")}>
       <div className="dock-panel-search">
         <Search className="size-3.5 shrink-0 opacity-60" aria-hidden="true" />
         <input className="dock-panel-input" value={query} placeholder={t("dock.fencesSearch")}
           onChange={(event) => setQuery(event.target.value)} />
+        <span className="dock-view-toggle">
+          <button type="button" aria-label={t("dock.fencesGrid")} aria-pressed={view === "grid"}
+            onClick={() => setView("grid")}><LayoutGrid className="size-3.5" aria-hidden="true" /></button>
+          <button type="button" aria-label={t("dock.fencesList")} aria-pressed={view === "list"}
+            onClick={() => setView("list")}><List className="size-3.5" aria-hidden="true" /></button>
+        </span>
       </div>
       <div className="dock-chips" role="tablist" aria-label={t("dock.fences")}>
         <button type="button" role="tab" aria-selected={chip === null} className={`dock-chip${chip === null ? " is-active" : ""}`}
@@ -255,15 +292,82 @@ function FencesFlyout() {
       </div>
       {visible.length === 0
         ? <p className="dock-panel-empty">{t("dock.fencesEmpty")}</p>
-        : <div className="dock-grid">
-            {visible.map((item) => (
-              <button type="button" key={item.id} className="dock-tile" title={item.path}
-                onClick={() => void open(item)}>
-                <ItemIcon type={item.type} path={item.path} iconUrl={item.iconUrl} size={46} />
-                <span className="dock-tile-label">{item.title}</span>
-              </button>
-            ))}
-          </div>}
+        : view === "grid"
+          ? <div className="dock-grid" style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${tileSize + 26}px, 1fr))` }}
+              ref={(node) => { gridRef.current = node; }}>
+              {visible.map((item) => (
+                <button type="button" key={item.id} className="dock-tile" title={item.path}
+                  onClick={() => void open(item)} {...dragProps(item.id)}>
+                  {itemBody(item)}
+                </button>
+              ))}
+            </div>
+          : <ul className="dock-lrows" ref={(node) => { gridRef.current = node; }}>
+              {visible.map((item) => (
+                <li key={item.id}>
+                  <button type="button" className="dock-lrow" title={item.path}
+                    onClick={() => void open(item)} {...dragProps(item.id)}>
+                    {itemBody(item)}
+                  </button>
+                </li>
+              ))}
+            </ul>}
+    </div>
+  );
+}
+
+/** 收集知识内嵌面板：紧凑快记，pin 脱离为独立窗口（图片/完整表单在独立窗里）。 */
+function CapturePanel({ setPanel }: { setPanel: (next: DockPanel | null) => void }) {
+  const { t } = useTranslation();
+  const root = useKnowledge((s) => s.vaultRoot);
+  const [title, setTitle] = useState("");
+  const [body, setBody] = useState("");
+  const [busy, setBusy] = useState(false);
+  const bodyRef = useRef<HTMLTextAreaElement>(null);
+
+  const save = async () => {
+    if (!root || !body.trim() || busy) return;
+    setBusy(true);
+    try {
+      await saveCapture(root, { id: crypto.randomUUID(), title: title.trim(), content: body, project: "", source: "", attachments: [] });
+      setTitle("");
+      setBody("");
+      bodyRef.current?.focus();
+      toast.success(t("dock.captureSaved"));
+    } catch (error) { report(error); }
+    finally { setBusy(false); }
+  };
+
+  if (!root) {
+    return (
+      <div className="dock-panel">
+        <p className="dock-panel-empty">{t("dock.captureNeedVault")}</p>
+        <button type="button" className="dock-panel-link"
+          onClick={() => { invoke("open_capture").catch(report); setPanel(null); }}>
+          {t("dock.captureDetach")}
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="dock-panel dock-capture" role="region" aria-label={t("dock.knowledge")}>
+      <input className="dock-panel-input dock-capture-title" placeholder={t("dock.captureTitle")}
+        maxLength={120} value={title} onChange={(event) => setTitle(event.target.value)} />
+      <textarea className="dock-capture-body" placeholder={t("dock.captureBody")} ref={bodyRef}
+        value={body} onChange={(event) => setBody(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" && event.ctrlKey) { event.preventDefault(); void save(); }
+        }} />
+      <div className="dock-capture-actions">
+        <button type="button" className="dock-capture-save" disabled={busy || !body.trim()}
+          onClick={() => void save()}>{busy ? t("dock.captureSaving") : t("dock.captureSave")}</button>
+        <button type="button" className="dock-capture-pin" title={t("dock.captureDetach")}
+          aria-label={t("dock.captureDetach")}
+          onClick={() => { invoke("open_capture").catch(report); setPanel(null); }}>
+          <RiPushpinLine size={13} aria-hidden="true" />{t("dock.captureDetach")}
+        </button>
+      </div>
     </div>
   );
 }

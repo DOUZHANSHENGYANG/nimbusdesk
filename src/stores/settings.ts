@@ -27,6 +27,8 @@ interface SettingsState {
   /** 桌面 Dock：贴边与开关（窗口本体常驻托盘之外，关闭=销毁窗口） */
   dockEdge: "left" | "right" | "top";
   dockOpen: boolean;
+  /** 收纳盒飞出面板的磁贴图标边长（Ctrl+滚轮调节，32–72） */
+  dockTileSize: number;
   setTheme: (theme: ThemeMode) => void;
   setLang: (lang: Lang) => void;
   setSidebarCollapsed: (v: boolean) => void;
@@ -39,6 +41,7 @@ interface SettingsState {
   setAutoClearDone: (v: boolean) => void;
   setDockEdge: (edge: "left" | "right" | "top") => void;
   setDockOpen: (v: boolean) => void;
+  setDockTileSize: (v: number) => void;
 }
 
 const PLANS_VIEWS: PlansView[] = ["outline", "timeline", "kanban", "calendar", "stats", "archive"];
@@ -67,6 +70,7 @@ export const useSettings = create<SettingsState>()(
       autoClearDone: false,
       dockEdge: "right",
       dockOpen: true,
+      dockTileSize: 46,
       setTheme: (theme) => set({ theme }),
       setLang: (lang) => set({ lang }),
       setSidebarCollapsed: (sidebarCollapsed) => set({ sidebarCollapsed }),
@@ -79,6 +83,7 @@ export const useSettings = create<SettingsState>()(
       setAutoClearDone: (autoClearDone) => set({ autoClearDone }),
       setDockEdge: (dockEdge) => set({ dockEdge }),
       setDockOpen: (dockOpen) => set({ dockOpen }),
+      setDockTileSize: (dockTileSize) => set({ dockTileSize: Math.min(72, Math.max(32, Math.round(dockTileSize))) }),
     }),
     {
       name: "settings",

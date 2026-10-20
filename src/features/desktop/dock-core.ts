@@ -6,7 +6,7 @@ export interface DockBounds { x: number; y: number; w: number; h: number }
 
 /** 三种窗口形态：纯图标条 / 悬停预览（带标签）/ 飞出面板（栅格、计划）。 */
 export type DockMode = "strip" | "expand" | "flyout";
-export type DockPanel = "fences" | "plans" | "projects";
+export type DockPanel = "fences" | "plans" | "projects" | "capture";
 
 /** 侧边栏常驻「图标 + 文字」，高度贴合内容（六个图标 + 关闭钮），不拉满工作区。 */
 export const DOCK_RAIL_W = 134;
