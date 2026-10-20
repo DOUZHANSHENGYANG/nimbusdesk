@@ -316,6 +316,129 @@
 
 .dock-todo-time { flex: none; font-size: 10px; font-variant-numeric: tabular-nums; color: var(--muted-foreground); }
 
+/* 行级悬停操作：附件与删除，贴行右侧 */
+.dock-todo-row { position: relative; display: flex; align-items: center; }
+.dock-todo-row .dock-todo { flex: 1; min-width: 0; }
+.dock-todo-row.is-done .dock-todo-mark { border-color: var(--brand); }
+.dock-todo-row.is-done .dock-todo-title {
+  color: var(--muted-foreground);
+  text-decoration: line-through;
+  text-decoration-color: color-mix(in srgb, var(--muted-foreground) 55%, transparent);
+}
+.dock-todo-actions {
+  display: none;
+  align-items: center;
+  gap: 2px;
+  flex: none;
+  padding-right: 2px;
+}
+.dock-todo-row:hover .dock-todo-actions, .dock-todo-row:focus-within .dock-todo-actions { display: inline-flex; }
+.dock-todo-actions button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 20px;
+  border-radius: var(--radius-sm);
+  color: var(--muted-foreground);
+}
+.dock-todo-actions button:hover { background: var(--accent); color: var(--brand); }
+.dock-todo-actions .is-danger:hover { color: var(--destructive); }
+.dock-todo-actions i {
+  font-style: normal;
+  font-size: 9px;
+  line-height: 1;
+  margin-left: 1px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 附件区：行下缩进展开 */
+.dock-atts {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px 6px 6px 28px;
+}
+.dock-att { display: inline-flex; align-items: center; gap: 2px; }
+.dock-att-name {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  max-width: 100%;
+  min-width: 0;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  color: var(--foreground/90);
+}
+.dock-att-name span, .dock-att-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dock-att-name:hover { background: var(--accent); color: var(--brand); }
+.dock-att-name small { flex: none; font-size: 9px; color: var(--muted-foreground); }
+.dock-att-x {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  flex: none;
+  border-radius: var(--radius-sm);
+  color: var(--muted-foreground);
+}
+.dock-att-x:hover { background: var(--accent); color: var(--destructive); }
+.dock-att-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  align-self: flex-start;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  color: var(--muted-foreground);
+}
+.dock-att-add:hover { background: var(--accent); color: var(--brand); }
+.dock-att-add:disabled { opacity: 0.5; }
+
+/* 项目列表 */
+.dock-plist {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+.dock-prow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  border-radius: var(--radius-md);
+  text-align: left;
+  outline: none;
+}
+.dock-prow:hover, .dock-prow:focus-visible { background: var(--accent); }
+.dock-prow-name {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--foreground/90);
+}
+.dock-prow-count {
+  flex: none;
+  min-width: 18px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  text-align: center;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted-foreground);
+  background: var(--accent);
+}
+
 .dock-panel-link {
   flex: none;
   padding: 6px 8px;
