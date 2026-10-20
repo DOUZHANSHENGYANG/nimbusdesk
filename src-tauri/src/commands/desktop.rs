@@ -8,7 +8,13 @@ fn hub_label(key: &str) -> Result<String, String> {
 }
 
 fn allowed_route(route: &str) -> bool {
-    matches!(route, "/" | "/plans" | "/projects" | "/files" | "/knowledge" | "/settings")
+    if route.chars().any(char::is_control) || route.contains('\\') {
+        return false;
+    }
+    matches!(
+        route.split('?').next().unwrap_or_default(),
+        "/" | "/plans" | "/projects" | "/files" | "/knowledge" | "/settings"
+    )
 }
 
 #[derive(Debug, PartialEq)]
@@ -196,17 +202,17 @@ mod tests {
 
     #[test]
     fn main_routes_allow_only_known_desktop_destinations() {
-        for route in ["/", "/plans", "/files", "/settings"] {
+        for route in ["/", "/plans", "/files", "/settings", "/projects?project=p1", "/projects?item=doing"] {
             assert!(super::allowed_route(route), "{route}");
         }
         for route in [
             "",
             "/tools",
-            "/plans?source=secret",
             "/files/../settings",
             "/settings#secret",
             "https://example.test",
             "/plans\n",
+            "/plans\\?x=1",
         ] {
             assert!(!super::allowed_route(route), "{route:?}");
         }

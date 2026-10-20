@@ -225,24 +225,25 @@
 }
 .dock-chip-sort button:hover { background: var(--accent); color: var(--brand); }
 
+/* 收纳盒磁贴：iOS 主屏式，圆角图标 + 下方标签 */
 .dock-grid {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 6px;
+  gap: 10px 6px;
   align-content: start;
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 2px;
+  padding: 4px 2px;
 }
 
 .dock-tile {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 5px;
-  padding: 8px 4px 6px;
-  border-radius: var(--radius-md);
+  gap: 6px;
+  padding: 10px 4px 8px;
+  border-radius: var(--radius-lg);
   outline: none;
 }
 
@@ -319,6 +320,35 @@
 /* 行级悬停操作：附件与删除，贴行右侧 */
 .dock-todo-row { position: relative; display: flex; align-items: center; }
 .dock-todo-row .dock-todo { flex: 1; min-width: 0; }
+/* 子任务：缩进 + 小一号 */
+.dock-todo-row.is-sub { padding-left: 24px; }
+.dock-todo-row.is-sub .dock-todo { padding-top: 4px; padding-bottom: 4px; }
+.dock-todo-row.is-sub .dock-todo-title { font-size: 11px; }
+/* 行内添加子任务的输入框 */
+.dock-sub-add {
+  display: flex;
+  align-items: center;
+  height: 30px;
+  margin: 2px 8px 4px 28px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--background);
+}
+/* 项目飞出的返回条 */
+.dock-pback {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex: none;
+  padding: 5px 8px;
+  border-radius: var(--radius-md);
+  font-size: 12px;
+  font-weight: 500;
+  text-align: left;
+  color: var(--foreground/90);
+}
+.dock-pback:hover { background: var(--accent); color: var(--brand); }
 .dock-todo-row.is-done .dock-todo-mark { border-color: var(--brand); }
 .dock-todo-row.is-done .dock-todo-title {
   color: var(--muted-foreground);

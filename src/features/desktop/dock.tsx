@@ -3,7 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { currentMonitor } from "@tauri-apps/api/window";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import {
-  BookOpen, CalendarCheck, ChevronLeft, ChevronRight, Folder, FolderKanban, GripHorizontal,
+  BookOpen, CalendarCheck, ChevronLeft, ChevronRight, FolderKanban, GripHorizontal,
   GripVertical, LayoutGrid, Search, Settings2, X,
 } from "lucide-react";
 import { RiAddLine, RiAttachment2, RiCloseLine, RiDeleteBinLine } from "@remixicon/react";
@@ -126,7 +126,6 @@ export function DockWindow() {
     { key: "fences", icon: LayoutGrid, panel: "fences" as const },
     { key: "plans", icon: CalendarCheck, panel: "plans" as const },
     { key: "projects", icon: FolderKanban, panel: "projects" as const },
-    { key: "files", icon: Folder, route: "/files" },
     { key: "knowledge", icon: BookOpen, run: () => invoke("open_capture").catch(report) },
     { key: "settings", icon: Settings2, route: "/settings" },
   ];
@@ -255,7 +254,7 @@ function FencesFlyout() {
             {visible.map((item) => (
               <button type="button" key={item.id} className="dock-tile" title={item.path}
                 onClick={() => void open(item)}>
-                <ItemIcon type={item.type} path={item.path} iconUrl={item.iconUrl} size={30} />
+                <ItemIcon type={item.type} path={item.path} iconUrl={item.iconUrl} size={40} />
                 <span className="dock-tile-label">{item.title}</span>
               </button>
             ))}
@@ -264,7 +263,7 @@ function FencesFlyout() {
   );
 }
 
-/** 计划飞出：今天的待办可勾选、新增、删除、传附件；完整编辑在主窗口。 */
+/** 计划飞出：勾选在行尾、完成划线沉底，可加子任务、删除与附件；完整编辑在主窗口。 */
 function PlansFlyout() {
   const { t } = useTranslation();
   const date = todayStr();
@@ -273,8 +272,18 @@ function PlansFlyout() {
   const addTask = usePlans((s) => s.addTask);
   const [draft, setDraft] = useState("");
   const [attsFor, setAttsFor] = useState<string | null>(null);
+  const [subFor, setSubFor] = useState<string | null>(null);
+  const [subDraft, setSubDraft] = useState("");
   const [addBusy, setAddBusy] = useState(false);
-  const tops = tasks.filter((task) => !task.parentId);
+  const tops = [...tasks.filter((task) => !task.parentId)].sort((a, b) => Number(a.done) - Number(b.done));
+  const childrenOf = useMemo(() => {
+    const map = new Map<string, typeof tasks>();
+    for (const task of tasks) {
+      if (!task.parentId) continue;
+      map.set(task.parentId, [...(map.get(task.parentId) ?? []), task]);
+    }
+    return map;
+  }, [tasks]);
 
   const submit = () => {
     const title = draft.trim();
@@ -282,12 +291,58 @@ function PlansFlyout() {
     setDraft("");
     addTask(date, null, title);
   };
+  const submitSub = () => {
+    const title = subDraft.trim();
+    if (!title || !subFor) return;
+    addTask(date, subFor, title);
+    setSubDraft("");
+  };
 
   const remove = (id: string) => {
     usePlans.getState().removeTask(date, id);
     if (attsFor === id) setAttsFor(null);
+    if (subFor === id) setSubFor(null);
     toast(t("dock.plansDeleted"), { action: { label: t("dock.plansUndo"), onClick: () => usePlans.getState().undo() } });
   };
+
+  const todoRow = (task: (typeof tasks)[number], sub = false) => (
+    <div className={`dock-todo-row${sub ? " is-sub" : ""}${task.done ? " is-done" : ""}`}>
+      <button type="button" className="dock-todo"
+        onClick={() => toggleDone(date, task.id)}
+        aria-pressed={task.done} title={task.title}>
+        <span className="dock-todo-title">{task.title}</span>
+        {task.start && <span className="dock-todo-time">{task.start}</span>}
+        <span className="dock-todo-mark" aria-hidden="true">{task.done ? "✓" : ""}</span>
+      </button>
+      {!sub && (
+        <span className="dock-todo-actions">
+          <button type="button" title={t("dock.plansAddSub")} aria-label={t("dock.plansAddSub")}
+            aria-expanded={subFor === task.id}
+            onClick={() => { setSubFor(subFor === task.id ? null : task.id); setSubDraft(""); }}>
+            <RiAddLine size={13} aria-hidden="true" />
+          </button>
+          <button type="button" title={t("dock.plansAttach")} aria-label={t("dock.plansAttach")}
+            aria-expanded={attsFor === task.id}
+            onClick={() => setAttsFor(attsFor === task.id ? null : task.id)}>
+            <RiAttachment2 size={13} aria-hidden="true" />
+            {(task.attachments?.length ?? 0) > 0 && <i>{task.attachments!.length}</i>}
+          </button>
+          <button type="button" className="is-danger" title={t("dock.plansDelete")} aria-label={t("dock.plansDelete")}
+            onClick={() => remove(task.id)}>
+            <RiDeleteBinLine size={13} aria-hidden="true" />
+          </button>
+        </span>
+      )}
+      {sub && (
+        <span className="dock-todo-actions">
+          <button type="button" className="is-danger" title={t("dock.plansDelete")} aria-label={t("dock.plansDelete")}
+            onClick={() => remove(task.id)}>
+            <RiDeleteBinLine size={13} aria-hidden="true" />
+          </button>
+        </span>
+      )}
+    </div>
+  );
 
   return (
     <div className="dock-panel" role="region" aria-label={t("dock.plans")}>
@@ -300,27 +355,14 @@ function PlansFlyout() {
         : <ul className="dock-todos">
             {tops.map((task) => (
               <li key={task.id}>
-                <div className={`dock-todo-row${task.done ? " is-done" : ""}`}>
-                  <button type="button" className="dock-todo"
-                    onClick={() => toggleDone(date, task.id)}
-                    aria-pressed={task.done} title={task.title}>
-                    <span className="dock-todo-mark" aria-hidden="true">{task.done ? "✓" : ""}</span>
-                    <span className="dock-todo-title">{task.title}</span>
-                    {task.start && <span className="dock-todo-time">{task.start}</span>}
-                  </button>
-                  <span className="dock-todo-actions">
-                    <button type="button" title={t("dock.plansAttach")} aria-label={t("dock.plansAttach")}
-                      aria-expanded={attsFor === task.id}
-                      onClick={() => setAttsFor(attsFor === task.id ? null : task.id)}>
-                      <RiAttachment2 size={13} aria-hidden="true" />
-                      {(task.attachments?.length ?? 0) > 0 && <i>{task.attachments!.length}</i>}
-                    </button>
-                    <button type="button" className="is-danger" title={t("dock.plansDelete")} aria-label={t("dock.plansDelete")}
-                      onClick={() => remove(task.id)}>
-                      <RiDeleteBinLine size={13} aria-hidden="true" />
-                    </button>
-                  </span>
-                </div>
+                {todoRow(task)}
+                {subFor === task.id && (
+                  <form className="dock-sub-add" onSubmit={(event) => { event.preventDefault(); submitSub(); }}>
+                    <input className="dock-panel-input" value={subDraft} placeholder={t("dock.plansAddSub")}
+                      maxLength={200} autoFocus onChange={(event) => setSubDraft(event.target.value)}
+                      onKeyDown={(event) => { if (event.key === "Escape") setSubFor(null); }} />
+                  </form>
+                )}
                 {attsFor === task.id && (
                   <div className="dock-atts">
                     {(task.attachments ?? []).map((attachment) => (
@@ -342,6 +384,9 @@ function PlansFlyout() {
                     </button>
                   </div>
                 )}
+                {(childrenOf.get(task.id) ?? []).map((child) => (
+                  <div key={child.id}>{todoRow(child, true)}</div>
+                ))}
               </li>
             ))}
           </ul>}
@@ -352,12 +397,13 @@ function PlansFlyout() {
   );
 }
 
-/** 项目飞出：项目列表直接选，点击深链到主窗口对应项目。 */
+/** 项目飞出：先选项目再看未完成工作项，点击深链到主窗口对应位置。 */
 function ProjectsFlyout() {
   const { t } = useTranslation();
   const projects = useProjects((s) => s.projects);
   const items = useProjects((s) => s.items);
   const [query, setQuery] = useState("");
+  const [openProject, setOpenProject] = useState<string | null>(null);
   const needle = query.trim().toLocaleLowerCase();
   const active = useMemo(() =>
     projects
@@ -365,38 +411,69 @@ function ProjectsFlyout() {
       .sort((a, b) => b.updatedAt - a.updatedAt), [projects]);
   const visible = useMemo(() =>
     active.filter((project) => !needle || project.name.toLocaleLowerCase().includes(needle)), [active, needle]);
-  const openCount = useMemo(() => {
-    const map = new Map<string, number>();
+  const openItems = useMemo(() => {
+    const map = new Map<string, typeof items>();
     for (const item of items) {
       if (!item.projectId || item.status === "done" || item.status === "cancelled") continue;
-      map.set(item.projectId, (map.get(item.projectId) ?? 0) + 1);
+      map.set(item.projectId, [...(map.get(item.projectId) ?? []), item]);
+    }
+    for (const list of map.values()) {
+      list.sort((a, b) => (a.deadline ?? "9999").localeCompare(b.deadline ?? "9999"));
     }
     return map;
   }, [items]);
+  const project = openProject ? projects.find((entry) => entry.id === openProject) : null;
+  const projectItems = openProject ? openItems.get(openProject) ?? [] : [];
 
   return (
     <div className="dock-panel" role="region" aria-label={t("dock.projects")}>
-      <div className="dock-panel-search">
-        <Search className="size-3.5 shrink-0 opacity-60" aria-hidden="true" />
-        <input className="dock-panel-input" value={query} placeholder={t("dock.projectsSearch")}
-          onChange={(event) => setQuery(event.target.value)} />
-      </div>
-      {visible.length === 0
-        ? <p className="dock-panel-empty">{t("dock.projectsEmpty")}</p>
-        : <ul className="dock-plist">
-            {visible.map((project) => (
-              <li key={project.id}>
-                <button type="button" className="dock-prow" title={project.name}
-                  onClick={() => invoke("desktop_open_main", { route: `/projects?project=${project.id}` }).catch(report)}>
-                  <span className="dock-prow-name">{project.name}</span>
-                  <span className="dock-prow-count">{openCount.get(project.id) ?? 0}</span>
-                </button>
-              </li>
-            ))}
-          </ul>}
-      <button type="button" className="dock-panel-link" onClick={() => invoke("desktop_open_main", { route: "/projects" }).catch(report)}>
-        {t("dock.projectsOpen")}
-      </button>
+      {project ? (
+        <>
+          <button type="button" className="dock-pback" onClick={() => setOpenProject(null)}>
+            <ChevronLeft className="size-3.5" aria-hidden="true" />{project.name}
+          </button>
+          {projectItems.length === 0
+            ? <p className="dock-panel-empty">{t("dock.projectsItemsEmpty")}</p>
+            : <ul className="dock-plist">
+                {projectItems.map((item) => (
+                  <li key={item.id}>
+                    <button type="button" className="dock-prow" title={item.title}
+                      onClick={() => invoke("desktop_open_main", { route: `/projects?item=${item.id}` }).catch(report)}>
+                      <span className="dock-prow-name">{item.title}</span>
+                      {item.deadline && <span className="dock-prow-count">{item.deadline.slice(5)}</span>}
+                    </button>
+                  </li>
+                ))}
+              </ul>}
+          <button type="button" className="dock-panel-link" onClick={() => invoke("desktop_open_main", { route: `/projects?project=${project.id}` }).catch(report)}>
+            {t("dock.projectsOpen")}
+          </button>
+        </>
+      ) : (
+        <>
+          <div className="dock-panel-search">
+            <Search className="size-3.5 shrink-0 opacity-60" aria-hidden="true" />
+            <input className="dock-panel-input" value={query} placeholder={t("dock.projectsSearch")}
+              onChange={(event) => setQuery(event.target.value)} />
+          </div>
+          {visible.length === 0
+            ? <p className="dock-panel-empty">{t("dock.projectsEmpty")}</p>
+            : <ul className="dock-plist">
+                {visible.map((entry) => (
+                  <li key={entry.id}>
+                    <button type="button" className="dock-prow" title={entry.name}
+                      onClick={() => setOpenProject(entry.id)}>
+                      <span className="dock-prow-name">{entry.name}</span>
+                      <span className="dock-prow-count">{(openItems.get(entry.id) ?? []).length}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>}
+          <button type="button" className="dock-panel-link" onClick={() => invoke("desktop_open_main", { route: "/projects" }).catch(report)}>
+            {t("dock.projectsOpen")}
+          </button>
+        </>
+      )}
     </div>
   );
 }
