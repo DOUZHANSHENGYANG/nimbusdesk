@@ -1,12 +1,10 @@
-/* 桌面 Dock：贴边玻璃条 + 飞出面板。颜色全部来自 token，不引入新色值。
+/* 桌面 Dock：贴边玻璃侧栏 + 飞出面板。颜色全部来自 token，不引入新色值。
  *
- * 三种形态（data-mode）：
- *   strip   56px 纯图标
- *   expand  168px 图标 + 标签（悬停）
- *   flyout  56px 图标条 + 352px 功能面板（栅格/计划）
- * 右缘 dock 的条贴右边界，面板向屏幕内侧展开；左缘镜像。
- * 顶缘是水平横排（macOS Dock 式）：图标竖排（图标在上标签在下），
- * 条贴顶边界，面板向下展开。
+ * 侧边栏常驻「图标 + 文字」，没有收起态（效率优先，点击零延迟）。
+ * 三种形态（data-mode）只剩尺寸差异：
+ *   strip / expand  同尺寸侧栏（134px）
+ *   flyout          408px 功能面板（收纳盒/计划/项目）
+ * 顶缘是水平横排：条贴顶边界（图标在上标签在下），面板向下展开。
  */
 
 .dock-root {
@@ -20,7 +18,7 @@
 .dock-strip {
   display: flex;
   flex-direction: column;
-  width: 45px;
+  width: 134px;
   flex: none;
   padding: 8px 6px;
   background: color-mix(in srgb, var(--popover) 88%, transparent);
@@ -28,8 +26,6 @@
   border: 1px solid var(--border);
   box-shadow: var(--shadow-lg);
 }
-
-.dock-root[data-mode="expand"] .dock-strip { width: 134px; }
 
 .dock-root[data-edge="left"] .dock-strip {
   margin-right: auto;
@@ -82,9 +78,6 @@
   height: auto;
   padding: 6px 4px;
 }
-/* 收起与飞出态标签隐藏，图标更窄才放得下七个 */
-.dock-root[data-edge="top"][data-mode="strip"] .dock-item,
-.dock-root[data-edge="top"][data-mode="flyout"] .dock-item { width: 40px; }
 .dock-root[data-edge="top"] .dock-label {
   max-width: 100%;
   text-align: center;
@@ -127,7 +120,7 @@
 
 .dock-icon { width: 18px; height: 18px; flex: none; }
 
-/* 标签只在悬停态出现；strip/flyout 形态下溢出隐藏。 */
+/* 标签常驻：效率玩家不需要悬停展开这一步 */
 .dock-label {
   min-width: 0;
   overflow: hidden;
@@ -136,8 +129,6 @@
   font-size: 12px;
   font-weight: 500;
 }
-.dock-root[data-mode="strip"] .dock-label,
-.dock-root[data-mode="flyout"] .dock-label { display: none; }
 
 .dock-close {
   display: flex;

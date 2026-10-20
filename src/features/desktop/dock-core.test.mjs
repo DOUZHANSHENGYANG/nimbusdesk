@@ -10,24 +10,25 @@ function load(file) {
   return module.exports;
 }
 
-const { dockBounds, dockSpringPair, DOCK_STRIP_W, DOCK_EXPAND_W, DOCK_FLYOUT_W } = load("./dock-core.ts");const area = { x: -1920, y: 0, w: 1920, h: 1080 };
+const { dockBounds, dockSpringPair, DOCK_RAIL_W, DOCK_FLYOUT_W } = load("./dock-core.ts");
+const area = { x: -1920, y: 0, w: 1920, h: 1080 };
 
-test("strip hugs the work-area edge and stays vertically centered", () => {
+test("the rail hugs the work-area edge and stays vertically centered", () => {
   const left = dockBounds(area, "left", "strip");
-  assert.deepEqual(left, { x: -1920, y: 280, w: DOCK_STRIP_W, h: 520 });
+  assert.deepEqual(left, { x: -1920, y: 280, w: DOCK_RAIL_W, h: 520 });
   const right = dockBounds(area, "right", "strip");
   assert.equal(right.x + right.w, area.x + area.w, "right edge must anchor to the border");
   assert.equal(right.y, left.y);
 });
 
-test("hover preview and flyout grow inward without crossing the work area", () => {
+test("rail and flyout grow inward without crossing the work area", () => {
   for (const mode of ["expand", "flyout"]) {
     const left = dockBounds(area, "left", mode);
     assert.equal(left.x, area.x, "left dock keeps its anchor");
     const right = dockBounds(area, "right", mode);
     assert.equal(right.x + right.w, area.x + area.w, "right dock grows toward the screen interior");
   }
-  assert.equal(dockBounds(area, "left", "expand").w, DOCK_EXPAND_W);
+  assert.equal(dockBounds(area, "left", "expand").w, DOCK_RAIL_W, "no expand step: rail is permanent");
   assert.equal(dockBounds(area, "left", "flyout").w, DOCK_FLYOUT_W);
 });
 
@@ -39,14 +40,13 @@ test("all modes share one anchor, so the spring only moves one side", () => {
       if (edge === "left") assert.equal(rect.x, rects[0].x, "left anchor fixed");
       else assert.equal(rect.x + rect.w, rects[0].x + rects[0].w, "right anchor fixed");
     }
-    // strip 与 expand 同高（只是变宽）；flyout 更高一档，属预期。
     assert.equal(dockBounds(area, edge, "expand").h, dockBounds(area, edge, "strip").h);
   }
 });
 
 test("spring pair passes both modes through unchanged", () => {
   const { from, to } = dockSpringPair(area, "right", "strip", "flyout");
-  assert.equal(from.w, DOCK_STRIP_W);
+  assert.equal(from.w, DOCK_RAIL_W);
   assert.equal(to.w, DOCK_FLYOUT_W);
   assert.equal(from.x + from.w, to.x + to.w, "right anchor stays pinned");
 });
@@ -68,8 +68,8 @@ test("top edge is a horizontal bar pinned to the top, centered, growing downward
     assert.equal(rect.y, area.y, "top anchor fixed");
     assert.equal(rect.x + rect.w / 2, area.x + area.w / 2, "centering fixed");
   }
-  assert.equal(expand.w, strip.w, "expand only grows in height");
-  assert.ok(expand.h > strip.h && flyout.h > expand.h);
+  assert.equal(expand.h, strip.h, "rail is permanent: no hover growth");
+  assert.ok(flyout.h > expand.h);
   const clamped = dockBounds({ x: 0, y: 0, w: 400, h: 300 }, "top", "strip");
   assert.equal(clamped.w, 400, "narrow work areas clamp the width");
 });

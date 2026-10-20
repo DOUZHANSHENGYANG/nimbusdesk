@@ -8,31 +8,28 @@ export interface DockBounds { x: number; y: number; w: number; h: number }
 export type DockMode = "strip" | "expand" | "flyout";
 export type DockPanel = "fences" | "plans" | "projects";
 
-/** 收起态只显示图标条；悬停长出标签；飞出面板再宽一档放下网格与搜索。 */
-export const DOCK_STRIP_W = 45;
-export const DOCK_EXPAND_W = 134;
+/** 侧边栏常驻「图标 + 文字」，不再有收起态；飞出面板再宽一档放下网格与搜索。 */
+export const DOCK_RAIL_W = 134;
 export const DOCK_FLYOUT_W = 408;
 /** 高度最多占工作区的 80%，飞出面板可以更高一档。 */
 export const DOCK_MAX_H = 520;
 export const DOCK_FLYOUT_MAX_H = 640;
-/** 顶缘横排的尺寸：条与展开只在高度上变化，宽度自适应屏幕。 */
+/** 顶缘横排的尺寸：宽度自适应屏幕。 */
 export const DOCK_TOP_W = 560;
 const TOP_MODE_W: Record<DockMode, number> = { strip: DOCK_TOP_W, expand: DOCK_TOP_W, flyout: DOCK_FLYOUT_W };
-const TOP_MODE_H: Record<DockMode, number> = { strip: 45, expand: 88, flyout: DOCK_FLYOUT_MAX_H };
+const TOP_MODE_H: Record<DockMode, number> = { strip: 88, expand: 88, flyout: DOCK_FLYOUT_MAX_H };
 /** 展开面板里每行的高度，供图标布局对齐。 */
 export const DOCK_ROW_H = 44;
 /** 锚定弹出时，面板前缘与触发图标中心保持的距离（逻辑像素）。 */
 const ANCHOR_LEAD = 48;
 
-const MODE_W: Record<DockMode, number> = { strip: DOCK_STRIP_W, expand: DOCK_EXPAND_W, flyout: DOCK_FLYOUT_W };
+const MODE_W: Record<DockMode, number> = { strip: DOCK_RAIL_W, expand: DOCK_RAIL_W, flyout: DOCK_FLYOUT_W };
 const MODE_H: Record<DockMode, number> = { strip: DOCK_MAX_H, expand: DOCK_MAX_H, flyout: DOCK_FLYOUT_MAX_H };
 
 /**
- * 三种形态的窗口矩形。垂直缘在工作区居中；
- * 右缘锚定右边界（x 随宽度外移），左缘锚定左边界（x 不变）。
- * 顶缘是水平横排：锚定顶边界，水平居中，向下生长。
- * anchor 是触发图标的屏幕逻辑坐标：飞出面板的前缘贴着图标弹出，
- * 其余形态忽略它（收起/展开永远居中）。绝不越过工作区。
+ * 三种形态的窗口矩形。侧边栏常驻「图标 + 文字」（strip 与 expand 同尺寸）；
+ * 飞出面板在锚定图标旁弹出，其余形态在工作区居中。
+ * 顶缘是水平横排：锚定顶边界。绝不越过工作区。
  */
 export function dockBounds(area: DockArea, edge: DockEdge, mode: DockMode, anchor?: number): DockBounds {
   const lead = mode === "flyout" ? anchor : undefined;

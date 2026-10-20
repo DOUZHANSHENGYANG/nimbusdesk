@@ -18,7 +18,7 @@ import { todayStr } from "@/features/plans/types";
 import { addTaskAttachment, attachmentSize, openTaskAttachment, unlinkTaskAttachment } from "@/features/plans/attachment-api";
 import { useProjects } from "@/features/projects/store";
 import { monitorArea } from "./monitors";
-import { DOCK_STRIP_W, dockBounds, dockSpringPair, type DockArea, type DockMode, type DockPanel } from "./dock-core";
+import { DOCK_RAIL_W, dockBounds, dockSpringPair, type DockArea, type DockMode, type DockPanel } from "./dock-core";
 import { nearestDockEdge } from "./edge-core";
 import { ItemIcon } from "@/features/files/icons";
 import "./dock.css";
@@ -69,17 +69,17 @@ export function DockWindow() {
     setMode(mode);
     await invoke("dock_spring", {
       label: LABEL, fromX: from.x, toX: to.x, fromW: from.w, toW: to.w,
-      y: to.y, h: to.h, style: "bouncy",
+      y: to.y, h: to.h, style: "stiff",
     });
   }, [edge, setMode]);
 
-  /** 面板与悬停互相独立：面板开着时悬停不再改变形态。锚点让面板从触发图标旁弹出。 */
+  /** 面板与悬停互相独立。锚点让面板从触发图标旁弹出；关闭回到常驻侧栏。 */
   const setPanel = useCallback((next: DockPanel | null, anchor?: number) => {
     panelRef.current = next;
     panelAnchor.current = next ? anchor : undefined;
     switchAt.current = Date.now();
     setPanelState(next);
-    void applyMode(next ? "flyout" : next === null && modeRef.current === "flyout" ? "expand" : modeRef.current, panelAnchor.current).catch(report);
+    void applyMode(next ? "flyout" : "strip", panelAnchor.current).catch(report);
   }, [applyMode]);
 
   /** 拖动 grip 松手后，按窗口落点吸附到最近的顶/左/右缘（复用 edge-core 口径）。 */
@@ -141,10 +141,10 @@ export function DockWindow() {
     const area = areaRef.current;
     if (!area) return {};
     const gap = 10;
-    if (edge === "top") return { x: Math.round(area.x + 24), y: Math.round(area.y + DOCK_STRIP_W + gap) };
+    if (edge === "top") return { x: Math.round(area.x + 24), y: Math.round(area.y + 88 + gap) };
     const x = edge === "right"
-      ? area.x + area.w - 400 - DOCK_STRIP_W - gap
-      : area.x + DOCK_STRIP_W + gap;
+      ? area.x + area.w - 400 - DOCK_RAIL_W - gap
+      : area.x + DOCK_RAIL_W + gap;
     return { x: Math.round(x), y: Math.round(area.y + 24) };
   };
   const actions = [
@@ -170,13 +170,6 @@ export function DockWindow() {
   }
   return (
     <div className="dock-root" data-edge={edge} data-mode={mode}
-      onMouseEnter={() => { if (dragging.current || panelRef.current) return; void applyMode("expand").catch(report); }}
-      onMouseLeave={() => {
-        // 确认弹窗渲染在 portal（.dock-root 之外），鼠标移上去会误触发
-        // mouseleave，把窗口收起并把弹窗挤成一条。弹窗或面板开着时不收起。
-        if (dragging.current || document.querySelector("[role='dialog']") || panelRef.current) return;
-        void applyMode("strip").catch(report);
-      }}
       onContextMenu={(event) => { event.preventDefault(); close(); }}>
       {panel === "fences" && <FencesFlyout />}
       {panel === "plans" && <PlansFlyout />}
