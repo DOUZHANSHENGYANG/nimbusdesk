@@ -17,8 +17,7 @@ import { usePlans } from "@/features/plans/store";
 import { todayStr } from "@/features/plans/types";
 import { addTaskAttachment, attachmentSize, openTaskAttachment, unlinkTaskAttachment } from "@/features/plans/attachment-api";
 import { useProjects } from "@/features/projects/store";
-import { useKnowledge } from "@/features/knowledge/store";
-import { saveCapture } from "@/features/knowledge/api";
+import { CaptureForm } from "@/features/knowledge/capture";
 import { monitorArea } from "./monitors";
 import { dockBounds, dockSpringPair, type DockArea, type DockMode, type DockPanel } from "./dock-core";
 import { nearestDockEdge } from "./edge-core";
@@ -316,57 +315,21 @@ function FencesFlyout() {
   );
 }
 
-/** 收集知识内嵌面板：紧凑快记，pin 脱离为独立窗口（图片/完整表单在独立窗里）。 */
+/** 收集知识内嵌面板：完整收集表单（草稿/图片/AI 整理），pin 脱离为独立窗口。 */
 function CapturePanel({ setPanel }: { setPanel: (next: DockPanel | null) => void }) {
   const { t } = useTranslation();
-  const root = useKnowledge((s) => s.vaultRoot);
-  const [title, setTitle] = useState("");
-  const [body, setBody] = useState("");
-  const [busy, setBusy] = useState(false);
-  const bodyRef = useRef<HTMLTextAreaElement>(null);
-
-  const save = async () => {
-    if (!root || !body.trim() || busy) return;
-    setBusy(true);
-    try {
-      await saveCapture(root, { id: crypto.randomUUID(), title: title.trim(), content: body, project: "", source: "", attachments: [] });
-      setTitle("");
-      setBody("");
-      bodyRef.current?.focus();
-      toast.success(t("dock.captureSaved"));
-    } catch (error) { report(error); }
-    finally { setBusy(false); }
-  };
-
-  if (!root) {
-    return (
-      <div className="dock-panel">
-        <p className="dock-panel-empty">{t("dock.captureNeedVault")}</p>
-        <button type="button" className="dock-panel-link"
-          onClick={() => { invoke("open_capture").catch(report); setPanel(null); }}>
-          {t("dock.captureDetach")}
-        </button>
-      </div>
-    );
-  }
-
   return (
     <div className="dock-panel dock-capture" role="region" aria-label={t("dock.knowledge")}>
-      <input className="dock-panel-input dock-capture-title" placeholder={t("dock.captureTitle")}
-        maxLength={120} value={title} onChange={(event) => setTitle(event.target.value)} />
-      <textarea className="dock-capture-body" placeholder={t("dock.captureBody")} ref={bodyRef}
-        value={body} onChange={(event) => setBody(event.target.value)}
-        onKeyDown={(event) => {
-          if (event.key === "Enter" && event.ctrlKey) { event.preventDefault(); void save(); }
-        }} />
-      <div className="dock-capture-actions">
-        <button type="button" className="dock-capture-save" disabled={busy || !body.trim()}
-          onClick={() => void save()}>{busy ? t("dock.captureSaving") : t("dock.captureSave")}</button>
+      <div className="dock-capture-bar">
+        <span className="dock-capture-bar-title">{t("dock.knowledge")}</span>
         <button type="button" className="dock-capture-pin" title={t("dock.captureDetach")}
           aria-label={t("dock.captureDetach")}
           onClick={() => { invoke("open_capture").catch(report); setPanel(null); }}>
-          <RiPushpinLine size={13} aria-hidden="true" />{t("dock.captureDetach")}
+          <RiPushpinLine size={12} aria-hidden="true" />{t("dock.captureDetach")}
         </button>
+      </div>
+      <div className="dock-capture-form">
+        <CaptureForm onHide={() => setPanel(null)} />
       </div>
     </div>
   );

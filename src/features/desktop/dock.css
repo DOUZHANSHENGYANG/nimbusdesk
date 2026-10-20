@@ -323,45 +323,28 @@
   color: var(--foreground/90);
 }
 
-/* 收集知识内嵌面板：紧凑快记 */
+/* 收集知识内嵌面板：顶栏 pin 脱离，完整表单占满余下高度滚动 */
 .dock-capture { gap: 6px; }
-.dock-capture-title { height: 30px; padding: 0 8px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--background); }
-.dock-capture-body {
-  flex: 1;
-  min-height: 0;
-  padding: 6px 8px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  background: var(--background);
-  resize: none;
-  outline: none;
-  font-size: 12px;
-  line-height: 1.5;
-  color: var(--foreground);
+.dock-capture-bar { display: flex; align-items: center; justify-content: space-between; gap: 6px; flex: none; }
+.dock-capture-bar-title { font-size: 12px; font-weight: 500; color: var(--foreground/90); }
+.dock-capture-form { flex: 1; min-height: 0; overflow-y: auto; }
+.dock-capture-form .capture-composer { padding: 0; }
+.dock-capture-form .capture-footer {
+  position: sticky;
+  bottom: 0;
+  background: color-mix(in srgb, var(--card) 96%, transparent);
 }
-.dock-capture-body::placeholder { color: var(--muted-foreground); }
-.dock-capture-actions { display: flex; align-items: center; gap: 6px; flex: none; }
-.dock-capture-save {
-  flex: 1;
-  height: 28px;
-  border-radius: var(--radius-md);
-  background: var(--brand);
-  color: var(--primary-foreground);
-  font-size: 12px;
-  font-weight: 500;
-}
-.dock-capture-save:disabled { opacity: 0.45; }
-.dock-capture-save:hover:not(:disabled) { filter: brightness(1.08); }
 .dock-capture-pin {
   display: flex;
   align-items: center;
   gap: 4px;
-  height: 28px;
-  padding: 0 8px;
-  border-radius: var(--radius-md);
+  height: 22px;
+  padding: 0 7px;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--border);
   font-size: 11px;
   color: var(--muted-foreground);
+  flex: none;
 }
 .dock-capture-pin:hover { background: var(--accent); color: var(--brand); }
 
