@@ -555,6 +555,45 @@
   color: var(--muted-foreground);
   background: var(--accent);
 }
+/* 项目飞出：区块化——项目头（名称/进度/新建）+ 未完成工作项直列 */
+.dock-psection { padding: 6px 0 8px; border-bottom: 1px solid var(--border); }
+.dock-psection:last-child { border-bottom: none; }
+.dock-phead { display: flex; align-items: center; gap: 6px; }
+.dock-pname {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--foreground);
+}
+.dock-pname:hover { color: var(--brand); }
+.dock-padd-item {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  flex: none;
+  border-radius: var(--radius-sm);
+  color: var(--muted-foreground);
+}
+.dock-padd-item:hover, .dock-padd-item[aria-expanded="true"] { background: var(--accent); color: var(--brand); }
+.dock-pbar {
+  display: block;
+  height: 3px;
+  margin: 5px 0 4px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--muted-foreground) 25%, transparent);
+  overflow: hidden;
+}
+.dock-pbar i { display: block; height: 100%; border-radius: 999px; background: var(--brand); }
+.dock-pnone { padding: 2px 0 2px 2px; font-size: 11px; color: var(--muted-foreground); }
+.dock-padd { margin: 4px 0; }
+
 /* 项目行：名称 + 进度条两行结构 */
 .dock-prow-main { display: flex; flex-direction: column; gap: 5px; min-width: 0; flex: 1; }
 .dock-prow-head { display: flex; align-items: center; gap: 8px; }

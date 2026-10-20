@@ -469,24 +469,24 @@ function PlansFlyout() {
   );
 }
 
-/** 项目飞出：项目带进度与未完成数，钻取看工作项（状态 + 截止日），点击深链主窗口。 */
+/** 项目飞出：所有项目连同未完成工作项一屏展开，点项目名进主窗口，点条目深链详情。 */
 function ProjectsFlyout() {
   const { t } = useTranslation();
   const projects = useProjects((s) => s.projects);
   const items = useProjects((s) => s.items);
-  const [query, setQuery] = useState("");
-  const [openProject, setOpenProject] = useState<string | null>(null);
-  const [projectDraft, setProjectDraft] = useState("");
-  const [itemDraft, setItemDraft] = useState("");
   const addProject = useProjects((s) => s.addProject);
   const addItem = useProjects((s) => s.addItem);
+  const [query, setQuery] = useState("");
+  const [projectDraft, setProjectDraft] = useState("");
+  const [addFor, setAddFor] = useState<string | null>(null);
+  const [itemDraft, setItemDraft] = useState("");
   const needle = query.trim().toLocaleLowerCase();
+
   const active = useMemo(() =>
     projects
       .filter((project) => project.status === "active")
       .sort((a, b) => b.updatedAt - a.updatedAt), [projects]);
-  const visible = useMemo(() =>
-    active.filter((project) => !needle || project.name.toLocaleLowerCase().includes(needle)), [active, needle]);
+
   const stats = useMemo(() => {
     const map = new Map<string, { done: number; total: number; open: typeof items }>();
     for (const item of items) {
@@ -502,91 +502,89 @@ function ProjectsFlyout() {
     }
     return map;
   }, [items]);
-  const project = openProject ? projects.find((entry) => entry.id === openProject) : null;
-  const projectItems = openProject ? stats.get(openProject)?.open ?? [] : [];
+
+  const visible = useMemo(() => active.filter((project) => {
+    if (!needle) return true;
+    if (project.name.toLocaleLowerCase().includes(needle)) return true;
+    return (stats.get(project.id) ?? { open: [] }).open.some((item) => item.title.toLocaleLowerCase().includes(needle));
+  }), [active, needle, stats]);
+
+  const submitItem = (projectId: string) => {
+    const title = itemDraft.trim();
+    if (!title) return;
+    addItem({ title, projectId });
+    setItemDraft("");
+  };
 
   return (
     <div className="dock-panel" role="region" aria-label={t("dock.projects")}>
-      {project ? (
-        <>
-          <button type="button" className="dock-pback" onClick={() => setOpenProject(null)}>
-            <ChevronLeft className="size-3.5" aria-hidden="true" />{project.name}
-          </button>
-          {projectItems.length === 0
-            ? <p className="dock-panel-empty">{t("dock.projectsItemsEmpty")}</p>
-            : <ul className="dock-plist">
-                {projectItems.map((item) => (
-                  <li key={item.id}>
-                    <button type="button" className="dock-prow" title={item.title}
-                      onClick={() => invoke("desktop_open_main", { route: `/projects?item=${item.id}` }).catch(report)}>
-                      <span className={`dock-pchip${item.status === "doing" ? " is-doing" : ""}`}>
-                        {t(item.status === "doing" ? "dock.projectsDoing" : "dock.projectsTodo")}
-                      </span>
-                      <span className="dock-prow-name">{item.title}</span>
-                      {item.deadline && <span className="dock-prow-count">{item.deadline.slice(5)}</span>}
+      <div className="dock-panel-search">
+        <Search className="size-3.5 shrink-0 opacity-60" aria-hidden="true" />
+        <input className="dock-panel-input" value={query} placeholder={t("dock.projectsSearch")}
+          onChange={(event) => setQuery(event.target.value)} />
+      </div>
+      {visible.length === 0
+        ? <p className="dock-panel-empty">{t("dock.projectsEmpty")}</p>
+        : <ul className="dock-plist">
+            {visible.map((entry) => {
+              const stat = stats.get(entry.id);
+              const open = stat?.open ?? [];
+              const shown = needle ? open.filter((item) => item.title.toLocaleLowerCase().includes(needle)) : open;
+              const pct = stat && stat.total > 0 ? Math.round((stat.done / stat.total) * 100) : 0;
+              return (
+                <li key={entry.id} className="dock-psection">
+                  <div className="dock-phead">
+                    <button type="button" className="dock-pname" title={entry.name}
+                      onClick={() => invoke("desktop_open_main", { route: `/projects?project=${entry.id}` }).catch(report)}>
+                      {entry.name}
                     </button>
-                  </li>
-                ))}
-              </ul>}
-          <form className="dock-panel-search dock-padd" onSubmit={(event) => {
-            event.preventDefault();
-            const title = itemDraft.trim();
-            if (!title || !openProject) return;
-            addItem({ title, projectId: openProject });
-            setItemDraft("");
-          }}>
-            <input className="dock-panel-input" value={itemDraft} placeholder={t("dock.projectsAddItem")}
-              maxLength={120} onChange={(event) => setItemDraft(event.target.value)} />
-          </form>
-          <button type="button" className="dock-panel-link" onClick={() => invoke("desktop_open_main", { route: `/projects?project=${project.id}` }).catch(report)}>
-            {t("dock.projectsOpen")}
-          </button>
-        </>
-      ) : (
-        <>
-          <div className="dock-panel-search">
-            <Search className="size-3.5 shrink-0 opacity-60" aria-hidden="true" />
-            <input className="dock-panel-input" value={query} placeholder={t("dock.projectsSearch")}
-              onChange={(event) => setQuery(event.target.value)} />
-          </div>
-          {visible.length === 0
-            ? <p className="dock-panel-empty">{t("dock.projectsEmpty")}</p>
-            : <ul className="dock-plist">
-                {visible.map((entry) => {
-                  const stat = stats.get(entry.id);
-                  const pct = stat && stat.total > 0 ? Math.round((stat.done / stat.total) * 100) : 0;
-                  return (
-                    <li key={entry.id}>
-                      <button type="button" className="dock-prow" title={entry.name}
-                        onClick={() => setOpenProject(entry.id)}>
-                        <span className="dock-prow-main">
-                          <span className="dock-prow-head">
-                            <span className="dock-prow-name">{entry.name}</span>
-                            <span className="dock-prow-count">{stat?.open.length ?? 0}</span>
-                          </span>
-                          <span className="dock-prow-bar" aria-hidden="true"><i style={{ width: `${pct}%` }} /></span>
-                        </span>
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>}
-          <form className="dock-panel-search dock-padd" onSubmit={(event) => {
-            event.preventDefault();
-            const name = projectDraft.trim();
-            if (!name) return;
-            const id = addProject({ name });
-            setProjectDraft("");
-            setOpenProject(id);
-          }}>
-            <input className="dock-panel-input" value={projectDraft} placeholder={t("dock.projectsAdd")}
-              maxLength={60} onChange={(event) => setProjectDraft(event.target.value)} />
-          </form>
-          <button type="button" className="dock-panel-link" onClick={() => invoke("desktop_open_main", { route: "/projects" }).catch(report)}>
-            {t("dock.projectsOpen")}
-          </button>
-        </>
-      )}
+                    <span className="dock-prow-count">{stat ? `${stat.done}/${stat.total}` : "0/0"}</span>
+                    <button type="button" className="dock-padd-item" aria-label={t("dock.projectsAddItem")}
+                      aria-expanded={addFor === entry.id}
+                      onClick={() => { setAddFor(addFor === entry.id ? null : entry.id); setItemDraft(""); }}>
+                      <RiAddLine size={12} aria-hidden="true" />
+                    </button>
+                  </div>
+                  <span className="dock-pbar" aria-hidden="true"><i style={{ width: `${pct}%` }} /></span>
+                  {addFor === entry.id && (
+                    <form className="dock-panel-search dock-padd" onSubmit={(event) => { event.preventDefault(); submitItem(entry.id); }}>
+                      <input className="dock-panel-input" value={itemDraft} placeholder={t("dock.projectsAddItem")}
+                        maxLength={120} autoFocus onChange={(event) => setItemDraft(event.target.value)} />
+                    </form>
+                  )}
+                  {shown.length === 0
+                    ? <p className="dock-pnone">{t("dock.projectsItemsEmpty")}</p>
+                    : <ul>
+                        {shown.map((item) => (
+                          <li key={item.id}>
+                            <button type="button" className="dock-prow" title={item.title}
+                              onClick={() => invoke("desktop_open_main", { route: `/projects?item=${item.id}` }).catch(report)}>
+                              <span className={`dock-pchip${item.status === "doing" ? " is-doing" : ""}`}>
+                                {t(item.status === "doing" ? "dock.projectsDoing" : "dock.projectsTodo")}
+                              </span>
+                              <span className="dock-prow-name">{item.title}</span>
+                              {item.deadline && <span className="dock-prow-count">{item.deadline.slice(5)}</span>}
+                            </button>
+                          </li>
+                        ))}
+                      </ul>}
+                </li>
+              );
+            })}
+          </ul>}
+      <form className="dock-panel-search dock-padd" onSubmit={(event) => {
+        event.preventDefault();
+        const name = projectDraft.trim();
+        if (!name) return;
+        addProject({ name });
+        setProjectDraft("");
+      }}>
+        <input className="dock-panel-input" value={projectDraft} placeholder={t("dock.projectsAdd")}
+          maxLength={60} onChange={(event) => setProjectDraft(event.target.value)} />
+      </form>
+      <button type="button" className="dock-panel-link" onClick={() => invoke("desktop_open_main", { route: "/projects" }).catch(report)}>
+        {t("dock.projectsOpen")}
+      </button>
     </div>
   );
 }
