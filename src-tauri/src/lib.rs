@@ -30,6 +30,7 @@ pub fn run() {
         .manage(commands::desktop_shortcut::FenceShortcut::default())
         .manage(commands::search::SearchShortcut::default())
         .manage(commands::quick_tools::QuickToolsShortcut::default())
+        .manage(commands::dock::DockShortcut::default())
         .invoke_handler(tauri::generate_handler![
             commands::data::write_plan_pair,
             commands::data::project_apply_remote_binding,
@@ -39,6 +40,8 @@ pub fn run() {
             commands::dock::window_show_no_activate,
             commands::dock::window_set_bounds,
             commands::dock::window_set_no_activate,
+            commands::dock::set_dock_shortcut,
+            commands::dock::dock_set_autohide,
             commands::zentao::zentao_secret_status,
             commands::zentao::zentao_test_connection,
             commands::zentao::zentao_forget_secret,

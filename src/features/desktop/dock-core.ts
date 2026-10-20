@@ -22,6 +22,8 @@ export const DOCK_ROW_H = 44;
 /** 锚定弹出时，面板前缘与触发图标中心保持的距离（逻辑像素）。保留给未来用。 */
 const ANCHOR_LEAD = 48;
 
+/** 收集知识面板内容多，飞出时单独放宽（其余面板恒等于侧栏高度）。 */
+export const DOCK_CAPTURE_H = 520;
 const MODE_W: Record<DockMode, number> = { strip: DOCK_RAIL_W, expand: DOCK_RAIL_W, flyout: DOCK_FLYOUT_W };
 const MODE_H: Record<DockMode, number> = { strip: DOCK_RAIL_H, expand: DOCK_RAIL_H, flyout: DOCK_RAIL_H };
 
@@ -30,17 +32,18 @@ const MODE_H: Record<DockMode, number> = { strip: DOCK_RAIL_H, expand: DOCK_RAIL
  * 飞出面板在锚定图标旁弹出，其余形态在工作区居中。
  * 顶缘是水平横排：锚定顶边界。绝不越过工作区。
  */
-export function dockBounds(area: DockArea, edge: DockEdge, mode: DockMode, anchor?: number): DockBounds {
+export function dockBounds(area: DockArea, edge: DockEdge, mode: DockMode, anchor?: number, height?: number): DockBounds {
   const lead = mode === "flyout" ? anchor : undefined;
+  const capH = mode === "flyout" ? height : undefined;
   if (edge === "top") {
     const w = Math.min(area.w, TOP_MODE_W[mode]);
-    const h = Math.min(area.h, TOP_MODE_H[mode]);
+    const h = Math.min(area.h, capH ?? TOP_MODE_H[mode]);
     const x = lead === undefined
       ? area.x + Math.round((area.w - w) / 2)
       : Math.min(Math.max(Math.round(lead - ANCHOR_LEAD), area.x), area.x + area.w - w);
     return { x, y: area.y, w, h };
   }
-  const h = Math.min(area.h, MODE_H[mode]);
+  const h = Math.min(area.h, capH ?? MODE_H[mode]);
   const w = MODE_W[mode];
   const y = lead === undefined
     ? area.y + Math.round((area.h - h) / 2)
@@ -50,6 +53,6 @@ export function dockBounds(area: DockArea, edge: DockEdge, mode: DockMode, ancho
 }
 
 /** 弹簧动画的起止矩形：只变 x/宽度，y/高度保持不动（顶缘直接落位，不走弹簧）。 */
-export function dockSpringPair(area: DockArea, edge: DockEdge, from: DockMode, to: DockMode, anchor?: number): { from: DockBounds; to: DockBounds } {
-  return { from: dockBounds(area, edge, from, anchor), to: dockBounds(area, edge, to, anchor) };
+export function dockSpringPair(area: DockArea, edge: DockEdge, from: DockMode, to: DockMode, anchor?: number, height?: number): { from: DockBounds; to: DockBounds } {
+  return { from: dockBounds(area, edge, from, anchor, height), to: dockBounds(area, edge, to, anchor, height) };
 }

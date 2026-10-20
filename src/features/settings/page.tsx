@@ -29,6 +29,7 @@ import { exportBackup, importBackup } from "@/features/settings/backup";
 import { gsap, useGSAP } from "@/lib/gsap";
 import { cn } from "@/lib/utils";
 import { KnowledgeSettings } from "@/features/knowledge/settings";
+import { ShortcutRecorder } from "@/features/knowledge/shortcut-recorder";
 import { ProviderSettings } from "@/features/ai/provider-settings";
 import { FeedNetworkSettings } from "@/features/feeds/network-settings";
 import { useProviderCopy } from "@/features/ai/provider-copy";
@@ -289,10 +290,28 @@ function SystemSection() {
 /* 桌面 Dock：开关立即生效（生命周期在 DesktopRuntime）；边向改动会重开窗口以应用。 */
 function DesktopDockCard() {
   const { t } = useTranslation();
+  const en = useSettings((s) => s.lang) === "en";
   const dockOpen = useSettings((s) => s.dockOpen);
   const dockEdge = useSettings((s) => s.dockEdge);
+  const dockShortcut = useSettings((s) => s.dockShortcut);
+  const dockAutoHide = useSettings((s) => s.dockAutoHide);
   const setDockOpen = useSettings((s) => s.setDockOpen);
   const setDockEdge = useSettings((s) => s.setDockEdge);
+  const setDockShortcut = useSettings((s) => s.setDockShortcut);
+  const setDockAutoHide = useSettings((s) => s.setDockAutoHide);
+  const [shortcutDraft, setShortcutDraft] = useState<string | null>(null);
+  const [recording, setRecording] = useState(false);
+  const [shortcutError, setShortcutError] = useState("");
+
+  const saveShortcut = async (value: string) => {
+    setShortcutError("");
+    try {
+      await invoke("set_dock_shortcut", { shortcut: value.trim() });
+      setDockShortcut(value.trim());
+      setShortcutDraft(null);
+      toast.success(en ? "Dock shortcut saved" : "Dock 快捷键已保存");
+    } catch (cause) { setShortcutError(String(cause)); }
+  };
 
   return (
     <Card>
@@ -320,6 +339,25 @@ function DesktopDockCard() {
           </div>
         </Field>
         <p className="text-[11px] leading-5 text-muted-foreground">{t("settings.dockEdgeHint")}</p>
+        <Field label={t("settings.dockShortcut")}>
+          <ShortcutRecorder placeholder="Ctrl+Alt+D" value={shortcutDraft ?? dockShortcut}
+            onChange={(value) => { setShortcutDraft(value); setShortcutError(""); }} en={en}
+            disabled={recording} onRecordingChange={setRecording} />
+        </Field>
+        {shortcutError && <p role="alert" className="text-xs leading-5 text-destructive">{shortcutError}</p>}
+        <div className="flex flex-wrap gap-2">
+          <Button size="sm" disabled={recording || (shortcutDraft ?? dockShortcut) === dockShortcut}
+            onClick={() => void saveShortcut(shortcutDraft ?? dockShortcut)}>
+            {en ? "Save shortcut" : "保存快捷键"}
+          </Button>
+          {!!dockShortcut && <Button size="sm" variant="ghost" disabled={recording}
+            onClick={() => void saveShortcut("")}>{en ? "Clear" : "清除"}</Button>}
+        </div>
+        <label className="flex cursor-pointer items-center justify-between gap-3">
+          <span className="text-[13px] font-medium text-foreground/90">{t("settings.dockAutoHide")}</span>
+          <Switch checked={dockAutoHide} onCheckedChange={setDockAutoHide} aria-label={t("settings.dockAutoHide")} />
+        </label>
+        <p className="text-[11px] leading-5 text-muted-foreground">{t("settings.dockAutoHideHint")}</p>
       </CardContent>
     </Card>
   );

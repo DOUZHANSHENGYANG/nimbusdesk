@@ -3,16 +3,22 @@
 //! 三个 Win32 技巧取自 NetSpeed-Dynamic（MIT）：无焦点显示、原子 bounds、
 //! 弹簧动画。普通 `.show()` 会抢走当前应用焦点，dock 弹出时不能打断用户。
 
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use tauri::{AppHandle, Manager};
-use windows::Win32::Foundation::HWND;
+use windows::Win32::Foundation::{HWND, RECT};
+use windows::Win32::Graphics::Gdi::{
+    GetMonitorInfoW, MonitorFromWindow, MONITOR_DEFAULTTONEAREST, MONITORINFO,
+};
 use windows::Win32::UI::WindowsAndMessaging::{
-    GetWindowLongPtrW, SetWindowLongPtrW, SetWindowPos, ShowWindow, GWL_EXSTYLE, HWND_TOPMOST,
-    SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER, SW_SHOWNOACTIVATE, WS_EX_NOACTIVATE,
+    GetForegroundWindow, GetWindowLongPtrW, GetWindowRect, SetWindowLongPtrW, SetWindowPos,
+    ShowWindow, GWL_EXSTYLE, HWND_TOPMOST, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER,
+    SW_SHOWNOACTIVATE, WS_EX_NOACTIVATE,
 };
 
 /// Dock 是全局单实例窗口；窗口操作按代数取消，新的弹簧动画会立即作废旧循环。
 static DOCK_SPRING: AtomicU64 = AtomicU64::new(0);
+/// 全屏自动隐藏开关；监视线程常驻，开关只读这个位。
+static DOCK_AUTOHIDE: AtomicBool = AtomicBool::new(false);
 
 fn hwnd_of(app: &AppHandle, label: &str) -> Result<HWND, String> {
     let win = app.get_webview_window(label).ok_or("窗口不存在")?;
@@ -177,6 +183,116 @@ pub async fn dock_open(app: AppHandle) -> Result<(), String> {
 pub async fn dock_close(app: AppHandle) -> Result<(), String> {
     if let Some(win) = app.get_webview_window("desktop-dock") {
         let _ = win.close();
+    }
+    Ok(())
+}
+
+/// Dock 显隐全局快捷键（复用收集快捷键的解析与占用检查）。
+#[derive(Default)]
+pub struct DockShortcut(pub std::sync::Mutex<Option<tauri_plugin_global_shortcut::Shortcut>>);
+
+#[tauri::command]
+pub async fn set_dock_shortcut(
+    app: AppHandle,
+    state: tauri::State<'_, DockShortcut>,
+    shortcut: String,
+) -> Result<(), String> {
+    use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
+    let next = if shortcut.trim().is_empty() {
+        None
+    } else {
+        Some(super::capture::parse_shortcut(&shortcut)?)
+    };
+    let mut current = state.0.lock().map_err(|_| "快捷键状态不可用")?;
+    if current.as_ref() == next.as_ref() { return Ok(()); }
+    if let Some(previous) = current.take() {
+        let _ = app.global_shortcut().unregister(previous);
+    }
+    if let Some(next) = next {
+        if app.global_shortcut().is_registered(next) {
+            return Err("快捷键被占用或无法注册，请更换组合键".into());
+        }
+        app.global_shortcut().on_shortcut(next, |app, _, event| {
+            if event.state() == ShortcutState::Pressed {
+                let app = app.clone();
+                tauri::async_runtime::spawn(async move {
+                    match app.get_webview_window("desktop-dock") {
+                        // 已存在就显隐切换；被关闭过则重开
+                        Some(win) => {
+                            if win.is_visible().unwrap_or(false) {
+                                let _ = win.hide();
+                            } else {
+                                let _ = win.show();
+                            }
+                        }
+                        None => { let _ = dock_open(app).await; }
+                    }
+                });
+            }
+        }).map_err(|_| "快捷键被占用或无法注册，请更换组合键".to_string())?;
+        *current = Some(next);
+    }
+    Ok(())
+}
+
+/// 全屏自动隐藏：前台窗口铺满所在显示器即视为全屏，Dock 收起；退出自动回来。
+static AUTOHIDE_SPAWNED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+static DOCK_HIDDEN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// 前台窗口是否铺满所在显示器（>95% 视为全屏应用）。
+#[cfg(windows)]
+fn foreground_covers_monitor() -> bool {
+    unsafe {
+        let fg = GetForegroundWindow();
+        let mut rect = RECT::default();
+        let _ = GetWindowRect(fg, &mut rect);
+        let monitor = MonitorFromWindow(fg, MONITOR_DEFAULTTONEAREST);
+        let mut info = MONITORINFO {
+            cbSize: std::mem::size_of::<MONITORINFO>() as u32,
+            ..Default::default()
+        };
+        if !GetMonitorInfoW(monitor, &mut info).as_bool() {
+            return false;
+        }
+        let m = info.rcMonitor;
+        let w = (m.right - m.left) as f64;
+        let h = (m.bottom - m.top) as f64;
+        let fw = (rect.right - rect.left) as f64;
+        let fh = (rect.bottom - rect.top) as f64;
+        w > 0.0 && h > 0.0 && fw / w > 0.95 && fh / h > 0.95
+    }
+}
+
+#[tauri::command]
+pub async fn dock_set_autohide(app: AppHandle, on: bool) -> Result<(), String> {
+    DOCK_AUTOHIDE.store(on, Ordering::Relaxed);
+    if on && !AUTOHIDE_SPAWNED.swap(true, Ordering::Relaxed) {
+        let handle = app.clone();
+        tauri::async_runtime::spawn_blocking(move || loop {
+            std::thread::sleep(std::time::Duration::from_secs(1));
+            if !DOCK_AUTOHIDE.load(Ordering::Relaxed) {
+                // 关闭自动隐藏时把 Dock 找回来
+                if DOCK_HIDDEN.swap(false, Ordering::Relaxed) {
+                    if let Some(win) = handle.get_webview_window("desktop-dock") {
+                        let _ = win.show();
+                    }
+                }
+                continue;
+            }
+            #[cfg(windows)]
+            if foreground_covers_monitor() {
+                if let Some(win) = handle.get_webview_window("desktop-dock") {
+                    if win.is_visible().unwrap_or(false) {
+                        let _ = win.hide();
+                        DOCK_HIDDEN.store(true, Ordering::Relaxed);
+                    }
+                }
+            } else if DOCK_HIDDEN.swap(false, Ordering::Relaxed) {
+                if let Some(win) = handle.get_webview_window("desktop-dock") {
+                    let _ = win.show();
+                }
+            }
+        });
     }
     Ok(())
 }

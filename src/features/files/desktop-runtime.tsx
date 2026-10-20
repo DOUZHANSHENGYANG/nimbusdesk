@@ -47,12 +47,16 @@ export function DesktopRuntime() {
         });
         const applyDock = () => {
             if (stopped || !useSettings.persist.hasHydrated()) return;
-            const { dockOpen } = useSettings.getState();
+            const { dockOpen, dockShortcut, dockAutoHide } = useSettings.getState();
             if (dockOpen) invoke('dock_open').catch(error => toast.error(String(error)));
             else invoke('dock_close').catch(() => undefined);
+            invoke('set_dock_shortcut', { shortcut: dockShortcut }).catch(error => toast.error(String(error)));
+            invoke('dock_set_autohide', { on: dockAutoHide }).catch(error => toast.error(String(error)));
         };
         const offDockHydration = useSettings.persist.onFinishHydration(applyDock);
-        const offDockSettings = useSettings.subscribe((state, previous) => { if (state.dockOpen !== previous.dockOpen) applyDock(); });
+        const offDockSettings = useSettings.subscribe((state, previous) => {
+            if (state.dockOpen !== previous.dockOpen || state.dockShortcut !== previous.dockShortcut || state.dockAutoHide !== previous.dockAutoHide) applyDock();
+        });
         const offHydration = useSettings.persist.onFinishHydration(applyShortcut);
         const offSettings = useSettings.subscribe((state, previous) => { if (state.fenceShortcut !== previous.fenceShortcut) applyShortcut(); });
         applyShortcut();

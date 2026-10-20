@@ -6,7 +6,7 @@ import {
   BookOpen, CalendarCheck, ChevronLeft, ChevronRight, FolderKanban, GripHorizontal,
   GripVertical, LayoutGrid, List, Search, Settings2, X,
 } from "lucide-react";
-import { RiAddLine, RiAttachment2, RiCloseLine, RiDeleteBinLine, RiPushpinLine } from "@remixicon/react";
+import { RiAddLine, RiAttachment2, RiClipboardLine, RiCloseLine, RiDeleteBinLine, RiPushpinLine } from "@remixicon/react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { useModal } from "@/components/shell/modal-host";
@@ -20,7 +20,7 @@ import { useProjects } from "@/features/projects/store";
 import { CaptureForm } from "@/features/knowledge/capture";
 import { beginMenu, closeMenu, emitMenuRequest, ensurePopupReady, ownerLabel, revealMenu, subscribeMenuSize, useMenuActions, type MenuAction } from "@/features/files/popup";
 import type { MenuIconKey, MenuNode } from "@/features/files/menu-model";import { monitorArea } from "./monitors";
-import { dockBounds, dockSpringPair, type DockArea, type DockMode, type DockPanel } from "./dock-core";
+import { DOCK_CAPTURE_H, dockBounds, dockSpringPair, type DockArea, type DockMode, type DockPanel } from "./dock-core";
 import { nearestDockEdge } from "./edge-core";
 import { ItemIcon } from "@/features/files/icons";
 import "./dock.css";
@@ -70,7 +70,8 @@ export function DockWindow() {
     // MonitorArea 是物理像素；dock-core 的口径是逻辑像素。
     const area: DockArea = { x: raw.x / scale, y: raw.y / scale, w: raw.w / scale, h: raw.h / scale };
     areaRef.current = area;
-    const bounds = dockBounds(area, edge, mode);
+    const height = panelRef.current === "capture" ? DOCK_CAPTURE_H : undefined;
+    const bounds = dockBounds(area, edge, mode, undefined, height);
     const sameMode = mode === modeRef.current;
     // 顶缘的形变是高度变化，而 dock_spring 只做横向弹簧，故顶缘直接落位。
     if (sameMode || edge === "top") {
@@ -81,7 +82,7 @@ export function DockWindow() {
       if (!sameMode) setMode(mode);
       return;
     }
-    const { from, to } = dockSpringPair(area, edge, modeRef.current, mode);
+    const { from, to } = dockSpringPair(area, edge, modeRef.current, mode, undefined, height);
     setMode(mode);
     await invoke("dock_spring", {
       label: LABEL, fromX: from.x, toX: to.x, fromW: from.w, toW: to.w,
@@ -139,6 +140,69 @@ export function DockWindow() {
     });
     return () => { void offFocus.then((off) => off()).catch(() => undefined); };
   }, [applyMode, setPanel]);
+
+  /** 拖放投递：文件拖到「收纳盒」=收录条目；拖到「计划」=建任务并挂链接。 */
+  const [dropTarget, setDropTarget] = useState<string | null>(null);
+  const dockAutoHide = useSettings((s) => s.dockAutoHide);
+  const dockShortcut = useSettings((s) => s.dockShortcut);
+  useEffect(() => {
+    if (!inTauri) return;
+    const webview = getCurrentWebviewWindow();
+    let off: (() => void) | undefined;
+    let target: string | null = null;
+    const basename = (p: string) => p.split(/[\\/]/).filter(Boolean).pop() ?? p;
+    const kindOf = (p: string): "file" | "folder" => (basename(p).includes(".") ? "file" : "folder");
+    const handleDrop = (paths: string[], key: string) => {
+      if (key === "fences") {
+        const state = useFiles.getState();
+        const tops = sortedTopCategories(state.categories);
+        const categoryId = tops[0]?.id ?? state.addCategory(t("dock.fences"));
+        state.addItems(paths.map((p) => ({ title: basename(p), type: kindOf(p), path: p, categoryId, tags: [] })));
+        toast.success(t("dock.dropStashed", { count: paths.length }));
+      } else if (key === "plans") {
+        const date = todayStr();
+        for (const p of paths) {
+          const store = usePlans.getState();
+          const before = new Set((store.days[date] ?? []).map((task) => task.id));
+          store.addTask(date, null, basename(p));
+          const created = (usePlans.getState().days[date] ?? []).find((task) => !before.has(task.id));
+          if (created) usePlans.getState().updateTask(date, created.id, { link: { type: kindOf(p), path: p } });
+        }
+        toast.success(t("dock.dropPlanned", { count: paths.length }));
+      }
+    };
+    void webview.onDragDropEvent((event) => {
+      if (event.payload.type === "enter" || event.payload.type === "over") {
+        const { x, y } = event.payload.position; // 物理像素
+        void currentMonitor().then((monitor) => {
+          const scale = monitor?.scaleFactor ?? 1;
+          const icon = document.elementFromPoint(x / scale, y / scale)?.closest("[data-dockdrop]");
+          const key = icon?.getAttribute("data-dockdrop") ?? null;
+          if (key !== target) { target = key; setDropTarget(key); }
+        }).catch(() => undefined);
+      } else if (event.payload.type === "drop") {
+        const paths = [...event.payload.paths];
+        const key = target;
+        target = null;
+        setDropTarget(null);
+        if ((key === "fences" || key === "plans") && paths.length > 0) handleDrop(paths, key);
+      } else {
+        target = null;
+        setDropTarget(null);
+      }
+    }).then((off2) => { off = off2; });
+    return () => off?.();
+  }, [t]);
+
+  /** 全局快捷键与全屏自动隐藏：设置变化即应用到 Rust 侧。 */
+  useEffect(() => {
+    if (!inTauri) return;
+    invoke("set_dock_shortcut", { shortcut: dockShortcut }).catch(report);
+  }, [dockShortcut]);
+  useEffect(() => {
+    if (!inTauri) return;
+    invoke("dock_set_autohide", { on: dockAutoHide }).catch(report);
+  }, [dockAutoHide]);
 
   const nav = (route: string) => invoke("desktop_open_main", { route }).catch(report);
 
@@ -264,8 +328,9 @@ export function DockWindow() {
             const menuNodes = menuFor(key);
             return (
               <li key={key}>
-                <button type="button" className={`dock-item${panel === actionPanel ? " is-active" : ""}`}
+                <button type="button" className={`dock-item${panel === actionPanel ? " is-active" : ""}${dropTarget === key ? " is-drop" : ""}`}
                   title={t(`dock.${key}`)} aria-label={t(`dock.${key}`)} aria-pressed={panel === actionPanel}
+                  data-dockdrop={key}
                   onClick={() => {
                     if (actionPanel) { setPanel(panel === actionPanel ? null : actionPanel); return; }
                     if (run) { void run(); return; }
@@ -342,6 +407,22 @@ function FencesFlyout() {
   const open = (item: typeof items[number]) =>
     (item.type === "url" ? openUrl(item.path) : openPath(item.path)).catch(report);
 
+  /** 剪贴板快收：URL 直接收录成条目；纯文本提示去收集知识粘贴。 */
+  const collectClipboard = async () => {
+    let text = "";
+    try { text = (await navigator.clipboard.readText()).trim(); } catch { report("剪贴板不可读"); return; }
+    if (!text) return;
+    const state = useFiles.getState();
+    const tops = sortedTopCategories(state.categories);
+    const categoryId = tops[0]?.id ?? state.addCategory(t("dock.fences"));
+    if (/^https?:\/\//i.test(text)) {
+      state.addItem({ title: text.replace(/^https?:\/\//i, "").slice(0, 80), type: "url", path: text, categoryId, tags: [] });
+      toast.success(t("dock.clipAdded"));
+    } else {
+      toast.info(t("dock.clipNotUrl"));
+    }
+  };
+
   const dragProps = (id: string) => ({
     draggable: true,
     onDragStart: () => { draggingId.current = id; },
@@ -371,6 +452,10 @@ function FencesFlyout() {
             onClick={() => setView("grid")}><LayoutGrid className="size-3.5" aria-hidden="true" /></button>
           <button type="button" aria-label={t("dock.fencesList")} aria-pressed={view === "list"}
             onClick={() => setView("list")}><List className="size-3.5" aria-hidden="true" /></button>
+          <button type="button" aria-label={t("dock.clipCollect")} title={t("dock.clipCollect")}
+            onClick={() => void collectClipboard()}>
+            <RiClipboardLine className="size-3.5" aria-hidden="true" />
+          </button>
         </span>
       </div>
       <div className="dock-chips" role="tablist" aria-label={t("dock.fences")}>

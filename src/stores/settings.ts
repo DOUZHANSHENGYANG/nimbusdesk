@@ -29,6 +29,10 @@ interface SettingsState {
   dockOpen: boolean;
   /** 收纳盒飞出面板的磁贴图标边长（Ctrl+滚轮调节，32–72） */
   dockTileSize: number;
+  /** Dock 显隐全局快捷键（空 = 无）；按下在托盘外切换 Dock 显示 */
+  dockShortcut: string;
+  /** 检测到全屏应用时自动隐藏 Dock */
+  dockAutoHide: boolean;
   setTheme: (theme: ThemeMode) => void;
   setLang: (lang: Lang) => void;
   setSidebarCollapsed: (v: boolean) => void;
@@ -42,6 +46,8 @@ interface SettingsState {
   setDockEdge: (edge: "left" | "right" | "top") => void;
   setDockOpen: (v: boolean) => void;
   setDockTileSize: (v: number) => void;
+  setDockShortcut: (v: string) => void;
+  setDockAutoHide: (v: boolean) => void;
 }
 
 const PLANS_VIEWS: PlansView[] = ["outline", "timeline", "kanban", "calendar", "stats", "archive"];
@@ -71,6 +77,8 @@ export const useSettings = create<SettingsState>()(
       dockEdge: "right",
       dockOpen: true,
       dockTileSize: 36,
+      dockShortcut: "",
+      dockAutoHide: false,
       setTheme: (theme) => set({ theme }),
       setLang: (lang) => set({ lang }),
       setSidebarCollapsed: (sidebarCollapsed) => set({ sidebarCollapsed }),
@@ -84,6 +92,8 @@ export const useSettings = create<SettingsState>()(
       setDockEdge: (dockEdge) => set({ dockEdge }),
       setDockOpen: (dockOpen) => set({ dockOpen }),
       setDockTileSize: (dockTileSize) => set({ dockTileSize: Math.min(72, Math.max(32, Math.round(dockTileSize))) }),
+      setDockShortcut: (dockShortcut) => set({ dockShortcut }),
+      setDockAutoHide: (dockAutoHide) => set({ dockAutoHide }),
     }),
     {
       name: "settings",
