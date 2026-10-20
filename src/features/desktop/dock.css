@@ -1,20 +1,44 @@
-/* 桌面 Dock：贴边玻璃条。颜色全部来自 token，不引入新色值。 */
+/* 桌面 Dock：贴边玻璃条 + 飞出面板。颜色全部来自 token，不引入新色值。
+ *
+ * 三种形态（data-mode）：
+ *   strip   56px 纯图标
+ *   expand  248px 图标 + 标签（悬停）
+ *   flyout  56px 图标条 + 352px 功能面板（栅格/计划）
+ * 右缘 dock 的条贴右边界，面板向屏幕内侧展开；左缘镜像。
+ */
 
 .dock-root {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: stretch;
   height: 100%;
+  user-select: none;
+}
+
+.dock-strip {
+  display: flex;
+  flex-direction: column;
+  width: 56px;
+  flex: none;
   padding: 10px 8px;
   background: color-mix(in srgb, var(--popover) 88%, transparent);
   backdrop-filter: blur(18px);
   border: 1px solid var(--border);
   box-shadow: var(--shadow-lg);
-  user-select: none;
 }
 
-.dock-root[data-edge="left"] { border-radius: 0 var(--radius-lg) var(--radius-lg) 0; border-left: none; }
-.dock-root[data-edge="right"] { border-radius: var(--radius-lg) 0 0 var(--radius-lg); border-right: none; }
+.dock-root[data-mode="expand"] .dock-strip { width: 248px; }
+
+.dock-root[data-edge="left"] .dock-strip {
+  margin-right: auto;
+  border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
+  border-left: none;
+}
+.dock-root[data-edge="right"] .dock-strip {
+  margin-left: auto;
+  border-radius: var(--radius-lg) 0 0 var(--radius-lg);
+  border-right: none;
+}
 
 .dock-list {
   display: flex;
@@ -40,14 +64,14 @@
   transition: background var(--pr-dur-fast, 120ms) ease, color var(--pr-dur-fast, 120ms) ease;
 }
 
-.dock-item:hover, .dock-item:focus-visible {
+.dock-item:hover, .dock-item:focus-visible, .dock-item.is-active {
   background: var(--accent);
   color: var(--brand);
 }
 
 .dock-icon { width: 20px; height: 20px; flex: none; }
 
-/* 收起态隐藏文字：溢出裁切由窗口宽度控制，不依赖 JS。 */
+/* 标签只在悬停态出现；strip/flyout 形态下溢出隐藏。 */
 .dock-label {
   min-width: 0;
   overflow: hidden;
@@ -56,6 +80,8 @@
   font-size: 12px;
   font-weight: 500;
 }
+.dock-root[data-mode="strip"] .dock-label,
+.dock-root[data-mode="flyout"] .dock-label { display: none; }
 
 .dock-close {
   display: flex;
@@ -68,6 +94,182 @@
 }
 
 .dock-close:hover { background: var(--accent); color: var(--destructive); }
+
+/* ── 飞出面板 ─────────────────────────────────────────── */
+
+.dock-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+  padding: 10px;
+  background: color-mix(in srgb, var(--card) 94%, transparent);
+  backdrop-filter: blur(18px);
+}
+
+.dock-root[data-edge="left"] .dock-panel { border-right: 1px solid var(--border); }
+.dock-root[data-edge="right"] .dock-panel { border-left: 1px solid var(--border); }
+
+.dock-panel-search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px;
+  height: 32px;
+  flex: none;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: var(--background);
+}
+
+.dock-panel-input {
+  min-width: 0;
+  flex: 1;
+  background: transparent;
+  outline: none;
+  font-size: 12px;
+  color: var(--foreground);
+}
+
+.dock-panel-input::placeholder { color: var(--muted-foreground); }
+
+.dock-panel-empty { padding: 18px 8px; font-size: 12px; text-align: center; color: var(--muted-foreground); }
+
+.dock-chips {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+  flex: none;
+}
+
+.dock-chip-box { display: inline-flex; align-items: center; border-radius: var(--radius-md); }
+
+.dock-chip {
+  padding: 3px 8px;
+  border-radius: var(--radius-md);
+  font-size: 11px;
+  color: var(--muted-foreground);
+}
+
+.dock-chip:hover, .dock-chip.is-active { background: var(--accent); color: var(--brand); }
+
+/* 排序箭头只在悬停时出现，避免占宽度 */
+.dock-chip-sort { display: none; align-items: center; margin-left: -2px; }
+.dock-chip-box:hover .dock-chip-sort { display: inline-flex; }
+.dock-chip-sort button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: var(--radius-sm);
+  color: var(--muted-foreground);
+}
+.dock-chip-sort button:hover { background: var(--accent); color: var(--brand); }
+
+.dock-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  align-content: start;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 2px;
+}
+
+.dock-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  padding: 8px 4px 6px;
+  border-radius: var(--radius-md);
+  outline: none;
+}
+
+.dock-tile:hover, .dock-tile:focus-visible { background: var(--accent); }
+
+.dock-tile-label {
+  max-width: 100%;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  font-size: 11px;
+  line-height: 1.35;
+  text-align: center;
+  color: var(--foreground/90);
+}
+
+.dock-todos {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.dock-todo {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  border-radius: var(--radius-md);
+  text-align: left;
+  outline: none;
+}
+
+.dock-todo:hover, .dock-todo:focus-visible { background: var(--accent); }
+
+.dock-todo-mark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  flex: none;
+  border: 1.5px solid var(--muted-foreground);
+  border-radius: 999px;
+  font-size: 10px;
+  line-height: 1;
+  color: var(--brand);
+}
+
+.dock-todo.is-done .dock-todo-mark { border-color: var(--brand); }
+
+.dock-todo.is-done .dock-todo-title {
+  color: var(--muted-foreground);
+  text-decoration: line-through;
+  text-decoration-color: color-mix(in srgb, var(--muted-foreground) 55%, transparent);
+}
+
+.dock-todo-title {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--foreground/90);
+}
+
+.dock-todo-time { flex: none; font-size: 10px; font-variant-numeric: tabular-nums; color: var(--muted-foreground); }
+
+.dock-panel-link {
+  flex: none;
+  padding: 6px 8px;
+  border-radius: var(--radius-md);
+  font-size: 11px;
+  text-align: center;
+  color: var(--muted-foreground);
+}
+
+.dock-panel-link:hover { background: var(--accent); color: var(--brand); }
 
 .dock-hint { padding: 12px; font-size: 12px; color: var(--muted-foreground); }
 

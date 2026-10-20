@@ -19,8 +19,17 @@ export interface FileCategory {
   syncDir?: boolean;
   /** 父分类 id。单层子分类：有父的分类不能再有子分类（由 UI 保证） */
   parentId?: string;
+  /** 展示顺序（Dock 飞出面板的标签从左到右按此升序）。缺省排最后 */
+  sortOrder?: number;
   /** 最后修改时间 —— 仅供备份合并判断「同 id 谁更新」 */
   updatedAt?: number;
+}
+
+/** 顶级分类按展示顺序排列：sortOrder 升序，缺省按创建时间兜底（兼容旧数据） */
+export function sortedTopCategories(categories: FileCategory[]): FileCategory[] {
+  return categories
+    .filter((category) => !category.parentId)
+    .sort((a, b) => (a.sortOrder ?? Number.MAX_SAFE_INTEGER) - (b.sortOrder ?? Number.MAX_SAFE_INTEGER) || a.createdAt - b.createdAt);
 }
 
 export interface FileItem {
@@ -53,6 +62,8 @@ interface FilesState {
   setCategoryParent: (id: string, parentId: string | null) => void;
   /** 绑定/更换分类的真实磁盘目录（null = 解绑） */
   setCategoryDir: (id: string, dir: string | null) => void;
+  /** 顶级分类展示排序：与相邻分类交换 sortOrder（Dock 飞出面板标签从左到右升序） */
+  moveCategory: (id: string, dir: -1 | 1) => void;
   setCategoryMapping: (id: string, root: string | null) => void;
   reconcileDirectory: (categoryId: string, requestedRoot: string, snapshot: DirectorySnapshot) => boolean;
   addItem: (item: Omit<FileItem, "id" | "createdAt">) => void;
@@ -132,7 +143,8 @@ export const useFiles = create<FilesState>()(
         set((s) => ({
           categories: [
             ...s.categories,
-            { id, name: clean, createdAt: Date.now(), updatedAt: Date.now(), parentId },
+            { id, name: clean, createdAt: Date.now(), updatedAt: Date.now(), parentId,
+              ...(parentId ? {} : { sortOrder: sortedTopCategories(s.categories).length }) },
           ],
         }));
         return id;
@@ -185,6 +197,28 @@ export const useFiles = create<FilesState>()(
               : c,
           ),
         })),
+
+      moveCategory: (id, dir) => set((s) => {
+        const tops = sortedTopCategories(s.categories);
+        const index = tops.findIndex((category) => category.id === id);
+        const neighbor = tops[index + dir];
+        if (index < 0 || !neighbor) return s;
+        const order = new Map(tops.map((category, position) => [category.id, position]));
+        order.set(id, index + dir);
+        order.set(neighbor.id, index);
+        // 重排后把序号压实为 0..n，避免多次交换后出现重复或跳号
+        const rank = [...order.entries()].sort((a, b) => a[1] - b[1]).map(([key], position) => [key, position] as const);
+        const rankMap = new Map(rank);
+        const now = Date.now();
+        return {
+          categories: s.categories.map((category) => {
+            const next = rankMap.get(category.id);
+            return next === undefined || category.sortOrder === next
+              ? category
+              : { ...category, sortOrder: next, updatedAt: now };
+          }),
+        };
+      }),
 
       setCategoryMapping: (id, root) => set(state => {
         const category = state.categories.find(entry => entry.id === id);
