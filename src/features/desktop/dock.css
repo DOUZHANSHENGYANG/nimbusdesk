@@ -15,14 +15,15 @@
   user-select: none;
 }
 
+/* 亚克力开启后系统负责模糊：底色减透让质感透出来，backdrop-filter 是
+ * 透明窗口上的无效开销，一并去掉。 */
 .dock-strip {
   display: flex;
   flex-direction: column;
   width: 134px;
   flex: none;
   padding: 8px 6px;
-  background: color-mix(in srgb, var(--popover) 88%, transparent);
-  backdrop-filter: blur(18px);
+  background: color-mix(in srgb, var(--popover) 72%, transparent);
   border: 1px solid var(--border);
   box-shadow: var(--shadow-lg);
 }
@@ -201,8 +202,7 @@
   flex: 1;
   min-width: 0;
   padding: 10px;
-  background: color-mix(in srgb, var(--card) 94%, transparent);
-  backdrop-filter: blur(18px);
+  background: color-mix(in srgb, var(--card) 80%, transparent);
 }
 
 .dock-root[data-edge="left"] .dock-panel { border-right: 1px solid var(--border); }
@@ -343,10 +343,21 @@
   color: var(--foreground/90);
 }
 
-/* 收集知识内嵌面板：顶栏 pin 脱离，完整表单占满余下高度滚动 */
+/* 收集知识内嵌面板：顶栏双标签（收集 / AI 快问）+ pin 脱离 */
 .dock-capture { gap: 6px; }
 .dock-capture-bar { display: flex; align-items: center; justify-content: space-between; gap: 6px; flex: none; }
-.dock-capture-bar-title { font-size: 12px; font-weight: 500; color: var(--foreground/90); }
+.dock-capture-tabs { display: inline-flex; align-items: center; gap: 2px; min-width: 0; }
+.dock-capture-tabs button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: var(--radius-md);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--muted-foreground);
+}
+.dock-capture-tabs button[aria-pressed="true"] { background: var(--accent); color: var(--brand); }
 .dock-capture-form { flex: 1; min-height: 0; overflow-y: auto; }
 .dock-capture-form .capture-composer { padding: 0; }
 /* 关联信息两栏在窄面板里改为独立描边输入，避免容器内嵌 ring 叠影 */
@@ -386,6 +397,35 @@
   flex: none;
 }
 .dock-capture-pin:hover { background: var(--accent); color: var(--brand); }
+
+/* AI 快问条 */
+.dock-ask { display: flex; flex-direction: column; gap: 6px; flex: 1; min-height: 0; }
+.dock-ask-send {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  flex: none;
+  border-radius: var(--radius-md);
+  color: var(--muted-foreground);
+}
+.dock-ask-send:hover:not(:disabled) { background: var(--accent); color: var(--brand); }
+.dock-ask-send:disabled { opacity: 0.4; }
+.dock-ask-answer {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--background);
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--foreground/90);
+}
 
 .dock-todos {
   display: flex;

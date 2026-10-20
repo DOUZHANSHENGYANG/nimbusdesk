@@ -19,6 +19,11 @@ use windows::Win32::UI::WindowsAndMessaging::{
 static DOCK_SPRING: AtomicU64 = AtomicU64::new(0);
 /// 全屏自动隐藏开关；监视线程常驻，开关只读这个位。
 static DOCK_AUTOHIDE: AtomicBool = AtomicBool::new(false);
+/// Dock 停靠边（0=左 1=右 2=顶），贴边热区唤起据此判断。
+static DOCK_EDGE: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(1);
+/// 自动隐藏监视线程只起一次；DOCK_HIDDEN 标记「当前是被自动隐藏收起的」。
+static AUTOHIDE_SPAWNED: AtomicBool = AtomicBool::new(false);
+static DOCK_HIDDEN: AtomicBool = AtomicBool::new(false);
 
 fn hwnd_of(app: &AppHandle, label: &str) -> Result<HWND, String> {
     let win = app.get_webview_window(label).ok_or("窗口不存在")?;
@@ -176,6 +181,10 @@ pub async fn dock_open(app: AppHandle) -> Result<(), String> {
         .visible(false)
         .build()
         .map_err(|e| e.to_string())?;
+    // 系统级亚克力模糊：失败（如 Win10 驱动问题）静默降级为半透明底色
+    if let Some(win) = app.get_webview_window(label) {
+        let _ = window_vibrancy::apply_acrylic(&win, None);
+    }
     Ok(())
 }
 
@@ -236,9 +245,7 @@ pub async fn set_dock_shortcut(
 }
 
 /// 全屏自动隐藏：前台窗口铺满所在显示器即视为全屏，Dock 收起；退出自动回来。
-static AUTOHIDE_SPAWNED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-static DOCK_HIDDEN: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-
+/// 收起后贴边热区仍可唤起（光标贴住停靠边 = 临时唤出，离开即回）。
 /// 前台窗口是否铺满所在显示器（>95% 视为全屏应用）。
 #[cfg(windows)]
 fn foreground_covers_monitor() -> bool {
@@ -263,33 +270,69 @@ fn foreground_covers_monitor() -> bool {
     }
 }
 
+#[cfg(windows)]
+fn cursor_near_dock_edge() -> bool {
+    use windows::Win32::Foundation::POINT;
+    let mut point = POINT::default();
+    unsafe {
+        let _ = windows::Win32::UI::WindowsAndMessaging::GetCursorPos(&mut point);
+        let monitor = MonitorFromWindow(
+            windows::Win32::UI::WindowsAndMessaging::WindowFromPoint(point),
+            MONITOR_DEFAULTTONEAREST,
+        );
+        let mut info = MONITORINFO {
+            cbSize: std::mem::size_of::<MONITORINFO>() as u32,
+            ..Default::default()
+        };
+        if !GetMonitorInfoW(monitor, &mut info).as_bool() {
+            return false;
+        }
+        let m = info.rcMonitor;
+        match DOCK_EDGE.load(Ordering::Relaxed) {
+            0 => (point.x - m.left).abs() <= 4,
+            2 => (point.y - m.top).abs() <= 4,
+            _ => (m.right - point.x).abs() <= 4,
+        }
+    }
+}
+
 #[tauri::command]
-pub async fn dock_set_autohide(app: AppHandle, on: bool) -> Result<(), String> {
+pub async fn dock_set_autohide(app: AppHandle, on: bool, edge: Option<String>) -> Result<(), String> {
+    match edge.as_deref() {
+        Some("left") => DOCK_EDGE.store(0, Ordering::Relaxed),
+        Some("top") => DOCK_EDGE.store(2, Ordering::Relaxed),
+        _ => DOCK_EDGE.store(1, Ordering::Relaxed),
+    }
     DOCK_AUTOHIDE.store(on, Ordering::Relaxed);
     if on && !AUTOHIDE_SPAWNED.swap(true, Ordering::Relaxed) {
         let handle = app.clone();
         tauri::async_runtime::spawn_blocking(move || loop {
-            std::thread::sleep(std::time::Duration::from_secs(1));
-            if !DOCK_AUTOHIDE.load(Ordering::Relaxed) {
-                // 关闭自动隐藏时把 Dock 找回来
-                if DOCK_HIDDEN.swap(false, Ordering::Relaxed) {
-                    if let Some(win) = handle.get_webview_window("desktop-dock") {
-                        let _ = win.show();
-                    }
-                }
-                continue;
-            }
+            std::thread::sleep(std::time::Duration::from_millis(200));
             #[cfg(windows)]
-            if foreground_covers_monitor() {
+            {
+                let fullscreen = foreground_covers_monitor();
+                let near_edge = cursor_near_dock_edge();
                 if let Some(win) = handle.get_webview_window("desktop-dock") {
-                    if win.is_visible().unwrap_or(false) {
-                        let _ = win.hide();
-                        DOCK_HIDDEN.store(true, Ordering::Relaxed);
+                    let visible = win.is_visible().unwrap_or(false);
+                    if fullscreen && !near_edge {
+                        // 全屏且光标不在停靠边：收起（记住是自动隐藏收的）
+                        if visible {
+                            let _ = win.hide();
+                            DOCK_HIDDEN.store(true, Ordering::Relaxed);
+                        }
+                    } else if DOCK_HIDDEN.load(Ordering::Relaxed) {
+                        // 自动隐藏中的贴边唤出：非聚焦显示，回到全屏深处再收
+                        if let Ok(hwnd) = win.hwnd() {
+                            unsafe {
+                                let _ = ShowWindow(HWND(hwnd.0), SW_SHOWNOACTIVATE);
+                                let _ = SetWindowPos(HWND(hwnd.0), Some(HWND_TOPMOST), 0, 0, 0, 0,
+                                    SWP_NOSIZE | SWP_NOMOVE | SWP_NOACTIVATE);
+                            }
+                        }
+                        if !fullscreen {
+                            DOCK_HIDDEN.store(false, Ordering::Relaxed);
+                        }
                     }
-                }
-            } else if DOCK_HIDDEN.swap(false, Ordering::Relaxed) {
-                if let Some(win) = handle.get_webview_window("desktop-dock") {
-                    let _ = win.show();
                 }
             }
         });

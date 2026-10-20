@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { currentMonitor } from "@tauri-apps/api/window";
+import { availableMonitors, currentMonitor, cursorPosition, type Monitor } from "@tauri-apps/api/window";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import {
   BookOpen, CalendarCheck, ChevronLeft, ChevronRight, FolderKanban, GripHorizontal,
   GripVertical, LayoutGrid, List, Search, Settings2, X,
 } from "lucide-react";
-import { RiAddLine, RiAttachment2, RiClipboardLine, RiCloseLine, RiDeleteBinLine, RiPushpinLine } from "@remixicon/react";
+import { RiAddLine, RiAttachment2, RiClipboardLine, RiCloseLine, RiDeleteBinLine, RiPushpinLine, RiSparklingLine } from "@remixicon/react";
+import { chatWithProvider } from "@/features/ai/client";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { useModal } from "@/components/shell/modal-host";
@@ -63,7 +64,17 @@ export function DockWindow() {
 
   const applyMode = useCallback(async (mode: DockMode) => {
     if (!inTauri) return;
-    const monitor = await currentMonitor().catch(() => null);
+    // 跟随鼠标：Dock 落在光标所在的显示器（多屏时在哪个屏工作就出现在哪）
+    const [cursor, monitors, current] = await Promise.all([
+      cursorPosition().catch(() => null),
+      availableMonitors().catch(() => [] as Monitor[]),
+      currentMonitor().catch(() => null),
+    ]);
+    const monitor = (cursor && monitors.find((m) => {
+      const p = m.position;
+      const s = m.size;
+      return cursor.x >= p.x && cursor.x < p.x + s.width && cursor.y >= p.y && cursor.y < p.y + s.height;
+    })) ?? current;
     if (!monitor) return;
     const raw = monitorArea(monitor);
     const scale = raw.scale || 1;
@@ -503,22 +514,60 @@ function FencesFlyout() {
   );
 }
 
-/** 收集知识内嵌面板：完整收集表单（草稿/图片/AI 整理），pin 脱离为独立窗口。 */
+/** 收集知识内嵌面板：完整收集表单（草稿/图片/AI 整理），AI 快问条，pin 脱离为独立窗口。 */
 function CapturePanel({ setPanel }: { setPanel: (next: DockPanel | null) => void }) {
   const { t } = useTranslation();
+  const [tab, setTab] = useState<"capture" | "ask">("capture");
   return (
     <div className="dock-panel dock-capture" role="region" aria-label={t("dock.knowledge")}>
       <div className="dock-capture-bar">
-        <span className="dock-capture-bar-title">{t("dock.knowledge")}</span>
+        <span className="dock-capture-tabs">
+          <button type="button" aria-pressed={tab === "capture"}
+            onClick={() => setTab("capture")}>{t("dock.knowledge")}</button>
+          <button type="button" aria-pressed={tab === "ask"} onClick={() => setTab("ask")}>
+            <RiSparklingLine size={12} aria-hidden="true" />{t("dock.aiAsk")}
+          </button>
+        </span>
         <button type="button" className="dock-capture-pin" title={t("dock.captureDetach")}
           aria-label={t("dock.captureDetach")}
           onClick={() => { invoke("open_capture").catch(report); setPanel(null); }}>
           <RiPushpinLine size={12} aria-hidden="true" />{t("dock.captureDetach")}
         </button>
       </div>
-      <div className="dock-capture-form">
-        <CaptureForm onHide={() => setPanel(null)} />
-      </div>
+      {tab === "capture"
+        ? <div className="dock-capture-form"><CaptureForm onHide={() => setPanel(null)} /></div>
+        : <AiAsk />}
+    </div>
+  );
+}
+
+/** AI 快问：走应用已配置的 AI 管线，一问一答，不落库。 */
+function AiAsk() {
+  const { t } = useTranslation();
+  const [question, setQuestion] = useState("");
+  const [answer, setAnswer] = useState("");
+  const [busy, setBusy] = useState(false);
+  const ask = async () => {
+    const q = question.trim();
+    if (!q || busy) return;
+    setBusy(true);
+    setAnswer("");
+    try { setAnswer(await chatWithProvider([{ role: "user", content: q }])); }
+    catch (cause) { setAnswer(String(cause)); }
+    finally { setBusy(false); }
+  };
+  return (
+    <div className="dock-ask">
+      <form className="dock-panel-search" onSubmit={(event) => { event.preventDefault(); void ask(); }}>
+        <input className="dock-panel-input" value={question} placeholder={t("dock.aiAskPlaceholder")}
+          maxLength={2000} onChange={(event) => setQuestion(event.target.value)} />
+        <button type="submit" className="dock-ask-send" disabled={busy || !question.trim()}
+          aria-label={t("dock.aiAsk")}>
+          <RiSparklingLine size={13} aria-hidden="true" />
+        </button>
+      </form>
+      {busy && <p className="dock-pnone">{t("dock.aiBusy")}</p>}
+      {answer && <div className="dock-ask-answer">{answer}</div>}
     </div>
   );
 }
