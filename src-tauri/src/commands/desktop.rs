@@ -8,7 +8,7 @@ fn hub_label(key: &str) -> Result<String, String> {
 }
 
 fn allowed_route(route: &str) -> bool {
-    matches!(route, "/" | "/plans" | "/files" | "/settings")
+    matches!(route, "/" | "/plans" | "/projects" | "/files" | "/knowledge" | "/settings")
 }
 
 #[derive(Debug, PartialEq)]

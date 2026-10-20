@@ -45,10 +45,18 @@ export function DesktopRuntime() {
         const listener = listen('desktop://toggle-fences', () => {
             if (useFiles.persist.hasHydrated() && useFences.persist.hasHydrated()) void toggleDesktopFences().catch(error => toast.error(String(error)));
         });
+        const applyDock = () => {
+            if (stopped || !useSettings.persist.hasHydrated()) return;
+            const { dockOpen } = useSettings.getState();
+            if (dockOpen) invoke('dock_open').catch(error => toast.error(String(error)));
+            else invoke('dock_close').catch(() => undefined);
+        };
+        const offDockHydration = useSettings.persist.onFinishHydration(applyDock);
+        const offDockSettings = useSettings.subscribe((state, previous) => { if (state.dockOpen !== previous.dockOpen) applyDock(); });
         const offHydration = useSettings.persist.onFinishHydration(applyShortcut);
         const offSettings = useSettings.subscribe((state, previous) => { if (state.fenceShortcut !== previous.fenceShortcut) applyShortcut(); });
         applyShortcut();
-        return () => { stopped = true; offHydration(); offSettings(); void listener.then(off => off()).catch(() => undefined); };
+        return () => { stopped = true; offHydration(); offSettings(); void listener.then(off => off()).catch(() => undefined); offDockHydration(); offDockSettings(); };
     }, []);
     return null;
 }

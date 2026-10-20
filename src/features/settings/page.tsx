@@ -8,9 +8,10 @@ import {
   sendNotification,
 } from "@/lib/notify";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { invoke } from "@tauri-apps/api/core";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
-import { FolderOpen, FolderInput, ExternalLink, Database, Palette, Info, Bot, SlidersHorizontal, ArrowLeft, Download, Upload, Bell, TriangleAlert, ListChecks, BookOpen, CalendarCheck, Search } from "lucide-react";
+import { FolderOpen, FolderInput, ExternalLink, Database, Palette, Info, Bot, SlidersHorizontal, ArrowLeft, Download, Upload, Bell, TriangleAlert, ListChecks, BookOpen, CalendarCheck, Search, LayoutGrid } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useModal } from "@/components/shell/modal-host";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -277,12 +278,52 @@ function SystemSection() {
           <Switch id="developer-mode" checked={developerMode} onCheckedChange={setDeveloperMode} aria-describedby="developer-mode-hint" />
         </CardContent>
       </Card>
+      <DesktopDockCard />
       <BackupCard />
     </>
   );
 }
 
 /* ── 计划：提醒与完成行为 ───────────────────────────────── */
+
+/* 桌面 Dock：开关立即生效（生命周期在 DesktopRuntime）；边向改动会重开窗口以应用。 */
+function DesktopDockCard() {
+  const { t } = useTranslation();
+  const dockOpen = useSettings((s) => s.dockOpen);
+  const dockEdge = useSettings((s) => s.dockEdge);
+  const setDockOpen = useSettings((s) => s.setDockOpen);
+  const setDockEdge = useSettings((s) => s.setDockEdge);
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-[15px]">
+          <LayoutGrid className="size-4 text-brand" />
+          {t("settings.dock")}
+        </CardTitle>
+        <CardDescription>{t("settings.dockHint")}</CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-4">
+        <label className="flex cursor-pointer items-center justify-between gap-3">
+          <span className="text-[13px] font-medium text-foreground/90">{t("settings.dockEnable")}</span>
+          <Switch checked={dockOpen} onCheckedChange={setDockOpen} aria-label={t("settings.dockEnable")} />
+        </label>
+        <Field label={t("settings.dockEdge")}>
+          <div className="flex gap-2">
+            {(["left", "right"] as const).map((side) => (
+              <Button key={side} variant={dockEdge === side ? "primary" : "secondary"} size="sm"
+                aria-pressed={dockEdge === side}
+                onClick={() => { setDockEdge(side); if (dockOpen) invoke("dock_close").then(() => invoke("dock_open")).catch((error) => toast.error(String(error))); }}>
+                {t(side === "left" ? "settings.dockEdgeLeft" : "settings.dockEdgeRight")}
+              </Button>
+            ))}
+          </div>
+        </Field>
+        <p className="text-[11px] leading-5 text-muted-foreground">{t("settings.dockEdgeHint")}</p>
+      </CardContent>
+    </Card>
+  );
+}
 
 function PlansSection() {
   return <><ReminderCard /><CompletionCard /></>;

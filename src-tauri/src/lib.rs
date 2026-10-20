@@ -33,6 +33,12 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::data::write_plan_pair,
             commands::data::project_apply_remote_binding,
+            commands::dock::dock_open,
+            commands::dock::dock_close,
+            commands::dock::dock_spring,
+            commands::dock::window_show_no_activate,
+            commands::dock::window_set_bounds,
+            commands::dock::window_set_no_activate,
             commands::zentao::zentao_secret_status,
             commands::zentao::zentao_test_connection,
             commands::zentao::zentao_forget_secret,

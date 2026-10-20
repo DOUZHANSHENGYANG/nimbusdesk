@@ -24,6 +24,9 @@ interface SettingsState {
   autoSortDone: boolean;
   /** 勾选完成后自动把该项从列表移除（真删，可撤销） */
   autoClearDone: boolean;
+  /** 桌面 Dock：贴边与开关（窗口本体常驻托盘之外，关闭=销毁窗口） */
+  dockEdge: "left" | "right";
+  dockOpen: boolean;
   setTheme: (theme: ThemeMode) => void;
   setLang: (lang: Lang) => void;
   setSidebarCollapsed: (v: boolean) => void;
@@ -34,6 +37,8 @@ interface SettingsState {
   setPlansView: (v: PlansView) => void;
   setAutoSortDone: (v: boolean) => void;
   setAutoClearDone: (v: boolean) => void;
+  setDockEdge: (edge: "left" | "right") => void;
+  setDockOpen: (v: boolean) => void;
 }
 
 const PLANS_VIEWS: PlansView[] = ["outline", "timeline", "kanban", "calendar", "stats", "archive"];
@@ -60,6 +65,8 @@ export const useSettings = create<SettingsState>()(
        */
       autoSortDone: true,
       autoClearDone: false,
+      dockEdge: "right",
+      dockOpen: true,
       setTheme: (theme) => set({ theme }),
       setLang: (lang) => set({ lang }),
       setSidebarCollapsed: (sidebarCollapsed) => set({ sidebarCollapsed }),
@@ -70,6 +77,8 @@ export const useSettings = create<SettingsState>()(
       setPlansView: (plansView) => set({ plansView }),
       setAutoSortDone: (autoSortDone) => set({ autoSortDone }),
       setAutoClearDone: (autoClearDone) => set({ autoClearDone }),
+      setDockEdge: (dockEdge) => set({ dockEdge }),
+      setDockOpen: (dockOpen) => set({ dockOpen }),
     }),
     {
       name: "settings",

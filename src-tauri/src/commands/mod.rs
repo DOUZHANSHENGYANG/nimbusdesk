@@ -1,4 +1,5 @@
 pub mod backup;
+pub mod dock;
 pub mod projects;
 pub mod zentao;
 pub mod task_attachments;

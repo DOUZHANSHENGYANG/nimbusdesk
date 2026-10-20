@@ -3,6 +3,7 @@ import ReactDOM from "react-dom/client";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { QuickToolsWindow } from "@/features/quick-tools/window";
 import { EdgeHubWindow } from "@/features/desktop/edge-hub";
+import { DockWindow } from "@/features/desktop/dock";
 import { Providers } from "@/app/providers";
 import App from "@/app/App";
 import { FenceWindow } from "@/features/files/fence";
@@ -33,6 +34,9 @@ let root: React.ReactNode;
 if (windowLabel.startsWith("edge-hub-")) {
   document.documentElement.classList.add("fence-root");
   root = <Providers><EdgeHubWindow /></Providers>;
+} else if (windowLabel === "desktop-dock") {
+  document.documentElement.classList.add("fence-root");
+  root = <Providers><DockWindow /></Providers>;
 } else if (windowLabel === "quick-tools") {
   root = <QuickToolsWindow />;
 } else if (windowLabel === "search") {
