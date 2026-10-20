@@ -7,7 +7,9 @@ import {
   GripVertical, LayoutGrid, List, Search, Settings2, X,
 } from "lucide-react";
 import { RiAddLine, RiAttachment2, RiClipboardLine, RiCloseLine, RiDeleteBinLine, RiPushpinLine, RiSparklingLine } from "@remixicon/react";
-import { chatWithProvider } from "@/features/ai/client";
+import { chatWithProvider, testProvider } from "@/features/ai/client";
+import { selectProvider } from "@/features/ai/core";
+import { providersReady, useProviders } from "@/features/ai/providers";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { useModal } from "@/components/shell/modal-host";
@@ -515,18 +517,62 @@ function FencesFlyout() {
 }
 
 /** 收集知识内嵌面板：完整收集表单（草稿/图片/AI 整理），AI 快问条，pin 脱离为独立窗口。 */
+
+/** AI 快问探测结果缓存：key = 默认文本服务商 id|baseUrl|model，配置变了才重新探测。 */
+let aiProbe: { key: string; ok: boolean } | null = null;
+
 function CapturePanel({ setPanel }: { setPanel: (next: DockPanel | null) => void }) {
   const { t } = useTranslation();
   const [tab, setTab] = useState<"capture" | "ask">("capture");
+  const defaultTextId = useProviders((s) => s.defaultTextId);
+  const defaultProvider = useProviders((s) => s.providers.find((p) => p.id === s.defaultTextId) ?? null);
+  const probeKey = defaultProvider ? `${defaultTextId}|${defaultProvider.baseUrl}|${defaultProvider.model}` : "none";
+  const [aiState, setAiState] = useState<"checking" | "ready" | "off">(
+    aiProbe?.key === probeKey ? (aiProbe.ok ? "ready" : "off") : "checking",
+  );
+
+  // 有默认文本服务商且连接测试通过才亮 AI 快问标签；配置变更自动重新探测
+  useEffect(() => {
+    let cancelled = false;
+    if (aiProbe?.key === probeKey) {
+      setAiState(aiProbe.ok ? "ready" : "off");
+      return () => { cancelled = true; };
+    }
+    setAiState("checking");
+    void (async () => {
+      await providersReady();
+      if (cancelled) return;
+      try {
+        const provider = selectProvider(useProviders.getState(), false);
+        if (!provider.baseUrl || !provider.model) throw new Error("AI_NO_PROVIDER");
+        await testProvider(provider);
+        aiProbe = { key: probeKey, ok: true };
+        if (!cancelled) setAiState("ready");
+      } catch {
+        aiProbe = { key: probeKey, ok: false };
+        if (!cancelled) setAiState("off");
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [probeKey]);
+
+  // AI 变为不可用时从快问页退回收集页
+  useEffect(() => {
+    if (tab === "ask" && aiState !== "ready") setTab("capture");
+  }, [aiState, tab]);
+
+  const showAsk = aiState === "ready";
   return (
     <div className="dock-panel dock-capture" role="region" aria-label={t("dock.knowledge")}>
       <div className="dock-capture-bar">
         <span className="dock-capture-tabs">
           <button type="button" aria-pressed={tab === "capture"}
             onClick={() => setTab("capture")}>{t("dock.knowledge")}</button>
-          <button type="button" aria-pressed={tab === "ask"} onClick={() => setTab("ask")}>
-            <RiSparklingLine size={12} aria-hidden="true" />{t("dock.aiAsk")}
-          </button>
+          {showAsk && (
+            <button type="button" aria-pressed={tab === "ask"} onClick={() => setTab("ask")}>
+              <RiSparklingLine size={12} aria-hidden="true" />{t("dock.aiAsk")}
+            </button>
+          )}
         </span>
         <button type="button" className="dock-capture-pin" title={t("dock.captureDetach")}
           aria-label={t("dock.captureDetach")}
@@ -534,9 +580,7 @@ function CapturePanel({ setPanel }: { setPanel: (next: DockPanel | null) => void
           <RiPushpinLine size={12} aria-hidden="true" />{t("dock.captureDetach")}
         </button>
       </div>
-      {tab === "capture"
-        ? <div className="dock-capture-form"><CaptureForm onHide={() => setPanel(null)} /></div>
-        : <AiAsk />}
+      {tab === "ask" && showAsk ? <AiAsk /> : <div className="dock-capture-form"><CaptureForm onHide={() => setPanel(null)} /></div>}
     </div>
   );
 }
