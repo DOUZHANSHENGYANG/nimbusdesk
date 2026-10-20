@@ -58,3 +58,19 @@ test("short work areas clamp the dock height instead of overflowing", () => {
   assert.equal(bounds.h, 300);
   assert.equal(bounds.y, 0);
 });
+
+test("top edge is a horizontal bar pinned to the top, centered, growing downward", () => {
+  const strip = dockBounds(area, "top", "strip");
+  assert.equal(strip.y, area.y, "strip hugs the top border");
+  assert.equal(strip.x + strip.w / 2, area.x + area.w / 2, "horizontally centered");
+  const expand = dockBounds(area, "top", "expand");
+  const flyout = dockBounds(area, "top", "flyout");
+  for (const rect of [expand, flyout]) {
+    assert.equal(rect.y, area.y, "top anchor fixed");
+    assert.equal(rect.x + rect.w / 2, area.x + area.w / 2, "centering fixed");
+  }
+  assert.equal(expand.w, strip.w, "expand only grows in height");
+  assert.ok(expand.h > strip.h && flyout.h > expand.h);
+  const clamped = dockBounds({ x: 0, y: 0, w: 400, h: 300 }, "top", "strip");
+  assert.equal(clamped.w, 400, "narrow work areas clamp the width");
+});

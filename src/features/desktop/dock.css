@@ -2,9 +2,11 @@
  *
  * 三种形态（data-mode）：
  *   strip   56px 纯图标
- *   expand  248px 图标 + 标签（悬停）
+ *   expand  168px 图标 + 标签（悬停）
  *   flyout  56px 图标条 + 352px 功能面板（栅格/计划）
  * 右缘 dock 的条贴右边界，面板向屏幕内侧展开；左缘镜像。
+ * 顶缘是水平横排（macOS Dock 式）：图标竖排（图标在上标签在下），
+ * 条贴顶边界，面板向下展开。
  */
 
 .dock-root {
@@ -27,7 +29,7 @@
   box-shadow: var(--shadow-lg);
 }
 
-.dock-root[data-mode="expand"] .dock-strip { width: 248px; }
+.dock-root[data-mode="expand"] .dock-strip { width: 168px; }
 
 .dock-root[data-edge="left"] .dock-strip {
   margin-right: auto;
@@ -38,6 +40,60 @@
   margin-left: auto;
   border-radius: var(--radius-lg) 0 0 var(--radius-lg);
   border-right: none;
+}
+
+/* 拖动手柄：抓住它拖动 Dock，松手吸附到最近的顶/左/右缘。 */
+.dock-grip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  height: 10px;
+  margin-bottom: 4px;
+  color: var(--muted-foreground);
+  opacity: 0.55;
+  cursor: grab;
+  touch-action: none;
+  transition: opacity var(--pr-dur-fast, 120ms) ease, background var(--pr-dur-fast, 120ms) ease;
+}
+.dock-grip:hover { opacity: 1; background: var(--accent); border-radius: var(--radius-md); }
+
+/* 顶缘横排：窗口矩形是「条在上、面板在下」的列布局，条占满整行宽度。 */
+.dock-root[data-edge="top"] { flex-direction: column; }
+.dock-root[data-edge="top"] .dock-strip {
+  order: 1;
+  width: 100%;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: auto;
+  padding: 8px 10px;
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+  border-top: none;
+}
+.dock-root[data-edge="top"] .dock-grip { height: auto; width: 16px; margin-bottom: 0; margin-right: 4px; }
+.dock-root[data-edge="top"] .dock-close { margin-top: 0; margin-left: 6px; align-self: center; }
+.dock-root[data-edge="top"] .dock-list { flex-direction: row; align-items: center; justify-content: center; }
+.dock-root[data-edge="top"] .dock-item {
+  flex-direction: column;
+  justify-content: center;
+  gap: 3px;
+  width: 64px;
+  height: auto;
+  padding: 6px 4px;
+}
+/* 收起与飞出态标签隐藏，图标更窄才放得下七个 */
+.dock-root[data-edge="top"][data-mode="strip"] .dock-item,
+.dock-root[data-edge="top"][data-mode="flyout"] .dock-item { width: 40px; }
+.dock-root[data-edge="top"] .dock-label {
+  max-width: 100%;
+  text-align: center;
+  font-size: 10px;
+  line-height: 1.2;
+}
+.dock-root[data-edge="top"] .dock-panel {
+  order: 2;
+  border-top: 1px solid var(--border);
 }
 
 .dock-list {
@@ -274,5 +330,5 @@
 .dock-hint { padding: 12px; font-size: 12px; color: var(--muted-foreground); }
 
 @media (prefers-reduced-motion: reduce) {
-  .dock-item, .dock-close { transition: none; }
+  .dock-item, .dock-close, .dock-grip { transition: none; }
 }

@@ -25,7 +25,7 @@ interface SettingsState {
   /** 勾选完成后自动把该项从列表移除（真删，可撤销） */
   autoClearDone: boolean;
   /** 桌面 Dock：贴边与开关（窗口本体常驻托盘之外，关闭=销毁窗口） */
-  dockEdge: "left" | "right";
+  dockEdge: "left" | "right" | "top";
   dockOpen: boolean;
   setTheme: (theme: ThemeMode) => void;
   setLang: (lang: Lang) => void;
@@ -37,7 +37,7 @@ interface SettingsState {
   setPlansView: (v: PlansView) => void;
   setAutoSortDone: (v: boolean) => void;
   setAutoClearDone: (v: boolean) => void;
-  setDockEdge: (edge: "left" | "right") => void;
+  setDockEdge: (edge: "left" | "right" | "top") => void;
   setDockOpen: (v: boolean) => void;
 }
 

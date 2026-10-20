@@ -310,11 +310,11 @@ function DesktopDockCard() {
         </label>
         <Field label={t("settings.dockEdge")}>
           <div className="flex gap-2">
-            {(["left", "right"] as const).map((side) => (
+            {(["left", "right", "top"] as const).map((side) => (
               <Button key={side} variant={dockEdge === side ? "primary" : "secondary"} size="sm"
                 aria-pressed={dockEdge === side}
                 onClick={() => { setDockEdge(side); if (dockOpen) invoke("dock_close").then(() => invoke("dock_open")).catch((error) => toast.error(String(error))); }}>
-                {t(side === "left" ? "settings.dockEdgeLeft" : "settings.dockEdgeRight")}
+                {t(`settings.dockEdge${side[0]!.toUpperCase()}${side.slice(1)}`)}
               </Button>
             ))}
           </div>

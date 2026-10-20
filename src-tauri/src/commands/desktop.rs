@@ -35,7 +35,7 @@ fn drag_outcome(left_down: bool, escape: bool, elapsed: std::time::Duration) -> 
 /// Wait off the UI thread so a capsule cannot snap back in the middle of an OS drag.
 #[tauri::command]
 pub async fn desktop_wait_drag_end(window: tauri::WebviewWindow) -> Result<bool, String> {
-    if !["todo-", "fence-", "edge-hub-"]
+    if !["todo-", "fence-", "edge-hub-", "desktop-dock"]
         .iter()
         .any(|prefix| window.label().starts_with(prefix))
     {

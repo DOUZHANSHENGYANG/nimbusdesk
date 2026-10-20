@@ -3,8 +3,8 @@ import { invoke } from "@tauri-apps/api/core";
 import { currentMonitor } from "@tauri-apps/api/window";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import {
-  BookOpen, CalendarCheck, ChevronLeft, ChevronRight, Folder, FolderKanban, LayoutGrid,
-  Search, Settings2, X,
+  BookOpen, CalendarCheck, ChevronLeft, ChevronRight, Folder, FolderKanban, GripHorizontal,
+  GripVertical, LayoutGrid, Search, Settings2, X,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -16,6 +16,7 @@ import { usePlans } from "@/features/plans/store";
 import { todayStr } from "@/features/plans/types";
 import { monitorArea } from "./monitors";
 import { dockBounds, dockSpringPair, type DockArea, type DockMode, type DockPanel } from "./dock-core";
+import { nearestDockEdge } from "./edge-core";
 import { ItemIcon } from "@/features/files/icons";
 import "./dock.css";
 
@@ -49,11 +50,14 @@ export function DockWindow() {
     const area: DockArea = { x: raw.x / scale, y: raw.y / scale, w: raw.w / scale, h: raw.h / scale };
     areaRef.current = area;
     const bounds = dockBounds(area, edge, mode);
-    if (mode === modeRef.current) {
+    const sameMode = mode === modeRef.current;
+    // 顶缘的形变是高度变化，而 dock_spring 只做横向弹簧，故顶缘直接落位。
+    if (sameMode || edge === "top") {
       await invoke("window_set_bounds", {
         label: LABEL, x: Math.round(bounds.x * scale), y: Math.round(bounds.y * scale),
         width: Math.round(bounds.w * scale), height: Math.round(bounds.h * scale),
       });
+      if (!sameMode) setMode(mode);
       return;
     }
     const { from, to } = dockSpringPair(area, edge, modeRef.current, mode);
@@ -70,6 +74,34 @@ export function DockWindow() {
     setPanelState(next);
     void applyMode(next ? "flyout" : "expand").catch(report);
   }, [applyMode]);
+
+  /** 拖动 grip 松手后，按窗口落点吸附到最近的顶/左/右缘（复用 edge-core 口径）。 */
+  const dragging = useRef(false);
+  const startDrag = useCallback(() => {
+    if (dragging.current || !inTauri) return;
+    dragging.current = true;
+    const win = getCurrentWebviewWindow();
+    void (async () => {
+      await win.startDragging();
+      const committed = await invoke<boolean>("desktop_wait_drag_end").catch(() => false);
+      dragging.current = false;
+      if (!committed) return;
+      // 拖动换位后飞出面板不再贴合新缘，直接收起
+      if (panelRef.current) setPanel(null);
+      const [pos, size, monitor] = await Promise.all([
+        win.outerPosition(), win.outerSize(), currentMonitor().catch(() => null),
+      ]);
+      if (!monitor) return;
+      const raw = monitorArea(monitor);
+      const scale = raw.scale || 1;
+      const area: DockArea = { x: raw.x / scale, y: raw.y / scale, w: raw.w / scale, h: raw.h / scale };
+      const rect = { x: pos.x / scale, y: pos.y / scale, w: size.width / scale, h: size.height / scale };
+      const store = useSettings.getState();
+      const next = nearestDockEdge(rect, area);
+      if (next !== store.dockEdge) store.setDockEdge(next);
+      else void applyMode(modeRef.current).catch(report);
+    })().catch((error) => { dragging.current = false; report(error); });
+  }, [applyMode, setPanel]);
 
   useEffect(() => {
     if (!inTauri) return;
@@ -110,18 +142,30 @@ export function DockWindow() {
   }
   return (
     <div className="dock-root" data-edge={edge} data-mode={mode}
-      onMouseEnter={() => { if (!panelRef.current) void applyMode("expand").catch(report); }}
+      onMouseEnter={() => { if (dragging.current || panelRef.current) return; void applyMode("expand").catch(report); }}
       onMouseLeave={() => {
         // 确认弹窗渲染在 portal（.dock-root 之外），鼠标移上去会误触发
         // mouseleave，把窗口收起并把弹窗挤成一条。弹窗或面板开着时不收起。
-        if (document.querySelector("[role='dialog']") || panelRef.current) return;
+        if (dragging.current || document.querySelector("[role='dialog']") || panelRef.current) return;
         void applyMode("strip").catch(report);
       }}
       onContextMenu={(event) => { event.preventDefault(); close(); }}>
       {panel === "fences" && <FencesFlyout />}
       {panel === "plans" && <PlansFlyout />}
-      <div className="dock-strip">
-        <ul className="dock-list" role="toolbar" aria-label={t("dock.title")} aria-orientation="vertical">
+      <div className="dock-strip"
+        onPointerDown={(event) => {
+          // 空白处与 grip 都能拖动换边；按钮和输入框照常点击
+          if (event.button !== 0) return;
+          if ((event.target as HTMLElement).closest("button, input")) return;
+          startDrag();
+        }}>
+        <div className="dock-grip" title={t("dock.grip")} aria-hidden="true">
+          {edge === "top"
+            ? <GripHorizontal className="size-3.5" aria-hidden="true" />
+            : <GripVertical className="size-3.5" aria-hidden="true" />}
+        </div>
+        <ul className="dock-list" role="toolbar" aria-label={t("dock.title")}
+          aria-orientation={edge === "top" ? "horizontal" : "vertical"}>
           {actions.map(({ key, icon: Icon, route, run, panel: actionPanel }) => (
             <li key={key}>
               <button type="button" className={`dock-item${panel === actionPanel ? " is-active" : ""}`}
