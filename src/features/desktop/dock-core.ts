@@ -8,12 +8,15 @@ export interface DockBounds { x: number; y: number; w: number; h: number }
 export type DockMode = "strip" | "expand" | "flyout";
 export type DockPanel = "fences" | "plans" | "projects" | "capture";
 
-/** 侧边栏常驻「图标 + 文字」，高度贴合内容（六个图标 + 关闭钮），不拉满工作区。 */
-export const DOCK_RAIL_W = 116;
-export const DOCK_RAIL_H = 268;
+/**
+ * 侧边栏常驻「图标 + 文字」，高度固定（不随面板开合变化）。
+ * 宽度是可调的唯一尺寸：116 → 100，标签仍放得下「收集知识」。
+ */
+export const DOCK_RAIL_W = 100;
+export const DOCK_RAIL_H = 560;
 export const DOCK_FLYOUT_W = 408;
-/** 普通飞出面板的高度：比侧栏高一截，列表类内容才有呼吸（侧栏本身不跟着变）。 */
-export const DOCK_PANEL_H = 420;
+/** 飞出面板与侧栏同高：开合只变宽，形态与高度恒定。 */
+export const DOCK_PANEL_H = DOCK_RAIL_H;
 export const DOCK_FLYOUT_MAX_H = 640;
 /** 顶缘横排的尺寸：宽度自适应屏幕，高度贴合内容。 */
 export const DOCK_TOP_W = 560;
@@ -24,8 +27,8 @@ export const DOCK_ROW_H = 44;
 /** 锚定弹出时，面板前缘与触发图标中心保持的距离（逻辑像素）。保留给未来用。 */
 const ANCHOR_LEAD = 48;
 
-/** 收集知识面板内容多，飞出时单独放宽（其余面板用 DOCK_PANEL_H）。 */
-export const DOCK_CAPTURE_H = 600;
+/** 收集知识面板内容多，内容区足够即可（窗口高度与侧栏一致，靠内部滚动）。 */
+export const DOCK_CAPTURE_H = DOCK_RAIL_H;
 const MODE_W: Record<DockMode, number> = { strip: DOCK_RAIL_W, expand: DOCK_RAIL_W, flyout: DOCK_FLYOUT_W };
 const MODE_H: Record<DockMode, number> = { strip: DOCK_RAIL_H, expand: DOCK_RAIL_H, flyout: DOCK_PANEL_H };
 

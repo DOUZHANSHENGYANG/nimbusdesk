@@ -20,9 +20,9 @@
 .dock-strip {
   display: flex;
   flex-direction: column;
-  width: 116px;
+  width: 100px;
   flex: none;
-  padding: 8px 6px;
+  padding: 12px 5px;
   background: color-mix(in srgb, var(--popover) 72%, transparent);
   border: 1px solid var(--border);
   box-shadow: var(--shadow-lg);
@@ -93,6 +93,7 @@
 .dock-list {
   display: flex;
   flex-direction: column;
+  justify-content: center;
   gap: 2px;
   min-height: 0;
   overflow: hidden;
@@ -149,7 +150,7 @@
   to { opacity: 1; transform: scaleY(1); }
 }
 
-.dock-icon { width: 17px; height: 17px; flex: none; }
+.dock-icon { width: 16px; height: 16px; flex: none; }
 
 /* 标签常驻：效率玩家不需要悬停展开这一步 */
 .dock-label {
@@ -157,7 +158,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 11.5px;
+  font-size: 11px;
   font-weight: 500;
   letter-spacing: 0.01em;
 }
