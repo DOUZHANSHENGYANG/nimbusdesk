@@ -14,6 +14,7 @@ import {
 import { useNow, usePlans, usePlansArchive } from "@/features/plans/store";
 import { cn } from "@/lib/utils";
 import { ScheduleView } from "./schedule";
+import { PlansRail } from "./plans-rail";
 
 export type CalendarNav = { onPick: (date: string) => void };
 /** 每个日期格最多列几条任务名，超出显示 +N */
@@ -55,7 +56,7 @@ export function CalendarView({ date, onPick }: { date: string; onPick: (date: st
   ];
 
   return (
-    <div className="mx-auto w-full max-w-5xl">
+    <div className="w-full">
       {/* 导航：上一页 / 标题 / 下一页 / 今天 + 档位切换 */}
       <div className="mb-3 flex flex-wrap items-center justify-center gap-2">
         <button type="button" onClick={() => shift(-1)}
@@ -86,9 +87,15 @@ export function CalendarView({ date, onPick }: { date: string; onPick: (date: st
         </span>
       </div>
 
-      {scale === "month"
-        ? <MonthGrid date={anchor} onPick={onPick} />
-        : <ScheduleView date={anchor} mode={scale} onPick={(cell) => { setAnchor(cell); onPick(cell); }} />}
+      {/* 栅格铺满（不再夹在 1024px 里），右侧一列玻璃栏 */}
+      <div className="flex gap-5">
+        <div className="min-w-0 flex-1">
+          {scale === "month"
+            ? <MonthGrid date={anchor} onPick={onPick} />
+            : <ScheduleView date={anchor} mode={scale} onPick={(cell) => { setAnchor(cell); onPick(cell); }} />}
+        </div>
+        <PlansRail />
+      </div>
     </div>
   );
 }

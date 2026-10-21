@@ -232,7 +232,7 @@ export function PlansPage() {
 
   return (
     <div className="h-full overflow-y-auto">
-      <div className="mx-auto flex w-full max-w-6xl flex-col gap-5 p-6 pb-10">
+      <div className="flex w-full flex-col gap-5 p-6 pb-10">
         {/* ── 工具栏：日期导航 + 进度 + 归档 ── */}
         <div className="flex flex-wrap items-center gap-2">
           {/* 日期步进器：图标与日期同处一个圆角容器，避免散落的小方块 */}
