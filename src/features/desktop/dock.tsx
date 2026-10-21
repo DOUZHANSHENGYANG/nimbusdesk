@@ -23,7 +23,7 @@ import { useProjects } from "@/features/projects/store";
 import { CaptureForm } from "@/features/knowledge/capture";
 import { beginMenu, closeMenu, emitMenuRequest, ensurePopupReady, ownerLabel, revealMenu, subscribeMenuSize, useMenuActions, type MenuAction } from "@/features/files/popup";
 import type { MenuIconKey, MenuNode } from "@/features/files/menu-model";import { monitorArea } from "./monitors";
-import { DOCK_CAPTURE_H, dockBounds, dockSpringPair, type DockArea, type DockMode, type DockPanel } from "./dock-core";
+import { DOCK_CAPTURE_H, dockBounds, type DockArea, type DockMode, type DockPanel } from "./dock-core";
 import { nearestDockEdge } from "./edge-core";
 import { ItemIcon } from "@/features/files/icons";
 import "./dock.css";
@@ -79,21 +79,10 @@ export function DockWindow() {
     areaRef.current = area;
     const height = panelRef.current === "capture" ? DOCK_CAPTURE_H : undefined;
     const bounds = dockBounds(area, edge, mode, undefined, height);
-    const sameMode = mode === modeRef.current;
-    // 顶缘的形变是高度变化，而 dock_spring 只做横向弹簧，故顶缘直接落位。
-    if (sameMode || edge === "top") {
-      await invoke("window_set_bounds", {
-        label: LABEL, x: Math.round(bounds.x * scale), y: Math.round(bounds.y * scale),
-        width: Math.round(bounds.w * scale), height: Math.round(bounds.h * scale),
-      });
-      if (!sameMode) setMode(mode);
-      return;
-    }
-    const { from, to } = dockSpringPair(area, edge, modeRef.current, mode, undefined, height);
     setMode(mode);
-    await invoke("dock_spring", {
-      label: LABEL, fromX: from.x, toX: to.x, fromW: from.w, toW: to.w,
-      y: to.y, h: to.h, style: "stiff",
+    await invoke("window_set_bounds", {
+      label: LABEL, x: Math.round(bounds.x * scale), y: Math.round(bounds.y * scale),
+      width: Math.round(bounds.w * scale), height: Math.round(bounds.h * scale),
     });
   }, [edge, setMode]);
 
