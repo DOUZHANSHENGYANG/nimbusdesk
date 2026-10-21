@@ -500,8 +500,8 @@ function FencesFlyout() {
       {visible.length === 0
         ? <p className="dock-panel-empty">{t("dock.fencesEmpty")}</p>
         : view === "grid"
-          ? <div className="dock-grid"
-              style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${tileSize + 26}px, 1fr))` }}>
+          ? <div className={`dock-grid${tileSize <= 24 ? " is-compact" : ""}`}
+              style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${tileSize + 12}px, 1fr))` }}>
               {visible.map((item) => (
                 <button type="button" key={item.id} className="dock-tile" title={item.path}
                   onClick={() => void open(item)} {...dragProps(item.id)}>

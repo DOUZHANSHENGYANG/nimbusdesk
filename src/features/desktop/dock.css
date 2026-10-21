@@ -282,10 +282,15 @@
   flex-direction: column;
   align-items: center;
   gap: 6px;
-  padding: 10px 4px 8px;
+  padding: 8px 4px 6px;
   border-radius: var(--radius-lg);
   outline: none;
 }
+
+/* 紧凑档：图标很小时收紧内边距与标签，否则格子被留白撑大，看起来「缩不下去」 */
+.dock-grid.is-compact { gap: 6px 4px; }
+.dock-grid.is-compact .dock-tile { padding: 3px 2px 2px; gap: 3px; }
+.dock-grid.is-compact .dock-tile-label { font-size: 10px; line-height: 1.25; -webkit-line-clamp: 1; }
 
 .dock-tile:hover, .dock-tile:focus-visible { background: var(--accent); }
 

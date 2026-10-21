@@ -91,7 +91,7 @@ export const useSettings = create<SettingsState>()(
       setAutoClearDone: (autoClearDone) => set({ autoClearDone }),
       setDockEdge: (dockEdge) => set({ dockEdge }),
       setDockOpen: (dockOpen) => set({ dockOpen }),
-      setDockTileSize: (dockTileSize) => set({ dockTileSize: Math.min(72, Math.max(32, Math.round(dockTileSize))) }),
+      setDockTileSize: (dockTileSize) => set({ dockTileSize: Math.min(72, Math.max(16, Math.round(dockTileSize))) }),
       setDockShortcut: (dockShortcut) => set({ dockShortcut }),
       setDockAutoHide: (dockAutoHide) => set({ dockAutoHide }),
     }),
