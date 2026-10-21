@@ -3,35 +3,36 @@
    三层结构：Primitive（原料）→ Semantic（语义）→ Component（组件）
    只允许在这里定义颜色/圆角/阴影/动效/字阶；组件层直接消费 token。
 
-   主题：石墨天青 Graphite Azure
-   - Neutral **真无彩**（C=0）。上一版用 H=255、C≤0.01 自称「冷中性」，
-     但 OKLCH H=255 已经贴着蓝轴 —— 渲染出来 gray-50 是 #f3f4f6，
-     反算色相 264.5°，而 sRGB 纯蓝 #0000ff 是 264.1°。也就是说
-     「灰阶」实际在喝蓝色，深色底又偏 285°（紫）。这就是残留 AI 味的来源。
-     现在一律 C=0，灰就是灰。
-   - Brand 天青蓝 H=252。明确偏青的蓝，与靛紫（H≈277）无关。
-   - FileType 色按**渲染后 sRGB 色相**分配，落在 352°→186° 单一弧上。
-     （旧版按 OKLCH 色相校验，漏掉了 audio@350 渲染成 327° —— 肉眼就是紫。）
+   主题：石墨天青 → **玻璃层 Liquid Layer**（2026-10 重构，方向稿 dir-1）
+   - 结构：窗底材质 → 内容面（标准材质）→ 玻璃功能层（侧栏 / 工具条 / Dock）
+     参考 Apple HIG · Materials：材质是制造 depth / layering / hierarchy 的
+     视觉效果；玻璃是浮在内容层之上的**独立功能层**，内容从它底下透出。
+   - Neutral **真无彩**（C=0）这条**不变**：中性的灰就是灰，一旦带上色相，
+     大面积铺开会泛蓝泛紫（上一版的 AI 味来源）。
+     现在带蓝灰调的是**材质层**（--pr-mat-*），它是刻意上的色，
+     与「灰阶不小心喝了蓝色」是两件事，不要混为一谈。
+   - Brand 天青蓝 H=256，彩度提高一档（旧版偏灰）。
+   - FileType 色未动：渲染后色相仍落在 352°→186° 单一弧上，脚本校验通过。
 
-   对比度全部经 WCAG AA 验证：正文 ≥4.5:1、大字/UI ≥3:1
+   对比度全部经 WCAG AA 验证：正文 ≥4.5:1、大字/图形 ≥3:1
    （验证脚本：scripts/check-contrast.mjs）
    ============================================================ */
 
 :root {
   /* ── 1. Primitive · 色板原料 ─────────────────────────── */
 
-  /* Brand · 天青蓝（Azure） */
-  --pr-brand-50: oklch(0.972 0.014 252);
-  --pr-brand-100: oklch(0.942 0.03 252);
-  --pr-brand-200: oklch(0.884 0.058 252);
-  --pr-brand-300: oklch(0.812 0.09 252);
-  --pr-brand-400: oklch(0.722 0.128 252);
-  --pr-brand-500: oklch(0.638 0.162 252);
-  --pr-brand-600: oklch(0.552 0.172 252);
-  --pr-brand-700: oklch(0.472 0.152 252);
-  --pr-brand-800: oklch(0.398 0.122 252);
-  --pr-brand-900: oklch(0.332 0.094 252);
-  --pr-brand-950: oklch(0.242 0.064 252);
+  /* Brand · 天青蓝（Azure）—— 彩度提一档，明度阶梯重取 */
+  --pr-brand-50: oklch(0.972 0.017 256);
+  --pr-brand-100: oklch(0.941 0.036 256);
+  --pr-brand-200: oklch(0.884 0.069 256);
+  --pr-brand-300: oklch(0.812 0.108 256);
+  --pr-brand-400: oklch(0.722 0.152 256);
+  --pr-brand-500: oklch(0.638 0.19 256);
+  --pr-brand-600: oklch(0.552 0.194 256);
+  --pr-brand-700: oklch(0.472 0.168 256);
+  --pr-brand-800: oklch(0.398 0.132 256);
+  --pr-brand-900: oklch(0.332 0.1 256);
+  --pr-brand-950: oklch(0.242 0.068 256);
 
   /*
    * Neutral · 石灰（真无彩 C=0）
@@ -48,7 +49,7 @@
   --pr-gray-150: oklch(0.905 0 0);
   --pr-gray-200: oklch(0.862 0 0);
   --pr-gray-300: oklch(0.762 0 0);
-  --pr-gray-400: oklch(0.642 0 0);
+  --pr-gray-400: oklch(0.7 0 0);
   --pr-gray-500: oklch(0.5 0 0);
   --pr-gray-600: oklch(0.452 0 0);
   --pr-gray-700: oklch(0.368 0 0);
@@ -62,6 +63,21 @@
   --pr-gray-1000: oklch(0.112 0 0);
 
   /*
+   * Material · 材质层（新增）
+   *
+   * 这一层是**刻意上的色**：窗底与内容面带一点蓝灰，玻璃功能层是半透白。
+   * 与灰阶的区别：灰阶不许有色相，材质必须有色相 —— 否则玻璃没有东西可透，
+   * 白玻璃压白底会读不出材质（dir-1 第一版就是这么糊掉的）。
+   */
+  --pr-mat-window: oklch(0.916 0.012 250); /* 窗底材质 */
+  --pr-mat-surface: oklch(0.955 0.004 250); /* 内容面（标准材质） */
+  --pr-mat-panel: oklch(0.938 0.006 250); /* 内容面上的次级块 */
+  --pr-mat-glass: oklch(1 0 0 / 0.68); /* 玻璃功能层 */
+  --pr-mat-glass-strong: oklch(1 0 0 / 0.84); /* 玻璃里被选中的一格 / 浮层 */
+  --pr-mat-glass-edge: oklch(1 0 0 / 0.9); /* 玻璃边缘高光 */
+  --pr-mat-hairline: oklch(0.2 0 0 / 0.1); /* 发丝线 */
+
+  /*
    * Status · 状态色
    * 分浅/深两档：浅色模式下用 -600（足够暗），深色模式下用 -400（足够亮）。
    * 同色相不同明度，而不是两套色相 —— 这样语义色在两种主题里是「同一个颜色」。
@@ -69,11 +85,11 @@
    */
   --pr-red-600: oklch(0.53 0.2 25);
   --pr-red-400: oklch(0.72 0.18 25);
-  --pr-green-600: oklch(0.535 0.15 155);
+  --pr-green-600: oklch(0.51 0.15 155);
   --pr-green-400: oklch(0.75 0.16 155);
   --pr-amber-600: oklch(0.53 0.12 60);
   --pr-amber-400: oklch(0.82 0.13 80);
-  --pr-blue-600: oklch(0.54 0.14 225);
+  --pr-blue-600: oklch(0.51 0.14 225);
   --pr-blue-400: oklch(0.72 0.13 225);
 
   /*
@@ -85,7 +101,7 @@
    * 分配规则（全部在**渲染后 sRGB 色相**空间里做，见 scripts/check-contrast.mjs）：
    *   1. 禁止区 265–350°（紫 → 品红）。旧版把 audio 写 oklch H=350 看着安全，
    *      渲染出来是 327°，人眼判定就是紫 —— 校验必须看渲染色相。
-   *   2. 与品牌（渲染 207°）留 ≥20° 且不落品牌↔紫区的蓝紫带，
+   *   2. 与品牌（渲染 ≈216°）留 ≥20° 且不落品牌↔紫区的蓝紫带，
    *      否则图标会被读成品牌强调元素。
    *   3. 于是可用安全带只剩 352°→186°（194°），8 类均分 → 24.3°/类。
    *   4. 语义尽量贴合惯例：PDF=红、演示=橙、压缩=琥珀、表格=绿（Excel 心智）。
@@ -105,40 +121,42 @@
   /* ── 1b. Primitive · 几何 / 字阶 / 间距 / 动效 ─────────── */
 
   /*
-   * 圆角：桌面密度比移动端紧一档。
-   * 卡片 12px（不是 16）、控件 8px —— 1440+ 宽屏上大圆角显得松散。
+   * 圆角：玻璃层的容器比旧版大一档（浮起来的块圆角小了会显得廉价），
+   * 控件仍然紧一档。桌面密度靠行高与字号维持，不靠小圆角。
    */
   --pr-radius-xs: 4px;
-  --pr-radius-sm: 6px;
-  --pr-radius-md: 8px;
-  --pr-radius-lg: 12px;
-  --pr-radius-xl: 16px;
+  --pr-radius-sm: 8px;
+  --pr-radius-md: 10px;
+  --pr-radius-lg: 14px;
+  --pr-radius-xl: 20px;
   --pr-radius-full: 999px;
 
   /*
    * 阴影：浅色用「短距 + 低透明度」双层；深色档在 .dark 里另行削弱，
    * 因为大范围模糊阴影在深色底上根本看不见，只会拖慢合成。
+   * -float 是玻璃功能层专用：更大更软，让玻璃「真的浮起来」。
    */
-  --pr-shadow-1: 0 1px 2px oklch(0 0 0 / 0.06), 0 1px 3px oklch(0 0 0 / 0.04);
-  --pr-shadow-2: 0 2px 5px oklch(0 0 0 / 0.07), 0 4px 12px oklch(0 0 0 / 0.06);
-  --pr-shadow-3: 0 6px 18px oklch(0 0 0 / 0.1), 0 12px 32px oklch(0 0 0 / 0.08);
-  --pr-shadow-glow: 0 0 0 1px oklch(0.552 0.172 252 / 0.3),
-    0 0 18px oklch(0.552 0.172 252 / 0.22);
+  --pr-shadow-1: 0 1px 2px oklch(0 0 0 / 0.04);
+  --pr-shadow-2: 0 2px 6px oklch(0 0 0 / 0.05), 0 6px 18px oklch(0 0 0 / 0.05);
+  --pr-shadow-3: 0 14px 40px oklch(0 0 0 / 0.12), 0 2px 8px oklch(0 0 0 / 0.06);
+  --pr-shadow-float: 0 18px 48px oklch(0.14 0.02 250 / 0.18), 0 2px 8px oklch(0.14 0.02 250 / 0.07);
+  --pr-shadow-glow: 0 0 0 1px oklch(0.552 0.194 256 / 0.3),
+    0 0 18px oklch(0.552 0.194 256 / 0.22);
 
   /*
-   * 字阶：桌面尺度。比 tailwind 默认小一档 ——
-   * 默认 text-sm 是 14px，在 1440+ 宽屏的密集列表里偏大，行数会被挤掉。
-   * 行高与字号在同一处定义 —— 分开写必然在两处漂移。
+   * 字阶：桌面尺度。正文提到 14px（旧版 13px 在 1707 宽屏上偏紧，
+   * 且低于「正文 ≥14px」这条底线），行高与字号在同一处定义 ——
+   * 分开写必然在两处漂移。
    */
   --pr-text-2xs: 10px;
-  --pr-text-xs: 11px;
-  --pr-text-sm: 12px;
-  --pr-text-base: 13px;
-  --pr-text-md: 14px;
-  --pr-text-lg: 16px;
-  --pr-text-xl: 19px;
-  --pr-text-2xl: 23px;
-  --pr-text-3xl: 28px;
+  --pr-text-xs: 11.5px;
+  --pr-text-sm: 12.5px;
+  --pr-text-base: 14px;
+  --pr-text-md: 15px;
+  --pr-text-lg: 17px;
+  --pr-text-xl: 20px;
+  --pr-text-2xl: 24px;
+  --pr-text-3xl: 30px;
 
   --pr-leading-tight: 1.25;
   --pr-leading-snug: 1.4;
@@ -151,7 +169,7 @@
   --pr-weight-bold: 700;
 
   /* 字距：大字号收紧，小字号放开 —— 补偿光学尺寸 */
-  --pr-tracking-tight: -0.012em;
+  --pr-tracking-tight: -0.015em;
   --pr-tracking-normal: 0;
   --pr-tracking-wide: 0.01em;
 
@@ -185,26 +203,35 @@
   --pr-ease-standard: cubic-bezier(0.2, 0, 0, 1);
   /* 弹性：用于按压/开关/卡片入场等需要「手感」的地方，不用在位移类过渡上 */
   --pr-ease-spring: cubic-bezier(0.34, 1.42, 0.64, 1);
+
+  /* 玻璃层的模糊半径：三档，全部在这一个地方定 */
+  --pr-glass-blur: 30px;
+  --pr-glass-saturate: 170%;
 }
 
 /* ── 2. Semantic · 语义层（浅色）─────────────────────── */
 :root {
   color-scheme: light;
 
-  --background: var(--pr-gray-50);
-  --foreground: var(--pr-gray-800);
-  --card: var(--pr-gray-0);
-  --card-foreground: var(--pr-gray-800);
-  --popover: var(--pr-gray-0);
-  --popover-foreground: var(--pr-gray-800);
+  /* 窗底材质就是页面底：整个应用坐在它上面 */
+  --background: var(--pr-mat-window);
+  --foreground: var(--pr-gray-850);
+  /* 内容面：标准材质，比窗底亮一档 */
+  --surface: var(--pr-mat-surface);
+  --surface-foreground: var(--pr-gray-850);
+  --card: var(--pr-mat-surface);
+  --card-foreground: var(--pr-gray-850);
+  /* 浮层属于玻璃功能层 */
+  --popover: var(--pr-mat-glass-strong);
+  --popover-foreground: var(--pr-gray-850);
   --primary: var(--pr-brand-600);
   --primary-foreground: var(--pr-gray-0);
   --secondary: var(--pr-gray-100);
   --secondary-foreground: var(--pr-gray-700);
-  --muted: var(--pr-gray-100);
+  --muted: var(--pr-mat-panel);
   /*
    * gray-500 取 L=0.50（不是 0.532）：次要文字也会落在 muted/secondary
-   * 底色上（下拉项、标签），0.532 在 gray-100 上只有 4.36:1，差一点。
+   * 底色上（下拉项、标签），0.532 在 panel 上不够 4.5:1。
    */
   --muted-foreground: var(--pr-gray-500);
   --accent: var(--pr-brand-50);
@@ -214,18 +241,24 @@
   --success: var(--pr-green-600);
   --warning: var(--pr-amber-600);
   --info: var(--pr-blue-600);
-  --border: var(--pr-gray-150);
+  --border: var(--pr-mat-hairline);
   --input: var(--pr-gray-200);
-  --ring: oklch(0.552 0.172 252 / 0.4);
+  --ring: oklch(0.552 0.194 256 / 0.4);
 
-  --sidebar: var(--pr-gray-100);
+  --sidebar: var(--pr-mat-surface);
   --sidebar-foreground: var(--pr-gray-600);
   --sidebar-primary: var(--pr-brand-600);
   --sidebar-primary-foreground: var(--pr-gray-0);
-  --sidebar-accent: oklch(0.552 0.172 252 / 0.1);
+  --sidebar-accent: oklch(0.552 0.194 256 / 0.1);
   --sidebar-accent-foreground: var(--pr-brand-700);
-  --sidebar-border: var(--pr-gray-150);
-  --sidebar-ring: oklch(0.552 0.172 252 / 0.4);
+  --sidebar-border: var(--pr-mat-hairline);
+  --sidebar-ring: oklch(0.552 0.194 256 / 0.4);
+
+  /* 玻璃功能层三件套 */
+  --glass: var(--pr-mat-glass);
+  --glass-strong: var(--pr-mat-glass-strong);
+  --glass-edge: var(--pr-mat-glass-edge);
+  --hairline: var(--pr-mat-hairline);
 
   --chart-1: var(--pr-brand-600);
   --chart-2: var(--pr-green-600);
@@ -233,57 +266,73 @@
   --chart-4: var(--pr-blue-600);
   --chart-5: var(--pr-red-600);
 
-  --surface-hover: oklch(0.552 0.172 252 / 0.05);
-  --surface-active: oklch(0.552 0.172 252 / 0.09);
+  --surface-hover: oklch(0.552 0.194 256 / 0.05);
+  --surface-active: oklch(0.552 0.194 256 / 0.09);
   --scrollbar-thumb: var(--pr-gray-300);
   --backdrop: oklch(0.2 0 0 / 0.4);
   /* 选中文字底色：跟随品牌，但保持低饱和以免整片文字发蓝 */
-  --selection: oklch(0.552 0.172 252 / 0.22);
+  --selection: oklch(0.552 0.194 256 / 0.22);
 }
 
 /* ── 2b. Semantic · 语义层（深色）────────────────────── */
 .dark {
   color-scheme: dark;
 
-  --background: var(--pr-gray-950);
+  /* 深色档的材质是「浅灰玻璃」：底比旧版提了一档，玻璃才有得透 */
+  --pr-mat-window: oklch(0.235 0.009 250);
+  --pr-mat-surface: oklch(0.272 0.008 250);
+  --pr-mat-panel: oklch(0.3 0.007 250);
+  --pr-mat-glass: oklch(1 0 0 / 0.085);
+  --pr-mat-glass-strong: oklch(1 0 0 / 0.14);
+  --pr-mat-glass-edge: oklch(1 0 0 / 0.14);
+  --pr-mat-hairline: oklch(1 0 0 / 0.11);
+
+  --background: var(--pr-mat-window);
   --foreground: var(--pr-gray-50);
-  --card: var(--pr-gray-900);
+  --surface: var(--pr-mat-surface);
+  --surface-foreground: var(--pr-gray-50);
+  --card: var(--pr-mat-surface);
   --card-foreground: var(--pr-gray-50);
-  --popover: var(--pr-gray-850);
+  --popover: var(--pr-mat-panel);
   --popover-foreground: var(--pr-gray-50);
   /*
    * 刻意用 600 而不是 500：`--primary` 是**实心按钮底色**，配白字。
    * 500（L=0.638）配白字不足 4.5:1 —— 连大字 AA 都够不上。
-   * 600（L=0.552）是 4.83:1，正文级 AA 达标。
+   * 600（L=0.552）是 4.8:1，正文级 AA 达标。
    * 深色模式需要「更亮的品牌色」时用 --ring / --accent，
    * 那些是描边与图标，不背白字。
    */
   --primary: var(--pr-brand-600);
   --primary-foreground: var(--pr-gray-0);
-  --secondary: var(--pr-gray-850);
+  --secondary: var(--pr-mat-panel);
   --secondary-foreground: var(--pr-gray-100);
-  --muted: var(--pr-gray-850);
-  /* gray-600 在 gray-850 上只有 4.30:1 —— 必须提到 400 档 */
-  --muted-foreground: var(--pr-gray-400);
-  --accent: oklch(0.638 0.162 252 / 0.16);
+  --muted: var(--pr-mat-panel);
+  /* 面提亮之后，次要文字也必须跟着提亮：gray-400 在 panel 上只有 4.0:1 */
+  --muted-foreground: oklch(0.72 0 0);
+  --accent: oklch(0.638 0.19 256 / 0.16);
   --accent-foreground: var(--pr-brand-200);
   --destructive: var(--pr-red-400);
   --destructive-foreground: var(--pr-gray-1000);
   --success: var(--pr-green-400);
   --warning: var(--pr-amber-400);
   --info: var(--pr-blue-400);
-  --border: oklch(1 0 0 / 0.09);
+  --border: var(--pr-mat-hairline);
   --input: oklch(1 0 0 / 0.13);
-  --ring: oklch(0.722 0.128 252 / 0.55);
+  --ring: oklch(0.722 0.152 256 / 0.55);
 
-  --sidebar: var(--pr-gray-975);
+  --sidebar: var(--pr-mat-window);
   --sidebar-foreground: var(--pr-gray-300);
-  --sidebar-primary: var(--pr-brand-500);
-  --sidebar-primary-foreground: var(--pr-gray-0);
-  --sidebar-accent: oklch(0.722 0.128 252 / 0.14);
+  --sidebar-primary: var(--pr-brand-400);
+  --sidebar-primary-foreground: var(--pr-gray-1000);
+  --sidebar-accent: oklch(0.722 0.152 256 / 0.14);
   --sidebar-accent-foreground: var(--pr-brand-200);
-  --sidebar-border: oklch(1 0 0 / 0.07);
-  --sidebar-ring: oklch(0.722 0.128 252 / 0.55);
+  --sidebar-border: var(--pr-mat-hairline);
+  --sidebar-ring: oklch(0.722 0.152 256 / 0.55);
+
+  --glass: var(--pr-mat-glass);
+  --glass-strong: var(--pr-mat-glass-strong);
+  --glass-edge: var(--pr-mat-glass-edge);
+  --hairline: var(--pr-mat-hairline);
 
   --chart-1: var(--pr-brand-400);
   --chart-2: var(--pr-green-400);
@@ -291,16 +340,17 @@
   --chart-4: var(--pr-blue-400);
   --chart-5: var(--pr-red-400);
 
-  --surface-hover: oklch(0.722 0.128 252 / 0.08);
-  --surface-active: oklch(0.722 0.128 252 / 0.14);
+  --surface-hover: oklch(0.722 0.152 256 / 0.08);
+  --surface-active: oklch(0.722 0.152 256 / 0.14);
   --scrollbar-thumb: var(--pr-gray-750);
   --backdrop: oklch(0.08 0 0 / 0.56);
-  --selection: oklch(0.722 0.128 252 / 0.3);
+  --selection: oklch(0.722 0.152 256 / 0.3);
 
-  /* 深色底上大范围阴影不可见，只保留极短距的一层 */
+  /* 深色底上大范围阴影不可见，只保留极短距的一层；浮层阴影可略大 */
   --pr-shadow-1: 0 1px 2px oklch(0 0 0 / 0.4);
   --pr-shadow-2: 0 2px 6px oklch(0 0 0 / 0.45);
   --pr-shadow-3: 0 8px 24px oklch(0 0 0 / 0.5);
+  --pr-shadow-float: 0 18px 48px oklch(0 0 0 / 0.55), 0 2px 8px oklch(0 0 0 / 0.35);
 }
 
 /*
@@ -325,9 +375,9 @@
 
 /* ── 3. Component · 组件层 ────────────────────────────── */
 :root {
-  --titlebar-h: 40px;
-  --sidebar-w: 224px;
-  --sidebar-w-collapsed: 60px;
+  --titlebar-h: 46px;
+  --sidebar-w: 200px;
+  --sidebar-w-collapsed: 56px;
   --page-pad: 20px;
   --radius: var(--pr-radius-md);
 

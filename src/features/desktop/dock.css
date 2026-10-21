@@ -26,9 +26,10 @@
   width: 100px;
   flex: none;
   padding: 12px 5px;
-  background: color-mix(in srgb, var(--popover) 92%, transparent);
-  backdrop-filter: blur(18px);
-  box-shadow: var(--shadow-lg);
+  background: var(--glass);
+  backdrop-filter: blur(var(--pr-glass-blur)) saturate(var(--pr-glass-saturate));
+  -webkit-backdrop-filter: blur(var(--pr-glass-blur)) saturate(var(--pr-glass-saturate));
+  box-shadow: var(--pr-shadow-float), inset 0 1px 0 var(--glass-edge);
 }
 
 /* 贴边的一侧不描边、不圆角（圆角由根节点统一处理） */
@@ -179,8 +180,9 @@
   flex: 1;
   min-width: 0;
   padding: 10px;
-  background: color-mix(in srgb, var(--card) 94%, transparent);
-  backdrop-filter: blur(18px);
+  background: var(--glass);
+  backdrop-filter: blur(var(--pr-glass-blur)) saturate(var(--pr-glass-saturate));
+  -webkit-backdrop-filter: blur(var(--pr-glass-blur)) saturate(var(--pr-glass-saturate));
 }
 
 .dock-root[data-edge="left"] .dock-panel { border-right: 1px solid var(--border); }

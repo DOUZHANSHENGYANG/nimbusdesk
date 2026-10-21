@@ -47,17 +47,17 @@ export function Sidebar() {
   return (
     <nav
       className={cn(
-        "group relative flex shrink-0 flex-col border-r border-sidebar-border bg-sidebar transition-[width] duration-300",
+        "mat-glass group relative flex shrink-0 flex-col rounded-[var(--pr-radius-xl)] transition-[width] duration-300",
         collapsed ? "w-(--sidebar-w-collapsed)" : "w-(--sidebar-w)",
       )}
       style={{ transitionTimingFunction: "cubic-bezier(0.22, 1, 0.36, 1)" }}
     >
-      <div ref={listRef} className="relative flex flex-col gap-1 px-2.5 pt-3">
+      <div ref={listRef} className="relative flex flex-col gap-1 px-2 pt-2">
         {/* 活跃胶囊 */}
         <div
           ref={pillRef}
           aria-hidden
-          className="pointer-events-none absolute left-2.5 right-2.5 top-0 rounded-lg bg-sidebar-accent opacity-0"
+          className="pointer-events-none absolute left-2 right-2 top-0 rounded-[10px] bg-sidebar-accent opacity-0"
         />
         {NAV_ITEMS.map(({ to, key, icon: Icon }) => {
           const active = location.pathname === to;
@@ -69,7 +69,7 @@ export function Sidebar() {
               onClick={() => navigate(to)}
               title={t(key)}
               className={cn(
-                "relative z-10 flex h-10 items-center gap-3 rounded-lg px-3 text-[13px] font-medium transition-colors duration-200",
+                "relative z-10 flex h-9 items-center gap-3 rounded-[10px] px-2.5 text-[13.5px] font-medium transition-colors duration-200",
                 active
                   ? "text-sidebar-accent-foreground"
                   : "text-sidebar-foreground hover:text-sidebar-accent-foreground",
@@ -78,7 +78,7 @@ export function Sidebar() {
             >
               <Icon
                 className={cn(
-                  "size-4.5 shrink-0 transition-colors duration-200",
+                  "size-4 shrink-0 transition-colors duration-200",
                   active ? "text-brand" : "opacity-70",
                 )}
                 strokeWidth={active ? 2.2 : 1.8}
@@ -92,7 +92,7 @@ export function Sidebar() {
       <div className="flex-1" />
 
       {/* 底部：折叠 */}
-      <div className="flex flex-col gap-1 px-2.5 pb-3">
+      <div className="flex flex-col gap-1 px-2 pb-2">
         <SidebarBottomButton
           icon={collapsed ? PanelLeftOpen : PanelLeftClose}
           label={collapsed ? t("nav.expand") : t("nav.collapse")}

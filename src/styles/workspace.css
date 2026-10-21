@@ -1,21 +1,49 @@
 /* Shared desktop materials. Extend the app's existing light/dark tokens. */
 :root {
   --workbench-font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Geist Variable", "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", sans-serif;
-  --workbench-glass: color-mix(in srgb, var(--background) 82%, transparent);
-  --workbench-surface: color-mix(in srgb, var(--card) 86%, var(--background));
-  --workbench-raised: color-mix(in srgb, var(--background) 94%, var(--foreground));
-  --workbench-line: color-mix(in srgb, var(--foreground) 10%, transparent);
-  --workbench-shadow: 0 16px 48px color-mix(in srgb, var(--foreground) 7%, transparent), 0 2px 8px color-mix(in srgb, var(--foreground) 3%, transparent);
-  --workbench-radius: 20px;
-  --workbench-radius-sm: 12px;
+  /* 材质层全部转发自 tokens.css，不再在这里另算一份 color-mix —— 两套口径必然漂移 */
+  --workbench-glass: var(--glass);
+  --workbench-surface: var(--surface);
+  --workbench-raised: var(--glass-strong);
+  --workbench-line: var(--hairline);
+  --workbench-shadow: var(--pr-shadow-float);
+  --workbench-radius: var(--pr-radius-xl);
+  --workbench-radius-sm: var(--pr-radius-lg);
   --workbench-ease: cubic-bezier(.22, .8, .25, 1);
 }
 .dark {
-  --workbench-glass: color-mix(in srgb, var(--background) 88%, transparent);
-  --workbench-surface: color-mix(in srgb, var(--background) 94%, var(--foreground));
-  --workbench-raised: color-mix(in srgb, var(--background) 91%, var(--foreground));
-  --workbench-line: color-mix(in srgb, var(--foreground) 11%, transparent);
-  --workbench-shadow: 0 16px 48px oklch(0 0 0 / .26), 0 2px 8px oklch(0 0 0 / .14);
+  /* 深色档的材质值同样由 tokens.css 的 .dark 给出 */
+  --workbench-glass: var(--glass);
+  --workbench-surface: var(--surface);
+  --workbench-raised: var(--glass-strong);
+  --workbench-line: var(--hairline);
+  --workbench-shadow: var(--pr-shadow-float);
+}
+
+/*
+ * 玻璃功能层（侧栏 / 工具条 / Dock 共用一处理解）：
+ * 半透 + 模糊 + 边缘高光 + 极柔外影；分层靠材质，不靠重描边。
+ */
+.mat-glass {
+  background: var(--glass);
+  border: 1px solid var(--glass-edge);
+  backdrop-filter: blur(var(--pr-glass-blur)) saturate(var(--pr-glass-saturate));
+  -webkit-backdrop-filter: blur(var(--pr-glass-blur)) saturate(var(--pr-glass-saturate));
+  box-shadow: var(--pr-shadow-float), inset 0 1px 0 var(--glass-edge);
+}
+/* 内容面：标准材质，不模糊（Liquid Glass 不用在内容层） */
+.mat-surface {
+  background: var(--surface);
+  box-shadow: inset 0 1px 0 var(--glass-edge), 0 1px 5px oklch(0.14 0.02 250 / 0.08);
+}
+.dark .mat-surface { box-shadow: inset 0 1px 0 oklch(1 0 0 / 0.06), 0 1px 5px oklch(0 0 0 / 0.5); }
+
+/* 标题栏：横贯整窗的玻璃条，不圆角（它不是浮块，是窗口自己的顶边） */
+.titlebar-glass {
+  background: var(--glass);
+  border-bottom: 1px solid var(--hairline);
+  backdrop-filter: blur(var(--pr-glass-blur)) saturate(var(--pr-glass-saturate));
+  -webkit-backdrop-filter: blur(var(--pr-glass-blur)) saturate(var(--pr-glass-saturate));
 }
 .workbench-ui { font-family: var(--workbench-font); color: var(--foreground); }
 .workbench-ui [data-slot="button"] { font-size: 12px; border-radius: var(--workbench-radius-sm); transition: box-shadow 160ms var(--workbench-ease), transform 160ms var(--workbench-ease); }

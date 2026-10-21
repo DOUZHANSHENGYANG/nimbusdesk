@@ -44,29 +44,27 @@ function Shell() {
           设置页（standalone）也必须能看到 */}
       <StorageAlert />
       <OrganizationActivity />
-      <div className="flex min-h-0 flex-1">
+      {/*
+        舞台：窗底（--background，也就是 body 的底）露在四边与两块之间，
+        中间是**内容面**（标准材质，圆角），侧栏是浮在旁边的**玻璃功能层**。
+        两层材质就在这一处对齐：窗底 → 内容面 → 玻璃功能层。
+      */}
+      <div className="flex min-h-0 flex-1 gap-2.5 p-2.5">
         {!standalone && <Sidebar />}
-        <div className="flex min-w-0 flex-1 flex-col">
-          {/*
-            这里原本有一条 h-12 的顶栏，只用来显示「当前页名」——
-            而左侧侧边栏已经把同一个名字高亮显示了，每一页都是重复的两份。
-            去掉它，内容区直接靠到标题栏下方，等于给所有页面多出 48px 呼吸空间。
-          */}
-          <main className="min-h-0 flex-1 overflow-hidden">
-            <PageTransition>
-              <Routes>
-                <Route path="/" element={<HomePage />} />
-                <Route path="/projects" element={<ProjectsPage />} />
-                <Route path="/plans" element={<PlansPage />} />
-                <Route path="/files" element={<FilesPage />} />
-                <Route path="/feeds" element={<FeedsPage />} />
-                <Route path="/knowledge" element={<KnowledgePage />} />
-                <Route path="/tools" element={<ToolsPage />} />
-                <Route path="/settings" element={<SettingsPage />} />
-              </Routes>
-            </PageTransition>
-          </main>
-        </div>
+        <main className="mat-surface relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-[var(--pr-radius-xl)]">
+          <PageTransition>
+            <Routes>
+              <Route path="/" element={<HomePage />} />
+              <Route path="/projects" element={<ProjectsPage />} />
+              <Route path="/plans" element={<PlansPage />} />
+              <Route path="/files" element={<FilesPage />} />
+              <Route path="/feeds" element={<FeedsPage />} />
+              <Route path="/knowledge" element={<KnowledgePage />} />
+              <Route path="/tools" element={<ToolsPage />} />
+              <Route path="/settings" element={<SettingsPage />} />
+            </Routes>
+          </PageTransition>
+        </main>
       </div>
     </div>
     </AppContextMenu>

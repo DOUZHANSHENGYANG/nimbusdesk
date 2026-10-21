@@ -61,7 +61,9 @@ export function Titlebar() {
     <header
       data-tauri-drag-region
       onDoubleClick={toggleMax}
-      className="relative z-50 flex h-(--titlebar-h) shrink-0 items-stretch justify-between border-b border-sidebar-border bg-sidebar select-none"
+      className={cn(
+        "relative z-50 flex h-(--titlebar-h) shrink-0 items-stretch justify-between titlebar-glass select-none",
+      )}
     >
       {/* 左：品牌区（可拖拽） */}
       <div data-tauri-drag-region className="flex items-center gap-2.5 pl-3.5 pr-2">
