@@ -5,7 +5,7 @@
 .home-header h1 { line-height: 1.4; }
 .home-layout { position: relative; display: flex; flex: 1; min-height: 480px; padding: 6px 0 16px; }
 .orbit-field { display: flex; flex-direction: column; flex: 1; min-width: 0; }
-.workspace-orbit { position: relative; width: 100%; flex: 1; min-height: 438px; isolation: isolate; overflow: hidden; background: var(--background); }
+.workspace-orbit { position: relative; width: 100%; flex: 1; min-height: 438px; isolation: isolate; overflow: hidden; background: var(--surface); }
 .neural-atmosphere { position: absolute; inset: -5%; pointer-events: none; background: radial-gradient(ellipse at 50% 48%, color-mix(in srgb, var(--foreground) 4%, transparent), transparent 62%); }
 .orbit-lines { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; }
 .orbit-speck { fill: var(--foreground); opacity: .16; animation: neural-twinkle 6s ease-in-out infinite alternate; }

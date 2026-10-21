@@ -12,6 +12,7 @@ import { useFiles, useFences } from "@/stores/files";
 import { deriveHomeRelations } from "./relations";
 import { WorkspaceOrbit, type HomeModule, type WorkspaceNode } from "./workspace-orbit";
 import { HomeInspector, type InboxSummary } from "./inspector";
+import { TodayList } from "./today-list";
 
 export function HomePage() {
   const { t, i18n } = useTranslation();
@@ -27,6 +28,13 @@ export function HomePage() {
   const vaultName = useKnowledge((state) => state.vaultName);
   const [selected, setSelected] = useState<HomeModule | null>(null);
   const [paused, setPaused] = useState(false);
+  /**
+   * 主页有两种视图：默认「今天」的行式清单，「脉络」是原来的星图。
+   * 星图是一屏计数概览，适合偶尔看一眼；每天真正要动手的是清单，
+   * 所以清单是落点，星图降为可切换的第二视图（不删功能）。
+   */
+  const [view, setView] = useState<"list" | "orbit">("list");
+  const [focusedTask, setFocusedTask] = useState<string | null>(null);
   const [captureBusy, setCaptureBusy] = useState(false);
   const workspace = useRef<HTMLDivElement>(null);
   const { inbox, refreshInbox } = useInbox(root);
@@ -38,11 +46,14 @@ export function HomePage() {
 
   useEffect(() => {
     const handleKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !event.isComposing) returnCenter();
+      if (event.key !== "Escape" || event.isComposing) return;
+      // 清单视图下 Esc 先收回选中的那一行，再退回中心
+      if (focusedTask) setFocusedTask(null);
+      else returnCenter();
     };
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, [returnCenter]);
+  }, [returnCenter, focusedTask]);
 
   const progress = dayProgress(tasks);
   const roots = childrenOf(tasks, null);
@@ -81,12 +92,46 @@ export function HomePage() {
     <div className="home-workspace workbench-ui" ref={workspace} data-expanded={selected !== null}>
       <div className="home-content">
         <header className="home-header flex flex-wrap items-center justify-between gap-4">
-          <div><p className="text-xs text-muted-foreground">{dateLabel}</p><h1 className="mt-2 text-[22px] font-semibold tracking-tight">{t("home.workspaceTitle")}</h1></div>
-          <Button variant="ghost" size="icon" aria-label={t(paused ? 'home.resumeScene' : 'home.pauseScene')} title={t(paused ? 'home.resumeScene' : 'home.pauseScene')} aria-pressed={paused} onClick={()=>setPaused(value=>!value)}>{paused?<RiPlayLine className="size-4"/>:<RiPauseLine className="size-4"/>}</Button>
+          <div>
+            <p className="text-xs text-muted-foreground">{dateLabel}</p>
+            <h1 className="mt-2 text-[22px] font-semibold tracking-tight">
+              {t(view === "list" ? "home.today" : "home.workspaceTitle")}
+            </h1>
+            {view === "list" && (
+              <p className="mt-1.5 text-[13px] text-muted-foreground">
+                {t("home.dayCrumb", { count: roots.length, done: progress.done })}
+              </p>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="home-viewswitch" role="group" aria-label={t("home.workspaceTitle")}>
+              <button type="button" aria-pressed={view === "list"} onClick={() => setView("list")}>
+                {t("home.viewList")}
+              </button>
+              <button type="button" aria-pressed={view === "orbit"} onClick={() => setView("orbit")}>
+                {t("home.viewOrbit")}
+              </button>
+            </div>
+            {view === "orbit" && (
+              <Button variant="ghost" size="icon" aria-label={t(paused ? 'home.resumeScene' : 'home.pauseScene')} title={t(paused ? 'home.resumeScene' : 'home.pauseScene')} aria-pressed={paused} onClick={()=>setPaused(value=>!value)}>{paused?<RiPlayLine className="size-4"/>:<RiPauseLine className="size-4"/>}</Button>
+            )}
+          </div>
         </header>
         <div className="home-layout">
-          <WorkspaceOrbit nodes={nodes} selected={selected} onSelect={selectModule} onCenter={returnCenter} relations={relations} paused={paused} contentCount={contentCount} />
-          {selected && <div className="home-module-panel" data-module={selected}><button type="button" className="home-return" onClick={returnCenter}><RiArrowLeftLine className="size-4" />{t("home.returnCenter")}<kbd>Esc</kbd></button><HomeInspector selected={selected} tasks={roots} latest={latest} categories={categories} openCategories={openCategories} items={items} inbox={inbox} vaultName={vaultName} today={today} now={now} onToggle={(id) => toggleDone(today, id)} onRetry={refreshInbox} onCapture={()=>void capture()} captureBusy={captureBusy} /></div>}
+          {view === "list" ? (
+            <TodayList
+              tasks={tasks}
+              focusedId={focusedTask}
+              onFocus={setFocusedTask}
+              onToggle={(id) => toggleDone(today, id)}
+              latest={latest}
+            />
+          ) : (
+            <>
+              <WorkspaceOrbit nodes={nodes} selected={selected} onSelect={selectModule} onCenter={returnCenter} relations={relations} paused={paused} contentCount={contentCount} />
+              {selected && <div className="home-module-panel" data-module={selected}><button type="button" className="home-return" onClick={returnCenter}><RiArrowLeftLine className="size-4" />{t("home.returnCenter")}<kbd>Esc</kbd></button><HomeInspector selected={selected} tasks={roots} latest={latest} categories={categories} openCategories={openCategories} items={items} inbox={inbox} vaultName={vaultName} today={today} now={now} onToggle={(id) => toggleDone(today, id)} onRetry={refreshInbox} onCapture={()=>void capture()} captureBusy={captureBusy} /></div>}
+            </>
+          )}
         </div>
       </div>
     </div>

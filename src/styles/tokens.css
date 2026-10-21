@@ -346,6 +346,11 @@
   --backdrop: oklch(0.08 0 0 / 0.56);
   --selection: oklch(0.722 0.152 256 / 0.3);
 
+  /* 深色档用更亮的一档做强调（实心按钮仍走 --primary 的 600） */
+  --brand: var(--pr-brand-400);
+  --brand-strong: var(--pr-brand-500);
+  --brand-soft: var(--pr-brand-600);
+
   /* 深色底上大范围阴影不可见，只保留极短距的一层；浮层阴影可略大 */
   --pr-shadow-1: 0 1px 2px oklch(0 0 0 / 0.4);
   --pr-shadow-2: 0 2px 6px oklch(0 0 0 / 0.45);
@@ -375,6 +380,25 @@
 
 /* ── 3. Component · 组件层 ────────────────────────────── */
 :root {
+  /*
+   * 品牌色的**运行时可引用别名**（一定要有这一层）。
+   *
+   * index.css 的 `@theme inline` 只把 --color-brand 的值内联进 Tailwind 工具类
+   * （text-brand / bg-brand），并不会保证 :root 上存在 --brand / --color-brand
+   * 这个自定义属性 —— Tailwind 只会保留「它自己文件里被引用过」的那些。
+   * 而 feature CSS（dock.css 23 处、tools.css 4 处、tasks-attachments.css 1 处）
+   * 直接写 var(--brand)：取到空值后整条声明按「无效值」丢弃，属性退回 initial
+   * （颜色 → currentColor、背景 → transparent）。表现只是「颜色有点不对」，
+   * 肉眼很难归因。所以在这里定义一次，两处口径合一。
+   *
+   * 同理要注意：不要在 feature CSS 里引 var(--shadow-lg) / var(--text-md) /
+   * var(--radius-xs) 这类**未被任何工具类使用**的 Tailwind 主题变量（实测不发）
+   * —— 用 --pr-* 原件名，它们永远存在。
+   */
+  --brand: var(--pr-brand-500);
+  --brand-strong: var(--pr-brand-600);
+  --brand-soft: var(--pr-brand-200);
+
   --titlebar-h: 46px;
   --sidebar-w: 200px;
   --sidebar-w-collapsed: 56px;
