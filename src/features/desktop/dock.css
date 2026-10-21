@@ -283,7 +283,7 @@
   font-size: 11px;
   line-height: 1.35;
   text-align: center;
-  color: var(--foreground/90);
+  color: color-mix(in srgb, var(--foreground) 90%, transparent);
 }
 
 /* 收纳盒：视图切换 + 列表视图 */
@@ -324,7 +324,7 @@
   -webkit-line-clamp: 1;
   font-size: 12px;
   text-align: left;
-  color: var(--foreground/90);
+  color: color-mix(in srgb, var(--foreground) 90%, transparent);
 }
 
 /* 收集知识内嵌面板
@@ -498,7 +498,7 @@
   line-height: 1.6;
   white-space: pre-wrap;
   word-break: break-word;
-  color: var(--foreground/90);
+  color: color-mix(in srgb, var(--foreground) 90%, transparent);
 }
 
 .dock-todos {
@@ -552,7 +552,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 12px;
-  color: var(--foreground/90);
+  color: color-mix(in srgb, var(--foreground) 90%, transparent);
 }
 
 .dock-todo-time { flex: none; font-size: 10px; font-variant-numeric: tabular-nums; color: var(--muted-foreground); }
@@ -586,7 +586,7 @@
   font-size: 12px;
   font-weight: 500;
   text-align: left;
-  color: var(--foreground/90);
+  color: color-mix(in srgb, var(--foreground) 90%, transparent);
 }
 .dock-pback:hover { background: var(--accent); color: var(--brand); }
 .dock-todo-row.is-done .dock-todo-mark { border-color: var(--brand); }
@@ -639,7 +639,7 @@
   padding: 2px 6px;
   border-radius: var(--radius-sm);
   font-size: 11px;
-  color: var(--foreground/90);
+  color: color-mix(in srgb, var(--foreground) 90%, transparent);
 }
 .dock-att-name span, .dock-att-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dock-att-name:hover { background: var(--accent); color: var(--brand); }
@@ -695,7 +695,7 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 12px;
-  color: var(--foreground/90);
+  color: color-mix(in srgb, var(--foreground) 90%, transparent);
 }
 .dock-prow-count {
   flex: none;
