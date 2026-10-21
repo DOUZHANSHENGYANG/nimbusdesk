@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Check, ChevronRight, Pencil, Plus, Trash2, X } from "lucide-react";
+import { Check, ChevronRight, Pencil, Plus, StickyNote, Trash2, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import {
   childrenOf,
@@ -185,6 +185,9 @@ function TaskRow({ date, task, depth, searchTaskId, revealIds, searchToken }: { 
     note: "",
   });
   const [childInput, setChildInput] = useState("");
+  /** 编辑态的备注折叠：默认只在已有备注时展开，空备注不占一行（点击「备注」才长出） */
+  const [noteOpen, setNoteOpen] = useState(false);
+  const noteRef = useRef<HTMLInputElement>(null);
   /**
    * 编辑态的边界：整行都算「里面」。
    *
@@ -212,6 +215,8 @@ function TaskRow({ date, task, depth, searchTaskId, revealIds, searchToken }: { 
     // 留着的话点它会先触发「保存并关闭编辑」，与用户心智不符；
     // 而且编辑态下 + 按钮本来就是隐藏的，它不该同时可见。
     setAdding(false);
+    // 有备注才展开备注行；空备注先收起，避免每行都挂一个空输入框
+    setNoteOpen(!!task.note?.trim());
     setEditing(true);
   };
 
@@ -346,6 +351,20 @@ function TaskRow({ date, task, depth, searchTaskId, revealIds, searchToken }: { 
                 end={draft.end}
                 onChange={({ start, end }) => setDraft({ ...draft, start, end })}
               />
+              {/* 备注入口：点了才长出下面那行，空备注不占版面 */}
+              <button
+                type="button"
+                onClick={() => { setNoteOpen(true); requestAnimationFrame(() => noteRef.current?.focus()); }}
+                title={t("plans.noteLabel")}
+                aria-label={t("plans.noteLabel")}
+                aria-pressed={noteOpen}
+                className={cn(
+                  "grid size-6 shrink-0 place-items-center rounded-md transition-colors hover:bg-muted",
+                  noteOpen || draft.note.trim() ? "text-brand" : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                <StickyNote className="size-3.5" />
+              </button>
               <button
                 type="button"
                 onClick={saveEdit}
@@ -366,17 +385,21 @@ function TaskRow({ date, task, depth, searchTaskId, revealIds, searchToken }: { 
               </button>
             </div>
 
-            {/* 第二行：备注独占一行，给足横向空间 */}
-            <input
-              value={draft.note}
-              onChange={(e) => setDraft({ ...draft, note: e.target.value })}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") saveEdit();
-                if (e.key === "Escape") setEditing(false);
-              }}
-              placeholder={t("plans.noteLabel")}
-              className="w-full bg-transparent text-[12px] text-muted-foreground outline-none placeholder:text-muted-foreground/50"
-            />
+            {/* 第二行：备注（点了备注按钮才出现；内容清空后自动收起） */}
+            {noteOpen && (
+              <input
+                ref={noteRef}
+                value={draft.note}
+                onChange={(e) => setDraft({ ...draft, note: e.target.value })}
+                onBlur={() => { if (!draftRef.current.note.trim()) setNoteOpen(false); }}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") saveEdit();
+                  if (e.key === "Escape") setEditing(false);
+                }}
+                placeholder={t("plans.noteLabel")}
+                className="w-full bg-transparent text-[12px] text-muted-foreground outline-none placeholder:text-muted-foreground/50"
+              />
+            )}
           </div>
         ) : (
           <div className="flex min-w-0 flex-1 flex-col gap-0.5">

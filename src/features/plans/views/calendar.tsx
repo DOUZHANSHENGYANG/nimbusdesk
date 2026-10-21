@@ -2,7 +2,9 @@ import { useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import {
+  addDays,
   dayProgress,
+  fmtDate,
   monthGrid,
   parseDate,
   statusOf,
@@ -11,25 +13,106 @@ import {
 } from "@/features/plans/types";
 import { useNow, usePlans, usePlansArchive } from "@/features/plans/store";
 import { cn } from "@/lib/utils";
+import { ScheduleView } from "./schedule";
 
 export type CalendarNav = { onPick: (date: string) => void };
 /** 每个日期格最多列几条任务名，超出显示 +N */
 const MAX_CHIPS = 3;
+/** 日程档位：日 / 周 / 月 / 年 */
+export type CalendarScale = "day" | "week" | "month" | "year";
 
-/** 日历月视图：整月网格 + 任务名 + 每日进度 + 点选日期 */
+/** 日历容器：日/周/月/年四档，共用一套导航（上一页 / 今天 / 下一页 + 档位切换） */
 export function CalendarView({ date, onPick }: { date: string; onPick: (date: string) => void }) {
+  const { t, i18n } = useTranslation();
+  const [scale, setScale] = useState<CalendarScale>("month");
+  const [anchor, setAnchor] = useState(date);
+
+  const shift = (delta: number) => {
+    const d = parseDate(anchor);
+    if (scale === "day") return setAnchor(fmtDate(new Date(d.getFullYear(), d.getMonth(), d.getDate() + delta)));
+    if (scale === "week") return setAnchor(fmtDate(new Date(d.getFullYear(), d.getMonth(), d.getDate() + delta * 7)));
+    if (scale === "year") return setAnchor(fmtDate(new Date(d.getFullYear() + delta, d.getMonth(), d.getDate())));
+    setAnchor(fmtDate(new Date(d.getFullYear(), d.getMonth() + delta, d.getDate())));
+  };
+
+  const title = useMemo(() => {
+    const d = parseDate(anchor);
+    const locale = i18n.language === "en" ? "en-US" : "zh-CN";
+    if (scale === "year") return new Intl.DateTimeFormat(locale, { year: "numeric" }).format(d);
+    if (scale === "month") return new Intl.DateTimeFormat(locale, { year: "numeric", month: "long" }).format(d);
+    if (scale === "day") return new Intl.DateTimeFormat(locale, { year: "numeric", month: "long", day: "numeric" }).format(d);
+    const start = parseDate(weekStart(anchor));
+    const end = parseDate(addDays(weekStart(anchor), 6));
+    const fmt = new Intl.DateTimeFormat(locale, { month: "numeric", day: "numeric" });
+    return `${fmt.format(start)} – ${fmt.format(end)}`;
+  }, [anchor, scale, i18n.language]);
+
+  const scales: { key: CalendarScale; label: string }[] = [
+    { key: "day", label: t("plans.scaleDay") },
+    { key: "week", label: t("plans.scaleWeek") },
+    { key: "month", label: t("plans.scaleMonth") },
+    { key: "year", label: t("plans.scaleYear") },
+  ];
+
+  return (
+    <div className="mx-auto w-full max-w-5xl">
+      {/* 导航：上一页 / 标题 / 下一页 / 今天 + 档位切换 */}
+      <div className="mb-3 flex flex-wrap items-center justify-center gap-2">
+        <button type="button" onClick={() => shift(-1)}
+          aria-label={t("plans.prevPage")}
+          className="grid size-7 place-items-center rounded-lg border border-border bg-card text-muted-foreground transition-colors hover:border-brand/40 hover:text-brand">
+          <ChevronLeft className="size-4" />
+        </button>
+        <span className="min-w-40 text-center text-[14px] font-semibold">{title}</span>
+        <button type="button" onClick={() => shift(1)}
+          aria-label={t("plans.nextPage")}
+          className="grid size-7 place-items-center rounded-lg border border-border bg-card text-muted-foreground transition-colors hover:border-brand/40 hover:text-brand">
+          <ChevronRight className="size-4" />
+        </button>
+        <button type="button" onClick={() => { setAnchor(todayStr()); onPick(todayStr()); }}
+          className="rounded-lg border border-border bg-card px-2.5 py-1 text-[12px] text-muted-foreground transition-colors hover:border-brand/40 hover:text-brand">
+          {t("plans.today")}
+        </button>
+        <span className="ml-1 inline-flex rounded-lg border border-border bg-card p-0.5">
+          {scales.map(({ key, label }) => (
+            <button key={key} type="button" aria-pressed={scale === key} onClick={() => setScale(key)}
+              className={cn(
+                "rounded-md px-2 py-0.5 text-[12px] transition-colors",
+                scale === key ? "bg-brand text-white" : "text-muted-foreground hover:text-foreground",
+              )}>
+              {label}
+            </button>
+          ))}
+        </span>
+      </div>
+
+      {scale === "month"
+        ? <MonthGrid date={anchor} onPick={onPick} />
+        : <ScheduleView date={anchor} mode={scale} onPick={(cell) => { setAnchor(cell); onPick(cell); }} />}
+    </div>
+  );
+}
+
+function weekStart(dateStr: string): string {
+  const d = parseDate(dateStr);
+  const offset = (d.getDay() + 6) % 7;
+  return fmtDate(new Date(d.getFullYear(), d.getMonth(), d.getDate() - offset));
+}
+
+/** 月档：整月网格 + 任务名 + 每日进度 + 点选日期 */
+function MonthGrid({ date, onPick }: { date: string; onPick: (date: string) => void }) {
   const { t, i18n } = useTranslation();
   const days = usePlans((s) => s.days);
   const archiveDays = usePlansArchive((s) => s.days);
   const now = useNow();
   const today = todayStr();
 
-  const [monthAnchor, setMonthAnchor] = useState(() => {
+  const anchorMonth = useMemo(() => {
     const d = parseDate(date);
     return { y: d.getFullYear(), m: d.getMonth() };
-  });
+  }, [date]);
 
-  const grid = useMemo(() => monthGrid(monthAnchor.y, monthAnchor.m), [monthAnchor]);
+  const grid = useMemo(() => monthGrid(anchorMonth.y, anchorMonth.m), [anchorMonth]);
 
   const weekdayLabels = useMemo(() => {
     const fmt = new Intl.DateTimeFormat(i18n.language === "en" ? "en-US" : "zh-CN", {
@@ -39,37 +122,8 @@ export function CalendarView({ date, onPick }: { date: string; onPick: (date: st
     return Array.from({ length: 7 }, (_, i) => fmt.format(new Date(2024, 0, 1 + i)));
   }, [i18n.language]);
 
-  const monthLabel = new Intl.DateTimeFormat(i18n.language === "en" ? "en-US" : "zh-CN", {
-    year: "numeric",
-    month: "long",
-  }).format(new Date(monthAnchor.y, monthAnchor.m, 1));
-
-  const shift = (delta: number) => {
-    const d = new Date(monthAnchor.y, monthAnchor.m + delta, 1);
-    setMonthAnchor({ y: d.getFullYear(), m: d.getMonth() });
-  };
-
   return (
-    <div className="mx-auto w-full max-w-5xl">
-      {/* 月导航 */}
-      <div className="mb-3 flex items-center justify-center gap-3">
-        <button
-          type="button"
-          onClick={() => shift(-1)}
-          className="grid size-7 place-items-center rounded-lg border border-border bg-card text-muted-foreground transition-colors hover:border-brand/40 hover:text-brand"
-        >
-          <ChevronLeft className="size-4" />
-        </button>
-        <span className="min-w-36 text-center text-[14px] font-semibold">{monthLabel}</span>
-        <button
-          type="button"
-          onClick={() => shift(1)}
-          className="grid size-7 place-items-center rounded-lg border border-border bg-card text-muted-foreground transition-colors hover:border-brand/40 hover:text-brand"
-        >
-          <ChevronRight className="size-4" />
-        </button>
-      </div>
-
+    <div>
       {/* 星期表头 */}
       <div className="mb-1.5 grid grid-cols-7 gap-1.5">
         {weekdayLabels.map((w) => (
