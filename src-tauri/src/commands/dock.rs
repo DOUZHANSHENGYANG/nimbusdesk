@@ -181,10 +181,6 @@ pub async fn dock_open(app: AppHandle) -> Result<(), String> {
         .visible(false)
         .build()
         .map_err(|e| e.to_string())?;
-    // 系统级亚克力模糊：失败（如 Win10 驱动问题）静默降级为半透明底色
-    if let Some(win) = app.get_webview_window(label) {
-        let _ = window_vibrancy::apply_acrylic(&win, None);
-    }
     Ok(())
 }
 

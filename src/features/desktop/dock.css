@@ -1,9 +1,9 @@
 /* 桌面 Dock：贴边玻璃侧栏 + 飞出面板。颜色全部来自 token，不引入新色值。
  *
  * 侧边栏常驻「图标 + 文字」，没有收起态（效率优先，点击零延迟）。
- * 三种形态（data-mode）只剩尺寸差异：
- *   strip / expand  同尺寸侧栏（134px）
- *   flyout          408px 功能面板（收纳盒/计划/项目）
+ * 高度恒定（DOCK_RAIL_H），只有宽度随面板开合变化：
+ *   strip / expand  100px 侧栏
+ *   flyout          408px 功能面板（收纳盒/计划/项目/收集知识）
  * 顶缘是水平横排：条贴顶边界（图标在上标签在下），面板向下展开。
  */
 
@@ -13,31 +13,27 @@
   align-items: stretch;
   height: 100%;
   user-select: none;
+  /* 圆角必须裁在根节点：窗口是透明的，圆角外侧若留出根节点背景，
+   * WebView 会以不透明底色填充，在四角显出白边。 */
+  overflow: hidden;
+  border-radius: var(--radius-lg);
 }
 
-/* 亚克力开启后系统负责模糊：底色减透让质感透出来，backdrop-filter 是
- * 透明窗口上的无效开销，一并去掉。 */
+/* 玻璃侧栏：圆角交给根节点裁切，这里只负责底色与模糊 */
 .dock-strip {
   display: flex;
   flex-direction: column;
   width: 100px;
   flex: none;
   padding: 12px 5px;
-  background: color-mix(in srgb, var(--popover) 72%, transparent);
-  border: 1px solid var(--border);
+  background: color-mix(in srgb, var(--popover) 92%, transparent);
+  backdrop-filter: blur(18px);
   box-shadow: var(--shadow-lg);
 }
 
-.dock-root[data-edge="left"] .dock-strip {
-  margin-right: auto;
-  border-radius: 0 var(--radius-lg) var(--radius-lg) 0;
-  border-left: none;
-}
-.dock-root[data-edge="right"] .dock-strip {
-  margin-left: auto;
-  border-radius: var(--radius-lg) 0 0 var(--radius-lg);
-  border-right: none;
-}
+/* 贴边的一侧不描边、不圆角（圆角由根节点统一处理） */
+.dock-root[data-edge="left"] .dock-strip { margin-right: auto; border-right: 1px solid var(--border); }
+.dock-root[data-edge="right"] .dock-strip { margin-left: auto; border-left: 1px solid var(--border); }
 
 /* 拖动手柄：抓住它拖动 Dock，松手吸附到最近的顶/左/右缘。 */
 .dock-grip {
@@ -65,8 +61,7 @@
   justify-content: center;
   margin-bottom: auto;
   padding: 8px 10px;
-  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
-  border-top: none;
+  border-bottom: 1px solid var(--border);
 }
 .dock-root[data-edge="top"] .dock-grip { height: auto; width: 16px; margin-bottom: 0; margin-right: 4px; }
 .dock-root[data-edge="top"] .dock-close { margin-top: 0; margin-left: 6px; align-self: center; }
@@ -184,7 +179,8 @@
   flex: 1;
   min-width: 0;
   padding: 10px;
-  background: color-mix(in srgb, var(--card) 80%, transparent);
+  background: color-mix(in srgb, var(--card) 94%, transparent);
+  backdrop-filter: blur(18px);
 }
 
 .dock-root[data-edge="left"] .dock-panel { border-right: 1px solid var(--border); }
