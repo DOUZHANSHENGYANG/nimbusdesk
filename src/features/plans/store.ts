@@ -114,6 +114,17 @@ interface PlansState {
   removeTasks: (date: string, ids: readonly string[]) => void;
   setTasksDone: (date: string, ids: readonly string[], done: boolean) => void;
   reorderTask: (date: string, id: string, targetId: string, position: "before" | "after") => void;
+  /**
+   * 把任务（连同子树）移到另一天，可同时改写时间。
+   * 跨天改期必须一次事务完成：分成「删除 + 新增」会在中途落盘出半截状态，
+   * 撤销也会变成两步。目标日期已有同 id（极小概率）时放弃移动。
+   */
+  moveTaskToDate: (
+    from: string,
+    id: string,
+    to: string,
+    time?: { start?: string; end?: string },
+  ) => boolean;
   /** 归档整日（返回该日任务，供写入归档库）；无该日返回 null */
   takeDay: (date: string) => PlanTask[] | null;
   /** 把某日全部已完成任务删掉，返回删除条数 */
@@ -287,10 +298,38 @@ export const usePlans = create<PlansState>()(
           };
         }),
 
+      moveTaskToDate: (from, id, to, time) => {
+        let moved = false;
+        set((s) => {
+          if (from === to) return s;
+          const source = s.days[from];
+          const moving = source?.find((task) => task.id === id);
+          if (!source || !moving) return s;
+          const ids = subtreeIds(source, id);
+          // 目标日期已有同 id 任务时不动（会撞 id），静默放弃
+          if ((s.days[to] ?? []).some((task) => ids.has(task.id))) return s;
+          const now = Date.now();
+          const carried = source
+            .filter((task) => ids.has(task.id))
+            .map((task) => task.id === id && time
+              ? { ...task, ...time, updatedAt: now }
+              : task);
+          const rest = source.filter((task) => !ids.has(task.id));
+          const nextDays: Record<string, PlanTask[]> = { ...s.days, [to]: [...(s.days[to] ?? []), ...carried] };
+          if (rest.length) nextDays[from] = rest;
+          else delete nextDays[from];
+          moved = true;
+          return {
+            history: pushBefore(s.history, s.days, [from, to], HISTORY_LABEL.update),
+            days: nextDays,
+          };
+        });
+        return moved;
+      },
+
       takeDay: (date) => {
         const tasks = get().days[date];
-        if (!tasks) return null;
-        set((s) => ({
+        if (!tasks) return null;        set((s) => ({
           history: pushBefore(s.history, s.days, [date], HISTORY_LABEL.archive),
           days: Object.fromEntries(Object.entries(s.days).filter(([d]) => d !== date)),
         }));

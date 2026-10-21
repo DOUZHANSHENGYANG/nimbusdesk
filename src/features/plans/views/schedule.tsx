@@ -1,16 +1,23 @@
-import { useMemo, useState } from "react";
+﻿import { useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   addDays,
   axisRange,
+  clampMinute,
   dayProgress,
   fmtDate,
+  fmtMinutes,
+  normalizeRange,
   parseDate,
+  shiftRange,
   statusOf,
   todayStr,
+  DAY_END_MIN,
+  SNAP_MIN,
 } from "@/features/plans/types";
 import { useNow, usePlans, usePlansArchive } from "@/features/plans/store";
 import { cn } from "@/lib/utils";
+import { capturePointer, releasePointer } from "@/lib/touch";
 
 /**
  * 日程视图：日 / 周 / 年三档（月档由 CalendarView 负责）。
@@ -28,8 +35,20 @@ const AXIS_FROM = 8 * 60;
 const AXIS_TO = 24 * 60;
 const PX_PER_HOUR = 40;
 const HOURS = (AXIS_TO - AXIS_FROM) / 60;
+const PX_PER_MIN = PX_PER_HOUR / 60;
 
 export type ScheduleMode = "day" | "week" | "year";
+
+/** 一次拖拽改期：横向换天、纵向换时间，松手才写 store */
+interface DragState {
+  id: string;
+  from: string;
+  origin: { start: number; end: number };
+  /** 按下时指针所在分钟（未吸附），整体平移靠它保留非整点偏移 */
+  grab: number;
+  /** 预览：目标日期 + 区间 */
+  next: { date: string; start: number; end: number };
+}
 
 function startOfWeek(dateStr: string): string {
   const d = parseDate(dateStr);
@@ -47,178 +66,221 @@ export function ScheduleView({
   onPick: (date: string) => void;
 }) {
   if (mode === "year") return <YearView date={date} onPick={onPick} />;
-  if (mode === "week") return <WeekView date={date} onPick={onPick} />;
-  return <DayView date={date} />;
+  return <TimeGrid date={date} mode={mode === "week" ? "week" : "day"} onPick={onPick} />;
 }
 
-/* ── 日视图：单日时间轴 + 未定时列表 ─────────────────────── */
+/* ── 日/周共用的时间网格：可拖拽改期（横向换天、纵向换时间） ── */
 
-function DayView({ date }: { date: string }) {
+function TimeGrid({ date, mode, onPick }: { date: string; mode: "day" | "week"; onPick: (date: string) => void }) {
   const { t } = useTranslation();
   const days = usePlans((s) => s.days);
   const archive = usePlansArchive((s) => s.days);
+  const moveTaskToDate = usePlans((s) => s.moveTaskToDate);
   const now = useNow();
-  const tasks = days[date] ?? archive[date]?.tasks ?? [];
-  const timed = tasks.filter((task) => axisRange(task) !== null);
-  const untimed = tasks.filter((task) => axisRange(task) === null && !task.parentId);
-  const progress = tasks.length ? dayProgress(tasks) : null;
+  const today = todayStr();
+  const trackRef = useRef<HTMLDivElement>(null);
+  const [drag, setDrag] = useState<DragState | null>(null);
+
+  const weekStartDate = startOfWeek(date);
+  const columns = useMemo(
+    () => (mode === "week" ? Array.from({ length: 7 }, (_, i) => addDays(weekStartDate, i)) : [date]),
+    [mode, weekStartDate, date],
+  );
+  const weekdayLabels = useMemo(
+    () => columns.map((cell) => new Intl.DateTimeFormat(undefined, { weekday: "short" }).format(parseDate(cell))),
+    [columns],
+  );
+
+  const tasksOf = (cell: string) => days[cell] ?? archive[cell]?.tasks ?? [];
+
+  /** 指针 → 时间轴分钟（未吸附；整体平移靠差值保留原有偏移） */
+  const rawMinuteAt = (clientY: number): number => {
+    const el = trackRef.current;
+    if (!el) return AXIS_FROM;
+    return AXIS_FROM + (clientY - el.getBoundingClientRect().top) / PX_PER_MIN;
+  };
+  /** 指针 → 落在哪一列（周视图横向换天） */
+  const columnAt = (clientX: number): string => {
+    const el = trackRef.current;
+    if (!el) return columns[0]!;
+    const rect = el.getBoundingClientRect();
+    const gutter = 56;
+    const width = (rect.width - gutter) / columns.length;
+    const index = clampMinute(Math.floor((clientX - rect.left - gutter) / width), 0, columns.length - 1);
+    return columns[index]!;
+  };
+
+  const beginDrag = (event: React.PointerEvent<HTMLElement>, cell: string, taskId: string) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const task = tasksOf(cell).find((item) => item.id === taskId);
+    const span = task ? axisRange(task) : null;
+    if (!task || !span) return;
+    capturePointer(event.currentTarget, event.pointerId);
+    setDrag({
+      id: taskId,
+      from: cell,
+      origin: { ...span },
+      grab: rawMinuteAt(event.clientY),
+      next: { date: cell, ...span },
+    });
+  };
+
+  const onMove = (event: React.PointerEvent<HTMLElement>) => {
+    if (!drag) return;
+    // 整体平移：位移用未吸附差值，保留任务原有的非整点偏移
+    const span = shiftRange(drag.origin.start, drag.origin.end,
+      rawMinuteAt(event.clientY) - drag.grab, AXIS_FROM, DAY_END_MIN);
+    setDrag((d) => (d ? { ...d, next: { date: columnAt(event.clientX), ...span } } : d));
+  };
+
+  const onUp = (event: React.PointerEvent<HTMLElement>) => {
+    if (!drag) return;
+    releasePointer(event.currentTarget, event.pointerId);
+    const target = drag.next;
+    const normalized = normalizeRange({ start: target.start, end: target.end }, SNAP_MIN);
+    const sameSlot = target.date === drag.from
+      && normalized.start === drag.origin.start
+      && normalized.end === drag.origin.end;
+    // 原地点击（没真拖）不写盘
+    if (!sameSlot) {
+      moveTaskToDate(drag.from, drag.id, target.date, {
+        start: fmtMinutes(normalized.start),
+        end: fmtMinutes(normalized.end),
+      });
+      if (target.date !== drag.from) onPick(target.date);
+    }
+    setDrag(null);
+  };
+
+  /** 块的定位与着色（拖拽中的块用预览位置渲染） */
+  const blockStyle = (cell: string, taskId: string, span: { start: number; end: number }) => {
+    const preview = drag?.id === taskId && drag.next.date === cell ? drag.next : null;
+    const range = preview ?? span;
+    const column = columns.indexOf(cell);
+    return {
+      top: ((range.start - AXIS_FROM) / 60) * PX_PER_HOUR,
+      height: Math.max(((range.end - range.start) / 60) * PX_PER_HOUR, 18),
+      left: `calc(56px + ${column} * (100% - 56px) / ${columns.length} + 2px)`,
+      width: `calc((100% - 56px) / ${columns.length} - 4px)`,
+    };
+  };
+
+  const isDragging = (taskId: string) => drag?.id === taskId;
 
   return (
-    <div className="flex flex-col gap-3">
-      <div className="flex items-center justify-between px-1">
-        <span className="text-[13px] font-semibold">
-          {new Intl.DateTimeFormat(undefined, { month: "long", day: "numeric", weekday: "long" }).format(parseDate(date))}
-        </span>
-        {progress && (
-          <span className="rounded-full bg-brand/10 px-2 py-0.5 text-[11px] font-medium tabular-nums text-brand">
-            {progress.done}/{progress.total}
+    <div className="flex flex-col gap-2">
+      {mode === "day" && (
+        <div className="flex items-center justify-between px-1">
+          <span className="text-[13px] font-semibold">
+            {new Intl.DateTimeFormat(undefined, { month: "long", day: "numeric", weekday: "long" }).format(parseDate(date))}
           </span>
-        )}
-      </div>
+          {(() => {
+            const list = tasksOf(date);
+            const progress = list.length ? dayProgress(list) : null;
+            return progress ? (
+              <span className="rounded-full bg-brand/10 px-2 py-0.5 text-[11px] font-medium tabular-nums text-brand">
+                {progress.done}/{progress.total}
+              </span>
+            ) : null;
+          })()}
+        </div>
+      )}
 
-      {untimed.length > 0 && (
+      {mode === "day" && tasksOf(date).some((task) => axisRange(task) === null && !task.parentId) && (
         <div className="flex flex-wrap gap-1.5 rounded-lg border border-dashed border-border p-2">
-          {untimed.map((task) => (
-            <span key={task.id}
-              className="max-w-full truncate rounded bg-muted px-1.5 py-0.5 text-[11px] text-foreground/80"
-              title={task.title}>
+          {tasksOf(date).filter((task) => axisRange(task) === null && !task.parentId).map((task) => (
+            <span key={task.id} title={task.title}
+              className="max-w-full truncate rounded bg-muted px-1.5 py-0.5 text-[11px] text-foreground/80">
               {task.title}
             </span>
           ))}
         </div>
       )}
 
-      <div className="relative overflow-hidden rounded-xl border border-border">
-        {Array.from({ length: HOURS }, (_, i) => {
-          const hour = AXIS_FROM / 60 + i;
-          return (
-            <div key={hour} className="flex" style={{ height: PX_PER_HOUR }}>
-              <span className="w-14 shrink-0 border-r border-border py-0.5 pr-1.5 text-right font-mono text-[10px] text-muted-foreground">
-                {String(hour).padStart(2, "0")}:00
-              </span>
-              <span className="flex-1 border-b border-border/60" />
-            </div>
-          );
-        })}
-        {timed.map((task) => {
-          const range = axisRange(task)!;
-          const top = ((range.start - AXIS_FROM) / 60) * PX_PER_HOUR;
-          const height = Math.max(((range.end - range.start) / 60) * PX_PER_HOUR, 18);
-          const status = statusOf(task, date, now);
-          return (
-            <span key={task.id} title={`${task.start ?? ""}${task.end ? `–${task.end}` : ""} ${task.title}`}
-              className={cn(
-                "absolute left-[60px] right-1.5 truncate rounded px-1.5 py-0.5 text-[11px] leading-4",
-                status === "done" ? "bg-muted text-muted-foreground line-through"
-                  : status === "doing" ? "bg-brand text-white"
-                    : "bg-brand/12 text-foreground ring-1 ring-inset ring-brand/25",
-              )}
-              style={{ top, height }}>
-              {task.title}
-            </span>
-          );
-        })}
-      </div>
-      {tasks.length === 0 && <p className="py-6 text-center text-[13px] text-muted-foreground">{t("plans.emptyDay")}</p>}
-    </div>
-  );
-}
-
-/* ── 周视图：7 列 × 时间轴 ──────────────────────────────── */
-
-function WeekView({ date, onPick }: { date: string; onPick: (date: string) => void }) {
-  const { t } = useTranslation();
-  const days = usePlans((s) => s.days);
-  const archive = usePlansArchive((s) => s.days);
-  const now = useNow();
-  const today = todayStr();
-  const start = startOfWeek(date);
-  const week = useMemo(() => Array.from({ length: 7 }, (_, i) => addDays(start, i)), [start]);
-
-  const weekdayLabels = useMemo(() => {
-    const fmt = new Intl.DateTimeFormat(undefined, { weekday: "short" });
-    return week.map((d) => fmt.format(parseDate(d)));
-  }, [week]);
-
-  return (
-    <div className="overflow-hidden rounded-xl border border-border">
-      {/* 表头：星期 + 日期 + 当天进度 */}
-      <div className="flex border-b border-border bg-card/50">
-        <span className="w-14 shrink-0" />
-        {week.map((cell, index) => {
-          const tasks = days[cell] ?? archive[cell]?.tasks ?? [];
-          const progress = tasks.length ? dayProgress(tasks) : null;
-          const isToday = cell === today;
-          return (
-            <button key={cell} type="button" onClick={() => onPick(cell)}
-              className={cn(
-                "flex flex-1 flex-col items-center gap-0.5 py-1.5 transition-colors hover:bg-surface-hover",
-                cell === date && "bg-brand/10",
-              )}>
-              <span className="text-[10px] text-muted-foreground">{weekdayLabels[index]}</span>
-              <span className={cn(
-                "grid size-5 place-items-center rounded-full text-[11px] font-semibold",
-                isToday && "bg-brand text-white",
-              )}>
-                {parseDate(cell).getDate()}
-              </span>
-              {progress && (
-                <span className="text-[9px] tabular-nums text-muted-foreground">{progress.done}/{progress.total}</span>
-              )}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* 时间网格 */}
-      <div className="relative">
-        {Array.from({ length: HOURS }, (_, i) => {
-          const hour = AXIS_FROM / 60 + i;
-          return (
-            <div key={hour} className="flex" style={{ height: PX_PER_HOUR }}>
-              <span className="w-14 shrink-0 border-r border-border py-0.5 pr-1.5 text-right font-mono text-[10px] text-muted-foreground">
-                {String(hour).padStart(2, "0")}
-              </span>
-              {week.map((cell) => (
-                <span key={cell} className={cn("flex-1 border-b border-r border-border/50", cell === today && "bg-brand/[0.03]")} />
-              ))}
-            </div>
-          );
-        })}
-
-        {/* 任务块：按天分列、按时间定位 */}
-        {week.map((cell, index) => {
-          const tasks = days[cell] ?? archive[cell]?.tasks ?? [];
-          return tasks.map((task) => {
-            const range = axisRange(task);
-            if (!range || range.start < AXIS_FROM) return null;
-            const top = ((range.start - AXIS_FROM) / 60) * PX_PER_HOUR;
-            const height = Math.max(((range.end - range.start) / 60) * PX_PER_HOUR, 16);
-            const status = statusOf(task, cell, now);
-            const columnWidth = `calc((100% - 56px) / 7)`;
+      <div className="overflow-hidden rounded-xl border border-border"
+        onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={() => setDrag(null)}>
+        {/* 表头 */}
+        <div className="flex border-b border-border bg-card/50">
+          <span className="w-14 shrink-0" />
+          {columns.map((cell, index) => {
+            const list = tasksOf(cell);
+            const progress = list.length ? dayProgress(list) : null;
+            const isToday = cell === today;
             return (
-              <span key={`${cell}-${task.id}`} title={`${task.title} ${task.start ?? ""}`}
+              <button key={cell} type="button" onClick={() => onPick(cell)}
                 className={cn(
-                  "absolute truncate rounded px-1 text-[10px] leading-4",
+                  "flex flex-1 flex-col items-center gap-0.5 py-1.5 transition-colors hover:bg-surface-hover",
+                  drag?.next.date === cell && "bg-brand/15",
+                  cell === date && !drag && "bg-brand/10",
+                )}>
+                <span className="text-[10px] text-muted-foreground">
+                  {mode === "week" ? weekdayLabels[index] : ""}
+                </span>
+                <span className={cn(
+                  "grid size-5 place-items-center rounded-full text-[11px] font-semibold",
+                  isToday && "bg-brand text-white",
+                )}>
+                  {parseDate(cell).getDate()}
+                </span>
+                {progress && <span className="text-[9px] tabular-nums text-muted-foreground">{progress.done}/{progress.total}</span>}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* 时间网格 + 任务块 */}
+        <div className="relative" ref={trackRef}>
+          {Array.from({ length: HOURS }, (_, i) => {
+            const hour = AXIS_FROM / 60 + i;
+            return (
+              <div key={hour} className="flex" style={{ height: PX_PER_HOUR }}>
+                <span className="w-14 shrink-0 border-r border-border py-0.5 pr-1.5 text-right font-mono text-[10px] text-muted-foreground">
+                  {String(hour).padStart(2, "0")}
+                </span>
+                {columns.map((cell) => (
+                  <span key={cell} className={cn(
+                    "flex-1 border-b border-r border-border/50",
+                    cell === today && "bg-brand/[0.03]",
+                    drag?.next.date === cell && "bg-brand/[0.07]",
+                  )} />
+                ))}
+              </div>
+            );
+          })}
+
+          {columns.map((cell) => tasksOf(cell).map((task) => {
+            const span = axisRange(task);
+            if (!span || span.start < AXIS_FROM) return null;
+            const status = statusOf(task, cell, now);
+            return (
+              <span key={`${cell}-${task.id}`}
+                title={`${task.start ?? ""}${task.end ? `–${task.end}` : ""} ${task.title}（可拖动改期）`}
+                onPointerDown={(event) => beginDrag(event, cell, task.id)}
+                className={cn(
+                  "absolute cursor-grab touch-none select-none truncate rounded px-1.5 text-[10px] leading-4 active:cursor-grabbing",
                   status === "done" ? "bg-muted text-muted-foreground line-through"
                     : status === "doing" ? "bg-brand text-white"
                       : "bg-brand/12 text-foreground ring-1 ring-inset ring-brand/25",
+                  isDragging(task.id) && "opacity-70 ring-2 ring-brand",
                 )}
-                style={{ top, height, left: `calc(56px + ${index} * ${columnWidth} + 2px)`, width: `calc(${columnWidth} - 4px)` }}>
+                style={blockStyle(cell, task.id, span)}>
                 {task.title}
               </span>
             );
-          });
-        })}
+          }))}
+        </div>
       </div>
 
-      {week.every((cell) => (days[cell] ?? archive[cell]?.tasks ?? []).length === 0) && (
-        <p className="py-6 text-center text-[13px] text-muted-foreground">{t("plans.emptyWeek")}</p>
+      {columns.every((cell) => tasksOf(cell).length === 0) && (
+        <p className="py-4 text-center text-[13px] text-muted-foreground">
+          {mode === "week" ? t("plans.emptyWeek") : t("plans.emptyDay")}
+        </p>
       )}
     </div>
   );
 }
-
 /* ── 年视图：12 个月热力概览 ────────────────────────────── */
 
 function YearView({ date, onPick }: { date: string; onPick: (date: string) => void }) {

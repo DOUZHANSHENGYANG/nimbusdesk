@@ -30,8 +30,35 @@ function setup(tasks, policy = { autoClear: false, autoSortDone: false }) {
   return store;
 }
 
-test("batch removal deduplicates parent/child selections and one undo restores all metadata", () => {
-  const tasks = [task("parent", null, { note: "notes", start: "09:00", attachments: [{ id: "a", path: "owned/a.txt" }] }), task("child", "parent"), task("keep")];
+test("moving a task to another day carries its subtree, rewrites time and undoes in one step", () => {
+  const other = "2026-10-20";
+  const tasks = [task("parent", null, { start: "09:00", end: "10:00", note: "keep" }), task("child", "parent"), task("stay")];
+  const store = setup(tasks);
+  assert.equal(typeof store.getState().moveTaskToDate, "function", "cross-day move must be implemented");
+  assert.equal(store.getState().moveTaskToDate(date, "parent", other, { start: "14:00", end: "15:30" }), true);
+  const state = store.getState();
+  assert.deepEqual(state.days[date].map(t => t.id), ["stay"], "source day keeps unrelated tasks");
+  assert.deepEqual(state.days[other].map(t => t.id), ["parent", "child"], "subtree travels with the parent");
+  const moved = state.days[other].find(t => t.id === "parent");
+  assert.equal(moved.start, "14:00");
+  assert.equal(moved.end, "15:30");
+  assert.equal(moved.note, "keep", "metadata survives the move");
+  assert.equal(state.history.past.length, 1, "one history entry covers both days");
+  assert.equal(state.undo(), true);
+  assert.deepEqual(store.getState().days[date], tasks, "undo restores the original day");
+  assert.equal(store.getState().days[other], undefined, "undo removes the created day");
+});
+
+test("moving onto the same day is a no-op and a colliding id never overwrites", () => {
+  const other = "2026-10-20";
+  const store = setup([task("a"), task("b")]);
+  assert.equal(store.getState().moveTaskToDate(date, "a", date), false);
+  store.setState({ days: { [date]: [task("a")], [other]: [task("a")] } });
+  assert.equal(store.getState().moveTaskToDate(date, "a", other), false, "duplicate id must not be overwritten");
+  assert.deepEqual(store.getState().days[date].map(t => t.id), ["a"]);
+});
+
+test("batch removal deduplicates parent/child selections and one undo restores all metadata", () => {  const tasks = [task("parent", null, { note: "notes", start: "09:00", attachments: [{ id: "a", path: "owned/a.txt" }] }), task("child", "parent"), task("keep")];
   const store = setup(tasks);
   assert.equal(typeof store.getState().removeTasks, "function", "batch removal must be implemented");
   store.getState().removeTasks(date, ["parent", "child", "parent", "missing"]);
