@@ -10,12 +10,14 @@ function load(file) {
   return module.exports;
 }
 
-const { dockBounds, dockSpringPair, DOCK_RAIL_W, DOCK_FLYOUT_W } = load("./dock-core.ts");
+const { dockBounds, dockSpringPair, DOCK_RAIL_W, DOCK_RAIL_H, DOCK_FLYOUT_W, DOCK_PANEL_H } = load("./dock-core.ts");
 const area = { x: -1920, y: 0, w: 1920, h: 1080 };
+/** 侧栏在垂直方向居中时的 y */
+const railY = area.y + Math.round((area.h - DOCK_RAIL_H) / 2);
 
 test("the rail hugs the work-area edge, fits its content and stays centered", () => {
   const left = dockBounds(area, "left", "strip");
-  assert.deepEqual(left, { x: -1920, y: 396, w: DOCK_RAIL_W, h: 288 });
+  assert.deepEqual(left, { x: area.x, y: railY, w: DOCK_RAIL_W, h: DOCK_RAIL_H });
   const right = dockBounds(area, "right", "strip");
   assert.equal(right.x + right.w, area.x + area.w, "right edge must anchor to the border");
   assert.equal(right.y, left.y);
@@ -54,8 +56,8 @@ test("spring pair passes both modes through unchanged", () => {
 test("short work areas clamp the dock height instead of overflowing", () => {
   const small = { x: 0, y: 0, w: 800, h: 300 };
   const bounds = dockBounds(small, "left", "flyout");
-  assert.equal(bounds.h, 288, "flyout shares the rail height: the bar never changes size");
-  assert.equal(bounds.y, 6);
+  assert.equal(bounds.h, Math.min(300, DOCK_PANEL_H), "flyout clamps to the work area");
+  assert.equal(bounds.y, Math.round((300 - bounds.h) / 2));
 });
 
 test("top edge is a horizontal bar pinned to the top, centered, growing downward", () => {
@@ -84,5 +86,5 @@ test("anchor pops the flyout next to the triggering icon, clamped to the work ar
   assert.equal(low.y, area.y + area.h - plain.h, "never below the work area");
   const topAnchored = dockBounds(area, "top", "flyout", 600);
   assert.equal(topAnchored.x, area.x + area.w - DOCK_FLYOUT_W, "top edge anchors horizontally, clamped");
-  assert.equal(dockBounds(area, "right", "strip", 400).y, 396, "non-flyout modes stay centered");
+  assert.equal(dockBounds(area, "right", "strip", 400).y, railY, "non-flyout modes stay centered");
 });

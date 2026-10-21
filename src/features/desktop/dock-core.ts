@@ -9,9 +9,11 @@ export type DockMode = "strip" | "expand" | "flyout";
 export type DockPanel = "fences" | "plans" | "projects" | "capture";
 
 /** 侧边栏常驻「图标 + 文字」，高度贴合内容（六个图标 + 关闭钮），不拉满工作区。 */
-export const DOCK_RAIL_W = 134;
-export const DOCK_RAIL_H = 288;
+export const DOCK_RAIL_W = 116;
+export const DOCK_RAIL_H = 268;
 export const DOCK_FLYOUT_W = 408;
+/** 普通飞出面板的高度：比侧栏高一截，列表类内容才有呼吸（侧栏本身不跟着变）。 */
+export const DOCK_PANEL_H = 420;
 export const DOCK_FLYOUT_MAX_H = 640;
 /** 顶缘横排的尺寸：宽度自适应屏幕，高度贴合内容。 */
 export const DOCK_TOP_W = 560;
@@ -22,10 +24,10 @@ export const DOCK_ROW_H = 44;
 /** 锚定弹出时，面板前缘与触发图标中心保持的距离（逻辑像素）。保留给未来用。 */
 const ANCHOR_LEAD = 48;
 
-/** 收集知识面板内容多，飞出时单独放宽（其余面板恒等于侧栏高度）。 */
-export const DOCK_CAPTURE_H = 520;
+/** 收集知识面板内容多，飞出时单独放宽（其余面板用 DOCK_PANEL_H）。 */
+export const DOCK_CAPTURE_H = 600;
 const MODE_W: Record<DockMode, number> = { strip: DOCK_RAIL_W, expand: DOCK_RAIL_W, flyout: DOCK_FLYOUT_W };
-const MODE_H: Record<DockMode, number> = { strip: DOCK_RAIL_H, expand: DOCK_RAIL_H, flyout: DOCK_RAIL_H };
+const MODE_H: Record<DockMode, number> = { strip: DOCK_RAIL_H, expand: DOCK_RAIL_H, flyout: DOCK_PANEL_H };
 
 /**
  * 三种形态的窗口矩形。侧边栏常驻「图标 + 文字」（strip 与 expand 同尺寸）；

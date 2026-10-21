@@ -20,7 +20,7 @@
 .dock-strip {
   display: flex;
   flex-direction: column;
-  width: 134px;
+  width: 116px;
   flex: none;
   padding: 8px 6px;
   background: color-mix(in srgb, var(--popover) 72%, transparent);
@@ -136,26 +136,6 @@
   background: var(--brand);
   animation: dock-active-in 160ms ease;
 }
-
-/* 角标：计划未完成数 / 项目逾期数 */
-.dock-badge {
-  position: absolute;
-  top: 0;
-  right: 2px;
-  min-width: 14px;
-  height: 14px;
-  padding: 0 3px;
-  border-radius: 999px;
-  background: var(--destructive);
-  color: var(--primary-foreground);
-  font-size: 9px;
-  font-style: normal;
-  line-height: 14px;
-  text-align: center;
-  font-variant-numeric: tabular-nums;
-  pointer-events: none;
-}
-.dock-root[data-edge="top"] .dock-badge { top: -3px; right: 0; }
 .dock-root[data-edge="top"] .dock-item.is-active::before {
   left: 18%;
   right: 18%;
@@ -169,7 +149,7 @@
   to { opacity: 1; transform: scaleY(1); }
 }
 
-.dock-icon { width: 18px; height: 18px; flex: none; }
+.dock-icon { width: 17px; height: 17px; flex: none; }
 
 /* 标签常驻：效率玩家不需要悬停展开这一步 */
 .dock-label {
@@ -177,8 +157,9 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 12px;
+  font-size: 11.5px;
   font-weight: 500;
+  letter-spacing: 0.01em;
 }
 
 .dock-close {

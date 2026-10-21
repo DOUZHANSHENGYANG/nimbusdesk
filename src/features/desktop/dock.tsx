@@ -40,7 +40,6 @@ export function DockWindow() {
   const theme = useSettings((s) => s.theme);
   const today = todayStr();
   const todayTasks = usePlans((s) => s.days[today]);
-  const allItems = useProjects((s) => s.items);
   const allProjects = useProjects((s) => s.projects);
   const areaRef = useRef<DockArea | null>(null);
   const modeRef = useRef<DockMode>("strip");
@@ -49,11 +48,6 @@ export function DockWindow() {
   const [mode, setModeState] = useState<DockMode>("strip");
   const panelRef = useRef<DockPanel | null>(null);
 
-  /** 角标：计划=今天未完成数；项目=逾期未完成数 */
-  const plansBadge = useMemo(() => (todayTasks ?? []).filter((task) => !task.done).length, [todayTasks]);
-  const overdueBadge = useMemo(() =>
-    allItems.filter((item) => item.status !== "done" && item.status !== "cancelled" && item.deadline && item.deadline < today).length,
-  [allItems, today]);
   const activeProjects = useMemo(() =>
     allProjects
       .filter((project) => project.status === "active")
@@ -337,7 +331,6 @@ export function DockWindow() {
         <ul className="dock-list" role="toolbar" aria-label={t("dock.title")}
           aria-orientation={edge === "top" ? "horizontal" : "vertical"}>
           {actions.map(({ key, icon: Icon, route, run, panel: actionPanel }) => {
-            const badge = key === "plans" ? plansBadge : key === "projects" ? overdueBadge : 0;
             const menuNodes = menuFor(key);
             return (
               <li key={key}>
@@ -357,7 +350,6 @@ export function DockWindow() {
                   }}>
                   <Icon className="dock-icon" aria-hidden="true" />
                   <span className="dock-label">{t(`dock.${key}`)}</span>
-                  {badge > 0 && <i className="dock-badge" aria-hidden="true">{badge > 99 ? "99+" : badge}</i>}
                 </button>
               </li>
             );
