@@ -40,7 +40,7 @@ function VaultPage({ root }: { root: string | null }) {
   const requestedNote = searchParams.get("note") || "";
   const routeRequest = `${location.key}:${requestedNote}`;
   const [consumedRoute, setConsumedRoute] = useState("");
-  const { i18n } = useTranslation();
+  const { t, i18n } = useTranslation();
   const name = useKnowledge((s) => s.vaultName);
   const [notes, setNotes] = useState<KnowledgeNote[]>([]);
   const [captures, setCaptures] = useState<CaptureRecord[]>([]);
@@ -196,6 +196,16 @@ function VaultPage({ root }: { root: string | null }) {
   useEffect(() => { setPageIndex((old) => Math.min(old, totalPages - 1)); }, [totalPages]);
   useEffect(() => { noteItems.current?.scrollTo({ top: 0 }); }, [currentPage, query, category, tag]);
 
+  /**
+   * 同目录的笔记（最多 3 条）。用已经拉到的列表算，不再发第二次查询 ——
+   * 这里回答的是「旁边还有什么」，不是全库精确检索。
+   */
+  const relatedNotes = active
+    ? notes
+        .filter((note) => note.path !== active.path && note.path.replace(/[\\/][^\\/]*$/, "") === active.path.replace(/[\\/][^\\/]*$/, ""))
+        .slice(0, 3)
+    : [];
+
   return <div className="workbench-ui knowledge-workspace" onKeyDown={(event) => {
     const target = event.target as HTMLElement;
     if (event.defaultPrevented || target.closest("input,textarea,[contenteditable=true],[role=dialog],[role=menu]")) return;
@@ -235,10 +245,27 @@ function VaultPage({ root }: { root: string | null }) {
           {!loading && !filtered.some((note) => note.path === active.path) && <div className="knowledge-outside-filter" role="status"><span>{c.readingOutsideFilter}</span><button onClick={clearFilters}>{c.resetFilters}</button></div>}
           {detail?.path === active.path ? <NoteReader key={detail.path} root={root} note={detail} title={active.title} onOpen={handleOpen} onInfo={() => setNoteInfoOpen(true)} recipe={active.kind === "recipe"} onSaved={noteSaved} onDirtyChange={setNoteDirty} /> : reading && <p role="status" className="p-5 text-sm text-muted-foreground">{c.loading}</p>}
         </div>}</article>
+        {/* 第三列：文档信息常驻。弹窗只留「采集来源」那几项（原始项目/来源/目标），
+            两处不重复：这里放当前文档本身的事实，以及可以直接改的标签。 */}
+        {active && <aside className="knowledge-info-rail" aria-label={c.noteInfo}>
+          <h2>{c.noteInfo}</h2>
+          <div className="knowledge-rail-row"><span>{c.originalPath}</span><b title={active.path}>{active.path}</b></div>
+          <div className="knowledge-rail-row"><span>{c.kind}</span><b>{categoryName(active.kind)}</b></div>
+          <div className="knowledge-rail-label">{t("knowledgeRail.tags")}</div>
+          {detail?.path === active.path && <NoteTags key={active.path} root={root} note={detail} disabled={noteDirty || organizationWritesNote(job, root, active.path)} onUpdated={noteSaved} onSelect={(value) => chooseTag(value)} />}
+          <div className="knowledge-rail-label">{t("knowledgeRail.relatedNotes")}</div>
+          {relatedNotes.map((note) => (
+            <div key={note.path} className="knowledge-rail-note">
+              <button type="button" onClick={() => chooseNote(note)} title={note.title}>{note.title}</button>
+              <small>{t("knowledgeRail.sameFolder")}</small>
+            </div>
+          ))}
+          {relatedNotes.length === 0 && <p className="knowledge-rail-empty">{t("knowledgeRail.noRelated")}</p>}
+        </aside>}
       </div>
     </>}
     <Dialog open={captureOpen} onOpenChange={setCaptureOpen}><DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-xl"><DialogHeader><DialogTitle>{c.capture}</DialogTitle><DialogDescription>{c.collectionHint}</DialogDescription></DialogHeader><CaptureForm onSaved={() => void refresh()} /></DialogContent></Dialog>
-    {root && active && <Dialog open={noteInfoOpen} onOpenChange={setNoteInfoOpen}><DialogContent className="workbench-ui knowledge-note-info"><DialogHeader><DialogTitle>{c.noteInfo}</DialogTitle><DialogDescription>{active.title}</DialogDescription></DialogHeader><dl className="knowledge-info-fields"><div><dt>{c.originalPath}</dt><dd>{active.path}</dd></div><div><dt>{c.kind}</dt><dd>{categoryName(active.kind)}</dd></div>{currentCapture?.project && <div><dt>{c.originalProject}</dt><dd>{currentCapture.project}</dd></div>}{currentCapture?.source && <div><dt>{c.originalSource}</dt><dd>{currentCapture.source}</dd></div>}{currentCapture?.archivedPath && <div><dt>{c.target}</dt><dd>{currentCapture.archivedPath}</dd></div>}</dl>{detail?.path === active.path && <NoteTags key={active.path} root={root} note={detail} disabled={noteDirty||organizationWritesNote(job,root,active.path)} onUpdated={noteSaved} onSelect={(value) => { chooseTag(value); setNoteInfoOpen(false); }} />}</DialogContent></Dialog>}
+    {root && active && <Dialog open={noteInfoOpen} onOpenChange={setNoteInfoOpen}><DialogContent className="workbench-ui knowledge-note-info"><DialogHeader><DialogTitle>{c.noteInfo}</DialogTitle><DialogDescription>{active.title}</DialogDescription></DialogHeader><dl className="knowledge-info-fields"><div><dt>{c.originalPath}</dt><dd>{active.path}</dd></div><div><dt>{c.kind}</dt><dd>{categoryName(active.kind)}</dd></div>{currentCapture?.project && <div><dt>{c.originalProject}</dt><dd>{currentCapture.project}</dd></div>}{currentCapture?.source && <div><dt>{c.originalSource}</dt><dd>{currentCapture.source}</dd></div>}{currentCapture?.archivedPath && <div><dt>{c.target}</dt><dd>{currentCapture.archivedPath}</dd></div>}</dl></DialogContent></Dialog>}
     {root && launcherOpen && <OrganizationLauncher root={root} blockedPath={noteDirty ? active?.path : undefined} onClose={() => setLauncherOpen(false)} onSelected={(next) => { setLauncherOpen(false); setNotice(""); setMaterials(next); }} />}
     {root && materials && <OrganizationWorkspace root={root} materials={materials} onClose={() => setMaterials(null)} onArchived={(result) => { setMaterials(null); setNotice(c.archiveSuccess); setActive(result); setCategory(result.kind === "note" ? "all" : result.kind); setTag(null); queryRef.current = ""; setQuery(""); void refresh(); }} />}
 

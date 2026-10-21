@@ -153,6 +153,13 @@ const zh = {
     propLink: "关联",
     propAttachments: "附件",
   },
+  /** 开发知识右栏（第三列）用到的少量标签 */
+  knowledgeRail: {
+    tags: "标签",
+    relatedNotes: "相关笔记",
+    sameFolder: "同目录",
+    noRelated: "同目录没有别的笔记",
+  },
   projects: {
     title: "项目管理",
     empty: "项目管理将在后续版本到来",
@@ -795,6 +802,13 @@ const en: typeof zh = {
     propNote: "Note",
     propLink: "Linked",
     propAttachments: "Files",
+  },
+  /** Labels for the third column on the Knowledge page */
+  knowledgeRail: {
+    tags: "Tags",
+    relatedNotes: "Related notes",
+    sameFolder: "Same folder",
+    noRelated: "Nothing else in this folder",
   },
   projects: {
     title: "Projects",
