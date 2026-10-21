@@ -11,7 +11,7 @@
 use crate::agenthub::models::*;
 use crate::agenthub::{copy_dir_recursive, dir_size_and_count, newest_mtime, now_iso, push_published, read_sidecar, safe_dir_name, slugify, stamp, write_json};
 use serde_json::{json, Value};
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 pub const SKILL_MD: &str = "SKILL.md";
 pub const HUB: &str = ".hub.json";
@@ -351,6 +351,7 @@ pub fn restore(skills_root: &Path, dir_name: &str, v: u32) -> Result<TbSkillDoc,
 mod tests {
     use super::*;
     use crate::agenthub::new_id as test_id;
+    use std::path::PathBuf;
 
     fn tmp() -> PathBuf {
         let dir = std::env::temp_dir().join(format!("nd-tb-skills-{}", test_id("t")));

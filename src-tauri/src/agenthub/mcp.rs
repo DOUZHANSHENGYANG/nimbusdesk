@@ -6,7 +6,6 @@
 use crate::agenthub::models::*;
 use crate::agenthub::{new_id, now_iso, push_version, read_json, safe_dir_name, write_json};
 use serde_json::{json, Map, Value};
-use std::collections::BTreeMap;
 use std::path::Path;
 
 pub fn list(mcp_root: &Path) -> Result<Vec<TbMcpServer>, String> {
@@ -166,6 +165,7 @@ pub fn merge_connection(old: &TbMcpServer, detected: &TbDetectedServer, harness:
 mod tests {
     use super::*;
     use crate::agenthub::new_id as test_id;
+    use std::collections::BTreeMap;
     use std::path::PathBuf;
 
     fn server(name: &str) -> TbMcpServer {
