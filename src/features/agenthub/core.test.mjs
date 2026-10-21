@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { addTags, filterItems, matchQuery, mcpNameProblem, removeTag, sizeLabel, timeLabel } from './core.ts';
+import { addTags, filterItems, formatPairs, matchQuery, mcpNameProblem, parsePairs, removeTag, sizeLabel, timeLabel } from './core.ts';
 
 test('搜索按多个词同时命中名字/描述/标签', () => {
   const items = [
@@ -51,4 +51,16 @@ test('MCP 名字里的分隔符会被挡下（别家工具的配置键不能带�
   assert.equal(mcpNameProblem('a/b'), 'separator');
   assert.equal(mcpNameProblem('a\\b'), 'separator');
   assert.equal(mcpNameProblem('filesystem'), null);
+});
+
+test('键值对文本按第一个等号切分，注释与空行被忽略', () => {
+  assert.deepEqual(parsePairs('# 注释\n\nFOO=bar\nURL=https://x?a=1&b=2\n空行= 值  '), {
+    FOO: 'bar',
+    URL: 'https://x?a=1&b=2',
+    空行: '值',
+  });
+  assert.deepEqual(parsePairs('没有等号\n=没有键'), {}, '坏行整条跳过而不是塞进门面');
+  assert.equal(formatPairs({ B: '2', A: '1' }), 'A=1\nB=2', '按键入排序便于比对');
+  assert.equal(parsePairs(formatPairs({ K: 'v=1' })).K, 'v=1', '往返不丢值里的等号');
+  assert.deepEqual(formatPairs({}), '');
 });

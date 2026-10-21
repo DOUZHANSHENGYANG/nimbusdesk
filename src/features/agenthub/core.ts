@@ -75,3 +75,31 @@ export function mcpNameProblem(name: string): "empty" | "separator" | null {
   if (/[\\/]/.test(name)) return "separator";
   return null;
 }
+
+/**
+ * 环境变量 / 请求头这类「键值对」用一行一条 `KEY=value` 的文本编辑。
+ *
+ * 用文本而不是逐行输入框：MCP 的环境变量通常是从文档整段粘过来的，
+ * 粘贴一次比敲十几个输入框快得多。只按**第一个** `=` 切分，
+ * 所以 value 里再出现 `=` 或 URL 查询串不会被打断。
+ */
+export function parsePairs(text: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const line of text.split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const at = trimmed.indexOf("=");
+    if (at <= 0) continue;
+    const key = trimmed.slice(0, at).trim();
+    if (key) out[key] = trimmed.slice(at + 1).trim();
+  }
+  return out;
+}
+
+/** 键值对 → 一行一条文本（键排序，便于人眼比对）。 */
+export function formatPairs(map: Record<string, string>): string {
+  return Object.keys(map)
+    .sort()
+    .map((key) => `${key}=${map[key]}`)
+    .join("\n");
+}

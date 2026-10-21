@@ -49,6 +49,10 @@
 .toolbox-tag-add { display:inline-flex; align-items:center; gap:4px; height:20px; padding:0 7px; border:1px dashed var(--workbench-line); border-radius:999px; color:var(--muted-foreground); font-size:10px; }
 .toolbox-tag-add svg { width:10px; height:10px; }
 .toolbox-tag-input { width:110px; height:20px; padding:0 7px; border:1px solid var(--workbench-line); border-radius:999px; background:var(--workbench-raised); font-size:10px; }
+.toolbox-badge { display:inline-flex; align-items:center; height:17px; padding:0 6px; border-radius:999px; background:var(--secondary); color:var(--muted-foreground); font-size:9.5px; }
+.toolbox-inline-switch { display:inline-flex; align-items:center; gap:7px; min-height:32px; padding:0 6px; font-size:11px; color:var(--muted-foreground); }
+.toolbox-field select { height:32px; padding:0 10px; border:1px solid var(--workbench-line); border-radius:8px; background:var(--workbench-raised); color:var(--foreground); font-size:12.5px; }
+.toolbox-field select:focus-visible { border-color:color-mix(in srgb,var(--ring) 70%,var(--workbench-line)); }
 
 .toolbox-detail { display:flex; flex-direction:column; gap:12px; min-width:0; min-height:0; }
 .toolbox-detail-head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; flex-shrink:0; }
