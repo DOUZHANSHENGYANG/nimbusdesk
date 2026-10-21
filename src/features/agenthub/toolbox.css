@@ -1,0 +1,95 @@
+/* 工具箱（AgentHub 迁移）：技能 / 提示词 / MCP / 本机工具。
+   材质与间距全部走 tokens.css 的语义 token 与 --pr-* 原始名，不写死色值。 */
+
+.toolbox { display:flex; flex-direction:column; height:100%; min-width:0; overflow:hidden; font-size:13px; }
+.toolbox-header { display:flex; align-items:center; justify-content:space-between; gap:24px; flex-shrink:0; min-height:76px; padding:16px 30px; border-bottom:1px solid var(--workbench-line); }
+.toolbox-header h1 { font-size:20px; font-weight:650; line-height:1.3; letter-spacing:-.025em; }
+.toolbox-header p { margin-top:4px; color:var(--muted-foreground); font-size:11.5px; }
+.toolbox-root { display:flex; align-items:center; gap:8px; min-width:0; max-width:46%; padding:6px 9px; border:1px solid var(--workbench-line); border-radius:8px; color:var(--muted-foreground); font-size:11px; }
+.toolbox-root:hover { color:var(--foreground); background:var(--accent); }
+.toolbox-root svg { width:13px; height:13px; flex-shrink:0; }
+.toolbox-root code { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-family:var(--font-mono); font-size:10.5px; direction:rtl; text-align:left; }
+
+.toolbox-tabs { display:flex; align-items:center; gap:4px; flex-shrink:0; padding:12px 30px 0; }
+.toolbox-tabs > button { display:inline-flex; align-items:center; gap:7px; min-height:32px; padding:6px 12px; border-radius:8px; color:var(--muted-foreground); font-size:12px; }
+.toolbox-tabs > button:hover { color:var(--foreground); background:var(--surface-hover); }
+.toolbox-tabs > button[aria-current="page"] { color:var(--accent-foreground); background:var(--accent); font-weight:550; }
+.toolbox-tabs svg { width:15px; height:15px; }
+
+.toolbox-body { flex:1; min-height:0; padding:16px 30px 22px; }
+.toolbox-split { display:grid; grid-template-columns:minmax(220px,300px) minmax(0,1fr); gap:18px; height:100%; min-height:0; }
+.toolbox-column { display:flex; flex-direction:column; min-width:0; min-height:0; }
+.toolbox-column-panel { overflow-y:auto; scrollbar-gutter:stable; }
+
+.toolbox-toolbar { display:flex; align-items:center; gap:8px; flex-shrink:0; margin-bottom:12px; }
+.toolbox-search { display:flex; align-items:center; gap:8px; flex:1; min-width:0; height:32px; padding:0 10px; border:1px solid var(--workbench-line); border-radius:8px; background:var(--workbench-raised); }
+.toolbox-search:focus-within { border-color:color-mix(in srgb,var(--ring) 70%,var(--workbench-line)); }
+.toolbox-search svg { width:14px; height:14px; flex-shrink:0; color:var(--muted-foreground); }
+.toolbox-search input { flex:1; min-width:0; border:0; background:transparent; outline:0; font-size:12.5px; }
+.toolbox-icon-button { display:grid; place-items:center; width:32px; height:32px; flex-shrink:0; border:1px solid var(--workbench-line); border-radius:8px; color:var(--muted-foreground); }
+.toolbox-icon-button:hover { color:var(--foreground); background:var(--accent); }
+.toolbox-icon-button svg { width:15px; height:15px; }
+
+.toolbox-list { display:flex; flex-direction:column; gap:2px; }
+.toolbox-row { display:flex; flex-direction:column; gap:4px; width:100%; padding:9px 10px; border-radius:9px; text-align:left; }
+.toolbox-row:hover { background:var(--surface-hover); }
+.toolbox-row[aria-current="true"] { background:var(--accent); }
+.toolbox-row-head { display:flex; align-items:center; gap:8px; min-width:0; }
+.toolbox-row-head strong { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:12.5px; font-weight:550; }
+.toolbox-row-head svg { width:12px; height:12px; flex-shrink:0; color:var(--brand); }
+.toolbox-row p { display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; overflow:hidden; color:var(--muted-foreground); font-size:11px; line-height:1.5; }
+.toolbox-row-meta { display:flex; align-items:center; gap:8px; color:var(--muted-foreground); font-size:10px; font-variant-numeric:tabular-nums; }
+.toolbox-row-meta svg { width:11px; height:11px; }
+
+.toolbox-tags { display:flex; flex-wrap:wrap; align-items:center; gap:4px; }
+.toolbox-tag { display:inline-flex; align-items:center; gap:4px; height:20px; padding:0 7px; border-radius:999px; background:var(--secondary); color:var(--secondary-foreground); font-size:10px; }
+.toolbox-tag button { display:grid; place-items:center; color:inherit; opacity:.6; }
+.toolbox-tag button:hover { opacity:1; }
+.toolbox-tag svg { width:10px; height:10px; }
+.toolbox-tag-add { display:inline-flex; align-items:center; gap:4px; height:20px; padding:0 7px; border:1px dashed var(--workbench-line); border-radius:999px; color:var(--muted-foreground); font-size:10px; }
+.toolbox-tag-add svg { width:10px; height:10px; }
+.toolbox-tag-input { width:110px; height:20px; padding:0 7px; border:1px solid var(--workbench-line); border-radius:999px; background:var(--workbench-raised); font-size:10px; }
+
+.toolbox-detail { display:flex; flex-direction:column; gap:12px; min-width:0; min-height:0; }
+.toolbox-detail-head { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; flex-shrink:0; }
+.toolbox-detail-head h2 { font-size:16px; font-weight:600; letter-spacing:-.02em; }
+.toolbox-detail-head code { display:block; margin-top:3px; color:var(--muted-foreground); font-family:var(--font-mono); font-size:10.5px; word-break:break-all; }
+.toolbox-field { display:flex; flex-direction:column; gap:6px; min-width:0; }
+.toolbox-field > label { display:flex; align-items:baseline; justify-content:space-between; gap:8px; font-size:11px; font-weight:550; color:var(--muted-foreground); }
+.toolbox-field > label em { font-style:normal; font-weight:400; font-size:10px; }
+.toolbox-field textarea { width:100%; padding:10px 12px; border:1px solid var(--workbench-line); border-radius:10px; background:var(--workbench-raised); outline:0; resize:vertical; font-size:12.5px; line-height:1.7; }
+.toolbox-field textarea:focus-visible { border-color:color-mix(in srgb,var(--ring) 70%,var(--workbench-line)); box-shadow:0 0 0 3px color-mix(in srgb,var(--ring) 11%,transparent); }
+.toolbox-field textarea.mono { font-family:var(--font-mono); font-size:12px; tab-size:2; }
+.toolbox-field textarea.grow { flex:1; min-height:200px; resize:none; }
+.toolbox-grid-2 { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:10px; }
+.toolbox-actions { display:flex; flex-wrap:wrap; align-items:center; gap:8px; flex-shrink:0; }
+.toolbox-actions .spacer { flex:1; }
+.toolbox-hint { color:var(--muted-foreground); font-size:10.5px; line-height:1.6; }
+.toolbox-danger { color:var(--destructive); }
+
+.toolbox-versions { display:flex; flex-direction:column; gap:2px; max-height:150px; overflow-y:auto; scrollbar-gutter:stable; }
+.toolbox-version { display:flex; align-items:center; gap:8px; padding:6px 8px; border-radius:7px; font-size:11px; }
+.toolbox-version:hover { background:var(--surface-hover); }
+.toolbox-version strong { font-variant-numeric:tabular-nums; font-weight:550; }
+.toolbox-version time { color:var(--muted-foreground); font-size:10px; }
+.toolbox-version button { margin-left:auto; color:var(--accent-foreground); font-size:10.5px; }
+
+.toolbox-empty { display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; flex:1; min-height:160px; padding:24px; color:var(--muted-foreground); text-align:center; font-size:12px; }
+.toolbox-empty svg { width:26px; height:26px; opacity:.55; }
+.toolbox-error { padding:9px 12px; border:1px solid color-mix(in srgb,var(--destructive) 40%,transparent); border-radius:9px; background:color-mix(in srgb,var(--destructive) 9%,transparent); color:var(--destructive); font-size:11.5px; line-height:1.6; }
+.toolbox-notice { padding:9px 12px; border-radius:9px; background:var(--surface-hover); color:var(--muted-foreground); font-size:11px; line-height:1.6; }
+
+/* ── 分发到本机工具（阶段三）── */
+.toolbox-tools { display:flex; flex-direction:column; gap:10px; overflow-y:auto; scrollbar-gutter:stable; }
+.toolbox-tool-card { display:flex; flex-direction:column; gap:8px; padding:14px 16px; border:1px solid var(--workbench-line); border-radius:12px; background:var(--workbench-raised); }
+.toolbox-tool-head { display:flex; align-items:center; gap:9px; }
+.toolbox-tool-head svg { width:15px; height:15px; color:var(--brand); }
+.toolbox-tool-head strong { font-size:13px; font-weight:600; }
+.toolbox-tool-head span { margin-left:auto; color:var(--muted-foreground); font-size:10px; }
+.toolbox-tool-path { color:var(--muted-foreground); font-family:var(--font-mono); font-size:10.5px; word-break:break-all; }
+.toolbox-detected { display:flex; flex-wrap:wrap; gap:6px; }
+.toolbox-detected > button { display:inline-flex; align-items:center; gap:6px; min-height:26px; padding:4px 9px; border:1px solid var(--workbench-line); border-radius:999px; color:var(--foreground); font-size:11px; }
+.toolbox-detected > button:hover { background:var(--accent); }
+.toolbox-detected svg { width:12px; height:12px; color:var(--muted-foreground); }
+.toolbox-notes { display:flex; flex-direction:column; gap:3px; }
+.toolbox-notes span { color:var(--warning); font-size:10.5px; }

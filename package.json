@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "check:tools": "node --test src/features/tools/core.test.mjs src/features/quick-tools/core.test.mjs",
+    "check:toolbox": "node --test src/features/agenthub/core.test.mjs",
     "check:search": "node --test src/features/search/core.test.mjs",
     "check:projects": "node --test src/features/projects/core.test.mjs src/features/projects/store.test.mjs src/features/projects/runtime-core.test.mjs src/features/projects/backup.test.mjs src/features/projects/project-files.test.mjs src/features/projects/zentao-core.test.mjs src/features/projects/zentao-controller.test.mjs src/features/projects/zentao-store.test.mjs src/features/projects/zentao-runtime.test.mjs src/features/projects/zentao-writeback-core.test.mjs src/features/projects/zentao-writeback-controller.test.mjs",
     "dev": "vite",
@@ -14,7 +15,7 @@
     "check:i18n": "node scripts/check-i18n.mjs",
     "check:rust": "cargo test --manifest-path src-tauri/Cargo.toml --lib",
     "check:knowledge": "node --test src/features/knowledge/background-organization-core.test.mjs src/features/knowledge/background-organization.test.mjs src/features/knowledge/auto-organize.test.mjs src/features/knowledge/recipe.test.mjs src/features/knowledge/organize.test.mjs src/features/knowledge/markdown-links.test.mjs src/features/knowledge/metadata.test.mjs src/features/knowledge/reader-presentation.test.mjs src/features/ai/core.test.mjs src/features/ai/setup.test.mjs src/features/knowledge/folders.test.mjs src/features/knowledge/shortcut-keys.test.mjs src/features/knowledge/organization-materials.test.mjs",
-    "verify": "npm run check:i18n && npm run check:contrast && npm run check:preview && tsc --noEmit && npm run check:tools && npm run check:search && npm run check:feeds && npm run check:knowledge && npm run check:desktop && npm run check:plans && npm run check:projects && npm run check:rust",
+    "verify": "npm run check:i18n && npm run check:contrast && npm run check:preview && tsc --noEmit && npm run check:tools && npm run check:toolbox && npm run check:search && npm run check:feeds && npm run check:knowledge && npm run check:desktop && npm run check:plans && npm run check:projects && npm run check:rust",
     "check:feeds": "node --test src/features/feeds/reliability.test.mjs",
     "check:contrast": "node scripts/check-contrast.mjs",
     "build:preview": "node scripts/build-preview.mjs",

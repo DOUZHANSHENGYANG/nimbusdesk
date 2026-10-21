@@ -1,4 +1,4 @@
-import { Home, FolderKanban, CalendarCheck2, Folders, Newspaper, BookOpen, Wrench } from "lucide-react";
+import { Home, FolderKanban, CalendarCheck2, Folders, Newspaper, BookOpen, Wrench, Boxes } from "lucide-react";
 
 /** Sidebar and context menu share the same destinations and labels. */
 export const NAV_ITEMS = [
@@ -9,4 +9,5 @@ export const NAV_ITEMS = [
   { to: "/feeds", key: "nav.feeds", icon: Newspaper },
   { to: "/knowledge", key: "nav.knowledge", icon: BookOpen },
   { to: "/tools", key: "nav.tools", icon: Wrench },
+  { to: "/toolbox", key: "nav.toolbox", icon: Boxes },
 ] as const;

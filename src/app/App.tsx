@@ -16,6 +16,7 @@ import { SettingsPage } from "@/features/settings/page";
 import { KnowledgePage } from "@/features/knowledge/page";
 import { OrganizationActivity } from "@/features/knowledge/organization-activity";
 import { ToolsPage } from "@/features/tools/page";
+import { ToolboxPage } from "@/features/agenthub/page";
 import { AppContextMenu } from "@/components/shell/app-context-menu";
 
 function SearchNavigationBridge() {
@@ -61,6 +62,7 @@ function Shell() {
               <Route path="/feeds" element={<FeedsPage />} />
               <Route path="/knowledge" element={<KnowledgePage />} />
               <Route path="/tools" element={<ToolsPage />} />
+              <Route path="/toolbox" element={<ToolboxPage />} />
               <Route path="/settings" element={<SettingsPage />} />
             </Routes>
           </PageTransition>

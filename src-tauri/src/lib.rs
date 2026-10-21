@@ -12,6 +12,7 @@ mod tray;
 mod organization_clock;
 mod search;
 mod quick_tools;
+mod agenthub;
 
 /// Entry used by the executable before initializing any UI or background tasks.
 pub fn run_quick_tools_selection_worker() -> bool { quick_tools::worker::run_if_worker() }
@@ -143,6 +144,28 @@ pub fn run() {
             commands::shellicon::native_icon,
             commands::fileops::ensure_dir,
             commands::shellicon::native_icons,
+            commands::agenthub::tb_root,
+            commands::agenthub::tb_root_reveal,
+            commands::agenthub::tb_skill_list,
+            commands::agenthub::tb_skill_read,
+            commands::agenthub::tb_skill_save,
+            commands::agenthub::tb_skill_create,
+            commands::agenthub::tb_skill_delete,
+            commands::agenthub::tb_skill_import,
+            commands::agenthub::tb_skill_reveal,
+            commands::agenthub::tb_prompt_list,
+            commands::agenthub::tb_prompt_save,
+            commands::agenthub::tb_prompt_delete,
+            commands::agenthub::tb_prompt_restore,
+            commands::agenthub::tb_skill_restore,
+            commands::agenthub::tb_mcp_list,
+            commands::agenthub::tb_mcp_save,
+            commands::agenthub::tb_mcp_delete,
+            commands::agenthub::tb_mcp_export,
+            commands::agenthub::tb_harness_scan,
+            commands::agenthub::tb_harness_collect,
+            commands::agenthub::tb_harness_push,
+            commands::agenthub::tb_harness_remove,
         ])
         .setup(|app| {
             tray::create(app)?;
