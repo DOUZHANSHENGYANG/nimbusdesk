@@ -1,14 +1,15 @@
 import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
-import { FolderOpen, KeyRound, Plug, Sparkles } from "lucide-react";
+import { FolderOpen, KeyRound, Plug, Sparkles, Terminal } from "lucide-react";
 import { tbRoot, tbRootReveal, type TbRoots } from "./api";
+import { HarnessView } from "./harness-view";
 import { McpView } from "./mcp-view";
 import { PromptsView } from "./prompts-view";
 import { SkillsView } from "./skills-view";
 import "./toolbox.css";
 
-type Tab = "skills" | "prompts" | "mcp";
+type Tab = "skills" | "prompts" | "mcp" | "harness";
 
 /**
  * 工具箱：把散落在各 AI 工具里的技能、提示词、MCP 配置收拢到一处。
@@ -29,6 +30,7 @@ export function ToolboxPage() {
     { id: "skills", label: t("toolbox.tabSkills"), icon: Sparkles },
     { id: "prompts", label: t("toolbox.tabPrompts"), icon: KeyRound },
     { id: "mcp", label: t("toolbox.tabMcp"), icon: Plug },
+    { id: "harness", label: t("toolbox.tabHarness"), icon: Terminal },
   ];
 
   return (
@@ -66,7 +68,7 @@ export function ToolboxPage() {
       </nav>
 
       <div className="toolbox-body">
-        {tab === "skills" ? <SkillsView /> : tab === "prompts" ? <PromptsView /> : <McpView />}
+        {tab === "skills" ? <SkillsView /> : tab === "prompts" ? <PromptsView /> : tab === "mcp" ? <McpView /> : <HarnessView />}
       </div>
     </div>
   );

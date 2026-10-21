@@ -97,3 +97,7 @@
 .toolbox-detected svg { width:12px; height:12px; color:var(--muted-foreground); }
 .toolbox-notes { display:flex; flex-direction:column; gap:3px; }
 .toolbox-notes span { color:var(--warning); font-size:10.5px; }
+.toolbox-detected em { color:var(--muted-foreground); font-style:normal; font-size:9.5px; }
+.toolbox-notice-head { font-weight:550; color:var(--foreground); }
+.toolbox-notice-backup { display:flex; align-items:flex-start; gap:6px; margin-top:4px; color:var(--success); font-family:var(--font-mono); font-size:10px; word-break:break-all; }
+.toolbox-notice-backup svg { flex-shrink:0; margin-top:1px; }

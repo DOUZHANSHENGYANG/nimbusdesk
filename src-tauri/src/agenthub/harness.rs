@@ -723,6 +723,46 @@ mod tests {
     }
 
     #[test]
+    fn scan_reports_every_builtin_tool_with_a_usable_shape() {
+        let reports = scan();
+        assert!(reports.len() >= 13, "内置工具表不该缩水：{}", reports.len());
+        for report in &reports {
+            assert!(!report.id.is_empty() && !report.name.is_empty());
+            assert!(
+                report.supports_mcp || report.supports_skills,
+                "{} 既不会读 MCP 也没有技能目录，列出来没有意义",
+                report.id
+            );
+            // 找到了技能目录就说明这个工具在这台机器上用过
+            if !report.skills_dirs.is_empty() {
+                assert!(report.exists, "{} 找到了技能目录却报不存在", report.id);
+            }
+            // 探测是只读的：不存在的路径不该出现在技能目录列表里
+            for dir in &report.skills_dirs {
+                assert!(std::path::Path::new(dir).is_dir(), "{dir} 不是目录却被列了出来");
+            }
+        }
+    }
+
+    /// 本机探测结果人工核对（默认 ignore，因为断言的是"这台机器"而不是代码）：
+    /// `cargo test --lib agenthub::harness -- --ignored --nocapture`
+    #[test]
+    #[ignore]
+    fn prints_this_machine_scan() {
+        for report in scan() {
+            println!(
+                "{} [{}] exists={} mcp={} skills={} notes={:?}",
+                report.name,
+                report.id,
+                report.exists,
+                report.mcp_servers.iter().map(|s| s.name.as_str()).collect::<Vec<_>>().join(","),
+                report.skills.iter().map(|s| s.name.as_str()).collect::<Vec<_>>().join(","),
+                report.notes.iter().map(|n| n.code.as_str()).collect::<Vec<_>>()
+            );
+        }
+    }
+
+    #[test]
     fn detects_the_three_json_shapes() {
         let dir = tmp("shapes");
         let flat = dir.join("flat.json");
