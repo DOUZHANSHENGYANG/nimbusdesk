@@ -1,9 +1,12 @@
 //! Native OpenAI-compatible requests and Windows credential storage.
 
 use base64::Engine;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::collections::HashMap;
 use std::io::Read;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
 
 static LEGACY_MIGRATION_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
@@ -573,6 +576,314 @@ pub async fn ai_finalize_legacy_migration(id: String) -> Result<(), String> {
     .map_err(|_| "AI_TASK_FAILED")?
 }
 
+/* ── 带密钥的流式转发（AI 面板的 fetch 接缝）────────────────────────
+
+   渲染进程拿不到凭据（凭据只在 Rust 侧），而 WebView 直连过不了 CORS
+   （origin 是 tauri.localhost，服务商不返回 CORS 头）。于是由这一个命令
+   把「注入密钥 + 绕 CORS + 流式回传」一次做完；上层（AI SDK 的 provider
+   与工具循环）只看到一个普通的 fetch，不感知 Rust。                      */
+
+/// 单个流的总字节上限。
+const FETCH_MAX_BYTES: usize = 32 * 1024 * 1024;
+/// 行数上限：防止「极短行 + 永不停」把内存吃光。
+const FETCH_MAX_LINES: usize = 400_000;
+const FETCH_MAX_HEADERS: usize = 32;
+const FETCH_MAX_HEADER_VALUE: usize = 8 * 1024;
+const FETCH_MAX_BODY: usize = 32 * 1024 * 1024;
+
+/// 这些请求头由本命令决定，前端传来的同名头一律丢弃（尤其是 Authorization——
+/// 否则前端就能用它把用户凭据带去打别的接口）。
+const DROPPED_REQUEST_HEADERS: [&str; 8] = [
+    "host",
+    "authorization",
+    "content-length",
+    "connection",
+    "transfer-encoding",
+    "content-encoding",
+    "accept-encoding",
+    "cookie",
+];
+/// 这些响应头不能回传：按行重切后 content-length 已不成立，压缩已由 reqwest 处理。
+const DROPPED_RESPONSE_HEADERS: [&str; 5] = [
+    "content-length",
+    "transfer-encoding",
+    "connection",
+    "content-encoding",
+    "keep-alive",
+];
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct FetchInput {
+    provider_id: String,
+    base_url: String,
+    url: String,
+    method: String,
+    headers: Vec<(String, String)>,
+    #[serde(default)]
+    body: Option<String>,
+}
+
+impl FetchInput {
+    fn validate(&self) -> Result<(), String> {
+        if !matches!(self.method.as_str(), "GET" | "POST") {
+            return Err("AI_INVALID_METHOD".into());
+        }
+        if self.headers.len() > FETCH_MAX_HEADERS
+            || self.headers.iter().any(|(name, value)| {
+                name.is_empty()
+                    || name.len() > 128
+                    || name.contains(['\r', '\n', ':'])
+                    || value.len() > FETCH_MAX_HEADER_VALUE
+                    || value.contains(['\r', '\n'])
+            })
+        {
+            return Err("AI_INVALID_HEADERS".into());
+        }
+        if self
+            .body
+            .as_ref()
+            .is_some_and(|body| body.len() > FETCH_MAX_BODY)
+        {
+            return Err("AI_REQUEST_TOO_LARGE".into());
+        }
+        Ok(())
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase", tag = "kind")]
+pub enum FetchEvent {
+    Head {
+        status: u16,
+        headers: Vec<(String, String)>,
+    },
+    Chunk {
+        text: String,
+    },
+    End,
+    Err {
+        message: String,
+    },
+}
+
+/// 取一个 URL 的「来源」（scheme + host + 有效端口），顺带拒掉非 http(s)。
+fn origin_of(url: &reqwest::Url) -> Result<(String, String, u16), String> {
+    if !matches!(url.scheme(), "http" | "https")
+        || url.host_str().is_none()
+        || !url.username().is_empty()
+        || url.password().is_some()
+        || url.fragment().is_some()
+    {
+        return Err("AI_INVALID_URL".into());
+    }
+    let host = url.host_str().unwrap_or_default().to_ascii_lowercase();
+    let port = url.port_or_known_default().ok_or("AI_INVALID_URL")?;
+    Ok((url.scheme().to_string(), host, port))
+}
+
+/// `ai_fetch` 会按 providerId 注入真实密钥，所以目标地址必须与服务商 baseUrl
+/// 同源 —— 否则这个命令就是一把「拿着用户 Key 打任意地址」的跳板。
+fn validate_same_origin(base_url: &str, target: &str) -> Result<reqwest::Url, String> {
+    let base = reqwest::Url::parse(base_url.trim()).map_err(|_| "AI_INVALID_URL")?;
+    let url = reqwest::Url::parse(target.trim()).map_err(|_| "AI_INVALID_URL")?;
+    if origin_of(&url)? != origin_of(&base)? {
+        return Err("AI_ORIGIN_MISMATCH".into());
+    }
+    Ok(url)
+}
+
+/// 按完整 `\n` 行切分字节流：跨 chunk 的多字节字符留在残余缓冲里，不会被劈成两半。
+#[derive(Default)]
+struct LineChunker {
+    residue: Vec<u8>,
+    lines: usize,
+    bytes: usize,
+}
+
+impl LineChunker {
+    fn push(&mut self, chunk: &[u8]) -> Result<Vec<String>, String> {
+        self.bytes += chunk.len();
+        if self.bytes > FETCH_MAX_BYTES {
+            return Err("AI_RESPONSE_TOO_LARGE".into());
+        }
+        self.residue.extend_from_slice(chunk);
+        let mut lines = Vec::new();
+        while let Some(end) = self.residue.iter().position(|byte| *byte == b'\n') {
+            let line: Vec<u8> = self.residue.drain(..=end).collect();
+            self.lines += 1;
+            if self.lines > FETCH_MAX_LINES {
+                return Err("AI_RESPONSE_TOO_LARGE".into());
+            }
+            lines.push(String::from_utf8_lossy(&line).into_owned());
+        }
+        Ok(lines)
+    }
+
+    /// 收尾：没有以 `\n` 结尾的尾巴也要发出去，否则最后一行会丢。
+    fn flush(&mut self) -> Option<String> {
+        (!self.residue.is_empty())
+            .then(|| String::from_utf8_lossy(&std::mem::take(&mut self.residue)).into_owned())
+    }
+}
+
+fn stream_fetch(
+    input: &FetchInput,
+    url: reqwest::Url,
+    secret: Option<String>,
+    cancelled: Arc<AtomicBool>,
+    emit: &mut dyn FnMut(FetchEvent) -> bool,
+) {
+    let client = match reqwest::blocking::Client::builder()
+        .connect_timeout(Duration::from_secs(10))
+        /*
+         * 刻意不设整请求 timeout：request_chat 那个 90s 会连读 body 一起管，
+         * 长流会被拦腰砍断。读空闲超时交给前端看门狗。
+         */
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+    {
+        Ok(client) => client,
+        Err(_) => {
+            emit(FetchEvent::Err {
+                message: "AI_NETWORK_ERROR".into(),
+            });
+            return;
+        }
+    };
+    let mut request = if input.method == "GET" {
+        client.get(url)
+    } else {
+        client.post(url)
+    };
+    for (name, value) in &input.headers {
+        if DROPPED_REQUEST_HEADERS.contains(&name.to_ascii_lowercase().as_str()) {
+            continue;
+        }
+        request = request.header(name, value);
+    }
+    // 流式不要内容编码：reqwest 带着 gzip 特性，服务端一压缩 SSE 就会攒成一坨。
+    request = request.header(reqwest::header::ACCEPT_ENCODING, "identity");
+    if let Some(key) = secret.filter(|key| !key.is_empty()) {
+        request = request.bearer_auth(key);
+    }
+    if let Some(body) = &input.body {
+        request = request.body(body.clone());
+    }
+    let mut response = match request.send() {
+        Ok(response) => response,
+        Err(_) => {
+            emit(FetchEvent::Err {
+                message: "AI_NETWORK_ERROR".into(),
+            });
+            return;
+        }
+    };
+    let status = response.status().as_u16();
+    let headers: Vec<(String, String)> = response
+        .headers()
+        .iter()
+        .filter(|(name, _)| !DROPPED_RESPONSE_HEADERS.contains(&name.as_str()))
+        .map(|(name, value)| {
+            (
+                name.as_str().to_string(),
+                value.to_str().unwrap_or_default().to_string(),
+            )
+        })
+        .collect();
+    // 4xx/5xx 也照常回传：AI SDK 要靠状态码与响应体拼出可读的错误。
+    if !emit(FetchEvent::Head { status, headers }) {
+        return;
+    }
+    let mut chunker = LineChunker::default();
+    let mut buffer = [0u8; 16 * 1024];
+    loop {
+        if cancelled.load(Ordering::Relaxed) {
+            break;
+        }
+        let size = match response.read(&mut buffer) {
+            Ok(0) => break,
+            Ok(size) => size,
+            Err(_) => {
+                if !cancelled.load(Ordering::Relaxed) {
+                    emit(FetchEvent::Err {
+                        message: "AI_NETWORK_ERROR".into(),
+                    });
+                }
+                return;
+            }
+        };
+        match chunker.push(&buffer[..size]) {
+            Ok(lines) => {
+                for line in lines {
+                    if !emit(FetchEvent::Chunk { text: line }) {
+                        return;
+                    }
+                }
+            }
+            Err(message) => {
+                emit(FetchEvent::Err { message });
+                return;
+            }
+        }
+    }
+    if let Some(tail) = chunker.flush() {
+        if !emit(FetchEvent::Chunk { text: tail }) {
+            return;
+        }
+    }
+    emit(FetchEvent::End);
+}
+
+/// 同一个服务商只留一条活流；取消按 providerId 打标记。
+fn cancel_flags() -> &'static Mutex<HashMap<String, Arc<AtomicBool>>> {
+    static FLAGS: OnceLock<Mutex<HashMap<String, Arc<AtomicBool>>>> = OnceLock::new();
+    FLAGS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+#[tauri::command]
+pub async fn ai_fetch(
+    input: FetchInput,
+    on_event: tauri::ipc::Channel<FetchEvent>,
+) -> Result<(), String> {
+    validate_id(&input.provider_id)?;
+    input.validate()?;
+    let url = validate_same_origin(&input.base_url, &input.url)?;
+    let secret = credentials::read(&input.provider_id)?;
+    let cancelled = Arc::new(AtomicBool::new(false));
+    if let Some(previous) = cancel_flags()
+        .lock()
+        .map_err(|_| "AI_TASK_FAILED")?
+        .insert(input.provider_id.clone(), cancelled.clone())
+    {
+        previous.store(true, Ordering::Relaxed);
+    }
+    let provider_id = input.provider_id.clone();
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        let mut emit = |event: FetchEvent| on_event.send(event).is_ok();
+        stream_fetch(&input, url, secret, cancelled, &mut emit);
+    })
+    .await
+    .map_err(|_| "AI_TASK_FAILED".to_string());
+    if let Ok(mut flags) = cancel_flags().lock() {
+        flags.remove(&provider_id);
+    }
+    result
+}
+
+#[tauri::command]
+pub async fn ai_fetch_cancel(provider_id: String) -> Result<(), String> {
+    validate_id(&provider_id)?;
+    if let Some(flag) = cancel_flags()
+        .lock()
+        .map_err(|_| "AI_TASK_FAILED")?
+        .get(&provider_id)
+    {
+        flag.store(true, Ordering::Relaxed);
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -955,5 +1266,227 @@ mod tests {
             std::fs::read_to_string(dir.join("ai-settings.json")).unwrap(),
             old
         );
+    }
+
+    #[test]
+    fn fetch_refuses_targets_outside_the_provider_origin() {
+        // 每一条都必须是「拿着用户 Key 打别处」的入口，全部拒掉。
+        for (base, target) in [
+            ("https://api.openai.com/v1", "https://evil.com/v1/chat/completions"),
+            ("https://api.openai.com/v1", "http://api.openai.com/v1/chat/completions"),
+            ("https://api.openai.com/v1", "https://api.openai.com:8443/v1/chat/completions"),
+            ("https://api.openai.com/v1", "https://127.0.0.1/v1/chat/completions"),
+            ("https://api.openai.com/v1", "https://api.openai.com.evil.com/v1/chat/completions"),
+            ("http://127.0.0.1:11434/v1", "http://127.0.0.1:9/v1/chat/completions"),
+        ] {
+            assert_eq!(
+                validate_same_origin(base, target).unwrap_err(),
+                "AI_ORIGIN_MISMATCH",
+                "{base} -> {target}"
+            );
+        }
+        // 目标地址自带用户名/口令：同源比对之前就被判非法。
+        assert_eq!(
+            validate_same_origin(
+                "https://api.openai.com/v1",
+                "https://user:secret@api.openai.com/v1/chat/completions"
+            )
+            .unwrap_err(),
+            "AI_INVALID_URL"
+        );
+        // 非 http(s) 的 scheme 连 baseUrl 这一关都过不去。
+        for url in ["file:///etc/passwd", "data:text/plain,x", "javascript:alert(1)"] {
+            assert_eq!(validate_same_origin(url, url).unwrap_err(), "AI_INVALID_URL");
+            assert_eq!(
+                validate_same_origin("https://api.openai.com/v1", url).unwrap_err(),
+                "AI_INVALID_URL"
+            );
+        }
+    }
+
+    #[test]
+    fn fetch_allows_same_origin_paths_and_equivalent_ports() {
+        for (base, target) in [
+            ("https://api.openai.com/v1", "https://api.openai.com/v1/chat/completions"),
+            ("https://api.openai.com/v1/", "https://api.openai.com/v1/chat/completions?x=1"),
+            ("https://API.OpenAI.com/v1", "https://api.openai.com/v1/chat/completions"),
+            // 缺省端口与显式默认端口是同一个来源
+            ("https://api.openai.com/v1", "https://api.openai.com:443/v1/chat/completions"),
+            ("http://127.0.0.1:11434/v1", "http://127.0.0.1:11434/v1/chat/completions"),
+        ] {
+            assert!(validate_same_origin(base, target).is_ok(), "{base} -> {target}");
+        }
+    }
+
+    #[test]
+    fn fetch_rejects_unsafe_request_shapes_before_connecting() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        listener.set_nonblocking(true).unwrap();
+        let base = format!("http://{}/v1", listener.local_addr().unwrap());
+        let shape = |method: &str, headers: Vec<(String, String)>, body: Option<String>| FetchInput {
+            provider_id: "test".into(),
+            base_url: base.clone(),
+            url: format!("{base}/chat/completions"),
+            method: method.into(),
+            headers,
+            body,
+        };
+        for input in [
+            shape("DELETE", vec![], None),
+            shape("POST", vec![("Host".into(), "evil.com".into()); 33], None),
+            shape("POST", vec![("x-bad\r\nx".into(), "v".into())], None),
+            shape("POST", vec![("x".into(), "v\nv".into())], None),
+            shape("POST", vec![], Some("x".repeat(FETCH_MAX_BODY + 1))),
+        ] {
+            assert!(input.validate().is_err());
+        }
+        assert!(shape("POST", vec![("x".into(), "y".into())], Some("{}".into())).validate().is_ok());
+        assert_eq!(
+            listener.accept().unwrap_err().kind(),
+            std::io::ErrorKind::WouldBlock
+        );
+    }
+
+    #[test]
+    fn line_chunker_keeps_split_multibyte_characters_intact() {
+        let mut chunker = LineChunker::default();
+        let bytes = "你好，完成。\n".as_bytes();
+        // 在「好」的第二个字节上劈开：这一块里没有任何完整行。
+        let cut = "你".len() + 1;
+        assert!(chunker.push(&bytes[..cut]).unwrap().is_empty());
+        assert_eq!(
+            chunker.push(&bytes[cut..]).unwrap(),
+            vec!["你好，完成。\n".to_string()]
+        );
+
+        // 没有换行收尾的尾巴靠 flush 补上，不丢字。
+        let mut chunker = LineChunker::default();
+        assert_eq!(
+            chunker.push("data: 完成".as_bytes()).unwrap(),
+            Vec::<String>::new()
+        );
+        assert_eq!(chunker.flush(), Some("data: 完成".to_string()));
+        assert_eq!(chunker.flush(), None);
+    }
+
+    #[test]
+    fn line_chunker_enforces_byte_and_line_limits() {
+        let mut chunker = LineChunker::default();
+        assert_eq!(
+            chunker.push(&vec![b'a'; FETCH_MAX_BYTES + 1]).unwrap_err(),
+            "AI_RESPONSE_TOO_LARGE"
+        );
+        let mut chunker = LineChunker::default();
+        let mut error = None;
+        for _ in 0..=FETCH_MAX_LINES {
+            if let Err(message) = chunker.push(b"\n") {
+                error = Some(message);
+                break;
+            }
+        }
+        assert_eq!(error.as_deref(), Some("AI_RESPONSE_TOO_LARGE"));
+    }
+
+    #[test]
+    fn fetch_streams_body_lines_in_order_with_credentials() {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let base = format!("http://{}/v1", listener.local_addr().unwrap());
+        let body = "data: {\"choices\":[]}\n\ndata: [DONE]\n\n";
+        let (sender, receiver) = mpsc::channel();
+        std::thread::spawn(move || {
+            let (mut socket, _) = listener.accept().unwrap();
+            socket
+                .set_read_timeout(Some(Duration::from_secs(3)))
+                .unwrap();
+            let mut request = Vec::new();
+            let mut chunk = [0; 4096];
+            loop {
+                let size = socket.read(&mut chunk).unwrap();
+                if size == 0 {
+                    break;
+                }
+                request.extend_from_slice(&chunk[..size]);
+                if let Some(end) = request.windows(4).position(|w| w == b"\r\n\r\n") {
+                    let headers = String::from_utf8_lossy(&request[..end]).to_lowercase();
+                    let length = headers
+                        .lines()
+                        .find_map(|line| {
+                            let (name, value) = line.split_once(':')?;
+                            name.trim()
+                                .eq("content-length")
+                                .then(|| value.trim().parse::<usize>().unwrap())
+                        })
+                        .unwrap_or(0);
+                    if request.len() >= end + 4 + length {
+                        break;
+                    }
+                }
+            }
+            socket
+                .write_all(
+                    b"HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\nConnection: close\r\n\r\n",
+                )
+                .unwrap();
+            // 故意切成两块发，模拟 TCP 分片。
+            let (first, second) = body.split_at(9);
+            socket.write_all(first.as_bytes()).unwrap();
+            socket.flush().unwrap();
+            std::thread::sleep(Duration::from_millis(20));
+            socket.write_all(second.as_bytes()).unwrap();
+            socket.flush().unwrap();
+            let _ = sender.send(String::from_utf8(request).unwrap());
+        });
+
+        let input = FetchInput {
+            provider_id: "test".into(),
+            base_url: base.clone(),
+            url: format!("{base}/chat/completions"),
+            method: "POST".into(),
+            headers: vec![
+                ("content-type".into(), "application/json".into()),
+                // 前端想自带凭据：必须被丢弃，改用凭据管理器里那份。
+                ("authorization".into(), "Bearer stolen".into()),
+            ],
+            body: Some("{\"stream\":true}".into()),
+        };
+        let url = validate_same_origin(&input.base_url, &input.url).unwrap();
+        let mut events = Vec::new();
+        let mut emit = |event: FetchEvent| {
+            events.push(event);
+            true
+        };
+        stream_fetch(
+            &input,
+            url,
+            Some("test-key".into()),
+            Arc::new(AtomicBool::new(false)),
+            &mut emit,
+        );
+
+        match events.first() {
+            Some(FetchEvent::Head { status, headers }) => {
+                assert_eq!(*status, 200);
+                assert!(headers.iter().any(|(name, value)| name == "content-type"
+                    && value.starts_with("text/event-stream")));
+                // 按行重切后 content-length 已经不成立，不能回传。
+                assert!(!headers.iter().any(|(name, _)| name == "content-length"));
+            }
+            other => panic!("首事件应为 Head，实际 {other:?}"),
+        }
+        let text: String = events
+            .iter()
+            .filter_map(|event| match event {
+                FetchEvent::Chunk { text } => Some(text.as_str()),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(text, body);
+        assert_eq!(events.last(), Some(&FetchEvent::End));
+
+        let request = receiver.recv_timeout(Duration::from_secs(5)).unwrap();
+        assert!(request.contains("Bearer test-key"));
+        assert!(!request.contains("stolen"));
+        assert!(request.to_lowercase().contains("accept-encoding: identity"));
+        assert!(request.split("\r\n\r\n").nth(1) == Some("{\"stream\":true}"));
     }
 }

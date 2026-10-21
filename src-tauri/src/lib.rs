@@ -92,6 +92,8 @@ pub fn run() {
             commands::ai::ai_delete_secret,
             commands::ai::ai_chat,
             commands::ai::ai_models,
+            commands::ai::ai_fetch,
+            commands::ai::ai_fetch_cancel,
             commands::ai::ai_finalize_legacy_migration,
             commands::knowledge::knowledge_bind,
             commands::knowledge::knowledge_validate_folders,
