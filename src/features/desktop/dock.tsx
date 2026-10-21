@@ -392,12 +392,19 @@ function FencesFlyout() {
   const [query, setQuery] = useState("");
   const [view, setView] = useState<"grid" | "list">("grid");
   const draggingId = useRef<string | null>(null);
-  const gridRef = useRef<HTMLElement | null>(null);
+  /** 面板根节点：挂在它上面，宫格/列表切换与空列表都不会丢监听 */
+  const panelRef = useRef<HTMLDivElement | null>(null);
   const needle = query.trim().toLocaleLowerCase();
 
-  // Ctrl+滚轮调节磁贴大小：React 的 wheel 是被动监听，阻止页面缩放需原生监听
+  /*
+   * Ctrl+滚轮调节磁贴大小。
+   * 两个坑：① React 的 onWheel 是被动监听，preventDefault 无效（会触发页面缩放），
+   * 必须用原生 addEventListener + passive: false；② 不能把监听挂在宫格容器上——
+   * 首次渲染时它可能还不存在（空列表），effect 的 [] 依赖下监听器就永远绑不上。
+   * 挂在始终存在的面板根节点上，两个问题一起消失。
+   */
   useEffect(() => {
-    const node = gridRef.current;
+    const node = panelRef.current;
     if (!node) return;
     const onWheel = (event: WheelEvent) => {
       if (!event.ctrlKey) return;
@@ -455,7 +462,7 @@ function FencesFlyout() {
   );
 
   return (
-    <div className="dock-panel" role="region" aria-label={t("dock.fences")}>
+    <div className="dock-panel" role="region" aria-label={t("dock.fences")} ref={panelRef}>
       <div className="dock-panel-search">
         <Search className="size-3.5 shrink-0 opacity-60" aria-hidden="true" />
         <input className="dock-panel-input" value={query} placeholder={t("dock.fencesSearch")}
@@ -493,8 +500,8 @@ function FencesFlyout() {
       {visible.length === 0
         ? <p className="dock-panel-empty">{t("dock.fencesEmpty")}</p>
         : view === "grid"
-          ? <div className="dock-grid" style={{ gridTemplateColumns: "repeat(4, minmax(0, 1fr))" }}
-              ref={(node) => { gridRef.current = node; }}>
+          ? <div className="dock-grid"
+              style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${tileSize + 26}px, 1fr))` }}>
               {visible.map((item) => (
                 <button type="button" key={item.id} className="dock-tile" title={item.path}
                   onClick={() => void open(item)} {...dragProps(item.id)}>
@@ -502,7 +509,7 @@ function FencesFlyout() {
                 </button>
               ))}
             </div>
-          : <ul className="dock-lrows" ref={(node) => { gridRef.current = node; }}>
+          : <ul className="dock-lrows">
               {visible.map((item) => (
                 <li key={item.id}>
                   <button type="button" className="dock-lrow" title={item.path}

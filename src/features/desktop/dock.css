@@ -266,10 +266,9 @@
 }
 .dock-chip-sort button:hover { background: var(--accent); color: var(--brand); }
 
-/* 收纳盒磁贴：桌面文件夹九宫格式，3 列圆角图标 + 下方标签 */
+/* 收纳盒磁贴：列数随图标尺寸自适应（行内 style 控制），尺寸越小越密 */
 .dock-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 10px 8px;
   align-content: start;
   flex: 1;
@@ -343,60 +342,150 @@
   color: var(--foreground/90);
 }
 
-/* 收集知识内嵌面板：顶栏双标签（收集 / AI 快问）+ pin 脱离 */
-.dock-capture { gap: 6px; }
-.dock-capture-bar { display: flex; align-items: center; justify-content: space-between; gap: 6px; flex: none; }
-.dock-capture-tabs { display: inline-flex; align-items: center; gap: 2px; min-width: 0; }
+/* 收集知识内嵌面板
+ *
+ * 视觉层级（由外到内，底色依次变亮）：
+ *   面板底 = --card 半透明（浮在桌面之上）
+ *   输入区 = --background（下沉的书写面）
+ *   顶栏/底栏 = 无底色，只靠间距与一条分隔线分组
+ * 主色只出现在：选中标签、聚焦描边、主按钮。其余一律中性灰，
+ * 避免整屏都在抢注意力（参考 macOS 设置面板的克制感）。
+ */
+.dock-capture {
+  gap: 14px;
+  padding: 14px 14px 12px;
+}
+
+/* 顶栏：标签在左、脱离按钮在右，底部一条细线划分区域 */
+.dock-capture-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex: none;
+  padding-bottom: 10px;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+}
+
+/* 分段控件：底槽 + 选中态浮起，比一排独立按钮更克制 */
+.dock-capture-tabs {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  padding: 2px;
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--muted) 55%, transparent);
+}
 .dock-capture-tabs button {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 3px 8px;
-  border-radius: var(--radius-md);
+  padding: 4px 10px;
+  border-radius: calc(var(--radius-md) - 2px);
   font-size: 12px;
   font-weight: 500;
   color: var(--muted-foreground);
+  transition: background 140ms ease, color 140ms ease;
 }
-.dock-capture-tabs button[aria-pressed="true"] { background: var(--accent); color: var(--brand); }
+.dock-capture-tabs button:hover { color: var(--foreground); }
+.dock-capture-tabs button[aria-pressed="true"] {
+  background: var(--card);
+  color: var(--foreground);
+  box-shadow: 0 1px 2px color-mix(in srgb, #000 18%, transparent);
+}
+
 .dock-capture-form { flex: 1; min-height: 0; overflow-y: auto; }
 .dock-capture-form .capture-composer { padding: 0; }
-/* 关联信息两栏在窄面板里改为独立描边输入，避免容器内嵌 ring 叠影 */
+
+/* 书写区：整块下沉为一张卡片，内部不再逐项描边 */
+.dock-capture-form .capture-writing {
+  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+  border-radius: var(--radius-lg);
+  background: var(--background);
+  overflow: hidden;
+}
+.dock-capture-form .capture-writing label { padding: 0 14px; }
+.dock-capture-form .capture-writing label + label {
+  border-top: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
+}
+.dock-capture-form .capture-writing input,
+.dock-capture-form .capture-writing textarea {
+  background: transparent !important;
+  box-shadow: none !important;
+}
+.dock-capture-form .capture-writing label:focus-within { background: color-mix(in srgb, var(--muted) 35%, transparent); }
+
+/* 区块标题：小字、字重 600、与内容拉开 10px */
+.dock-capture-form .capture-section-heading { margin: 0 0 10px; }
+.dock-capture-form .capture-section-heading h2 {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--foreground);
+}
+.dock-capture-form .capture-section-heading > span { font-size: 11px; color: var(--muted-foreground); }
+.dock-capture-form .capture-context,
+.dock-capture-form .capture-attachments { margin-top: 16px; }
+
+/* 关联信息：两栏改为独立描边输入（窄面板里容器式内嵌会与输入 ring 叠影） */
 .dock-capture-form .capture-context-fields {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 8px;
   border: none;
   border-radius: 0;
   background: transparent;
   overflow: visible;
 }
 .dock-capture-form .capture-context-fields label {
-  border: 1px solid var(--border);
+  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
   border-radius: var(--radius-md);
   background: var(--background);
-  padding-left: 8px;
+  padding-left: 10px;
+  transition: border-color 140ms ease;
 }
-.dock-capture-form .capture-context-fields label + label { border-left: 1px solid var(--border); }
-.dock-capture-form .capture-context-fields label:focus-within { border-color: var(--ring); box-shadow: none; background: var(--background); }
+.dock-capture-form .capture-context-fields label + label { border-left: 1px solid color-mix(in srgb, var(--border) 80%, transparent); }
+.dock-capture-form .capture-context-fields label:focus-within {
+  border-color: color-mix(in srgb, var(--brand) 55%, transparent);
+  box-shadow: none;
+  background: var(--background);
+}
 .dock-capture-form .capture-context-fields input { box-shadow: none !important; }
+
+/* 底栏：贴在滚动区底部，上方一条分隔线，按钮留足呼吸 */
 .dock-capture-form .capture-footer {
   position: sticky;
   bottom: 0;
-  background: color-mix(in srgb, var(--card) 96%, transparent);
+  gap: 12px;
+  padding-top: 12px;
+  margin-top: 16px;
+  border-top: 1px solid color-mix(in srgb, var(--border) 60%, transparent);
+  background: color-mix(in srgb, var(--card) 92%, transparent);
+  backdrop-filter: blur(12px);
 }
+.dock-capture-form .capture-actions { gap: 8px; }
+.dock-capture-form .capture-actions button { height: 34px; border-radius: var(--radius-md); font-size: 12px; }
+
+/* 脱离按钮：幽灵按钮，不与主操作争视线 */
 .dock-capture-pin {
   display: flex;
   align-items: center;
-  gap: 4px;
-  height: 22px;
-  padding: 0 7px;
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border);
+  gap: 5px;
+  height: 26px;
+  padding: 0 9px;
+  border-radius: var(--radius-md);
+  border: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
   font-size: 11px;
   color: var(--muted-foreground);
   flex: none;
+  transition: background 140ms ease, color 140ms ease, border-color 140ms ease;
 }
-.dock-capture-pin:hover { background: var(--accent); color: var(--brand); }
+.dock-capture-pin:hover {
+  background: color-mix(in srgb, var(--muted) 55%, transparent);
+  color: var(--foreground);
+  border-color: transparent;
+}
 
 /* AI 快问条 */
 .dock-ask { display: flex; flex-direction: column; gap: 6px; flex: 1; min-height: 0; }

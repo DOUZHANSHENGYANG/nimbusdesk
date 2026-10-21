@@ -76,7 +76,7 @@ export const useSettings = create<SettingsState>()(
       autoClearDone: false,
       dockEdge: "right",
       dockOpen: true,
-      dockTileSize: 36,
+      dockTileSize: 28,
       dockShortcut: "",
       dockAutoHide: false,
       setTheme: (theme) => set({ theme }),
@@ -110,8 +110,8 @@ export const useSettings = create<SettingsState>()(
         const s = persisted as Partial<SettingsState> | undefined;
         if (!s) return persisted as SettingsState;
         if (version >= 3) {
-          // 旧默认磁贴 46 偏大：静默并入新默认 36（用户手动调过的值不动）
-          if (s.dockTileSize === 46) s.dockTileSize = 36;
+          // 旧默认磁贴偏大：静默并入新默认 28（用户手动调过的值不动）
+          if (s.dockTileSize === 46 || s.dockTileSize === 36) s.dockTileSize = 28;
           return persisted as SettingsState;
         }
         return {
