@@ -762,6 +762,15 @@ fn stream_fetch(
         }
         request = request.header(name, value);
     }
+    // 带 body 却不声明类型时补上（与 request_chat 一致），否则服务商多半直接 415。
+    if input.body.is_some()
+        && !input
+            .headers
+            .iter()
+            .any(|(name, _)| name.eq_ignore_ascii_case("content-type"))
+    {
+        request = request.header(reqwest::header::CONTENT_TYPE, "application/json");
+    }
     // 流式不要内容编码：reqwest 带着 gzip 特性，服务端一压缩 SSE 就会攒成一坨。
     request = request.header(reqwest::header::ACCEPT_ENCODING, "identity");
     if let Some(key) = secret.filter(|key| !key.is_empty()) {
@@ -1443,7 +1452,7 @@ mod tests {
             url: format!("{base}/chat/completions"),
             method: "POST".into(),
             headers: vec![
-                ("content-type".into(), "application/json".into()),
+                ("accept".into(), "text/event-stream".into()),
                 // 前端想自带凭据：必须被丢弃，改用凭据管理器里那份。
                 ("authorization".into(), "Bearer stolen".into()),
             ],
@@ -1486,7 +1495,116 @@ mod tests {
         let request = receiver.recv_timeout(Duration::from_secs(5)).unwrap();
         assert!(request.contains("Bearer test-key"));
         assert!(!request.contains("stolen"));
-        assert!(request.to_lowercase().contains("accept-encoding: identity"));
+        let request_lower = request.to_lowercase();
+        assert!(request_lower.contains("accept-encoding: identity"));
+        // 调用方没声明 content-type 时按 JSON 补上，否则服务商多半直接 415。
+        assert!(request_lower.contains("content-type: application/json"));
         assert!(request.split("\r\n\r\n").nth(1) == Some("{\"stream\":true}"));
+    }
+
+    /// 真实服务商冒烟：读凭据 → 同源校验 → 流式转发，只花 max_tokens=1 的额度。
+    /// 默认不跑（`--ignored` 才跑），因为它打的是用户自己的服务商。
+    /// 用法：cargo test --lib real_provider_stream_smoke -- --ignored --nocapture
+    #[test]
+    #[ignore = "打真实服务商，会花额度"]
+    fn real_provider_stream_smoke() {
+        /*
+         * 测试二进制的 exe 在 target/debug/deps 下，`resolve_data_dir()` 会因此
+         * 解析到 deps/data 这个空目录。所以要显式指向应用的数据目录（或用
+         * AI_SMOKE_DATA_DIR 覆盖）。
+         */
+        let root = std::env::var("AI_SMOKE_DATA_DIR")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|_| {
+                std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target/debug/data")
+            });
+        println!("数据目录={}", root.display());
+        let stored = crate::database::read_at(&root, "ai-providers").expect("read ai-providers");
+        let Some(stored) = stored else {
+            // 没配服务商：把库里现存的键打出来，免得把「键名写错」当成「没配」。
+            let conn =
+                rusqlite::Connection::open(root.join("workbench.sqlite3")).expect("open database");
+            let mut statement = conn
+                .prepare("SELECT key FROM module_state ORDER BY key")
+                .expect("prepare");
+            let keys: Vec<String> = statement
+                .query_map([], |row| row.get(0))
+                .expect("query")
+                .filter_map(Result::ok)
+                .collect();
+            println!("没有 ai-providers 这一条，现存的键：{keys:?}");
+            return;
+        };
+        let state = stored.get("state").unwrap_or(&stored);
+        let providers = state["providers"].as_array().cloned().unwrap_or_default();
+        let wanted = state["defaultTextId"].as_str();
+        let provider = providers
+            .iter()
+            .find(|item| Some(item["id"].as_str().unwrap_or_default()) == wanted)
+            .or_else(|| providers.first())
+            .expect("no provider configured");
+        let id = provider["id"].as_str().unwrap();
+        let base_url = provider["baseUrl"].as_str().unwrap();
+        let model = provider["model"].as_str().unwrap();
+        let secret = credentials::read(id).expect("credential read");
+        println!(
+            "provider={id} base={base_url} model={model} has_key={}",
+            if secret.is_some() { "yes" } else { "no" }
+        );
+
+        let input = FetchInput {
+            provider_id: id.to_string(),
+            base_url: base_url.to_string(),
+            url: format!("{}/chat/completions", base_url.trim_end_matches('/')),
+            method: "POST".into(),
+            headers: vec![("accept".into(), "text/event-stream".into())],
+            body: Some(
+                serde_json::json!({
+                    "model": model,
+                    "messages": [{"role": "user", "content": "hi"}],
+                    "stream": true,
+                    "max_tokens": 1,
+                })
+                .to_string(),
+            ),
+        };
+        let url = validate_same_origin(&input.base_url, &input.url).expect("same origin");
+        let mut events = Vec::new();
+        let mut first_chunk_at = None;
+        let started = std::time::Instant::now();
+        let mut emit = |event: FetchEvent| {
+            if first_chunk_at.is_none() && matches!(event, FetchEvent::Chunk { .. }) {
+                first_chunk_at = Some(started.elapsed());
+            }
+            events.push(event);
+            true
+        };
+        stream_fetch(
+            &input,
+            url,
+            secret,
+            Arc::new(AtomicBool::new(false)),
+            &mut emit,
+        );
+        let elapsed = started.elapsed();
+        let status = match events.first() {
+            Some(FetchEvent::Head { status, .. }) => *status,
+            other => panic!("首事件应为 Head，实际 {other:?}"),
+        };
+        let text: String = events
+            .iter()
+            .filter_map(|event| match event {
+                FetchEvent::Chunk { text } => Some(text.as_str()),
+                _ => None,
+            })
+            .collect();
+        println!(
+            "status={status} 总耗时={elapsed:?} 首字节={first_chunk_at:?} 事件数={} 正文={}",
+            events.len(),
+            &text[..text.len().min(240)]
+        );
+        assert!((200..300).contains(&status), "HTTP {status}");
+        assert_eq!(events.last(), Some(&FetchEvent::End));
+        assert!(!text.is_empty(), "没有收到任何正文");
     }
 }
