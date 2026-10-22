@@ -17,6 +17,9 @@
     "core:default",
     "notification:default",
     "opener:default",
+    "dialog:default",
+    "clipboard-manager:allow-write-text",
+    "clipboard-manager:allow-read-text",
     {
       "identifier": "opener:allow-open-url",
       "allow": [

@@ -13,6 +13,9 @@ mod organization_clock;
 mod search;
 mod quick_tools;
 mod agenthub;
+// AgentHub（源侧工具箱后端）原样搬进来的模块，独立在 ahub/ 下，
+// 与云台自造的 agenthub/ 共存，等四页搬完后才删旧的。
+mod ahub;
 
 /// Entry used by the executable before initializing any UI or background tasks.
 pub fn run_quick_tools_selection_worker() -> bool { quick_tools::worker::run_if_worker() }
@@ -26,6 +29,7 @@ pub fn run() {
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_clipboard_manager::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .manage(commands::capture::CaptureShortcut::default())
         .manage(commands::desktop_shortcut::FenceShortcut::default())
@@ -170,12 +174,154 @@ pub fn run() {
             commands::agenthub::tb_harness_collect,
             commands::agenthub::tb_harness_push,
             commands::agenthub::tb_harness_remove,
+            // ── AgentHub 原版命令（129 条，与源侧 invoke_handler 逐条一致）──
+            ahub::commands::add_skill_source_dir,
+            ahub::commands::ai_provider_create,
+            ahub::commands::ai_provider_delete,
+            ahub::commands::ai_provider_list,
+            ahub::commands::ai_provider_presets,
+            ahub::commands::ai_provider_set_default,
+            ahub::commands::ai_provider_set_enabled,
+            ahub::commands::ai_provider_test,
+            ahub::commands::ai_provider_update,
+            ahub::commands::ai_suggest_tags,
+            ahub::commands::apply_to_harness,
+            ahub::commands::auth_create_repo,
+            ahub::commands::auth_github_poll,
+            ahub::commands::auth_github_start,
+            ahub::commands::auth_logout,
+            ahub::commands::auth_save_pat,
+            ahub::commands::auth_status,
+            ahub::commands::check_pack_ready,
+            ahub::commands::check_upstream,
+            ahub::commands::cleanup_git_temp,
+            ahub::commands::clear_skill_versions,
+            ahub::commands::cli_explain,
+            ahub::commands::cli_explain_versions,
+            ahub::commands::cli_scan,
+            ahub::commands::cli_tldr_clear,
+            ahub::commands::cli_tldr_ensure,
+            ahub::commands::cli_tldr_status,
+            ahub::commands::delete_mcp,
+            ahub::commands::delete_prompt,
+            ahub::commands::delete_skill,
+            ahub::commands::disk_scan,
+            ahub::commands::disk_scan_cached,
+            ahub::commands::ensure_skill_protocol,
+            ahub::commands::export_mcp_config,
+            ahub::commands::get_env_root,
+            ahub::commands::get_settings,
+            ahub::commands::git_fetch_skills,
+            ahub::commands::ignore_all_vet_findings,
+            ahub::commands::import_from_harness,
+            ahub::commands::import_skill_folder,
+            ahub::commands::import_skill_zip,
+            ahub::commands::install_from_index,
+            ahub::commands::install_skillpack,
+            ahub::commands::install_tool,
+            ahub::commands::list_mcp,
+            ahub::commands::list_prompts,
+            ahub::commands::list_skill_files,
+            ahub::commands::list_skills,
+            ahub::commands::merge_harness_config,
+            ahub::commands::mirror_apply,
+            ahub::commands::mirror_list,
+            ahub::commands::mirror_plan,
+            ahub::commands::mirror_rollback,
+            ahub::commands::onboard_skills_batch,
+            ahub::commands::ahub_open_path,
+            ahub::commands::open_skill_file,
+            ahub::commands::pack_skill,
+            ahub::commands::pack_skills_batch,
+            ahub::commands::parse_prompt_vars,
+            ahub::commands::parse_skill_index,
+            ahub::commands::pre_import,
+            ahub::commands::preset_create,
+            ahub::commands::preset_delete,
+            ahub::commands::preset_export,
+            ahub::commands::preset_list,
+            ahub::commands::preset_update,
+            ahub::commands::preview_skill_dir,
+            ahub::commands::read_harness_config,
+            ahub::commands::read_import_file,
+            ahub::commands::read_skill,
+            ahub::commands::read_skill_file,
+            ahub::commands::read_vet_report,
+            ahub::commands::release_skill_version,
+            ahub::commands::remove_from_harness,
+            ahub::commands::remove_prompt_var,
+            ahub::commands::remove_skill_source_dir,
+            ahub::commands::rename_prompt_var,
+            ahub::commands::render_prompt_vars,
+            ahub::commands::repair_skill_tags,
+            ahub::commands::restore_path_backup,
+            ahub::commands::reveal_path,
+            ahub::commands::review_vet_finding,
+            ahub::commands::save_mcp,
+            ahub::commands::save_prompt,
+            ahub::commands::save_skill,
+            ahub::commands::scan_harnesses,
+            ahub::commands::seed_skill_version,
+            ahub::commands::set_auto_summary_on_import,
+            ahub::commands::ahub_set_data_dir,
+            ahub::commands::set_env_root,
+            ahub::commands::set_harness_order,
+            ahub::commands::set_prefs,
+            ahub::commands::set_skill_status,
+            ahub::commands::set_vet_review,
+            ahub::commands::skill_extension,
+            ahub::commands::skill_generate_summary,
+            ahub::commands::skill_generate_summary_batch,
+            ahub::commands::skill_import_abort,
+            ahub::commands::skill_import_ai_fix,
+            ahub::commands::skill_import_apply_fixes,
+            ahub::commands::skill_import_cleanup,
+            ahub::commands::skill_import_execute,
+            ahub::commands::skill_import_explore,
+            ahub::commands::skillhub_categories,
+            ahub::commands::skillhub_install,
+            ahub::commands::skillhub_search,
+            ahub::commands::storage_stats,
+            ahub::commands::sync_pull,
+            ahub::commands::sync_push,
+            ahub::commands::sync_set_remote,
+            ahub::commands::sync_status,
+            ahub::commands::test_mcp_connectivity,
+            ahub::commands::tool_check_latest,
+            ahub::commands::tool_list,
+            ahub::commands::tool_update,
+            ahub::commands::update_skill_ext,
+            ahub::commands::validate_prompt_var_name,
+            ahub::commands::vault_clear,
+            ahub::commands::vault_index,
+            ahub::commands::vault_installed_count,
+            ahub::commands::vault_maybe_daily,
+            ahub::commands::vault_read_version,
+            ahub::commands::vault_restore,
+            ahub::commands::vault_set_daily,
+            ahub::commands::vault_set_watched,
+            ahub::commands::vault_snapshot,
+            ahub::commands::vault_status,
+            ahub::commands::vet_skill,
+            ahub::commands::write_harness_config,
         ])
         .setup(|app| {
             tray::create(app)?;
             organization_clock::start(app.handle().clone())?;
             commands::search::start(app.handle().clone());
             commands::quick_tools::start(app.handle().clone());
+            // AgentHub 原版启动清理：把 ZIP 的 DOS 纪元哨兵时间戳（1980-01-01）改写为
+            // 可信时间。与源侧同一段代码、同样放后台线程、同样幂等。
+            {
+                let handle = app.handle().clone();
+                std::thread::spawn(move || {
+                    let root = ahub::store::data_root(&handle).join("skills");
+                    let n = ahub::store::normalize_epoch_times(&root);
+                    if n > 0 {
+                        eprintln!("[agenthub] 已把 {n} 个文件的 DOS 纪元时间戳改写为可信时间");
+                    }
+                });
+            }
             // 兜底：若前端 6s 内未调用 window_ready（JS 崩溃/页面加载失败），
             // 强制显示主窗口，避免"窗口永远不出现"的无声失败。
             let handle = app.handle().clone();

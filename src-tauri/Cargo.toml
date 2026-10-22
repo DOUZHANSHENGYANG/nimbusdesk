@@ -35,6 +35,18 @@ base64 = "0.22"
 tauri-plugin-notification = "2.7.0"
 tauri-plugin-global-shortcut = "2"
 
+# ── AgentHub（原样搬进来的工具箱后端）所需依赖 ──────────────────
+# 每个模块用到哪个，见交付说明；版本与源侧一致。
+tauri-plugin-clipboard-manager = "2"
+uuid = { version = "1", features = ["v4"] }
+chrono = "0.4"
+dirs = "6"
+toml = "0.8"
+sha2 = "0.10"
+ureq = { version = "2", features = ["json"] }
+serde_yaml_ng = "0.10.0"
+filetime = "0.2"
+
 [target."cfg(windows)".dependencies]
 everything-ipc = "=0.1.4"
 windows = { version = "0.62", features = [
