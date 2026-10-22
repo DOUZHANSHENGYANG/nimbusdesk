@@ -1,0 +1,95 @@
+/* 定时任务页的布局件。
+   只做几何（栅格 / 间距 / 滚动），颜色一律留给 Tailwind 的语义工具类，
+   所以这里不会出现硬编码色值，也不会引用未被工具类用过的主题变量名。 */
+
+.schedule-body {
+    display: flex;
+    min-height: 0;
+    flex: 1;
+    flex-direction: column;
+    gap: var(--pr-space-4);
+    overflow-y: auto;
+    padding: var(--pr-space-4) var(--page-pad) var(--pr-space-8);
+}
+
+/* 任务表与历史表共用同一套列宽，避免两处漂移 */
+.schedule-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1.5fr) minmax(0, 1.7fr) 152px 104px 56px 128px;
+    align-items: center;
+    gap: var(--pr-space-3);
+    padding: var(--pr-space-2) var(--pr-space-3);
+    border-radius: var(--pr-radius-md);
+}
+
+.schedule-row[data-head] {
+    padding-top: var(--pr-space-1);
+    padding-bottom: var(--pr-space-1);
+}
+
+.schedule-row[data-body]:hover {
+    background: var(--surface-hover);
+}
+
+.schedule-history-row {
+    display: grid;
+    grid-template-columns: 152px 72px minmax(0, 1fr);
+    align-items: baseline;
+    gap: var(--pr-space-3);
+    padding: var(--pr-space-2) var(--pr-space-3);
+    border-radius: var(--pr-radius-sm);
+}
+
+.schedule-history-row:hover {
+    background: var(--surface-hover);
+}
+
+.schedule-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--pr-space-2);
+}
+
+.schedule-chip {
+    min-width: 46px;
+    padding: var(--pr-space-1) var(--pr-space-2);
+    border: 1px solid var(--input);
+    border-radius: var(--pr-radius-sm);
+    background: transparent;
+    color: var(--muted-foreground);
+    font-size: var(--pr-text-sm);
+    transition: background var(--pr-dur-fast) var(--pr-ease-out),
+        color var(--pr-dur-fast) var(--pr-ease-out);
+}
+
+.schedule-chip:hover {
+    background: var(--surface-hover);
+    color: var(--foreground);
+}
+
+.schedule-chip[data-active="true"] {
+    border-color: transparent;
+    background: var(--accent);
+    color: var(--accent-foreground);
+}
+
+.schedule-preview {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--pr-space-2) var(--pr-space-4);
+    font-variant-numeric: tabular-nums;
+}
+
+/* 编辑弹窗里的参数表单：标签在左、控件在右，窄屏自动上下堆叠 */
+.schedule-field {
+    display: grid;
+    grid-template-columns: 132px minmax(0, 1fr);
+    align-items: start;
+    gap: var(--pr-space-2) var(--pr-space-3);
+}
+
+@media (max-width: 720px) {
+    .schedule-field {
+        grid-template-columns: minmax(0, 1fr);
+    }
+}

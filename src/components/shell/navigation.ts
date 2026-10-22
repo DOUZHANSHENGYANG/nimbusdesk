@@ -1,4 +1,4 @@
-import { Home, FolderKanban, CalendarCheck2, Folders, Newspaper, BookOpen, Wrench, Sparkles, MessageSquare, KeyRound, Plug, Terminal } from "lucide-react";
+import { Home, FolderKanban, CalendarCheck2, CalendarClock, Folders, Newspaper, BookOpen, Wrench, Sparkles, MessageSquare, KeyRound, Plug, Terminal } from "lucide-react";
 
 export interface NavItem {
   to: string;
@@ -39,6 +39,7 @@ export const NAV_GROUPS: NavGroup[] = [
     key: "nav.ai",
     items: [
       { to: "/agent", key: "nav.agent", icon: MessageSquare },
+      { to: "/schedules", key: "nav.schedules", icon: CalendarClock },
       { to: "/toolbox/prompts", key: "nav.prompts", icon: KeyRound },
       { to: "/toolbox/skills", key: "nav.skills", icon: Sparkles },
       { to: "/toolbox/mcp", key: "nav.mcp", icon: Plug },

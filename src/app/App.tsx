@@ -21,6 +21,7 @@ import { AhubMcpPage } from "@/features/agenthub/ahub-host";
 import { AhubSkillsPage } from "@/features/agenthub/ahub-host-skills";
 import { AhubHarnessPage } from "@/features/agenthub/ahub-host-harness";
 import { AgentPage } from "@/features/agent/panel";
+import { SchedulePage } from "@/features/schedule/page";
 import { AppContextMenu } from "@/components/shell/app-context-menu";
 
 function SearchNavigationBridge() {
@@ -73,6 +74,7 @@ function Shell() {
               <Route path="/toolbox/mcp" element={<AhubMcpPage />} />
               <Route path="/toolbox/harness" element={<AhubHarnessPage />} />
               <Route path="/agent" element={<AgentPage />} />
+              <Route path="/schedules" element={<SchedulePage />} />
               <Route path="/settings" element={<SettingsPage />} />
             </Routes>
           </PageTransition>
