@@ -87,7 +87,7 @@ export function Sidebar() {
         onClick={() => navigate(to)}
         title={t(key)}
         className={cn(
-          "relative flex h-[34px] shrink-0 items-center gap-3 rounded-[10px] px-2.5 text-[13.5px] font-medium transition-colors duration-200",
+          "relative flex h-[30px] shrink-0 items-center gap-3 rounded-[10px] px-2.5 text-[13.5px] font-medium transition-colors duration-200",
           active ? "text-sidebar-accent-foreground" : "text-sidebar-foreground hover:text-sidebar-accent-foreground",
           collapsed && "justify-center px-0",
         )}
@@ -124,12 +124,12 @@ export function Sidebar() {
       )}
       style={{ transitionTimingFunction: "cubic-bezier(0.22, 1, 0.36, 1)" }}
     >
-      <motion.div ref={listRef} layoutRoot className="relative flex min-h-0 flex-col gap-1 overflow-y-auto px-2 pt-2 pb-1">
+      <motion.div ref={listRef} layoutRoot className="relative flex min-h-0 flex-col gap-1 overflow-y-auto px-2 pt-1.5 pb-1">
         {NAV_GROUPS.map((group, index) => {
           const state = groupState[group.key];
           const open = collapsed || state.open;
           return (
-            <div key={group.key} className={cn("flex flex-col gap-1", !collapsed && index > 0 && "mt-1.5")}>
+            <div key={group.key} className={cn("flex flex-col gap-0.5", !collapsed && index > 0 && "mt-1")}>
               {/* 折叠态：不显示组标题，组与组之间用一条发丝线分隔 */}
               {collapsed
                 ? index > 0 && <div aria-hidden className="mx-1.5 my-1 h-px bg-sidebar-border" />
@@ -139,7 +139,7 @@ export function Sidebar() {
                     onClick={state.toggle}
                     title={t(group.key)}
                     aria-expanded={state.open}
-                    className="flex h-7 shrink-0 items-center gap-3 rounded-[10px] px-2.5 text-[11px] font-medium text-muted-foreground transition-colors duration-200 hover:text-sidebar-accent-foreground"
+                    className="flex h-5 shrink-0 items-center gap-3 rounded-[10px] px-2.5 text-[11px] font-medium text-muted-foreground transition-colors duration-200 hover:text-sidebar-accent-foreground"
                   >
                     <span aria-hidden className="size-4 shrink-0" />
                     <span className="truncate">{t(group.key)}</span>
@@ -153,7 +153,7 @@ export function Sidebar() {
                 initial={false}
                 animate={{ height: open ? "auto" : 0, opacity: open ? 1 : 0 }}
                 transition={reduce ? { duration: 0 } : PILL_SPRING}
-                className="flex flex-col gap-1 overflow-hidden"
+                className="flex flex-col gap-0.5 overflow-hidden"
               >
                 {group.items.map(item)}
               </motion.div>
@@ -164,7 +164,7 @@ export function Sidebar() {
 
       <div className="flex-1" />
 
-      <div className="flex flex-col gap-1 px-2 pb-2">
+      <div className="flex flex-col gap-1 px-2 pb-1.5">
         <SidebarBottomButton
           icon={collapsed ? PanelLeftOpen : PanelLeftClose}
           label={collapsed ? t("nav.expand") : t("nav.collapse")}
@@ -202,7 +202,7 @@ function SidebarBottomButton({
       title={label}
       onClick={onClick}
       className={cn(
-        "flex h-[34px] items-center gap-3 rounded-[10px] px-2.5 text-[13.5px] font-medium transition-colors duration-200",
+        "flex h-[30px] items-center gap-3 rounded-[10px] px-2.5 text-[13.5px] font-medium transition-colors duration-200",
         active
           ? "bg-sidebar-accent text-sidebar-accent-foreground"
           : "text-sidebar-foreground/75 hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground",
