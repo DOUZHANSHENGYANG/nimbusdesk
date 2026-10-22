@@ -270,10 +270,16 @@ export const useAgent = create<AgentState>((set, get) => {
 
     refresh: () => {
       const config = useProviders.getState();
-      const known = config.providers.some((item) => item.id === get().providerId);
       set({ options: listModelOptions(config) });
-      if (known || get().guide) return;
-      const provider = resolveSelection(config, null, null);
+      const current = get();
+      const stillThere = current.providerId !== null && config.providers.some((item) => item.id === current.providerId);
+      if (stillThere) return;
+      /*
+       * 当前服务商没了（设置里删了），或者本来就还没配：重新找一个可用的。
+       * 注意这里不能在 guide 态提前返回 —— 用户刚在设置里加完服务商回来，
+       * 正经路径就是这一次 refresh，提前返回会让面板一直卡在引导卡上。
+       */
+      const provider = resolveSelection(config, current.providerId, current.model);
       if (provider) applyProvider(set, provider);
       else set({ guide: true, providerId: null, providerName: "", baseUrl: "", model: "", vision: false });
     },
@@ -348,7 +354,7 @@ export const useAgent = create<AgentState>((set, get) => {
         await chat.sendMessage({
           text: prompt.text,
           files: prompt.files,
-          metadata: { createdAt: startedAt, model: get().model, attachments: prompt.attachments },
+          metadata: { createdAt: startedAt, model: get().model, attachments: prompt.attachments, display: trimmed },
         });
       } catch (error) {
         const described = describeError(error);
@@ -370,6 +376,8 @@ export const useAgent = create<AgentState>((set, get) => {
        * 所以这里表现成「已停止」而不是瞬时中断。
        */
       await entry.chat.stop();
+      // 停止后这一次 send 的 finally 可能还没轮到：先把发送态放掉，否则按钮卡在「停止」
+      set({ starting: false });
       sync(get().sessionId);
       persist(get().sessionId);
     },
@@ -419,7 +427,7 @@ export const useAgent = create<AgentState>((set, get) => {
       await entry.chat.sendMessage({
         text: trimmed,
         messageId,
-        metadata: { createdAt: Date.now(), model: get().model },
+        metadata: { createdAt: Date.now(), model: get().model, display: trimmed },
       });
       sync(get().sessionId);
     },

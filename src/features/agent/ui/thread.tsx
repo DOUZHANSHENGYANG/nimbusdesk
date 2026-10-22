@@ -508,6 +508,19 @@ export function Thread({ model }: { model: string }) {
                 </MessageScrollerItem>
               );
             })}
+            {/* 已提交、还没等到首字节：助手位置先立一行「思考中…」 */}
+            {status === "submitted" && (
+              <MessageScrollerItem>
+                <Message align="start">
+                  <MessageContent>
+                    <TraceLine status="running">
+                      <Spinner />
+                      <TraceTitle>{t("agent.thinking")}</TraceTitle>
+                    </TraceLine>
+                  </MessageContent>
+                </Message>
+              </MessageScrollerItem>
+            )}
             {error && (
               <MessageScrollerItem>
                 <ErrorBar error={error} onRetry={() => void retry()} />

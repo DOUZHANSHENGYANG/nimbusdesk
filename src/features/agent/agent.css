@@ -27,7 +27,10 @@
 .agent-body { display:flex; flex-direction:column; flex:1; min-height:0; }
 
 .agent-thread { padding:22px 30px; }
-.agent-text { color:var(--foreground); font-size:13.5px; line-height:1.7; white-space:pre-wrap; }
+/* 文字块出现时淡入（按块，不是按字：一段 text part 只挂载一次） */
+.agent-text { color:var(--foreground); font-size:13.5px; line-height:1.7; white-space:pre-wrap; animation:agent-text-in 240ms var(--workbench-ease); }
+@keyframes agent-text-in { from { opacity:0; transform:translateY(1px) } to { opacity:1; transform:none } }
+@media (prefers-reduced-motion: reduce) { .agent-text { animation:none } }
 .agent-meta { color:var(--muted-foreground); font-size:10.5px; }
 /* 「回到底部」：浮在输入区上方，别压住输入框里的字 */
 .agent-scroll-button { bottom:12px; gap:6px; padding:0 10px; font-size:11px; }
