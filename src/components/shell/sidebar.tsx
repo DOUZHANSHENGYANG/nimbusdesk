@@ -96,7 +96,7 @@ export function Sidebar() {
         onClick={() => navigate(to)}
         title={t(key)}
         className={cn(
-          "relative flex h-[28px] shrink-0 items-center gap-3 rounded-[10px] px-2.5 text-[13.5px] font-medium transition-colors duration-200 hover:bg-[color-mix(in_srgb,var(--foreground)_4%,transparent)]",
+          "relative flex h-[38px] shrink-0 items-center gap-3 rounded-[10px] px-2.5 text-[13.5px] font-medium transition-colors duration-200 hover:bg-[color-mix(in_srgb,var(--foreground)_4%,transparent)]",
           active ? "text-foreground" : "text-sidebar-foreground hover:text-foreground",
           collapsed && "justify-center px-0",
         )}
@@ -133,12 +133,12 @@ export function Sidebar() {
       )}
       style={{ transitionTimingFunction: "cubic-bezier(0.22, 1, 0.36, 1)" }}
     >
-      <motion.div ref={listRef} layoutRoot className="relative flex min-h-0 flex-col gap-1 overflow-y-auto px-2 pt-1.5 pb-1">
+      <motion.div ref={listRef} layoutRoot className="relative flex min-h-0 flex-col overflow-y-auto px-2 pt-3 pb-2">
         {NAV_GROUPS.map((group, index) => {
           const state = groupState[group.key];
           const open = collapsed || state.open;
           return (
-            <div key={group.key} className={cn("flex flex-col gap-0.5", !collapsed && index > 0 && "mt-1")}>
+            <div key={group.key} className={cn("flex flex-col gap-1.5", !collapsed && index > 0 && "mt-6")}>
               {/* 折叠态：不显示组标题，组与组之间用一条发丝线分隔 */}
               {collapsed
                 ? index > 0 && <div aria-hidden className="mx-1.5 my-1 h-px bg-sidebar-border" />
@@ -148,9 +148,9 @@ export function Sidebar() {
                     onClick={state.toggle}
                     title={t(group.key)}
                     aria-expanded={state.open}
-                    className="flex h-[18px] shrink-0 items-center gap-3 rounded-[10px] px-2.5 text-[11px] font-medium text-muted-foreground transition-colors duration-200 hover:text-sidebar-accent-foreground"
+                    className="flex h-6 shrink-0 items-center gap-3 rounded-[10px] px-2.5 text-[11px] font-medium tracking-[0.06em] text-muted-foreground/80 transition-colors duration-200 hover:text-sidebar-accent-foreground"
                   >
-                    <group.icon aria-hidden className="size-3.5 shrink-0 opacity-60" strokeWidth={2} />
+                    <span aria-hidden className="size-4 shrink-0" />
                     <span className="truncate">{t(group.key)}</span>
                     <span aria-hidden className="h-px flex-1 bg-sidebar-border" />
                     <ChevronRight
@@ -163,7 +163,7 @@ export function Sidebar() {
                 initial={false}
                 animate={{ height: open ? "auto" : 0, opacity: open ? 1 : 0 }}
                 transition={reduce ? { duration: 0 } : PILL_SPRING}
-                className="flex flex-col gap-0.5 overflow-hidden"
+                className="flex flex-col gap-1.5 overflow-hidden"
               >
                 {group.items.map(item)}
               </motion.div>
@@ -174,14 +174,14 @@ export function Sidebar() {
 
       <div className="flex-1" />
 
-      <div className="flex flex-col gap-1 px-2 pb-1.5">
+      <div className="flex flex-col gap-1 px-2 pb-3">
         <div aria-hidden className="mx-1 h-px bg-sidebar-border" />
         {!collapsed && dataRoot ? (
           <button
             type="button"
             title={t("nav.dataDir")}
             onClick={() => void ahubApi.revealPath(dataRoot)}
-            className="flex h-[28px] items-center gap-3 rounded-[10px] px-2.5 text-[12px] text-sidebar-foreground/75 transition-colors duration-200 hover:text-foreground"
+            className="flex h-[38px] items-center gap-3 rounded-[10px] px-2.5 text-[12px] text-sidebar-foreground/75 transition-colors duration-200 hover:text-foreground"
           >
             <FolderOpen className="size-4 shrink-0" strokeWidth={1.8} />
             <span className="truncate" dir="ltr">
@@ -226,7 +226,7 @@ function SidebarBottomButton({
       title={label}
       onClick={onClick}
       className={cn(
-        "flex h-[28px] items-center gap-3 rounded-[10px] px-2.5 text-[13.5px] font-medium transition-colors duration-200",
+        "flex h-[38px] items-center gap-3 rounded-[10px] px-2.5 text-[13.5px] font-medium transition-colors duration-200",
         active
           ? "bg-sidebar-accent text-sidebar-accent-foreground"
           : "text-sidebar-foreground/75 hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground",
