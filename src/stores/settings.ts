@@ -4,6 +4,14 @@ import { tauriJsonStorage } from "@/lib/storage";
 import type { ThemeMode } from "@/lib/theme";
 import type { Lang } from "@/lib/i18n";
 import { setCompletionPolicyReader } from "@/features/plans/store";
+import {
+  isAgentPreset,
+  isPermissionMode,
+  isThinkingLevel,
+  type AgentPreset,
+  type PermissionMode,
+  type ThinkingLevel,
+} from "@/features/agent/composer-core";
 
 /** 计划的视图键（与 `features/plans/page.tsx` 的 VIEW_KEYS 对应） */
 export type PlansView = "outline" | "timeline" | "kanban" | "calendar" | "stats" | "archive";
@@ -47,6 +55,15 @@ interface SettingsState {
   workbenchGroupOpen: boolean;
   libraryGroupOpen: boolean;
   aiGroupOpen: boolean;
+  /**
+   * 对话面板的权限档（写不写本机数据由它决定，所以放在全局设置里而不是会话里：
+   * 用户改的是「我这个人的尺度」，不是「这个会话的尺度」）。
+   */
+  agentPermission: PermissionMode;
+  /** 对话面板的智能体预设（构建 / 计划 / 追问）。 */
+  agentPreset: AgentPreset;
+  /** 思考等级：auto = 跟随服务商模型里配的 reasoningEffort。 */
+  agentThinking: ThinkingLevel;
   setTheme: (theme: ThemeMode) => void;
   setLang: (lang: Lang) => void;
   setSidebarCollapsed: (v: boolean) => void;
@@ -67,6 +84,9 @@ interface SettingsState {
   setWorkbenchGroupOpen: (v: boolean) => void;
   setLibraryGroupOpen: (v: boolean) => void;
   setAiGroupOpen: (v: boolean) => void;
+  setAgentPermission: (v: PermissionMode) => void;
+  setAgentPreset: (v: AgentPreset) => void;
+  setAgentThinking: (v: ThinkingLevel) => void;
 }
 
 const PLANS_VIEWS: PlansView[] = ["outline", "timeline", "kanban", "calendar", "stats", "archive"];
@@ -103,6 +123,9 @@ export const useSettings = create<SettingsState>()(
       workbenchGroupOpen: true,
       libraryGroupOpen: true,
       aiGroupOpen: true,
+      agentPermission: "ask",
+      agentPreset: "build",
+      agentThinking: "auto",
       setTheme: (theme) => set({ theme }),
       setLang: (lang) => set({ lang }),
       setSidebarCollapsed: (sidebarCollapsed) => set({ sidebarCollapsed }),
@@ -123,23 +146,27 @@ export const useSettings = create<SettingsState>()(
       setWorkbenchGroupOpen: (workbenchGroupOpen) => set({ workbenchGroupOpen }),
       setLibraryGroupOpen: (libraryGroupOpen) => set({ libraryGroupOpen }),
       setAiGroupOpen: (aiGroupOpen) => set({ aiGroupOpen }),
+      setAgentPermission: (agentPermission) => set({ agentPermission }),
+      setAgentPreset: (agentPreset) => set({ agentPreset }),
+      setAgentThinking: (agentThinking) => set({ agentThinking }),
     }),
     {
       name: "settings",
       storage: createJSONStorage(() => tauriJsonStorage),
-      version: 7,
+      version: 8,
       /**
        * v1 → v2：新增 `plansView`（旧 settings.json 没这个键，pill 会全不亮）。
        * v2 → v3：新增 `autoSortDone` / `autoClearDone`。
        * v3 → v4：新增 `aiGroupOpen`（侧栏 AI 组的展开态）。
        * v4 → v5：侧栏改三个分区，新增 `workbenchGroupOpen` / `libraryGroupOpen`。
-       * v5 → v6：新增 `alwaysOnTop`（主窗口置顶）。老用户升级后一律**不**置顶：
+       * v5 → v6：对话面板新增权限档 / 智能体预设 / 思考等级。
+       * v6 → v7：新增 `alwaysOnTop`（主窗口置顶）。老用户升级后一律**不**置顶：
        *           旧版本没有这个开关，谈不上「他手动开过」。
-       * v6 → v7：新增 `dockEnabled`（桌面 Dock 总开关）。同理一律默认关：
-       *           没有这个字段 = 从没开过。
+       * v7 → v8：新增 `dockEnabled`（桌面 Dock 总开关）。同理默认关 ——
+       *           没有这个字段就等于从没开过，升级不该突然在桌面上多一条横条。
        *
-       * 迁移只补缺失字段、不改其它值；视图键顺手校验，手改坏的退回大纲
-       * 而不是让整个页面白屏。
+       * 迁移只补缺失字段、不改其它值；视图键与新增的三个值顺手校验，手改坏
+       * 的退回默认而不是让整个页面白屏。
        */
       migrate: (persisted, version) => {
         const s = persisted as Partial<SettingsState> | undefined;
@@ -158,8 +185,13 @@ export const useSettings = create<SettingsState>()(
           s.workbenchGroupOpen = s.workbenchGroupOpen ?? true;
           s.libraryGroupOpen = s.libraryGroupOpen ?? true;
         }
-        if (version < 6) s.alwaysOnTop = s.alwaysOnTop ?? false;
-        if (version < 7) s.dockEnabled = s.dockEnabled ?? false;
+        if (version < 6) {
+          s.agentPermission = isPermissionMode(s.agentPermission) ? s.agentPermission : "ask";
+          s.agentPreset = isAgentPreset(s.agentPreset) ? s.agentPreset : "build";
+          s.agentThinking = isThinkingLevel(s.agentThinking) ? s.agentThinking : "auto";
+        }
+        if (version < 7) s.alwaysOnTop = s.alwaysOnTop ?? false;
+        if (version < 8) s.dockEnabled = s.dockEnabled ?? false;
         return s as SettingsState;
       },
     },

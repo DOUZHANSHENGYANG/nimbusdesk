@@ -22,6 +22,8 @@ export interface AgentSession {
   /** 上次这一轮用的服务商与模型；下次打开会话接着用。 */
   providerId: string | null;
   model: string | null;
+  /** 本次会话的目标/意图（可空）：非空时拼进 instructions，并在会话顶部显示一条。 */
+  goal: string | null;
   createdAt: number;
   updatedAt: number;
   messages: AgentMessage[];
@@ -44,7 +46,7 @@ interface SessionsState {
 
 function blank(): AgentSession {
   const now = Date.now();
-  return { id: newSessionId(), title: null, providerId: null, model: null, createdAt: now, updatedAt: now, messages: [] };
+  return { id: newSessionId(), title: null, providerId: null, model: null, goal: null, createdAt: now, updatedAt: now, messages: [] };
 }
 
 export const useSessions = create<SessionsState>()(
@@ -101,6 +103,7 @@ export const useSessions = create<SessionsState>()(
             title: typeof item.title === "string" ? item.title : null,
             providerId: typeof item.providerId === "string" ? item.providerId : null,
             model: typeof item.model === "string" ? item.model : null,
+            goal: typeof item.goal === "string" ? item.goal : null,
             createdAt: typeof item.createdAt === "number" ? item.createdAt : Date.now(),
             updatedAt: typeof item.updatedAt === "number" ? item.updatedAt : Date.now(),
             messages: item.messages as AgentMessage[],

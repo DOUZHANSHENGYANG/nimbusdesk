@@ -3,13 +3,16 @@ import { isToolUIPart, lastAssistantMessageIsCompleteWithApprovalResponses } fro
 import type { ChatStatus, LanguageModelUsage } from "ai";
 import { create } from "zustand";
 import { useProviders } from "@/features/ai/providers";
+import { useSettings } from "@/stores/settings";
 import {
   buildTransport,
   listModelOptions,
   resolveSelection,
   type AgentMessage,
+  type AgentRuntime,
   type ModelOption,
 } from "./model";
+import { cleanGoal } from "./composer-core";
 import { ensureSession, sessionsReady, useSessions, type AgentSession } from "./sessions";
 import { isIncomplete, trimContext } from "./transcript";
 import { buildPrompt, type Pending } from "./attachments";
@@ -107,9 +110,12 @@ interface AgentState {
   starting: boolean;
   /** 没有可用服务商：输入区禁用 + 引导卡。 */
   guide: boolean;
+  /** 本次会话的目标（可空）：非空时进 instructions，并在会话顶部显示一条。 */
+  goal: string | null;
   init: () => Promise<void>;
   refresh: () => void;
   selectModel: (providerId: string, modelId: string) => Promise<void>;
+  setGoal: (goal: string | null) => void;
   newSession: () => Promise<void>;
   openSession: (id: string) => Promise<void>;
   renameSession: (id: string, title: string | null) => void;
@@ -175,7 +181,18 @@ export const useAgent = create<AgentState>((set, get) => {
     return () => { for (const off of offs) off(); };
   };
 
-  /** 会话惰性创建；服务商或模型换了就重建 transport，已聊的消息带过去。 */
+  /**
+   * 输入区控件的当前取值。每次真正要发请求 / 要执行一个工具时才读，
+   * 所以中途改权限或思考等级立刻生效，不需要重建 transport。
+   */
+  const runtime = (): AgentRuntime => ({
+    preset: useSettings.getState().agentPreset,
+    goal: get().goal,
+    permission: () => useSettings.getState().agentPermission,
+    thinking: () => useSettings.getState().agentThinking,
+  });
+
+  /** 会话惰性创建；服务商、模型、智能体档位或目标换了就重建 transport，已聊的消息带过去。 */
   const ensureChat = async (): Promise<Chat<AgentMessage> | null> => {
     await sessionsReady();
     const session = useSessions.getState().sessions.find((item) => item.id === get().sessionId) ?? ensureSession();
@@ -184,13 +201,15 @@ export const useAgent = create<AgentState>((set, get) => {
       set({ guide: true, error: null });
       return null;
     }
-    const key = `${provider.id}::${provider.model}`;
+    const options = runtime();
+    // transport 不可换：档位与目标都烤进 instructions 了，所以它们变了必须重建。
+    const key = `${provider.id}::${provider.model}::${options.preset}::${options.goal ?? ""}`;
     const existing = live.get(session.id);
     if (existing && existing.key === key) return existing.chat;
 
     const chat = new Chat<AgentMessage>({
       messages: existing ? existing.chat.messages : session.messages,
-      transport: buildTransport(provider, (usage) => set({ usage })),
+      transport: buildTransport(provider, options, (usage) => set({ usage })),
       sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithApprovalResponses,
     });
     if (existing) {
@@ -207,6 +226,15 @@ export const useAgent = create<AgentState>((set, get) => {
     const entry = currentLive();
     if (entry && busyStatus(entry.chat.status)) await entry.chat.stop();
     if (entry) persist(get().sessionId);
+  };
+
+  /**
+   * 「这一轮按现在的模型 / 档位 / 目标来」的统一入口：重试、重新生成、继续都要
+   * 先过一遍 ensureChat，档位或目标变过就会拿到重建后的实例（消息带过去）。
+   */
+  const entryForCall = async () => {
+    await ensureChat();
+    return currentLive();
   };
 
   const open = async (session: AgentSession) => {
@@ -226,6 +254,7 @@ export const useAgent = create<AgentState>((set, get) => {
       droppedContext: 0,
       starting: false,
       guide: !provider,
+      goal: session.goal ?? null,
     });
     if (provider) applyProvider(set, provider);
     else set({ providerId: null, providerName: "", baseUrl: "", model: "", vision: false });
@@ -261,6 +290,7 @@ export const useAgent = create<AgentState>((set, get) => {
     droppedContext: 0,
     starting: false,
     guide: false,
+    goal: null,
 
     init: async () => {
       await Promise.all([sessionsReady(), Promise.resolve()]);
@@ -293,6 +323,21 @@ export const useAgent = create<AgentState>((set, get) => {
       useSessions.getState().save(id, { providerId: provider.id, model: provider.model, messages: get().messages });
       applyProvider(set, provider);
       await ensureChat(); // 立刻重建：下一次发送就用新模型
+    },
+
+    /**
+     * 本次目标：空串等于清除（不落一个空字符串进会话文件）。
+     *
+     * 不在这里重建 transport —— 目标是烤进 instructions 的，下一次 ensureChat 会
+     * 因为 key 里的目标变了而重建，已聊的消息原样带过去。这里重建会让正在生成的
+     * 那一轮被打断，改一个还没生效的目标不值得。
+     */
+    setGoal: (goal) => {
+      const clean = cleanGoal(goal);
+      const value = clean ? clean : null;
+      if (value === get().goal) return;
+      useSessions.getState().save(get().sessionId, { goal: value });
+      set({ goal: value });
     },
 
     newSession: async () => {
@@ -383,7 +428,7 @@ export const useAgent = create<AgentState>((set, get) => {
     },
 
     retry: async () => {
-      const entry = currentLive();
+      const entry = await entryForCall();
       if (!entry || busyStatus(entry.chat.status)) return;
       set({ error: null, stopped: false, usage: null, elapsedMs: null, incomplete: false });
       entry.chat.clearError();
@@ -393,7 +438,7 @@ export const useAgent = create<AgentState>((set, get) => {
     },
 
     regenerate: async (messageId) => {
-      const entry = currentLive();
+      const entry = await entryForCall();
       if (!entry || busyStatus(entry.chat.status)) return;
       set({ error: null, stopped: false, usage: null, elapsedMs: null, incomplete: false });
       entry.chat.clearError();
@@ -404,7 +449,7 @@ export const useAgent = create<AgentState>((set, get) => {
     },
 
     continueLast: async () => {
-      const entry = currentLive();
+      const entry = await entryForCall();
       if (!entry || busyStatus(entry.chat.status)) return;
       set({ error: null, stopped: false, usage: null, elapsedMs: null });
       startedAt = Date.now();

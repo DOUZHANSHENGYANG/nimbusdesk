@@ -18,6 +18,15 @@ import {
 import { providersReady, useProviders } from "@/features/ai/providers";
 import { agentFetch } from "./fetch";
 import { agentTools } from "./tools";
+import {
+  approvalFor,
+  composeInstructions,
+  presetTools,
+  resolveReasoningEffort,
+  type AgentPreset,
+  type PermissionMode,
+  type ThinkingLevel,
+} from "./composer-core";
 import type { AgentMeta } from "./transcript";
 
 /**
@@ -35,8 +44,19 @@ export const AGENT_INSTRUCTIONS = [
   "最多做 8 步（含工具调用），够不着就停下来告诉用户还差什么。",
 ].join("\n");
 
-/** 写类工具必须经用户批准：审批在 AI SDK 内部停住工具循环，批准后才执行。 */
-const TOOL_APPROVAL = { save_skill: "user-approval" } as const;
+/**
+ * 输入区那几个控件要传给 agent 的东西。全部做成**取值函数**而不是值：
+ * 权限档、思考等级可能在一轮对话中途就被改掉，而 agent/transport 是建好就不换的，
+ * 取值的时机必须落在「真正发请求 / 真正要执行这个工具」那一刻。
+ */
+export interface AgentRuntime {
+  /** 智能体档位：决定 instructions 前缀与允许的工具集合。 */
+  preset: AgentPreset;
+  /** 本次会话的目标：非空时追加到 instructions 末尾。 */
+  goal: string | null;
+  permission: () => PermissionMode;
+  thinking: () => ThinkingLevel;
+}
 
 /**
  * `DirectChatTransport` 默认把流里的错误压成一句「An error occurred.」，状态码与
@@ -138,7 +158,7 @@ export async function defaultSelection(): Promise<AiProvider> {
  * - `reasoningEffort`：AI SDK 走 providerOptions，而键名由服务商名推导、不可靠，
  *   这里直接写 `reasoning_effort`，路径最短。
  */
-export function buildAgent(provider: AiProvider) {
+export function buildAgent(provider: AiProvider, runtime: AgentRuntime) {
   const parameters = modelParameters(provider);
   const factory = createOpenAICompatible({
     name: provider.name,
@@ -150,16 +170,23 @@ export function buildAgent(provider: AiProvider) {
         body.max_completion_tokens = body.max_tokens;
         delete body.max_tokens;
       }
-      if (parameters.reasoningEffort) body.reasoning_effort = parameters.reasoningEffort;
+      // 思考等级：输入区选的档位优先，auto 才回落到模型配置（都没配就不发这个字段）
+      const effort = resolveReasoningEffort(runtime.thinking(), parameters.reasoningEffort);
+      if (effort) body.reasoning_effort = effort;
       return body;
     },
   });
+  const allowed = presetTools(runtime.preset);
   return new ToolLoopAgent({
     model: factory(provider.model),
-    instructions: AGENT_INSTRUCTIONS,
+    // 档位前缀在最前、本次目标在最后（见 composer/core：composeInstructions）
+    instructions: composeInstructions(AGENT_INSTRUCTIONS, runtime.preset, runtime.goal),
     tools: agentTools,
+    // `plan` 只留只读工具、`ask` 一个都不给；`build` 为 null → 不限制
+    activeTools: allowed ? (allowed as (keyof typeof agentTools)[]) : undefined,
     stopWhen: isStepCount(8),
-    toolApproval: TOOL_APPROVAL,
+    // 审批结论按「此刻的权限档」现算：审批在 AI SDK 内部停住工具循环，批准后才执行。
+    toolApproval: ({ toolCall }) => approvalFor(runtime.permission(), toolCall.toolName),
     temperature: parameters.temperature,
     topP: parameters.topP,
     maxOutputTokens: parameters.maxTokens,
@@ -175,11 +202,11 @@ export type AgentMessage = InferAgentUIMessage<ReturnType<typeof buildAgent>>;
  * `messageMetadata` 顺手把「这一轮用的模型 / 起算时刻 / 耗时 / 用量」写进消息的
  * metadata —— 于是每条历史消息都能显示自己的元信息，而不只是最后一条。
  */
-export function buildTransport(provider: AiProvider, onUsage: (usage: LanguageModelUsage) => void) {
+export function buildTransport(provider: AiProvider, runtime: AgentRuntime, onUsage: (usage: LanguageModelUsage) => void) {
   const model = provider.model;
   let startedAt: number | undefined;
   return new DirectChatTransport({
-    agent: buildAgent(provider),
+    agent: buildAgent(provider, runtime),
     onError: errorLine,
     messageMetadata: ({ part }) => {
       if (part.type === "start") {
