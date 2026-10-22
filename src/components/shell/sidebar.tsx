@@ -69,6 +69,8 @@ export function Sidebar() {
   const setAiOpen = useSettings((s) => s.setAiGroupOpen);
   const counts = useToolboxCounts();
   const dataRoot = useAhubSettings((s) => s.info?.dataDirs.root);
+  /** 入口只显示最后一段目录名，完整路径放 title */
+  const dataRootLabel = dataRoot ? dataRoot.replace(/[\\/]+$/, "").split(/[\\/]/).pop() ?? "" : "";
   useEffect(() => {
     // 数据目录入口需要 ahub 的 settings.info，而宿主只在工具箱页挂载；
     // 用户可能停在主页——这里补一次（只读，三个列表查询都不发）。
@@ -96,15 +98,15 @@ export function Sidebar() {
         onClick={() => navigate(to)}
         title={t(key)}
         className={cn(
-          "relative flex h-[38px] shrink-0 items-center gap-3 rounded-[10px] px-2.5 text-[13.5px] font-medium transition-colors duration-200 hover:bg-[color-mix(in_srgb,var(--foreground)_4%,transparent)]",
-          active ? "text-foreground" : "text-sidebar-foreground hover:text-foreground",
+          "relative flex h-[40px] shrink-0 items-center gap-3 rounded-[10px] px-2.5 text-[13.5px] font-medium transition-colors duration-200 hover:bg-[color-mix(in_srgb,var(--foreground)_4%,transparent)]",
+          active ? "text-foreground" : "text-muted-foreground hover:text-foreground",
           collapsed && "justify-center px-0",
         )}
       >
         {active && <Pill />}
         <Icon
           className={cn("relative z-10 size-4 shrink-0 transition-colors duration-200", active ? "text-brand" : "opacity-70")}
-          strokeWidth={active ? 2.2 : 1.8}
+          strokeWidth={active ? 2.1 : 1.6}
         />
         {!collapsed && <span className="relative z-10 truncate">{t(key)}</span>}
         {/* 角标位每行都在（无数字时留空），这样右缘是齐的 */}
@@ -112,7 +114,7 @@ export function Sidebar() {
           <span
             className={cn(
               "relative z-10 ml-auto min-w-4 text-right text-[10.5px] tabular-nums",
-              count === undefined ? "opacity-0" : active ? "text-brand" : "text-muted-foreground",
+              count === undefined || count === 0 ? "opacity-0" : active ? "text-brand" : "text-muted-foreground",
             )}
           >
             {count ?? 0}
@@ -136,7 +138,7 @@ export function Sidebar() {
           const open = collapsed || state.open;
           const groupActive = group.items.some((entry) => entry.to === location.pathname);
           return (
-            <div key={group.key} className={cn("flex flex-col gap-0.5", !collapsed && index > 0 && "mt-4")}>
+            <div key={group.key} className={cn("flex flex-col gap-0.5", !collapsed && index > 0 && "mt-6")}>
               {/* 一级就是一条正常导航项（图标 + 标签 + 箭头），不是分区小标签：
                   按用户给的 Ant Pro 式参考，一级字号 ≥ 二级，二级选中时一级也变色。 */}
               <button
@@ -145,7 +147,7 @@ export function Sidebar() {
                 title={t(group.key)}
                 aria-expanded={state.open}
                 className={cn(
-                  "relative flex h-[38px] shrink-0 items-center gap-3 rounded-[10px] px-2.5 text-[14px] font-semibold transition-colors duration-200 hover:bg-[color-mix(in_srgb,var(--foreground)_4%,transparent)]",
+                  "relative flex h-[40px] shrink-0 items-center gap-3 rounded-[10px] px-2.5 text-[14px] font-semibold transition-colors duration-200 hover:bg-[color-mix(in_srgb,var(--foreground)_4%,transparent)]",
                   groupActive ? "text-brand" : "text-foreground/85 hover:text-foreground",
                   collapsed && "justify-center px-0",
                 )}
@@ -179,13 +181,13 @@ export function Sidebar() {
         {!collapsed && dataRoot ? (
           <button
             type="button"
-            title={t("nav.dataDir")}
+            title={dataRoot}
             onClick={() => void ahubApi.revealPath(dataRoot)}
-            className="flex h-[38px] items-center gap-3 rounded-[10px] px-2.5 text-[12px] text-sidebar-foreground/75 transition-colors duration-200 hover:text-foreground"
+            className="flex h-[40px] items-center gap-3 rounded-[10px] px-2.5 text-[12px] text-muted-foreground transition-colors duration-200 hover:text-foreground"
           >
-            <FolderOpen className="size-4 shrink-0" strokeWidth={1.8} />
+            <FolderOpen className="size-4 shrink-0" strokeWidth={1.6} />
             <span className="truncate" dir="ltr">
-              {dataRoot}
+              {dataRootLabel}
             </span>
           </button>
         ) : null}
@@ -226,7 +228,7 @@ function SidebarBottomButton({
       title={label}
       onClick={onClick}
       className={cn(
-        "flex h-[38px] items-center gap-3 rounded-[10px] px-2.5 text-[13.5px] font-medium transition-colors duration-200",
+        "flex h-[40px] items-center gap-3 rounded-[10px] px-2.5 text-[13.5px] font-medium transition-colors duration-200",
         active
           ? "bg-sidebar-accent text-sidebar-accent-foreground"
           : "text-sidebar-foreground/75 hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground",
