@@ -22,6 +22,7 @@ import { AhubSkillsPage } from "@/features/agenthub/ahub-host-skills";
 import { AhubHarnessPage } from "@/features/agenthub/ahub-host-harness";
 import { AgentPage } from "@/features/agent/panel";
 import { SchedulePage } from "@/features/schedule/page";
+import { ScheduleRuntime } from "@/features/schedule/runtime";
 import { AppContextMenu } from "@/components/shell/app-context-menu";
 
 function SearchNavigationBridge() {
@@ -90,6 +91,9 @@ export default function App() {
     <HashRouter>
       <Providers>
         <SearchNavigationBridge />
+      {/* 定时任务的委托动作监听器：引擎随时可能触发，它必须全局在岗，
+          挂在页面里的话——你不在 /schedules 时触发的任务会等满超时然后失败。 */}
+      <ScheduleRuntime />
         <Shell />
       </Providers>
     </HashRouter>

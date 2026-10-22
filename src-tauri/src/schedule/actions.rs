@@ -23,7 +23,11 @@ use std::collections::BTreeMap;
 
 /// AI 一次调用给足余量（`request_chat` 自己的客户端超时是 90s）。
 pub const AI_TIMEOUT_MS: u64 = 120_000;
-/// 其余动作（含前端的抓取 / 打包）够用。
+/// 全量刷新信息源：几十个源逐个抓，网络慢时 5 分钟都不够，给到 10 分钟。
+pub const FEEDS_TIMEOUT_MS: u64 = 600_000;
+/// 备份：把全部模块状态打包成一份 JSON。
+pub const BACKUP_TIMEOUT_MS: u64 = 120_000;
+/// 其余动作够用。
 pub const DEFAULT_TIMEOUT_MS: u64 = 60_000;
 
 #[derive(Debug, Clone)]
@@ -79,7 +83,7 @@ pub static ACTIONS: &[ActionDef] = &[
     ActionDef {
         id: "refresh_feeds",
         label: "schedule.action.refreshFeeds",
-        timeout_ms: DEFAULT_TIMEOUT_MS,
+        timeout_ms: FEEDS_TIMEOUT_MS,
         kind: Kind::Delegated,
         fields: r#"[
             {"name":"sourceId","type":"source","label":"schedule.field.sourceId","hint":"schedule.field.sourceIdHint"}
@@ -89,7 +93,7 @@ pub static ACTIONS: &[ActionDef] = &[
     ActionDef {
         id: "backup",
         label: "schedule.action.backup",
-        timeout_ms: DEFAULT_TIMEOUT_MS,
+        timeout_ms: BACKUP_TIMEOUT_MS,
         kind: Kind::Delegated,
         fields: "[]",
         run: None,
