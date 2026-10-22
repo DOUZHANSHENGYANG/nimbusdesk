@@ -67,6 +67,7 @@ export function Sidebar() {
   const setWorkbenchOpen = useSettings((s) => s.setWorkbenchGroupOpen);
   const setLibraryOpen = useSettings((s) => s.setLibraryGroupOpen);
   const setAiOpen = useSettings((s) => s.setAiGroupOpen);
+  const navDisabled = useSettings((s) => s.navDisabled);
   const counts = useToolboxCounts();
   const dataRoot = useAhubSettings((s) => s.info?.dataDirs.root);
   useEffect(() => {
@@ -134,7 +135,10 @@ export function Sidebar() {
         {NAV_GROUPS.map((group, index) => {
           const state = groupState[group.key];
           const open = collapsed || state.open;
-          const groupActive = group.items.some((entry) => entry.to === location.pathname);
+          // 功能开关：被关掉的条目直接不渲染；一组全关掉，整组连标题一起消失
+          const items = group.items.filter((entry) => !navDisabled.includes(entry.to));
+          if (!items.length) return null;
+          const groupActive = items.some((entry) => entry.to === location.pathname);
           return (
             <div key={group.key} className={cn("flex flex-col gap-0.5", !collapsed && index > 0 && "mt-6")}>
               {/* 一级就是一条正常导航项（图标 + 标签 + 箭头），不是分区小标签：
@@ -165,7 +169,7 @@ export function Sidebar() {
                 transition={reduce ? { duration: 0 } : PILL_SPRING}
                 className="flex flex-col gap-0.5 overflow-hidden"
               >
-                <div className={cn("flex flex-col gap-0.5", !collapsed && "pl-4")}>{group.items.map(item)}</div>
+                <div className={cn("flex flex-col gap-0.5", !collapsed && "pl-4")}>{items.map(item)}</div>
               </motion.div>
             </div>
           );

@@ -55,6 +55,9 @@ interface SettingsState {
   workbenchGroupOpen: boolean;
   libraryGroupOpen: boolean;
   aiGroupOpen: boolean;
+  /** 被关掉的功能 id 列表（= NAV_GROUPS 里的 item.to 或 group.key）。
+   *  同一份状态同时控制主侧栏与设置页：关掉「资讯」，侧栏那一项和设置里对应分节都消失。 */
+  navDisabled: string[];
   /**
    * 对话面板的权限档（写不写本机数据由它决定，所以放在全局设置里而不是会话里：
    * 用户改的是「我这个人的尺度」，不是「这个会话的尺度」）。
@@ -84,6 +87,7 @@ interface SettingsState {
   setWorkbenchGroupOpen: (v: boolean) => void;
   setLibraryGroupOpen: (v: boolean) => void;
   setAiGroupOpen: (v: boolean) => void;
+  setNavEnabled: (id: string, on: boolean) => void;
   setAgentPermission: (v: PermissionMode) => void;
   setAgentPreset: (v: AgentPreset) => void;
   setAgentThinking: (v: ThinkingLevel) => void;
@@ -123,6 +127,7 @@ export const useSettings = create<SettingsState>()(
       workbenchGroupOpen: true,
       libraryGroupOpen: true,
       aiGroupOpen: true,
+      navDisabled: [],
       agentPermission: "ask",
       agentPreset: "build",
       agentThinking: "auto",
@@ -146,6 +151,9 @@ export const useSettings = create<SettingsState>()(
       setWorkbenchGroupOpen: (workbenchGroupOpen) => set({ workbenchGroupOpen }),
       setLibraryGroupOpen: (libraryGroupOpen) => set({ libraryGroupOpen }),
       setAiGroupOpen: (aiGroupOpen) => set({ aiGroupOpen }),
+      setNavEnabled: (id, on) => set((state) => ({
+        navDisabled: on ? state.navDisabled.filter((x) => x !== id) : [...state.navDisabled, id],
+      })),
       setAgentPermission: (agentPermission) => set({ agentPermission }),
       setAgentPreset: (agentPreset) => set({ agentPreset }),
       setAgentThinking: (agentThinking) => set({ agentThinking }),

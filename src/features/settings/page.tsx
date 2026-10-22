@@ -35,7 +35,9 @@ import { FeedNetworkSettings } from "@/features/feeds/network-settings";
 import { useProviderCopy } from "@/features/ai/provider-copy";
 import { SearchSettings } from "@/features/search";
 
-type SettingsTab = "system" | "plans" | "knowledge" | "feeds" | "ai" | "about" | "search";
+import { FeaturesSection } from "./features-section";
+
+type SettingsTab = "system" | "plans" | "knowledge" | "feeds" | "ai" | "features" | "about" | "search";
 
 /** 设置页：独立路由 + 左侧功能分类侧栏 + 右侧内容 */
 export function SettingsPage() {
@@ -59,6 +61,7 @@ export function SettingsPage() {
     { key: "knowledge", icon: BookOpen, label: t("nav.knowledge") },
     { key: "feeds", icon: SlidersHorizontal, label: t("nav.feeds") },
     { key: "ai", icon: Bot, label: t("settings.tabs.ai") },
+    { key: "features", icon: LayoutGrid, label: t("settings.tabs.features") },
     { key: "about", icon: Info, label: t("settings.tabs.about") },
   ];
 
@@ -125,6 +128,7 @@ export function SettingsPage() {
           {tab === "knowledge" && <KnowledgeSettings />}
           {tab === "feeds" && <FeedNetworkSettings />}
           {tab === "ai" && <AiSection onDirtyChange={setAiDirty} />}
+          {tab === "features" && <FeaturesSection />}
           {tab === "about" && <AboutSection />}
         </div>
       </div>
