@@ -30,7 +30,7 @@ function statusTone(status: string): string {
 function StatusBadge({ status }: { status: string }) {
     const { t } = useTranslation();
     return (
-        <span className={cn("inline-flex h-5 items-center rounded-full px-2 text-xs font-medium", statusTone(status))}>
+        <span className={cn("inline-flex h-5 shrink-0 items-center whitespace-nowrap rounded-full px-2 text-xs font-medium", statusTone(status))}>
             {t(statusLabel(status))}
         </span>
     );

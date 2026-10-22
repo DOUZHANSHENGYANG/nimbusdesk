@@ -27,5 +27,9 @@ export function AhubPromptsPage() {
     };
   }, []);
 
-  return <AhubPromptsPageView />;
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <AhubPromptsPageView />
+    </div>
+  );
 }
