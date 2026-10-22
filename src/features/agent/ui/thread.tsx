@@ -2,12 +2,18 @@ import { useState } from "react";
 import { isToolUIPart } from "ai";
 import { useTranslation } from "react-i18next";
 import {
+  Check,
   CircleAlert,
   CircleCheck,
+  Copy,
   LoaderCircle,
+  Pencil,
   RefreshCw,
   ShieldAlert,
+  ShieldCheck,
   Sparkles,
+  StepForward,
+  X,
 } from "lucide-react";
 import { Message, MessageContent, MessageFooter } from "@/components/ui/message";
 import {
@@ -31,6 +37,7 @@ import {
   TraceLine,
   TraceTitle,
 } from "@/components/ui/trace";
+import { metaOf, type AgentAttachmentMeta } from "../sessions";
 import { useAgent, type AgentError } from "../store";
 import type { AgentMessage } from "../model";
 
@@ -52,11 +59,151 @@ const Spinner = () => (
 );
 
 type Part = AgentMessage["parts"][number];
+type Extra = "copy" | "regenerate" | "continue" | "edit";
+
+/** `file` part 在联合类型里不带可选 url，这里统一收窄一次。 */
+interface FileLike { type: "file"; mediaType: string; url?: string; filename?: string }
+const filesOf = (parts: readonly Part[]) => parts.filter((part): part is Part & FileLike => part.type === "file");
+
+/** 气泡下方的悬停操作条：复制 / 重新生成 / 继续 / 编辑。 */
+function Actions({ message, items, onEdit }: { message: AgentMessage; items: Extra[]; onEdit?: () => void }) {
+  const { t } = useTranslation();
+  const [copied, setCopied] = useState(false);
+  const regenerate = useAgent((state) => state.regenerate);
+  const continueLast = useAgent((state) => state.continueLast);
+  const text = message.parts.filter((part) => part.type === "text").map((part) => part.text).join("");
+
+  const icon: Record<Extra, typeof Copy> = {
+    copy: Copy,
+    regenerate: RefreshCw,
+    continue: StepForward,
+    edit: Pencil,
+  };
+
+  return (
+    <div className="agent-actions">
+      {items.map((item) => {
+        const Icon = item === "copy" && copied ? Check : icon[item];
+        const label =
+          item === "copy" ? t("agent.action.copy")
+            : item === "regenerate" ? t("agent.regenerate")
+              : item === "continue" ? t("agent.action.continue")
+                : t("agent.action.edit");
+        return (
+          <Button
+            key={item}
+            size="icon"
+            variant="ghost"
+            aria-label={label}
+            title={label}
+            onClick={() => {
+              if (item === "copy") {
+                void navigator.clipboard.writeText(text).then(() => {
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 1500);
+                }, () => undefined);
+                return;
+              }
+              if (item === "regenerate") void regenerate(message.id);
+              if (item === "continue") void continueLast();
+              if (item === "edit") onEdit?.();
+            }}
+          >
+            <Icon />
+          </Button>
+        );
+      })}
+    </div>
+  );
+}
+
+/** 用户消息：附件缩略图 + 气泡 + 时间 + 悬停操作；编辑时就地换成输入框。 */
+function UserMessage({ message }: { message: AgentMessage }) {
+  const [editing, setEditing] = useState(false);
+  const meta = metaOf(message);
+  const time = meta.createdAt ? new Date(meta.createdAt).toLocaleTimeString() : null;
+  const attachments = meta.attachments ?? [];
+  const images = filesOf(message.parts).filter((part) => part.url);
+  const text = message.parts.filter((part) => part.type === "text").map((part) => part.text).join("");
+
+  if (editing) {
+    return (
+      <Message align="end">
+        <MessageContent>
+          <MessageEditor message={message} onDone={() => setEditing(false)} />
+        </MessageContent>
+      </Message>
+    );
+  }
+
+  return (
+    <Message align="end">
+      <MessageContent>
+        {images.map((part, index) => (
+          <img key={index} className="agent-image" src={part.url} alt={part.filename ?? ""} />
+        ))}        <Bubble align="end">
+          <BubbleContent>{text}</BubbleContent>
+        </Bubble>
+        {attachments.length > 0 && <Attachments items={attachments} />}
+        <MessageFooter className="agent-meta">{time && <span>{time}</span>}</MessageFooter>
+        <Actions message={message} items={["copy", "edit"]} onEdit={() => setEditing(true)} />
+      </MessageContent>
+    </Message>
+  );
+}
+
+/** 编辑用户消息并重发：就地替换，后面那一段分支会被丢掉（AI SDK 的语义）。 */
+function MessageEditor({ message, onDone }: { message: AgentMessage; onDone: () => void }) {
+  const { t } = useTranslation();
+  const editMessage = useAgent((state) => state.editMessage);
+  const [text, setText] = useState(
+    message.parts.filter((part) => part.type === "text").map((part) => part.text).join(""),
+  );
+  return (
+    <div className="agent-edit">
+      <textarea
+        autoFocus
+        value={text}
+        onChange={(event) => setText(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Escape") onDone();
+          if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
+            event.preventDefault();
+            void editMessage(message.id, text);
+            onDone();
+          }
+        }}
+      />
+      <div className="agent-edit-actions">
+        <Button size="sm" onClick={() => { void editMessage(message.id, text); onDone(); }}>
+          {t("agent.action.resend")}
+        </Button>
+        <Button size="sm" variant="ghost" onClick={onDone}>{t("agent.cancel")}</Button>
+      </div>
+    </div>
+  );
+}
+
+function Attachments({ items }: { items: AgentAttachmentMeta[] }) {
+  const { t } = useTranslation();
+  return (
+    <div className="agent-attachments">
+      {items.map((item) => (
+        <span key={`${item.name}-${item.size}`} className="agent-attachment" data-kind={item.kind}>
+          {item.name}
+          {!item.kept && <em>{t("agent.attach.dropped")}</em>}
+        </span>
+      ))}
+    </div>
+  );
+}
 
 /** 一条工具调用：人是看的「动词 + 宾语」一行，参数与结果藏在展开层里。 */
-function ToolCall({ part }: { part: Part }) {
+function ToolCall({ part, message }: { part: Part; message: AgentMessage }) {
   const { t } = useTranslation();
   const approve = useAgent((state) => state.approve);
+  const reapprove = useAgent((state) => state.reapprove);
+  const regenerate = useAgent((state) => state.regenerate);
   const [open, setOpen] = useState(false);
   if (!isToolUIPart(part)) return null;
   const name = part.type === "dynamic-tool" ? part.toolName : part.type.slice("tool-".length);
@@ -64,10 +211,20 @@ function ToolCall({ part }: { part: Part }) {
 
   if (part.state === "input-streaming") {
     return (
-      <TraceLine status="running">
-        <Spinner />
-        <TraceTitle>{t("agent.tool.preparing", { name: label })}</TraceTitle>
-      </TraceLine>
+      <TraceCollapsible>
+        <TraceCollapsibleTrigger>
+          <TraceLine status="running">
+            <Spinner />
+            <TraceTitle>{t("agent.tool.preparing", { name: label })}</TraceTitle>
+          </TraceLine>
+        </TraceCollapsibleTrigger>
+        <TraceCollapsibleContent>
+          {/* 参数还在逐字补齐：直接把半截 JSON 显示出来，别等它长完 */}
+          <CodeBlock size="sm">
+            <CodeBlockContent wrap>{asText(part.input)}</CodeBlockContent>
+          </CodeBlock>
+        </TraceCollapsibleContent>
+      </TraceCollapsible>
     );
   }
 
@@ -104,7 +261,7 @@ function ToolCall({ part }: { part: Part }) {
         <TraceTitle>
           {part.approval.approved
             ? t("agent.tool.approved", { name: label })
-            : t("agent.tool.denied", { name: label })}
+            : t("agent.tool.deniedWaiting", { name: label })}
         </TraceTitle>
       </TraceLine>
     );
@@ -112,24 +269,44 @@ function ToolCall({ part }: { part: Part }) {
 
   if (part.state === "output-denied") {
     return (
-      <TraceLine status="pending">
-        <TraceIcon>
-          <ShieldAlert />
-        </TraceIcon>
-        <TraceTitle>{t("agent.tool.denied", { name: label })}</TraceTitle>
-      </TraceLine>
+      <TraceCollapsible>
+        <TraceCollapsibleTrigger>
+          <TraceLine status="pending">
+            <TraceIcon>
+              <ShieldAlert />
+            </TraceIcon>
+            <TraceTitle>{t("agent.tool.denied", { name: label })}</TraceTitle>
+          </TraceLine>
+        </TraceCollapsibleTrigger>
+        <TraceCollapsibleContent>
+          <CodeBlock size="sm">
+            <CodeBlockContent wrap>{asText(part.input)}</CodeBlockContent>
+          </CodeBlock>
+          <Button size="sm" variant="outline" onClick={() => void reapprove(part.approval.id)}>
+            <ShieldCheck />
+            {t("agent.tool.reapprove")}
+          </Button>
+        </TraceCollapsibleContent>
+      </TraceCollapsible>
     );
   }
 
   if (part.state === "output-error") {
     return (
-      <TraceLine status="error">
-        <TraceIcon>
-          <CircleAlert />
-        </TraceIcon>
-        <TraceTitle>{t("agent.tool.failed", { name: label })}</TraceTitle>
-        <TraceDescription className="agent-error-text">{part.errorText}</TraceDescription>
-      </TraceLine>
+      <div className="agent-tool-error">
+        <TraceLine status="error">
+          <TraceIcon>
+            <CircleAlert />
+          </TraceIcon>
+          <TraceTitle>{t("agent.tool.failed", { name: label })}</TraceTitle>
+          <TraceDescription className="agent-error-text">{part.errorText}</TraceDescription>
+        </TraceLine>
+        {/* 单个工具没法单独重跑，就地重跑一轮（模型会再决定调不调这个工具） */}
+        <Button size="sm" variant="outline" onClick={() => void regenerate(message.id)}>
+          <RefreshCw />
+          {t("agent.retry")}
+        </Button>
+      </div>
     );
   }
 
@@ -155,7 +332,7 @@ function ToolCall({ part }: { part: Part }) {
   );
 }
 
-function Reasoning({ text, streaming }: { text: string; streaming: boolean }) {
+function Reasoning({ text, streaming, seconds }: { text: string; streaming: boolean; seconds?: string }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState<boolean | undefined>(undefined);
   // 流式时自动展开，结束后自动折叠；用户手动开过就听用户的。
@@ -167,7 +344,9 @@ function Reasoning({ text, streaming }: { text: string; streaming: boolean }) {
           <TraceIcon>
             <Sparkles />
           </TraceIcon>
-          <TraceTitle>{streaming ? t("agent.thinking") : t("agent.thought")}</TraceTitle>
+          <TraceTitle>
+            {streaming ? t("agent.thinking") : seconds ? t("agent.meta.thought", { seconds }) : t("agent.thought")}
+          </TraceTitle>
         </TraceLine>
       </TraceCollapsibleTrigger>
       <TraceCollapsibleContent>{text}</TraceCollapsibleContent>
@@ -176,6 +355,8 @@ function Reasoning({ text, streaming }: { text: string; streaming: boolean }) {
 }
 
 function AssistantParts({ message, streaming }: { message: AgentMessage; streaming: boolean }) {
+  const meta = metaOf(message);
+  const seconds = meta.elapsedMs === undefined ? undefined : (meta.elapsedMs / 1000).toFixed(1);
   return (
     <Trace>
       {message.parts.map((part, index) => {
@@ -187,10 +368,16 @@ function AssistantParts({ message, streaming }: { message: AgentMessage; streami
           ) : null;
         }
         if (part.type === "reasoning") {
-          return <Reasoning key={index} text={part.text} streaming={streaming} />;
+          return <Reasoning key={index} text={part.text} streaming={streaming && part.state === "streaming"} seconds={seconds} />;
+        }
+        if (part.type === "file") {
+          const file = part as { mediaType: string; url?: string; filename?: string };
+          return file.mediaType.startsWith("image/") && file.url
+            ? <img key={index} className="agent-image" src={file.url} alt={file.filename ?? ""} />
+            : null;
         }
         if (part.type === "dynamic-tool" || isToolUIPart(part)) {
-          return <ToolCall key={index} part={part} />;
+          return <ToolCall key={index} part={part} message={message} />;
         }
         return null;
       })}
@@ -220,21 +407,55 @@ function ErrorBar({ error, onRetry }: { error: AgentError; onRetry: () => void }
   );
 }
 
+/** 「已停止 / 上次未完成」之后的两个出口：接着写，或者重来。 */
+function ResumeRow({ kind, messageId }: { kind: "stopped" | "incomplete"; messageId?: string }) {
+  const { t } = useTranslation();
+  const retry = useAgent((state) => state.retry);
+  const regenerate = useAgent((state) => state.regenerate);
+  const continueLast = useAgent((state) => state.continueLast);
+  return (
+    <MessageFooter className="agent-stopped">
+      {kind === "stopped" ? t("agent.stopped") : t("agent.incomplete")}
+      <Button size="sm" variant="ghost" onClick={() => void continueLast()}>
+        <StepForward />
+        {t("agent.action.continue")}
+      </Button>
+      <Button
+        size="sm"
+        variant="ghost"
+        onClick={() => (messageId ? void regenerate(messageId) : void retry())}
+      >
+        <RefreshCw />
+        {t("agent.regenerate")}
+      </Button>
+    </MessageFooter>
+  );
+}
+
 export function Thread({ model }: { model: string }) {
   const { t } = useTranslation();
   const messages = useAgent((state) => state.messages);
   const status = useAgent((state) => state.status);
   const stopped = useAgent((state) => state.stopped);
+  const incomplete = useAgent((state) => state.incomplete);
+  const droppedContext = useAgent((state) => state.droppedContext);
   const error = useAgent((state) => state.error);
   const elapsedMs = useAgent((state) => state.elapsedMs);
   const usage = useAgent((state) => state.usage);
   const retry = useAgent((state) => state.retry);
-  const last = messages[messages.length - 1];
   const busy = status === "submitted" || status === "streaming";
+  const last = messages[messages.length - 1];
+  const lastMeta = last ? metaOf(last) : {};
+  const partial = error !== null && last?.role === "assistant"
+    && last.parts.some((part) => part.type === "text" && part.text);
+  const liveElapsed = lastMeta.elapsedMs ?? elapsedMs;
+  const liveUsage = lastMeta.usage ?? usage;
   const meta = [
-    model,
-    elapsedMs === null ? null : t("agent.meta.elapsed", { seconds: (elapsedMs / 1000).toFixed(1) }),
-    usage?.totalTokens == null ? null : t("agent.meta.tokens", { count: usage.totalTokens }),
+    lastMeta.model ?? model,
+    liveElapsed === null || liveElapsed === undefined
+      ? null
+      : t("agent.meta.elapsed", { seconds: (liveElapsed / 1000).toFixed(1) }),
+    liveUsage?.totalTokens == null ? null : t("agent.meta.tokens", { count: liveUsage.totalTokens }),
   ].filter(Boolean);
 
   return (
@@ -242,34 +463,35 @@ export function Thread({ model }: { model: string }) {
       <MessageScroller>
         <MessageScrollerViewport>
           <MessageScrollerContent className="agent-thread">
-            {messages.map((message) => (
-              <MessageScrollerItem key={message.id} messageId={message.id}>
-                {message.role === "user" ? (
-                  <Message align="end">
-                    <MessageContent>
-                      <Bubble align="end">
-                        <BubbleContent>
-                          {message.parts
-                            .filter((part) => part.type === "text")
-                            .map((part) => part.text)
-                            .join("")}
-                        </BubbleContent>
-                      </Bubble>
-                    </MessageContent>
-                  </Message>
-                ) : (
-                  <Message align="start">
-                    <MessageContent>
-                      <AssistantParts message={message} streaming={busy && message === last} />
-                      {/* 耗时与用量放最次级位置，不抢正文 */}
-                      {message === last && !busy && !error && meta.length > 0 && (
-                        <MessageFooter className="agent-meta">{meta.join(" · ")}</MessageFooter>
-                      )}
-                    </MessageContent>
-                  </Message>
-                )}
+            {droppedContext > 0 && (
+              <MessageScrollerItem>
+                <div className="agent-notice" role="status">
+                  <CircleAlert />
+                  <span>{t("agent.context.trimmed", { count: droppedContext })}</span>
+                </div>
               </MessageScrollerItem>
-            ))}
+            )}
+            {messages.map((message) => {
+              if (metaOf(message).hidden) return null;
+              return (
+                <MessageScrollerItem key={message.id} messageId={message.id}>
+                  {message.role === "user" ? (
+                    <UserMessage message={message} />
+                  ) : (
+                    <Message align="start">
+                      <MessageContent>
+                        <AssistantParts message={message} streaming={busy && message === last} />
+                        {/* 次要素级元信息：模型 · 耗时 · token，不抢正文 */}
+                        {message === last && !busy && !error && meta.length > 0 && (
+                          <MessageFooter className="agent-meta">{meta.join(" · ")}</MessageFooter>
+                        )}
+                        <Actions message={message} items={["copy", "regenerate", "continue"]} />
+                      </MessageContent>
+                    </Message>
+                  )}
+                </MessageScrollerItem>
+              );
+            })}
             {error && (
               <MessageScrollerItem>
                 <ErrorBar error={error} onRetry={() => void retry()} />
@@ -277,12 +499,19 @@ export function Thread({ model }: { model: string }) {
             )}
             {stopped && !busy && !error && (
               <MessageScrollerItem>
+                <ResumeRow kind="stopped" />
+              </MessageScrollerItem>
+            )}
+            {incomplete && !busy && !error && !stopped && (
+              <MessageScrollerItem>
+                <ResumeRow kind="incomplete" messageId={last?.role === "assistant" ? last.id : undefined} />
+              </MessageScrollerItem>
+            )}
+            {partial && (
+              <MessageScrollerItem>
                 <MessageFooter className="agent-stopped">
-                  {t("agent.stopped")}
-                  <Button size="sm" variant="ghost" onClick={() => void retry()}>
-                    <RefreshCw />
-                    {t("agent.regenerate")}
-                  </Button>
+                  <X />
+                  {t("agent.incomplete")}
                 </MessageFooter>
               </MessageScrollerItem>
             )}

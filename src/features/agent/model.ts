@@ -6,10 +6,19 @@ import {
   type InferAgentUIMessage,
   type LanguageModelUsage,
 } from "ai";
-import { selectProvider, type AiProvider } from "@/features/ai/core";
+import {
+  cleanProvider,
+  getProviderModels,
+  selectModel,
+  selectProvider,
+  type AiProvider,
+  type ModelParameters,
+  type ProviderConfig,
+} from "@/features/ai/core";
 import { providersReady, useProviders } from "@/features/ai/providers";
 import { agentFetch } from "./fetch";
 import { agentTools } from "./tools";
+import type { AgentMeta } from "./transcript";
 
 /**
  * **唯一**知道「provider 怎么造」的地方：输入是 `AiProvider`，输出是 `ToolLoopAgent`
@@ -42,24 +51,118 @@ function errorLine(error: unknown): string {
   return [code, raw === code ? "" : raw].filter(Boolean).join(" · ").slice(0, 400);
 }
 
-/** 现成的默认服务商选择逻辑（缺默认项时抛 `AI_NO_PROVIDER`）。 */
-export async function currentProvider(): Promise<AiProvider> {
+/* ── 选择器用的模型目录 ────────────────────────────────── */
+
+/** 选择器里的一行：一个服务商 × 一个模型。 */
+export interface ModelOption {
+  providerId: string;
+  providerName: string;
+  modelId: string;
+  vision: boolean;
+  parameters: ModelParameters;
+}
+
+export function listModelOptions(config: ProviderConfig): ModelOption[] {
+  const options: ModelOption[] = [];
+  for (const provider of config.providers) {
+    let models;
+    try {
+      models = getProviderModels(provider);
+    } catch {
+      continue; // 一条坏配置不该让整个选择器空掉
+    }
+    for (const model of models) {
+      options.push({
+        providerId: provider.id,
+        providerName: provider.name,
+        modelId: model.id,
+        vision: model.vision,
+        parameters: model.parameters ?? {},
+      });
+    }
+  }
+  return options;
+}
+
+/**
+ * 把「会话记着的 providerId + model」落成一个可用的 `AiProvider`。
+ *
+ * 三种边界都收在这里，且**不抛给 UI**（返回 null 表示真的一个都没有）：
+ * - 记着的模型被删了 → 退回该服务商的默认模型；
+ * - 记着的服务商被删了 / 配置坏了 → 退回全局默认服务商；
+ * - 一个服务商都没有 → null，UI 显示引导卡。
+ */
+export function resolveSelection(
+  config: ProviderConfig,
+  providerId: string | null,
+  modelId: string | null,
+): AiProvider | null {
+  const provider = providerId ? config.providers.find((item) => item.id === providerId) : undefined;
+  if (provider) {
+    try {
+      return selectModel(provider, modelId ?? provider.model);
+    } catch { /* 模型被删：往下退回默认模型 */ }
+    try {
+      return cleanProvider(provider);
+    } catch { /* 服务商本身坏了：往下退回全局默认 */ }
+  }
+  try {
+    return selectProvider(config);
+  } catch {
+    return null;
+  }
+}
+
+export function modelParameters(provider: AiProvider): ModelParameters {
+  try {
+    return getProviderModels(provider).find((item) => item.id === provider.model)?.parameters ?? {};
+  } catch {
+    return {};
+  }
+}
+
+/** 现成的默认选择；一个服务商都没有时抛 `AI_NO_PROVIDER`。 */
+export async function defaultSelection(): Promise<AiProvider> {
   await providersReady();
   return selectProvider(useProviders.getState());
 }
 
-function buildAgent(provider: AiProvider) {
-  const model = createOpenAICompatible({
+/* ── agent 与 transport ────────────────────────────────── */
+
+/**
+ * 模型参数怎么落到 AI SDK：`temperature` / `topP` / `maxTokens`（→`maxOutputTokens`）
+ * 是 AI SDK 的一等字段，直接传；另外两个在请求体上改（provider 的
+ * `transformRequestBody`），因为 AI SDK 没有对应名字：
+ * - `tokenLimitField`：AI SDK 一律发 `max_tokens`，选了 `max_completion_tokens`
+ *   就在这里改名（有些新模型只认后者）。
+ * - `reasoningEffort`：AI SDK 走 providerOptions，而键名由服务商名推导、不可靠，
+ *   这里直接写 `reasoning_effort`，路径最短。
+ */
+export function buildAgent(provider: AiProvider) {
+  const parameters = modelParameters(provider);
+  const factory = createOpenAICompatible({
     name: provider.name,
     baseURL: provider.baseUrl,
+    // 刻意不传 apiKey：密钥由 Rust 侧按 providerId 注入，渲染进程永远看不到它。
     fetch: agentFetch(provider.id, provider.baseUrl),
-  })(provider.model);
+    transformRequestBody: (body) => {
+      if (parameters.tokenLimitField === "max_completion_tokens" && body.max_tokens != null) {
+        body.max_completion_tokens = body.max_tokens;
+        delete body.max_tokens;
+      }
+      if (parameters.reasoningEffort) body.reasoning_effort = parameters.reasoningEffort;
+      return body;
+    },
+  });
   return new ToolLoopAgent({
-    model,
+    model: factory(provider.model),
     instructions: AGENT_INSTRUCTIONS,
     tools: agentTools,
     stopWhen: isStepCount(8),
     toolApproval: TOOL_APPROVAL,
+    temperature: parameters.temperature,
+    topP: parameters.topP,
+    maxOutputTokens: parameters.maxTokens,
   });
 }
 
@@ -68,18 +171,32 @@ export type AgentMessage = InferAgentUIMessage<ReturnType<typeof buildAgent>>;
 
 /**
  * 组装 transport。
- * 刻意**不传 apiKey**：密钥由 Rust 侧按 providerId 注入，渲染进程永远看不到它。
+ *
+ * `messageMetadata` 顺手把「这一轮用的模型 / 起算时刻 / 耗时 / 用量」写进消息的
+ * metadata —— 于是每条历史消息都能显示自己的元信息，而不只是最后一条。
  */
-export function buildTransport(
-  provider: AiProvider,
-  onUsage: (usage: LanguageModelUsage) => void,
-) {
+export function buildTransport(provider: AiProvider, onUsage: (usage: LanguageModelUsage) => void) {
+  const model = provider.model;
+  let startedAt: number | undefined;
   return new DirectChatTransport({
     agent: buildAgent(provider),
     onError: errorLine,
-    // 用量只在最后一段 finish 上是完整的（含工具轮的累计值）。
     messageMetadata: ({ part }) => {
-      if (part.type === "finish") onUsage(part.totalUsage);
+      if (part.type === "start") {
+        startedAt = Date.now();
+        return { createdAt: startedAt, model } satisfies AgentMeta;
+      }
+      if (part.type === "finish") {
+        // 用量只在最后一段 finish 上是完整的（含工具轮的累计值）。
+        onUsage(part.totalUsage);
+        const meta: AgentMeta = { model, usage: part.totalUsage };
+        if (startedAt !== undefined) {
+          meta.createdAt = startedAt;
+          meta.elapsedMs = Date.now() - startedAt;
+        }
+        startedAt = undefined;
+        return meta;
+      }
       return undefined;
     },
   });
