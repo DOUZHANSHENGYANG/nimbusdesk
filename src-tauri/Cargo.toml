@@ -36,16 +36,17 @@ tauri-plugin-notification = "2.7.0"
 tauri-plugin-global-shortcut = "2"
 
 # ── AgentHub（原样搬进来的工具箱后端）所需依赖 ──────────────────
-# 每个模块用到哪个，见交付说明；版本与源侧一致。
-tauri-plugin-clipboard-manager = "2"
-uuid = { version = "1", features = ["v4"] }
-chrono = "0.4"
-dirs = "6"
-toml = "0.8"
-sha2 = "0.10"
-ureq = { version = "2", features = ["json"] }
-serde_yaml_ng = "0.10.0"
-filetime = "0.2"
+# 锁精确版本（与云台既有的 pinyin/lopdf/zip/quick-xml/rusqlite 同一习惯），
+# 版本号取源侧解析结果。每个模块用到哪个，见交付说明。
+tauri-plugin-clipboard-manager = "=2.5.0"
+uuid = { version = "=1.28.0", features = ["v4"] }
+chrono = "=0.4.45"
+dirs = "=6.0.0"
+toml = "=0.8.2"
+sha2 = "=0.10.9"
+ureq = { version = "=2.12.1", features = ["json"] }
+serde_yaml_ng = "=0.10.0"
+filetime = "=0.2.29"
 
 [target."cfg(windows)".dependencies]
 everything-ipc = "=0.1.4"
