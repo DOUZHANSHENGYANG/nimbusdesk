@@ -287,14 +287,17 @@ function SystemSection() {
 
 /* ── 计划：提醒与完成行为 ───────────────────────────────── */
 
-/* 桌面 Dock：开关立即生效（生命周期在 DesktopRuntime）；边向改动会重开窗口以应用。 */
+/* 桌面 Dock：总开关决定「有没有这个东西」（生命周期在 DesktopRuntime，Rust 侧门控），
+   显示开关只决定「现在露不露面」；边向改动会重开窗口以应用。 */
 function DesktopDockCard() {
   const { t } = useTranslation();
   const en = useSettings((s) => s.lang) === "en";
+  const dockEnabled = useSettings((s) => s.dockEnabled);
   const dockOpen = useSettings((s) => s.dockOpen);
   const dockEdge = useSettings((s) => s.dockEdge);
   const dockShortcut = useSettings((s) => s.dockShortcut);
   const dockAutoHide = useSettings((s) => s.dockAutoHide);
+  const setDockEnabled = useSettings((s) => s.setDockEnabled);
   const setDockOpen = useSettings((s) => s.setDockOpen);
   const setDockEdge = useSettings((s) => s.setDockEdge);
   const setDockShortcut = useSettings((s) => s.setDockShortcut);
@@ -323,41 +326,59 @@ function DesktopDockCard() {
         <CardDescription>{t("settings.dockHint")}</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
-        <label className="flex cursor-pointer items-center justify-between gap-3">
-          <span className="text-[13px] font-medium text-foreground/90">{t("settings.dockEnable")}</span>
-          <Switch checked={dockOpen} onCheckedChange={setDockOpen} aria-label={t("settings.dockEnable")} />
+        {/* 总开关：默认关。关掉时下面所有项都够不到 —— 不能让人以为调了有用 */}
+        <label className="flex cursor-pointer items-start justify-between gap-3">
+          <span className="flex flex-col gap-0.5">
+            <span className="text-[13px] font-medium text-foreground/90">{t("settings.dockEnabled")}</span>
+            <span className="text-[11px] leading-5 text-muted-foreground">{t("settings.dockEnabledHint")}</span>
+          </span>
+          <Switch checked={dockEnabled} onCheckedChange={setDockEnabled} aria-label={t("settings.dockEnabled")} />
         </label>
-        <Field label={t("settings.dockEdge")}>
-          <div className="flex gap-2">
-            {(["left", "right", "top"] as const).map((side) => (
-              <Button key={side} variant={dockEdge === side ? "primary" : "secondary"} size="sm"
-                aria-pressed={dockEdge === side}
-                onClick={() => { setDockEdge(side); if (dockOpen) invoke("dock_close").then(() => invoke("dock_open")).catch((error) => toast.error(String(error))); }}>
-                {t(`settings.dockEdge${side[0]!.toUpperCase()}${side.slice(1)}`)}
-              </Button>
-            ))}
+        {/*
+         * 用 fieldset[disabled] 而不是逐个传 disabled：原生语义会把里面
+         * 所有表单控件一起禁用（含 Radix 的 Switch/Button），鼠标点不动、
+         * 键盘也进不去，少写一堆 props 又不会漏。
+         */}
+        <fieldset
+          disabled={!dockEnabled}
+          className="flex flex-col gap-4 border-0 p-0 transition-opacity disabled:opacity-45"
+        >
+          <label className="flex cursor-pointer items-center justify-between gap-3">
+            <span className="text-[13px] font-medium text-foreground/90">{t("settings.dockEnable")}</span>
+            <Switch checked={dockOpen} onCheckedChange={setDockOpen} aria-label={t("settings.dockEnable")} />
+          </label>
+          <Field label={t("settings.dockEdge")}>
+            <div className="flex gap-2">
+              {(["left", "right", "top"] as const).map((side) => (
+                <Button key={side} variant={dockEdge === side ? "primary" : "secondary"} size="sm"
+                  aria-pressed={dockEdge === side}
+                  onClick={() => { setDockEdge(side); if (dockEnabled && dockOpen) invoke("dock_close").then(() => invoke("dock_open")).catch((error) => toast.error(String(error))); }}>
+                  {t(`settings.dockEdge${side[0]!.toUpperCase()}${side.slice(1)}`)}
+                </Button>
+              ))}
+            </div>
+          </Field>
+          <p className="text-[11px] leading-5 text-muted-foreground">{t("settings.dockEdgeHint")}</p>
+          <Field label={t("settings.dockShortcut")}>
+            <ShortcutRecorder placeholder="Ctrl+Alt+D" value={shortcutDraft ?? dockShortcut}
+              onChange={(value) => { setShortcutDraft(value); setShortcutError(""); }} en={en}
+              disabled={recording} onRecordingChange={setRecording} />
+          </Field>
+          {shortcutError && <p role="alert" className="text-xs leading-5 text-destructive">{shortcutError}</p>}
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" disabled={recording || (shortcutDraft ?? dockShortcut) === dockShortcut}
+              onClick={() => void saveShortcut(shortcutDraft ?? dockShortcut)}>
+              {en ? "Save shortcut" : "保存快捷键"}
+            </Button>
+            {!!dockShortcut && <Button size="sm" variant="ghost" disabled={recording}
+              onClick={() => void saveShortcut("")}>{en ? "Clear" : "清除"}</Button>}
           </div>
-        </Field>
-        <p className="text-[11px] leading-5 text-muted-foreground">{t("settings.dockEdgeHint")}</p>
-        <Field label={t("settings.dockShortcut")}>
-          <ShortcutRecorder placeholder="Ctrl+Alt+D" value={shortcutDraft ?? dockShortcut}
-            onChange={(value) => { setShortcutDraft(value); setShortcutError(""); }} en={en}
-            disabled={recording} onRecordingChange={setRecording} />
-        </Field>
-        {shortcutError && <p role="alert" className="text-xs leading-5 text-destructive">{shortcutError}</p>}
-        <div className="flex flex-wrap gap-2">
-          <Button size="sm" disabled={recording || (shortcutDraft ?? dockShortcut) === dockShortcut}
-            onClick={() => void saveShortcut(shortcutDraft ?? dockShortcut)}>
-            {en ? "Save shortcut" : "保存快捷键"}
-          </Button>
-          {!!dockShortcut && <Button size="sm" variant="ghost" disabled={recording}
-            onClick={() => void saveShortcut("")}>{en ? "Clear" : "清除"}</Button>}
-        </div>
-        <label className="flex cursor-pointer items-center justify-between gap-3">
-          <span className="text-[13px] font-medium text-foreground/90">{t("settings.dockAutoHide")}</span>
-          <Switch checked={dockAutoHide} onCheckedChange={setDockAutoHide} aria-label={t("settings.dockAutoHide")} />
-        </label>
-        <p className="text-[11px] leading-5 text-muted-foreground">{t("settings.dockAutoHideHint")}</p>
+          <label className="flex cursor-pointer items-center justify-between gap-3">
+            <span className="text-[13px] font-medium text-foreground/90">{t("settings.dockAutoHide")}</span>
+            <Switch checked={dockAutoHide} onCheckedChange={setDockAutoHide} aria-label={t("settings.dockAutoHide")} />
+          </label>
+          <p className="text-[11px] leading-5 text-muted-foreground">{t("settings.dockAutoHideHint")}</p>
+        </fieldset>
       </CardContent>
     </Card>
   );

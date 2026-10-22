@@ -19,6 +19,10 @@ use windows::Win32::UI::WindowsAndMessaging::{
 static DOCK_SPRING: AtomicU64 = AtomicU64::new(0);
 /// 全屏自动隐藏开关；监视线程常驻，开关只读这个位。
 static DOCK_AUTOHIDE: AtomicBool = AtomicBool::new(false);
+/// Dock 总开关。默认**关**：用户没主动启用时，连窗口都不该被创建。
+/// 所有会「让 Dock 冒出来」的入口（命令、全局快捷键、自动隐藏监视线程）
+/// 都先读这一位 —— 只在其中一个入口上把关，别的入口就成了后门。
+static DOCK_ENABLED: AtomicBool = AtomicBool::new(false);
 /// Dock 停靠边（0=左 1=右 2=顶），贴边热区唤起据此判断。
 static DOCK_EDGE: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(1);
 /// 自动隐藏监视线程只起一次；DOCK_HIDDEN 标记「当前是被自动隐藏收起的」。
@@ -164,6 +168,10 @@ pub async fn dock_spring(
 /// 通过 `window_set_bounds` + `window_show_no_activate` 完成。
 #[tauri::command]
 pub async fn dock_open(app: AppHandle) -> Result<(), String> {
+    // 总开关关着就不建窗口：这是「关掉后桌面上不该出现任何东西」的第一道门。
+    if !DOCK_ENABLED.load(Ordering::SeqCst) {
+        return Ok(());
+    }
     let label = "desktop-dock";
     if let Some(win) = app.get_webview_window(label) {
         let _ = win.show();
@@ -192,6 +200,36 @@ pub async fn dock_close(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+/// 桌面 Dock 总开关（设置里的「启用桌面 Dock」，默认关）。
+///
+/// 关：销毁窗口 + 注销全局快捷键 + 停掉自动隐藏 —— 桌面上不留东西，
+/// 也不留任何能把它叫回来的入口（快捷键处理器与贴边热区都另读了 DOCK_ENABLED）。
+/// 开：这里**不**建窗口，位置尺寸得等前端问过显示器工作区才算得出来，
+/// 由前端 applyDock 紧接着调 `dock_open`。
+#[tauri::command]
+pub async fn dock_set_enabled(
+    app: AppHandle,
+    state: tauri::State<'_, DockShortcut>,
+    on: bool,
+) -> Result<(), String> {
+    use tauri_plugin_global_shortcut::GlobalShortcutExt;
+    DOCK_ENABLED.store(on, Ordering::SeqCst);
+    if on {
+        return Ok(());
+    }
+    // 先熄火再拆窗：热区/自动隐藏的监视线程若还在跑，销毁过程中会把它重新建起来。
+    DOCK_AUTOHIDE.store(false, Ordering::Relaxed);
+    DOCK_HIDDEN.store(false, Ordering::Relaxed);
+    if let Some(win) = app.get_webview_window("desktop-dock") {
+        let _ = win.destroy();
+    }
+    let mut current = state.0.lock().map_err(|_| "快捷键状态不可用")?;
+    if let Some(previous) = current.take() {
+        let _ = app.global_shortcut().unregister(previous);
+    }
+    Ok(())
+}
+
 /// Dock 显隐全局快捷键（复用收集快捷键的解析与占用检查）。
 #[derive(Default)]
 pub struct DockShortcut(pub std::sync::Mutex<Option<tauri_plugin_global_shortcut::Shortcut>>);
@@ -203,6 +241,14 @@ pub async fn set_dock_shortcut(
     shortcut: String,
 ) -> Result<(), String> {
     use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
+    // 总开关关着就不注册：注册了等于给一个「不存在的 Dock」留了条快捷键后门。
+    if !DOCK_ENABLED.load(Ordering::SeqCst) {
+        let mut current = state.0.lock().map_err(|_| "快捷键状态不可用")?;
+        if let Some(previous) = current.take() {
+            let _ = app.global_shortcut().unregister(previous);
+        }
+        return Ok(());
+    }
     let next = if shortcut.trim().is_empty() {
         None
     } else {
@@ -219,6 +265,11 @@ pub async fn set_dock_shortcut(
         }
         app.global_shortcut().on_shortcut(next, |app, _, event| {
             if event.state() == ShortcutState::Pressed {
+                // 关闭状态下的快捷键必须是死键：用户关掉 Dock 之后，
+                // 按到旧组合键不该有任何东西冒出来。
+                if !DOCK_ENABLED.load(Ordering::SeqCst) {
+                    return;
+                }
                 let app = app.clone();
                 tauri::async_runtime::spawn(async move {
                     match app.get_webview_window("desktop-dock") {
@@ -304,6 +355,11 @@ pub async fn dock_set_autohide(app: AppHandle, on: bool, edge: Option<String>) -
         let handle = app.clone();
         tauri::async_runtime::spawn_blocking(move || loop {
             std::thread::sleep(std::time::Duration::from_millis(200));
+            // 线程只起一次、常驻；真正的开关在循环里读，否则「关掉自动隐藏」
+            // 与「关掉 Dock」之后这个线程还会继续把窗口藏起来/叫回来。
+            if !DOCK_ENABLED.load(Ordering::SeqCst) || !DOCK_AUTOHIDE.load(Ordering::Relaxed) {
+                continue;
+            }
             #[cfg(windows)]
             {
                 let fullscreen = foreground_covers_monitor();

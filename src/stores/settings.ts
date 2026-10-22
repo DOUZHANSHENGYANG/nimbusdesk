@@ -26,6 +26,15 @@ interface SettingsState {
   autoClearDone: boolean;
   /** 主窗口是否置顶（默认关：窗口不该一直压住别的应用） */
   alwaysOnTop: boolean;
+  /**
+   * 桌面 Dock 总开关（默认关）。
+   *
+   * 与下面的 `dockOpen` 不是一回事：dockOpen 是「显示/隐藏」这个常驻部件，
+   * dockEnabled 是「要不要有这么个东西」—— 关掉时 Rust 侧连窗口都不创建，
+   * 全局快捷键与贴边热区也一并停用。默认关：用户没主动要，就别在桌面上
+   * 多出一条横条。
+   */
+  dockEnabled: boolean;
   /** 桌面 Dock：贴边与开关（窗口本体常驻托盘之外，关闭=销毁窗口） */
   dockEdge: "left" | "right" | "top";  dockOpen: boolean;
   /** 收纳盒飞出面板的磁贴图标边长（Ctrl+滚轮调节，32–72） */
@@ -49,6 +58,7 @@ interface SettingsState {
   setAutoSortDone: (v: boolean) => void;
   setAutoClearDone: (v: boolean) => void;
   setDockEdge: (edge: "left" | "right" | "top") => void;
+  setDockEnabled: (v: boolean) => void;
   setDockOpen: (v: boolean) => void;
   setAlwaysOnTop: (v: boolean) => void;
   setDockTileSize: (v: number) => void;
@@ -84,6 +94,7 @@ export const useSettings = create<SettingsState>()(
       autoSortDone: true,
       autoClearDone: false,
       dockEdge: "right",
+      dockEnabled: false,
       dockOpen: true,
       alwaysOnTop: false,
       dockTileSize: 28,
@@ -103,6 +114,7 @@ export const useSettings = create<SettingsState>()(
       setAutoSortDone: (autoSortDone) => set({ autoSortDone }),
       setAutoClearDone: (autoClearDone) => set({ autoClearDone }),
       setDockEdge: (dockEdge) => set({ dockEdge }),
+      setDockEnabled: (dockEnabled) => set({ dockEnabled }),
       setDockOpen: (dockOpen) => set({ dockOpen }),
       setAlwaysOnTop: (alwaysOnTop) => set({ alwaysOnTop }),
       setDockTileSize: (dockTileSize) => set({ dockTileSize: Math.min(72, Math.max(16, Math.round(dockTileSize))) }),
@@ -115,7 +127,7 @@ export const useSettings = create<SettingsState>()(
     {
       name: "settings",
       storage: createJSONStorage(() => tauriJsonStorage),
-      version: 6,
+      version: 7,
       /**
        * v1 → v2：新增 `plansView`（旧 settings.json 没这个键，pill 会全不亮）。
        * v2 → v3：新增 `autoSortDone` / `autoClearDone`。
@@ -123,6 +135,8 @@ export const useSettings = create<SettingsState>()(
        * v4 → v5：侧栏改三个分区，新增 `workbenchGroupOpen` / `libraryGroupOpen`。
        * v5 → v6：新增 `alwaysOnTop`（主窗口置顶）。老用户升级后一律**不**置顶：
        *           旧版本没有这个开关，谈不上「他手动开过」。
+       * v6 → v7：新增 `dockEnabled`（桌面 Dock 总开关）。同理一律默认关：
+       *           没有这个字段 = 从没开过。
        *
        * 迁移只补缺失字段、不改其它值；视图键顺手校验，手改坏的退回大纲
        * 而不是让整个页面白屏。
@@ -145,6 +159,7 @@ export const useSettings = create<SettingsState>()(
           s.libraryGroupOpen = s.libraryGroupOpen ?? true;
         }
         if (version < 6) s.alwaysOnTop = s.alwaysOnTop ?? false;
+        if (version < 7) s.dockEnabled = s.dockEnabled ?? false;
         return s as SettingsState;
       },
     },

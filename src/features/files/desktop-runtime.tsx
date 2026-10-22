@@ -45,17 +45,27 @@ export function DesktopRuntime() {
         const listener = listen('desktop://toggle-fences', () => {
             if (useFiles.persist.hasHydrated() && useFences.persist.hasHydrated()) void toggleDesktopFences().catch(error => toast.error(String(error)));
         });
-        const applyDock = () => {
+        const applyDock = async () => {
             if (stopped || !useSettings.persist.hasHydrated()) return;
-            const { dockOpen, dockEdge, dockShortcut, dockAutoHide } = useSettings.getState();
-            if (dockOpen) invoke('dock_open').catch(error => toast.error(String(error)));
-            else invoke('dock_close').catch(() => undefined);
-            invoke('set_dock_shortcut', { shortcut: dockShortcut }).catch(error => toast.error(String(error)));
-            invoke('dock_set_autohide', { on: dockAutoHide, edge: dockEdge }).catch(error => toast.error(String(error)));
+            const { dockEnabled, dockOpen, dockEdge, dockShortcut, dockAutoHide } = useSettings.getState();
+            try {
+                /*
+                 * 顺序是有意的：先把总开关交给 Rust，再谈开关窗口与快捷键。
+                 * 反过来的话，关闭时那一瞬间 dock_open 还能建出窗口（Rust 侧
+                 * 的开关还没被写下去），用户会看到 Dock 闪一下。
+                 * 关闭分支到此为止：Rust 已经销毁窗口并注销快捷键。
+                 */
+                await invoke('dock_set_enabled', { on: dockEnabled });
+                if (!dockEnabled) return;
+                if (dockOpen) await invoke('dock_open');
+                else await invoke('dock_close');
+                await invoke('set_dock_shortcut', { shortcut: dockShortcut });
+                await invoke('dock_set_autohide', { on: dockAutoHide, edge: dockEdge });
+            } catch (error) { toast.error(String(error)); }
         };
         const offDockHydration = useSettings.persist.onFinishHydration(applyDock);
         const offDockSettings = useSettings.subscribe((state, previous) => {
-            if (state.dockOpen !== previous.dockOpen || state.dockShortcut !== previous.dockShortcut || state.dockAutoHide !== previous.dockAutoHide) applyDock();
+            if (state.dockEnabled !== previous.dockEnabled || state.dockOpen !== previous.dockOpen || state.dockShortcut !== previous.dockShortcut || state.dockAutoHide !== previous.dockAutoHide) void applyDock();
         });
         const offHydration = useSettings.persist.onFinishHydration(applyShortcut);
         const offSettings = useSettings.subscribe((state, previous) => { if (state.fenceShortcut !== previous.fenceShortcut) applyShortcut(); });

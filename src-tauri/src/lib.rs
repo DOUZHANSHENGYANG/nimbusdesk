@@ -40,6 +40,7 @@ pub fn run() {
             commands::data::project_apply_remote_binding,
             commands::dock::dock_open,
             commands::dock::dock_close,
+            commands::dock::dock_set_enabled,
             commands::dock::dock_spring,
             commands::dock::window_show_no_activate,
             commands::dock::window_set_bounds,
