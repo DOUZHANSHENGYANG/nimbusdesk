@@ -37,9 +37,9 @@ import "./toolbox.css";
 type ContentMode = "edit" | "preview" | "split";
 
 const CONTENT_MODES: { id: ContentMode; icon: typeof Eye; key: string }[] = [
-  { id: "edit", icon: PencilLine, key: "toolbox.prompts.modeEdit" },
-  { id: "preview", icon: Eye, key: "toolbox.prompts.modePreview" },
-  { id: "split", icon: Columns2, key: "toolbox.prompts.modeSplit" },
+  { id: "edit", icon: PencilLine, key: "toolbox.modeEdit" },
+  { id: "preview", icon: Eye, key: "toolbox.modePreview" },
+  { id: "split", icon: Columns2, key: "toolbox.modeSplit" },
 ];
 
 function blank(): TbPrompt {
@@ -318,7 +318,7 @@ export function PromptsPage() {
               </div>
               <div className="mt-auto flex items-center gap-2 pt-3 text-[11px] text-ink-3">
                 <span>
-                  {t("toolbox.prompts.updatedAt")} {timeLabel(item.updatedAt, i18n.language)}
+                  {t("toolbox.updatedAt")} {timeLabel(item.updatedAt, i18n.language)}
                 </span>
                 {item.versions.length > 0 ? (
                   <span className="ml-auto inline-flex items-center gap-1">
