@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { addTags, bodyOf, collapseContext, collectTags, diffLines, diffStat, filterItems, formatPairs, matchQuery, matchTags, mcpNameProblem, parsePairs, removeTag, sizeLabel, timeLabel } from './core.ts';
+import { addTags, bodyOf, collapseContext, collectTags, diffLines, diffStat, filterItems, formatPairs, matchQuery, matchTags, mcpEntry, mcpExport, mcpNameProblem, parseMcpJson, parsePairs, removeTag, sizeLabel, timeLabel } from './core.ts';
 
 test('搜索按多个词同时命中名字/描述/标签', () => {
   const items = [
@@ -107,4 +107,35 @@ test('版本比对前剥掉 frontmatter，正文一样就不算脏', () => {
   assert.equal(bodyOf(fm), '正文');
   assert.equal(bodyOf('正文'), '正文', '没有 frontmatter 时原样返回');
   assert.equal(bodyOf('---\r\nname: a\r\n---\r\n\r\n正文'), '正文', 'CRLF 也要剥掉');
+});
+
+test('MCP 导出的条目形状与 Rust 侧逐字段一致（空 env/headers 也照发）', () => {
+  const stdio = { name: 'fs', transport: 'stdio', command: 'npx', args: ['-y', 'x'], env: {}, url: '', headers: {} };
+  const http = { name: 'remote', transport: 'sse', command: '', args: [], env: {}, url: 'https://a/mcp', headers: { Authorization: 'Bearer t' } };
+  assert.deepEqual(mcpEntry(stdio), { command: 'npx', args: ['-y', 'x'], env: {} });
+  assert.deepEqual(mcpEntry(http), { type: 'sse', url: 'https://a/mcp', headers: { Authorization: 'Bearer t' } });
+  assert.deepEqual(mcpExport([stdio, http]), {
+    mcpServers: {
+      fs: { command: 'npx', args: ['-y', 'x'], env: {} },
+      remote: { type: 'sse', url: 'https://a/mcp', headers: { Authorization: 'Bearer t' } },
+    },
+  });
+  assert.deepEqual(mcpExport([{ ...stdio, name: '  ' }]), { mcpServers: {} }, '没有名字的条目会被别的工具写坏配置');
+});
+
+test('MCP JSON 导入认四种包装，坏 JSON 不抛异常', () => {
+  const single = '{"mcpServers":{"fs":{"command":"npx","args":["-y","x"],"env":{"K":"v"}}}}';
+  assert.deepEqual(parseMcpJson(single), [
+    { name: 'fs', transport: 'stdio', command: 'npx', args: ['-y', 'x'], env: { K: 'v' }, url: '', headers: {} },
+  ]);
+  assert.equal(parseMcpJson('{"servers":{"a":{"type":"stdio","command":"node"}}}')[0].name, 'a', 'VS Code 的 servers');
+  assert.deepEqual(parseMcpJson('{"mcp":{"b":{"type":"remote","url":"https://x","headers":{"A":"1"}}}}'), [
+    { name: 'b', transport: 'http', command: '', args: [], env: {}, url: 'https://x', headers: { A: '1' } },
+  ], 'OpenCode 的 mcp + remote');
+  assert.deepEqual(parseMcpJson('{"c":{"type":"local","command":["node","server.js"],"environment":{"K":"v"}}}'), [
+    { name: 'c', transport: 'stdio', command: 'node', args: ['server.js'], env: { K: 'v' }, url: '', headers: {} },
+  ], '裸映射 + 数组式 command + environment');
+  assert.deepEqual(parseMcpJson('不是 JSON'), []);
+  assert.deepEqual(parseMcpJson('[]'), []);
+  assert.deepEqual(parseMcpJson('{"mcpServers":{"bad":123}}'), [], '条目不是对象就整条丢掉');
 });

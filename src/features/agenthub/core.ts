@@ -104,6 +104,105 @@ export function formatPairs(map: Record<string, string>): string {
     .join("\n");
 }
 
+/* ── MCP：导出与导入 ─────────────────────────────────── */
+
+/** 导出/导入都只认这几个字段（结构与 Rust 侧 `entry_flat` 一致）。 */
+export interface McpLike {
+  name: string;
+  transport: string;
+  command: string;
+  args: string[];
+  env: Record<string, string>;
+  url: string;
+  headers: Record<string, string>;
+}
+
+/**
+ * 一个服务 → 标准 `mcpServers` 条目。
+ *
+ * 为什么要有一份前端实现：后端的导出（`tb_mcp_export`）只吃**启用**的服务，
+ * 而卡片上的「复制这条」需要连停用的也能复制。字段与 Rust 侧逐个对齐，
+ * 空 env / headers 也照发（Rust 就是这么写的），避免两处产出不同的 JSON。
+ */
+export function mcpEntry(server: McpLike): Record<string, unknown> {
+  if (server.transport === "stdio") {
+    return { command: server.command, args: server.args, env: server.env };
+  }
+  return { type: server.transport, url: server.url, headers: server.headers };
+}
+
+export function mcpExport(servers: McpLike[]): { mcpServers: Record<string, unknown> } {
+  const mcpServers: Record<string, unknown> = {};
+  for (const server of servers) if (server.name.trim()) mcpServers[server.name] = mcpEntry(server);
+  return { mcpServers };
+}
+
+export interface ParsedMcpEntry {
+  name: string;
+  transport: string;
+  command: string;
+  args: string[];
+  env: Record<string, string>;
+  url: string;
+  headers: Record<string, string>;
+}
+
+function asStringMap(value: unknown): Record<string, string> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const out: Record<string, string> = {};
+  for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
+    if (item === null || item === undefined) continue;
+    out[key] = typeof item === "string" ? item : JSON.stringify(item);
+  }
+  return out;
+}
+
+/** 一条 `mcpServers` 条目 → 我们自己的形状。认 stdio 与 url 两种，其余字段忽略。 */
+function entryOf(name: string, raw: unknown): ParsedMcpEntry | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const entry = raw as Record<string, unknown>;
+  const declared = typeof entry.type === "string" ? entry.type : "";
+  const url = typeof entry.url === "string" ? entry.url : "";
+  // OpenCode 把命令写成数组，且 env 叫 environment
+  const rawCommand = entry.command;
+  const command = Array.isArray(rawCommand) ? String(rawCommand[0] ?? "") : typeof rawCommand === "string" ? rawCommand : "";
+  const args = Array.isArray(rawCommand) ? rawCommand.slice(1).map(String) : Array.isArray(entry.args) ? entry.args.map(String) : [];
+  const remote = Boolean(url) || ["http", "sse", "remote"].includes(declared.toLowerCase());
+  return {
+    name,
+    transport: remote ? (declared.toLowerCase() === "sse" ? "sse" : "http") : "stdio",
+    command,
+    args,
+    env: asStringMap(entry.env ?? entry.environment),
+    url,
+    headers: asStringMap(entry.headers),
+  };
+}
+
+/**
+ * 解析一段 MCP JSON。认四种常见形状：
+ *   `{mcpServers:{名:…}}`、`{servers:{名:…}}`、`{mcp:{名:…}}`、以及「直接就是 {名:…}」。
+ * 认不出来返回空数组（调用方据此提示），不抛异常 —— 用户粘的是别家的配置，格式五花八门。
+ */
+export function parseMcpJson(text: string): ParsedMcpEntry[] {
+  let data: unknown;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    return [];
+  }
+  if (!data || typeof data !== "object" || Array.isArray(data)) return [];
+  const root = data as Record<string, unknown>;
+  const wrapped = root.mcpServers ?? root.servers ?? root.mcp;
+  const map = wrapped && typeof wrapped === "object" && !Array.isArray(wrapped) ? (wrapped as Record<string, unknown>) : root;
+  const out: ParsedMcpEntry[] = [];
+  for (const [name, raw] of Object.entries(map)) {
+    const parsed = entryOf(name, raw);
+    if (parsed) out.push(parsed);
+  }
+  return out;
+}
+
 /* ── 标签筛选 ─────────────────────────────────────────── */
 
 export type TagMode = "or" | "and";
