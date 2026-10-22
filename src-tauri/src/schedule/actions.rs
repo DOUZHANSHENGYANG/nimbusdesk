@@ -299,7 +299,13 @@ fn ai_prompt(ctx: &Ctx) -> RunResult {
         },
     )?;
     Ok(Outcome {
-        note: Some(record.note_path),
+        // 给绝对路径：界面直接拿去「在资源管理器里显示」，不必知道知识库根在哪
+        note: Some(
+            std::path::Path::new(&root)
+                .join(&record.note_path)
+                .to_string_lossy()
+                .into_owned(),
+        ),
     })
 }
 
