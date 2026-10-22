@@ -1,5 +1,5 @@
 import { jsonSchema, tool } from "ai";
-import { tbPromptList, tbSkillCreate, tbSkillList } from "@/features/agenthub/api";
+import { api } from "@/ahub/lib/api";
 import { searchQuery } from "@/features/search/api";
 import type { SearchHit } from "@/features/search/types";
 import { inTauri } from "@/lib/tauri";
@@ -51,7 +51,7 @@ export const agentTools = {
     inputSchema: jsonSchema<Record<string, never>>({ type: "object", properties: {} }),
     execute: async () => {
       requireDesktop();
-      const skills = await tbSkillList();
+      const skills = await api.listSkills();
       return {
         total: skills.length,
         skills: skills
@@ -66,7 +66,7 @@ export const agentTools = {
     inputSchema: jsonSchema<Record<string, never>>({ type: "object", properties: {} }),
     execute: async () => {
       requireDesktop();
-      const prompts = await tbPromptList();
+      const prompts = await api.listPrompts();
       return {
         total: prompts.length,
         prompts: prompts
@@ -89,7 +89,14 @@ export const agentTools = {
     }),
     execute: async ({ name, description }) => {
       requireDesktop();
-      const created = await tbSkillCreate(name, description);
+      const created = await api.saveSkill({
+        dirName: "",
+        name,
+        description,
+        tags: [],
+        body: "",
+        frontmatter: {},
+      });
       return { dirName: created.dirName, name: created.name };
     },
   }),

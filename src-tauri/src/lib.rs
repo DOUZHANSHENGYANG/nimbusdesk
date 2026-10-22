@@ -12,9 +12,7 @@ mod tray;
 mod organization_clock;
 mod search;
 mod quick_tools;
-mod agenthub;
-// AgentHub（源侧工具箱后端）原样搬进来的模块，独立在 ahub/ 下，
-// 与云台自造的 agenthub/ 共存，等四页搬完后才删旧的。
+// AgentHub（源侧工具箱后端）原样搬进来的模块，独立在 ahub/ 下。
 mod ahub;
 
 /// Entry used by the executable before initializing any UI or background tasks.
@@ -150,30 +148,6 @@ pub fn run() {
             commands::shellicon::native_icon,
             commands::fileops::ensure_dir,
             commands::shellicon::native_icons,
-            commands::agenthub::tb_root,
-            commands::agenthub::tb_root_reveal,
-            commands::agenthub::tb_skill_list,
-            commands::agenthub::tb_skill_read,
-            commands::agenthub::tb_skill_save,
-            commands::agenthub::tb_skill_create,
-            commands::agenthub::tb_skill_delete,
-            commands::agenthub::tb_skill_import,
-            commands::agenthub::tb_skill_reveal,
-            commands::agenthub::tb_skill_list_files,
-            commands::agenthub::tb_skill_read_file,
-            commands::agenthub::tb_prompt_list,
-            commands::agenthub::tb_prompt_save,
-            commands::agenthub::tb_prompt_delete,
-            commands::agenthub::tb_prompt_restore,
-            commands::agenthub::tb_skill_restore,
-            commands::agenthub::tb_mcp_list,
-            commands::agenthub::tb_mcp_save,
-            commands::agenthub::tb_mcp_delete,
-            commands::agenthub::tb_mcp_export,
-            commands::agenthub::tb_harness_scan,
-            commands::agenthub::tb_harness_collect,
-            commands::agenthub::tb_harness_push,
-            commands::agenthub::tb_harness_remove,
             // ── AgentHub 原版命令（129 条，与源侧 invoke_handler 逐条一致）──
             ahub::commands::add_skill_source_dir,
             ahub::commands::ai_provider_create,
