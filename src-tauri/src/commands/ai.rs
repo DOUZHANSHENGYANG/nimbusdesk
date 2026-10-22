@@ -382,6 +382,12 @@ mod credentials {
     }
 }
 
+/// 桥③（AI 提供商）用：按提供商 id 读本机凭据（`NimbusDesk/AI/<id>`）。
+/// 工具箱的技能摘要等 AI 调用没有自己的凭据，只会走这里读云台那一份。
+pub fn read_secret(id: &str) -> Result<Option<String>, String> {
+    credentials::read(id)
+}
+
 #[tauri::command]
 pub async fn ai_save_secret(id: String, key: String) -> Result<(), String> {
     validate_id(&id)?;

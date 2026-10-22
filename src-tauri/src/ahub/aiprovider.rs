@@ -824,20 +824,77 @@ pub fn test_connection(app: &AppH, id: &str, draft: Option<ProviderDraft>) -> Re
 
 // ---------------- 默认提供商解析 ----------------
 
+/// 桥③（AI 提供商）：云台那套「AI 提供商」是唯一一份配置。
+///
+/// 源侧读自己的 settings.json（`aiProviders`）与凭据管理器里的 `agenthub-ai-*`，
+/// 而用户配好的那条在云台那边：模块存储的 `ai-providers`（zustand 持久化，
+/// `{"state":{"providers":[…],"defaultTextId":"…"}}`）与 `NimbusDesk/AI/<id>` 凭据。
+/// 源侧那套设置页并没有随四个页面一起搬进来，所以这里必须自己转译一次 ——
+/// 否则技能页的「生成摘要」永远报「尚未配置 AI 提供商」。
+///
+/// 只读、只取云台的默认**文本**提供商（与云台 `selectProvider()` 同一条选取规则）；
+/// 源侧要的只有 kind / baseUrl / model，云台侧全是 OpenAI 兼容，kind 固定 `openai`。
+fn from_nimbusdesk() -> Option<(AiProvider, String)> {
+    let value = crate::commands::data::read_current("ai-providers").ok().flatten()?;
+    let p = nimbusdesk_provider(&value)?;
+    let key = crate::commands::ai::read_secret(&p.id).ok().flatten().unwrap_or_default();
+    Some((p, key))
+}
+
+/// 从云台 `ai-providers` 的持久化信封里取出默认文本提供商（纯函数，便于验证）。
+pub fn nimbusdesk_provider(value: &serde_json::Value) -> Option<AiProvider> {
+    let state = value.get("state")?;
+    let id = state.get("defaultTextId")?.as_str()?.trim().to_string();
+    if id.is_empty() {
+        return None;
+    }
+    let raw = state
+        .get("providers")?
+        .as_array()?
+        .iter()
+        .find(|p| p.get("id").and_then(|v| v.as_str()) == Some(id.as_str()))?;
+    let base_url = raw.get("baseUrl").and_then(|v| v.as_str())?.trim().to_string();
+    if base_url.is_empty() {
+        return None;
+    }
+    let now = now_iso();
+    Some(AiProvider {
+        id,
+        name: raw
+            .get("name")
+            .and_then(|v| v.as_str())
+            .unwrap_or("云台 AI 提供商")
+            .to_string(),
+        kind: "openai".into(),
+        base_url,
+        model: raw.get("model").and_then(|v| v.as_str()).unwrap_or_default().trim().to_string(),
+        enabled: true,
+        is_default: true,
+        created_at: now.clone(),
+        updated_at: now,
+        // 凭据不在源侧这边：key 由 from_nimbusdesk 直接从云台凭据读出
+        credential_ref: String::new(),
+        key_hint: String::new(),
+    })
+}
+
 /// 返回默认提供商 + 从凭据管理器读出的 key。
+/// 源侧自己没配过（或没默认）时，落到桥③：用云台那一条。
 /// 无默认 / 默认已停用 → Err（不静默回退到其它提供商）。
 /// 空 key 不算错误（本地网关可不需要 key），由厂商以 HTTP 401 报回。
 pub fn resolve_default(app: &AppH) -> Result<(AiProvider, String), String> {
     // 迁移是幂等的：只在 aiProviders 为空时生效，失败不影响后续判断
     let _ = migrate_legacy(app);
     let s = store::load_settings(app);
-    let p = s
+    let stored = s
         .ai_providers
         .iter()
         .find(|p| !s.ai_default_provider_id.trim().is_empty() && p.id == s.ai_default_provider_id)
         .or_else(|| s.ai_providers.iter().find(|p| p.is_default))
-        .ok_or_else(|| ERR_NOT_CONFIGURED.to_string())?
-        .clone();
+        .cloned();
+    let Some(p) = stored else {
+        return from_nimbusdesk().ok_or_else(|| ERR_NOT_CONFIGURED.to_string());
+    };
     if !p.enabled {
         return Err(format!(
             "AI 提供商「{}」已停用：请到「设置」→「AI 提供商」启用它，或换一个默认提供商",
@@ -859,8 +916,14 @@ pub fn default_model_name(app: &AppH) -> Option<String> {
         .ai_providers
         .iter()
         .find(|p| !s.ai_default_provider_id.trim().is_empty() && p.id == s.ai_default_provider_id)
-        .or_else(|| s.ai_providers.iter().find(|p| p.is_default))?;
-    Some(resolve_model(p))
+        .or_else(|| s.ai_providers.iter().find(|p| p.is_default))
+        .cloned()
+        .or_else(|| {
+            // 桥③：源侧没配过时，摘要里记的模型来自云台那一条
+            let value = crate::commands::data::read_current("ai-providers").ok().flatten()?;
+            nimbusdesk_provider(&value)
+        })?;
+    Some(resolve_model(&p))
 }
 
 // ---------------- 旧字段迁移 ----------------
@@ -1293,6 +1356,54 @@ mod tests {
     fn not_configured_message_points_to_settings() {
         assert!(ERR_NOT_CONFIGURED.contains("设置"));
         assert!(ERR_NOT_CONFIGURED.contains("AI 提供商"));
+    }
+
+    // ---- 桥③：把云台的提供商转译成源侧的一条 ----
+
+    /// 云台 `ai-providers` 模块的真实持久化形态（zustand 信封）
+    fn nimbusdesk_store() -> serde_json::Value {
+        serde_json::json!({
+            "state": {
+                "defaultTextId": "e3ad",
+                "defaultVisionId": null,
+                "providers": [
+                    { "id": "other", "name": "DeepSeek", "baseUrl": "https://api.deepseek.com", "model": "deepseek-chat" },
+                    { "id": "e3ad", "name": "本地网关", "baseUrl": "http://127.0.0.1:7865/v1", "model": "deepseek" }
+                ]
+            },
+            "version": 1
+        })
+    }
+
+    #[test]
+    fn nimbusdesk_default_provider_becomes_an_openai_provider() {
+        let p = nimbusdesk_provider(&nimbusdesk_store()).expect("云台的默认提供商必须能转译");
+        assert_eq!(p.base_url, "http://127.0.0.1:7865/v1");
+        assert_eq!(p.model, "deepseek");
+        assert_eq!(p.kind, "openai", "云台侧只有 OpenAI 兼容一种协议");
+        assert!(p.enabled && p.is_default);
+        assert_eq!(
+            openai_endpoint(&effective_base_url(&p)),
+            "http://127.0.0.1:7865/v1/chat/completions",
+            "转译后的端点就是云台在用的那个"
+        );
+    }
+
+    #[test]
+    fn nimbusdesk_without_a_usable_default_is_none() {
+        for value in [
+            serde_json::json!({}),
+            serde_json::json!({ "state": {} }),
+            serde_json::json!({ "state": { "defaultTextId": "", "providers": [] } }),
+            serde_json::json!({ "state": { "defaultTextId": null, "providers": [] } }),
+            serde_json::json!({ "state": { "defaultTextId": "gone", "providers": [{ "id": "a", "baseUrl": "http://x/v1" }] } }),
+            serde_json::json!({ "state": { "defaultTextId": "a", "providers": [{ "id": "a", "baseUrl": "   " }] } }),
+        ] {
+            assert!(
+                nimbusdesk_provider(&value).is_none(),
+                "取不到默认提供商时宁可报「尚未配置」，也不猜一个：{value}"
+            );
+        }
     }
 
     // ---- CRUD（在内存 Settings 上验证真实行为） ----
