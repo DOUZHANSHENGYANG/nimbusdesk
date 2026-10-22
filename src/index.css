@@ -71,6 +71,27 @@
   --color-brand-soft: var(--pr-brand-200);
 
   /*
+   * 源应用（AgentHub）工具类的兼容层。
+   *
+   * 从源应用搬过来的组件里写着 `text-ink-2` / `bg-surface-2` / `bg-primary-soft`
+   * / `border-strong` 这些云台没有的工具类。这里把它们映射到**云台已有的语义
+   * token**，让搬过来的 JSX 原样可用 —— 逐处改名不仅改动量十倍，而且漏一处就
+   * 静默掉色（Tailwind 遇到未定义的类名不会报错，只是不生成样式）。
+   *
+   * 只做映射，不引入源侧的色值：ink 的两档在云台合成同一档次要文字色
+   * （云台只有一级 muted-foreground），surface-2 落在 panel 材质上，
+   * primary-soft 就是品牌的浅底（--accent），border-strong 用输入框描边那档，
+   * danger 就是云台的 destructive，bg-subtle 是内嵌槽位底色（panel）。
+   */
+  --color-ink-2: var(--muted-foreground);
+  --color-ink-3: var(--muted-foreground);
+  --color-surface-2: var(--muted);
+  --color-primary-soft: var(--accent);
+  --color-border-strong: var(--input);
+  --color-danger: var(--destructive);
+  --color-bg-subtle: var(--muted);
+
+  /*
    * 文件类型标识色。暴露成 tailwind color 之后组件里写 `text-file-pdf` 即可，
    * 两套主题的明度差异由 token 层负责 —— 组件不需要知道当前是明是暗。
    */

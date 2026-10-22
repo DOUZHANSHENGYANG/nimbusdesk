@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { addTags, filterItems, formatPairs, matchQuery, mcpNameProblem, parsePairs, removeTag, sizeLabel, timeLabel } from './core.ts';
+import { addTags, bodyOf, collapseContext, collectTags, diffLines, diffStat, filterItems, formatPairs, matchQuery, matchTags, mcpNameProblem, parsePairs, removeTag, sizeLabel, timeLabel } from './core.ts';
 
 test('搜索按多个词同时命中名字/描述/标签', () => {
   const items = [
@@ -63,4 +63,48 @@ test('键值对文本按第一个等号切分，注释与空行被忽略', () =>
   assert.equal(formatPairs({ B: '2', A: '1' }), 'A=1\nB=2', '按键入排序便于比对');
   assert.equal(parsePairs(formatPairs({ K: 'v=1' })).K, 'v=1', '往返不丢值里的等号');
   assert.deepEqual(formatPairs({}), '');
+});
+
+test('标签筛选：或=命中任意一个，与=必须全部命中', () => {
+  const tags = ['git', 'db'];
+  assert.equal(matchTags(tags, new Set(), 'or'), true, '没选标签全通过');
+  assert.equal(matchTags(tags, new Set(['db', 'rust']), 'or'), true);
+  assert.equal(matchTags(tags, new Set(['db', 'rust']), 'and'), false);
+  assert.equal(matchTags(tags, new Set(['git', 'db']), 'and'), true);
+  assert.equal(matchTags([], new Set(['db']), 'or'), false);
+});
+
+test('标签清单按使用次数降序，同次数按名字稳定排序', () => {
+  const { tags, counts } = collectTags([{ tags: ['b', 'a'] }, { tags: ['a', 'c'] }, { tags: ['a'] }]);
+  assert.deepEqual(tags, ['a', 'b', 'c']);
+  assert.deepEqual(counts, { a: 3, b: 1, c: 1 });
+  assert.deepEqual(collectTags([]), { tags: [], counts: {} });
+});
+
+test('行级 diff 标出增删，相同行保持顺序', () => {
+  assert.deepEqual(diffLines('a\nb\nc', 'a\nx\nc'), [
+    { type: 'same', text: 'a' },
+    { type: 'del', text: 'b' },
+    { type: 'add', text: 'x' },
+    { type: 'same', text: 'c' },
+  ]);
+  assert.deepEqual(diffLines('', 'new'), [{ type: 'add', text: 'new' }], '空内容不该凭空多一行');
+  assert.deepEqual(diffLines('gone', ''), [{ type: 'del', text: 'gone' }]);
+  assert.deepEqual(diffLines('same', 'same'), [{ type: 'same', text: 'same' }]);
+  assert.deepEqual(diffStat(diffLines('a\nb', 'a\nc\nb')), { added: 1, removed: 0 });
+});
+
+test('纯增删的 diff 不被折叠成省略号（否则点开什么也看不到）', () => {
+  const rows = diffLines('', 'l1\nl2\nl3\nl4\nl5\nl6');
+  assert.equal(collapseContext(rows).some((r) => r.type === 'gap'), false);
+  const lines = Array.from({ length: 12 }, (_, i) => 'l' + i).join('\n');
+  const changed = lines.replace('l2', 'X').replace('l9', 'Y');
+  assert.equal(collapseContext(diffLines(lines, changed)).some((r) => r.type === 'gap'), true, '两处改动之间的长段相同内容要折叠');
+});
+
+test('版本比对前剥掉 frontmatter，正文一样就不算脏', () => {
+  const fm = '---\nname: a\n---\n\n正文';
+  assert.equal(bodyOf(fm), '正文');
+  assert.equal(bodyOf('正文'), '正文', '没有 frontmatter 时原样返回');
+  assert.equal(bodyOf('---\r\nname: a\r\n---\r\n\r\n正文'), '正文', 'CRLF 也要剥掉');
 });
