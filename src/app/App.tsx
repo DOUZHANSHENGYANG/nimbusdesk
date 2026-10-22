@@ -17,7 +17,7 @@ import { KnowledgePage } from "@/features/knowledge/page";
 import { OrganizationActivity } from "@/features/knowledge/organization-activity";
 import { ToolsPage } from "@/features/tools/page";
 import { PromptsPage } from "@/features/agenthub/prompts-page";
-import { McpPage } from "@/features/agenthub/mcp-page";
+import { AhubMcpPage } from "@/features/agenthub/ahub-host";
 import { SkillsPage } from "@/features/agenthub/skills-page";
 import { HarnessPage } from "@/features/agenthub/harness-page";
 import { AgentPage } from "@/features/agent/panel";
@@ -70,7 +70,7 @@ function Shell() {
               <Route path="/toolbox" element={<Navigate to="/toolbox/skills" replace />} />
               <Route path="/toolbox/skills" element={<SkillsPage />} />
               <Route path="/toolbox/prompts" element={<PromptsPage />} />
-              <Route path="/toolbox/mcp" element={<McpPage />} />
+              <Route path="/toolbox/mcp" element={<AhubMcpPage />} />
               <Route path="/toolbox/harness" element={<HarnessPage />} />
               <Route path="/agent" element={<AgentPage />} />
               <Route path="/settings" element={<SettingsPage />} />
