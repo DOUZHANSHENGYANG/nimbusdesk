@@ -54,18 +54,88 @@
 
 .agent-guide { display:flex; flex-direction:column; flex:1; min-height:0; }
 
-.agent-composer { flex-shrink:0; padding:12px 30px 18px; border-top:1px solid var(--workbench-line); }
-.agent-composer-box { display:flex; align-items:flex-end; gap:10px; padding:8px 8px 8px 14px; border:1px solid var(--workbench-line); border-radius:var(--pr-radius-lg); background:var(--workbench-raised); transition:border-color 160ms var(--workbench-ease); }
+.agent-composer { flex-shrink:0; padding:12px 30px 18px; border-top:1px solid var(--workbench-line); container-type:inline-size; }
+.agent-composer-box { display:flex; flex-direction:column; gap:4px; padding:8px 8px 6px 14px; border:1px solid var(--workbench-line); border-radius:var(--pr-radius-lg); background:var(--workbench-raised); transition:border-color 160ms var(--workbench-ease); }
 .agent-composer-box:focus-within { border-color:color-mix(in srgb,var(--ring) 70%,var(--workbench-line)); }
-.agent-composer-box textarea { flex:1; min-height:24px; max-height:180px; padding:6px 0; border:0; background:transparent; box-shadow:none; outline:0; resize:none; font-size:13px; line-height:1.6; }
+.agent-composer-box textarea { flex:1; min-height:24px; max-height:166px; padding:6px 0 2px; border:0; background:transparent; box-shadow:none; outline:0; resize:none; overflow-y:auto; font-size:13px; line-height:1.6; }
 .agent-composer-box[data-disabled="true"] { opacity:.6; }
-.agent-composer-hint { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-top:7px; color:var(--muted-foreground); font-size:10.5px; }
-.agent-composer-left { display:flex; align-items:center; gap:2px; min-width:0; }
 
-/* 输入区左下角的当前模型：点一下就是换模型（与顶栏同一个选择器） */
-.agent-model-chip { display:inline-flex; align-items:center; gap:5px; height:24px; padding:0 7px; color:var(--muted-foreground); font-size:10.5px; font-weight:500; }
-.agent-model-chip:hover { color:var(--foreground); }
-.agent-model-chip svg { width:12px; height:12px; }
+/* ── 工具行：左边「往里加东西」，右边「这一轮怎么跑」 ──────────── */
+.agent-composer-tools { display:flex; align-items:center; justify-content:space-between; gap:8px; min-width:0; }
+.agent-tools-group { display:flex; align-items:center; gap:2px; min-width:0; }
+.agent-tools-end { justify-content:flex-end; }
+
+/*
+ * 工具行里的小按钮：15px 图标 + 可选短文字、高 28、圆角 8。
+ * 刻意做得「不像按钮」—— 它们是贴着输入框的图标，不是一排主操作；
+ * 悬停只提亮文字与一层极浅底，不做边框与阴影。
+ */
+.agent-tool-btn { display:inline-flex; align-items:center; justify-content:center; gap:5px; height:28px; min-width:28px; padding:0 6px; border:0; border-radius:var(--pr-radius-sm); background:transparent; color:var(--muted-foreground); font-size:11px; font-weight:500; line-height:1; white-space:nowrap; transition:color var(--pr-dur-fast) var(--workbench-ease), background-color var(--pr-dur-fast) var(--workbench-ease); }
+.agent-tool-btn:hover:not(:disabled) { color:var(--foreground); background:color-mix(in srgb,var(--foreground) 6%,transparent); }
+.agent-tool-btn:focus-visible { outline:0; color:var(--foreground); box-shadow:0 0 0 2px color-mix(in srgb,var(--ring) 60%,transparent); }
+.agent-tool-btn:disabled { opacity:.45; cursor:not-allowed; }
+.agent-tool-btn[data-active="true"] { color:var(--foreground); }
+.agent-tool-btn[data-muted="true"] { cursor:default; }
+.agent-tool-btn svg { width:15px; height:15px; flex-shrink:0; }
+.agent-tool-label { max-width:10ch; overflow:hidden; text-overflow:ellipsis; }
+/* 有值（目标已填）：一个小圆点，比换图标更容易在扫一眼时看出来 */
+.agent-tool-dot { width:5px; height:5px; flex-shrink:0; border-radius:50%; background:var(--primary); }
+/* 危险态（权限「全部自动」）：整颗染成警告色 + 右上角小点 */
+.agent-tool-btn[data-risky="true"] { color:var(--destructive); }
+.agent-tool-btn[data-risky="true"]:hover:not(:disabled) { color:var(--destructive); background:color-mix(in srgb,var(--destructive) 12%,transparent); }
+.agent-tool-alert { position:absolute; top:4px; right:4px; width:5px; height:5px; border-radius:50%; background:currentColor; }
+.agent-tool-btn { position:relative; }
+.agent-tool-wrap { display:inline-flex; }
+
+/* 发送/停止：工具行右端的一颗实心小方块（与其它图标同高，但不透明） */
+.agent-tool-btn.agent-send { width:28px; padding:0; background:var(--primary); color:var(--primary-foreground); }
+.agent-tool-btn.agent-send:hover:not(:disabled) { background:color-mix(in srgb,var(--primary) 84%,var(--foreground)); color:var(--primary-foreground); }
+.agent-tool-btn.agent-send:disabled { background:color-mix(in srgb,var(--primary) 40%,transparent); color:var(--primary-foreground); opacity:1; }
+.agent-tool-btn.agent-send[data-busy="true"] { background:color-mix(in srgb,var(--destructive) 14%,transparent); color:var(--destructive); }
+.agent-tool-btn.agent-send[data-busy="true"]:hover { background:color-mix(in srgb,var(--destructive) 22%,transparent); color:var(--destructive); }
+
+/* 选择器菜单：一行两段（名字 + 一句说明），危险项整行染红 */
+.agent-menu { padding:4px; }
+.agent-menu-title { font-size:10.5px; letter-spacing:.02em; color:var(--muted-foreground); }
+.agent-menu-check { width:13px; height:13px; flex-shrink:0; color:var(--primary); }
+.agent-menu-item { display:flex; flex-direction:column; gap:1px; min-width:0; }
+.agent-menu-name { font-size:12.5px; }
+.agent-menu-note { color:var(--muted-foreground); font-size:10.5px; line-height:1.45; white-space:normal; }
+.agent-menu-foot { padding:2px 8px 4px; color:var(--muted-foreground); font-size:10px; }
+[data-risky="true"].agent-menu-name,
+[data-risky="true"] .agent-menu-name { color:var(--destructive); }
+
+/* 本次目标：popover 里就一个输入框 + 两个动作 */
+.agent-goal-pop { gap:6px; }
+.agent-goal-input { width:100%; height:28px; padding:0 8px; border:1px solid var(--workbench-line); border-radius:var(--pr-radius-sm); background:var(--background); color:var(--foreground); font-size:12.5px; outline:0; }
+.agent-goal-input:focus { border-color:color-mix(in srgb,var(--ring) 70%,var(--workbench-line)); }
+.agent-goal-actions { display:flex; align-items:center; gap:6px; }
+.agent-goal-count { margin-right:auto; color:var(--muted-foreground); font-size:10px; font-variant-numeric:tabular-nums; }
+
+/* 会话顶部的目标小条：关掉即清除（也会从 instructions 里去掉） */
+.agent-goal-bar { display:flex; align-items:center; gap:6px; flex-shrink:0; padding:6px 30px; border-bottom:1px solid var(--workbench-line); background:color-mix(in srgb,var(--primary) 6%,transparent); font-size:11.5px; }
+.agent-goal-bar svg { width:13px; height:13px; flex-shrink:0; color:var(--primary); }
+.agent-goal-label { flex-shrink:0; color:var(--muted-foreground); font-size:10.5px; }
+.agent-goal-value { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.agent-goal-bar button { display:inline-flex; margin-left:auto; flex-shrink:0; color:var(--muted-foreground); }
+.agent-goal-bar button:hover { color:var(--destructive); }
+
+/* 放大输入框的面板标题 */
+.agent-expand-title { display:flex; align-items:center; gap:6px; }
+.agent-expand-title svg { width:15px; height:15px; color:var(--muted-foreground); }
+
+/*
+ * 窄宽度：这一行有 9 个控件，文字先让位（右侧三个状态型控件只留图标）。
+ * 用容器查询而不是视口媒体查询 —— 面板可能被挤窄而窗口仍然很宽。
+ */
+@container (max-width: 520px) {
+  .agent-tool-label { display:none; }
+  .agent-composer { padding-left:16px; padding-right:16px; }
+  .agent-composer-tools { gap:4px; }
+}
+
+
+/* 顶栏那颗模型按钮：服务商 + 模型名可能很长，截断而不是把按钮撑开 */
 .agent-model-name { max-width:22ch; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 
 /* 模型选择器：按服务商分组，选中态用勾号 + 当前行高亮 */

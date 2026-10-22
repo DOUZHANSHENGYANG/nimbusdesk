@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import { Check, ChevronDown, Eye, Wrench } from "lucide-react";
+import { Check, ChevronDown, Cloud, Eye, Wrench } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -10,6 +10,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useAgent } from "../store";
+import { shortModelName } from "../composer-core";
 
 import type { ModelParameters } from "@/features/ai/core";
 
@@ -25,6 +26,10 @@ function parametersLabel(parameters: ModelParameters): string {
  * 模型选择器：列出**所有已配置服务商 × 它们的模型**，切换后当前会话立刻用新模型
  * 继续（store 会重建 ToolLoopAgent，历史消息原样带过去）。
  *
+ * 两处外观、同一个菜单：
+ * - `header`：顶栏那颗带服务商地址的按钮；
+ * - `composer`：输入区工具行里的一颗小图标 + 模型短名（窄宽度只留图标）。
+ *
  * 一个都没有时不显示禁用壳子，而是给一句去哪儿配 —— 免得用户对着灰按钮猜。
  */
 export function ModelPicker({ variant = "header" }: { variant?: "header" | "composer" }) {
@@ -36,29 +41,38 @@ export function ModelPicker({ variant = "header" }: { variant?: "header" | "comp
   const selectModel = useAgent((state) => state.selectModel);
   const guide = useAgent((state) => state.guide);
   const busy = status === "submitted" || status === "streaming";
+  const label = shortModelName(model) || t("agent.model.none");
 
   if (options.length === 0) {
-    return variant === "header" ? null : <span className="agent-model-chip">{t("agent.model.none")}</span>;
+    return variant === "header" ? null : (
+      <span className="agent-tool-btn" data-muted="true">{t("agent.model.none")}</span>
+    );
   }
 
   const providers = [...new Set(options.map((item) => item.providerId))];
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button
-          variant="outline"
-          size="sm"
-          className={variant === "composer" ? "agent-model-chip" : undefined}
+      {variant === "composer" ? (
+        <DropdownMenuTrigger
+          className="agent-tool-btn"
           disabled={guide}
-          title={t("agent.model.switchHint")}
+          title={`${t("agent.model.switchHint")}\n${model || t("agent.model.none")}`}
+          aria-label={`${t("agent.model.switchHint")}：${label}`}
         >
-          <Wrench />
-          <span className="agent-model-name">{model || t("agent.model.none")}</span>
-          <ChevronDown />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="end" className="agent-model-menu">
+          <Cloud />
+          <span className="agent-tool-label">{label}</span>
+        </DropdownMenuTrigger>
+      ) : (
+        <DropdownMenuTrigger asChild>
+          <Button variant="outline" size="sm" disabled={guide} title={t("agent.model.switchHint")}>
+            <Wrench />
+            <span className="agent-model-name">{model || t("agent.model.none")}</span>
+            <ChevronDown />
+          </Button>
+        </DropdownMenuTrigger>
+      )}
+      <DropdownMenuContent side="top" align="end" className="agent-model-menu">
         {providers.map((id) => {
           const items = options.filter((item) => item.providerId === id);
           return (

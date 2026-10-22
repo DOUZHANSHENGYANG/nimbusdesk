@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
-import { Bot, Sparkles } from "lucide-react";
+import { Bot, Sparkles, Target, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Empty,
@@ -34,6 +34,8 @@ export function AgentPage() {
   const count = useAgent((state) => state.messages.length);
   const model = useAgent((state) => state.model);
   const send = useAgent((state) => state.send);
+  const goal = useAgent((state) => state.goal);
+  const setGoal = useAgent((state) => state.setGoal);
 
   useEffect(() => {
     void init();
@@ -42,6 +44,17 @@ export function AgentPage() {
   return (
     <div className="agent workbench-ui">
       <Status />
+      {goal && (
+        /* 本次目标：一小条，关掉就是清除（它同时会从 instructions 里去掉） */
+        <div className="agent-goal-bar">
+          <Target />
+          <span className="agent-goal-label">{t("agent.goal.banner")}</span>
+          <span className="agent-goal-value" title={goal}>{goal}</span>
+          <button type="button" aria-label={t("agent.goal.clear")} title={t("agent.goal.clear")} onClick={() => setGoal(null)}>
+            <X />
+          </button>
+        </div>
+      )}
       <div className="agent-body">
         {guide ? (
           <div className="agent-guide">
