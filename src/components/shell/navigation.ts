@@ -6,25 +6,46 @@ export interface NavItem {
   icon: typeof Home;
 }
 
-/** AI 组：对话 + 工具箱的四个页面（原版 AgentHub 就是四个独立页）。 */
-export const AI_NAV: NavItem[] = [
-  { to: "/agent", key: "nav.agent", icon: MessageSquare },
-  { to: "/toolbox/prompts", key: "nav.prompts", icon: KeyRound },
-  { to: "/toolbox/mcp", key: "nav.mcp", icon: Plug },
-  { to: "/toolbox/skills", key: "nav.skills", icon: Sparkles },
-  { to: "/toolbox/harness", key: "nav.harness", icon: Terminal },
-];
+/** 侧栏的一个分区：标题 + 条目（组标题自身不是条目，不可导航）。 */
+export interface NavGroup {
+  /** 组标题的 i18n key */
+  key: string;
+  items: NavItem[];
+}
 
-/** AI 组之外的顶层目的地。 */
-export const NAV_TOP: NavItem[] = [
-  { to: "/", key: "nav.home", icon: Home },
-  { to: "/projects", key: "nav.projects", icon: FolderKanban },
-  { to: "/plans", key: "nav.plans", icon: CalendarCheck2 },
-  { to: "/files", key: "nav.files", icon: Folders },
-  { to: "/feeds", key: "nav.feeds", icon: Newspaper },
-  { to: "/knowledge", key: "nav.knowledge", icon: BookOpen },
-  { to: "/tools", key: "nav.tools", icon: Wrench },
+/**
+ * 侧栏的三个分区（顺序即展示顺序）：
+ * 工作台 = 本机日常，资料 = 阅读/沉淀，AI = 对话与工具箱。
+ */
+export const NAV_GROUPS: NavGroup[] = [
+  {
+    key: "nav.workbench",
+    items: [
+      { to: "/", key: "nav.home", icon: Home },
+      { to: "/plans", key: "nav.plans", icon: CalendarCheck2 },
+      { to: "/projects", key: "nav.projects", icon: FolderKanban },
+      { to: "/tools", key: "nav.tools", icon: Wrench },
+    ],
+  },
+  {
+    key: "nav.library",
+    items: [
+      { to: "/files", key: "nav.files", icon: Folders },
+      { to: "/knowledge", key: "nav.knowledge", icon: BookOpen },
+      { to: "/feeds", key: "nav.feeds", icon: Newspaper },
+    ],
+  },
+  {
+    key: "nav.ai",
+    items: [
+      { to: "/agent", key: "nav.agent", icon: MessageSquare },
+      { to: "/toolbox/prompts", key: "nav.prompts", icon: KeyRound },
+      { to: "/toolbox/skills", key: "nav.skills", icon: Sparkles },
+      { to: "/toolbox/mcp", key: "nav.mcp", icon: Plug },
+      { to: "/toolbox/harness", key: "nav.harness", icon: Terminal },
+    ],
+  },
 ];
 
 /** 侧栏与右键菜单共用的一张平表（顺序即展示顺序）。 */
-export const NAV_ITEMS: NavItem[] = [...NAV_TOP, ...AI_NAV];
+export const NAV_ITEMS: NavItem[] = NAV_GROUPS.flatMap((group) => group.items);

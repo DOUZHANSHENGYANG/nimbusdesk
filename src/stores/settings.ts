@@ -32,7 +32,9 @@ interface SettingsState {
   dockShortcut: string;
   /** 检测到全屏应用时自动隐藏 Dock */
   dockAutoHide: boolean;
-  /** 侧栏 AI 组是否展开（折叠侧栏时该组强制摊开，与这个值无关） */
+  /** 侧栏三个分区是否展开（折叠侧栏时全部强制摊开，与这些值无关） */
+  workbenchGroupOpen: boolean;
+  libraryGroupOpen: boolean;
   aiGroupOpen: boolean;
   setTheme: (theme: ThemeMode) => void;
   setLang: (lang: Lang) => void;
@@ -49,6 +51,8 @@ interface SettingsState {
   setDockTileSize: (v: number) => void;
   setDockShortcut: (v: string) => void;
   setDockAutoHide: (v: boolean) => void;
+  setWorkbenchGroupOpen: (v: boolean) => void;
+  setLibraryGroupOpen: (v: boolean) => void;
   setAiGroupOpen: (v: boolean) => void;
 }
 
@@ -81,6 +85,8 @@ export const useSettings = create<SettingsState>()(
       dockTileSize: 28,
       dockShortcut: "",
       dockAutoHide: false,
+      workbenchGroupOpen: true,
+      libraryGroupOpen: true,
       aiGroupOpen: true,
       setTheme: (theme) => set({ theme }),
       setLang: (lang) => set({ lang }),
@@ -97,16 +103,19 @@ export const useSettings = create<SettingsState>()(
       setDockTileSize: (dockTileSize) => set({ dockTileSize: Math.min(72, Math.max(16, Math.round(dockTileSize))) }),
       setDockShortcut: (dockShortcut) => set({ dockShortcut }),
       setDockAutoHide: (dockAutoHide) => set({ dockAutoHide }),
+      setWorkbenchGroupOpen: (workbenchGroupOpen) => set({ workbenchGroupOpen }),
+      setLibraryGroupOpen: (libraryGroupOpen) => set({ libraryGroupOpen }),
       setAiGroupOpen: (aiGroupOpen) => set({ aiGroupOpen }),
     }),
     {
       name: "settings",
       storage: createJSONStorage(() => tauriJsonStorage),
-      version: 4,
+      version: 5,
       /**
        * v1 → v2：新增 `plansView`（旧 settings.json 没这个键，pill 会全不亮）。
        * v2 → v3：新增 `autoSortDone` / `autoClearDone`。
        * v3 → v4：新增 `aiGroupOpen`（侧栏 AI 组的展开态）。
+       * v4 → v5：侧栏改三个分区，新增 `workbenchGroupOpen` / `libraryGroupOpen`。
        *
        * 迁移只补缺失字段、不改其它值；视图键顺手校验，手改坏的退回大纲
        * 而不是让整个页面白屏。
@@ -124,6 +133,10 @@ export const useSettings = create<SettingsState>()(
           s.dockTileSize = 28;
         }
         if (version < 4) s.aiGroupOpen = true;
+        if (version < 5) {
+          s.workbenchGroupOpen = s.workbenchGroupOpen ?? true;
+          s.libraryGroupOpen = s.libraryGroupOpen ?? true;
+        }
         return s as SettingsState;
       },
     },
