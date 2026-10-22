@@ -12,6 +12,7 @@ import {
   LayoutGrid,
   PencilLine,
   Plus,
+  RefreshCw,
   Rows3,
   Trash2,
 } from "lucide-react";
@@ -225,7 +226,11 @@ export function PromptsPage() {
             ))}
           </div>
           <SearchBar value={query} onChange={setQuery} placeholder={t("toolbox.prompts.searchPlaceholder")} className="w-56" />
-          <Button size="sm" onClick={() => openEditor(null)}>
+          <Button size="sm" variant="secondary" className="h-8" onClick={() => void load()}>
+            <RefreshCw className="size-3.5" />
+            {t("toolbox.refresh")}
+          </Button>
+          <Button size="sm" className="h-8" onClick={() => openEditor(null)}>
             <Plus className="size-3.5" />
             {t("toolbox.prompts.new")}
           </Button>
@@ -392,6 +397,7 @@ export function PromptsPage() {
                 窗口窄到放不下两栏时，侧栏整块换到正文下方，而不是把两边都挤成一列字。 */}
             <div className="flex min-h-0 flex-1 flex-wrap gap-3">
               <div className="flex min-h-0 min-w-[280px] flex-1 flex-col gap-1.5">
+                <span className="text-xs font-medium text-ink-2">{t("toolbox.prompts.content")}</span>
                 <div className="flex flex-wrap shrink-0 items-center gap-2">
                   <div className="flex shrink-0 items-center gap-0.5 rounded-lg border border-border bg-surface p-0.5">
                     {CONTENT_MODES.map(({ id, icon: Icon, key }) => (
@@ -417,6 +423,7 @@ export function PromptsPage() {
                       size="sm"
                       variant="secondary"
                       className="h-7 px-2.5 text-[11px]"
+                      title={t("toolbox.prompts.publishHint")}
                       disabled={busy || !canSave || !dirtyVsSaved}
                       onClick={() => void save(false)}
                     >
@@ -473,7 +480,7 @@ export function PromptsPage() {
           </DialogBody>
 
           <DialogFooter className="flex-wrap justify-between">
-            <span className="text-[11px] text-ink-3">{statusText}</span>
+            <span className="text-[11px] text-ink-3">{dirtyVsSaved ? t("toolbox.unsaved") : statusText}</span>
             <Button
               size="sm"
               variant="secondary"

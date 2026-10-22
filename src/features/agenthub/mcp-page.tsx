@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
-import { Braces, Check, Copy, ListChecks, Plus, ScanSearch, Server, Trash2 } from "lucide-react";
+import { Braces, Check, Copy, ListChecks, Plus, RefreshCw, ScanSearch, Server, Trash2 } from "lucide-react";
 import { Button } from "@/components/motion/button/base";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -261,6 +261,10 @@ export function McpPage() {
           <Button size="sm" variant="secondary" className="h-8" disabled={items.length === 0} onClick={() => void copyJson(items.filter((item) => item.enabled))}>
             <Copy className="size-3.5" />
             {t("toolbox.mcp.export")}
+          </Button>
+          <Button size="sm" variant="secondary" className="h-8" onClick={() => void load()}>
+            <RefreshCw className="size-3.5" />
+            {t("toolbox.refresh")}
           </Button>
           <Button size="sm" className="h-8" onClick={() => openEditor(null)}>
             <Plus className="size-3.5" />

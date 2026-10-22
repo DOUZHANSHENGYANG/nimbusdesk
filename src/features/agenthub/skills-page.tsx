@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
-import { Check, Columns2, Eye, FolderOpen, History, Paperclip, PencilLine, Plus, Sparkles, Trash2, Upload } from "lucide-react";
+import { Check, Columns2, Eye, FolderOpen, History, Paperclip, PencilLine, Plus, RefreshCw, Sparkles, Trash2, Upload } from "lucide-react";
 import { Button } from "@/components/motion/button/base";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -11,7 +11,7 @@ import { collectTags, matchQuery, matchTags, timeLabel, type TagMode } from "./c
 import { ConfirmDialog } from "./confirm";
 import { ToolboxPage } from "./page";
 import { EmptyState } from "./shared/empty-state";
-import { Field, Input, Textarea } from "./shared/form";
+import { Field, Input, Label, Textarea } from "./shared/form";
 import { MarkdownView } from "./shared/markdown";
 import { FilterBar, SearchBar } from "./shared/search-bar";
 import { TagFilter } from "./shared/tag-filter";
@@ -217,6 +217,10 @@ export function SkillsPage() {
             <Upload className="size-3.5" />
             {t("toolbox.skills.import")}
           </Button>
+          <Button size="sm" variant="secondary" className="h-8" onClick={() => void load()}>
+            <RefreshCw className="size-3.5" />
+            {t("toolbox.refresh")}
+          </Button>
           <Button size="sm" className="h-8" onClick={() => setCreating(true)}>
             <Plus className="size-3.5" />
             {t("toolbox.skills.new")}
@@ -394,6 +398,7 @@ export function SkillsPage() {
               </Field>
 
               <div className="flex min-h-0 flex-1 flex-col gap-1.5">
+                <Label>{t("toolbox.skills.body")}</Label>
                 <div className="flex flex-wrap items-center gap-2">
                   <div className="flex shrink-0 items-center gap-0.5 rounded-lg border border-border bg-surface p-0.5">
                     {CONTENT_MODES.map(({ id, icon: Icon, key }) => (
@@ -495,7 +500,7 @@ export function SkillsPage() {
               onChange={(event) => setNewName(event.target.value)}
             />
           </Field>
-          <Field label={t("toolbox.prompts.description")}>
+          <Field label={t("toolbox.skills.description")}>
             <Textarea
               rows={3}
               value={newDescription}
