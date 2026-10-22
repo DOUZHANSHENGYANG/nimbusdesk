@@ -1,0 +1,449 @@
+/*
+ * ⚠️ 本文件**没有**被任何地方 import，保留它是为了对照源侧的 token 原貌。
+ *
+ * 千万不要 import 它：里面的 :root 会重新定义 --background / --foreground /
+ * --card / --border / --ring / --radius 等云台自己的语义 token，把整个云台的
+ * 配色与圆角覆盖掉；而且它按 `[data-theme="dark"]` 切主题，云台是按 `.dark` 类切。
+ *
+ * 实际生效的映射写在 `src/index.css`：
+ *   · 工具类兼容层（text-ink-2 / bg-surface-2 / bg-primary-soft …）
+ *   · 裸变量桥（--ah-primary / --ah-primary-soft）
+ *   · ah-material / ah-material-strong 两个 @utility
+ */
+@import "tailwindcss";
+@import "tw-animate-css";
+
+/* ============================================================
+   AgentHub Design System — token layer
+   明暗双主题 / 语义 token / shadcn & beUI 兼容层
+   ============================================================ */
+
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+/* ============================================================
+   Palette —— 双轴模型
+   · data-theme  = 明暗模式（light / dark）      —— 决定中性色、阴影、材质
+   · data-accent = 主题色调（blue/teal/rose/graphite）—— 只决定强调色
+   两轴正交：任何色调都能配任何模式，共 4×2 = 8 组。
+   这样 Tailwind 的 dark: 变体与 color-scheme 仍只需认 data-theme。
+   ============================================================ */
+
+/* ---------- 默认：蓝色 + 浅色模式 ---------- */
+:root {
+  /* surfaces —— 中性灰阶：靠层次分工，不靠色偏 */
+  --ah-bg: #f5f5f7;          /* 窗口底 */
+  --ah-bg-subtle: #ececee;   /* 内嵌槽位（代码块 / 输入底色） */
+  --ah-surface: #ffffff;     /* 卡片 / 面板 */
+  --ah-surface-2: #f0f0f2;   /* 悬停填充 */
+  --ah-border: rgba(0, 0, 0, 0.08);   /* 发丝级半透明，随底色自适应 */
+  --ah-border-strong: rgba(0, 0, 0, 0.16);
+  /* ink —— Apple 近黑 + 系统灰 */
+  --ah-text: #1d1d1f;
+  --ah-text-2: #5b5b62;       /* 对页面底 6.19:1 */
+  --ah-text-3: #6f6f76;       /* 对页面底 4.58:1 */
+  /* accent —— 默认蓝：Apple 官网按钮蓝，白字在其上 4.70:1（AA） */
+  --ah-primary: #0071e3;
+  --ah-primary-hover: #0062c4;
+  --ah-primary-fg: #ffffff;
+  --ah-primary-soft: rgba(0, 113, 227, 0.10);
+  --ah-ring: rgba(0, 113, 227, 0.45);
+  /* status —— 压饱和度取达标深色值。
+     注意：status 刻意不随 accent 变 —— 语义色一变，"成功/警告"就不再是固定含义 */
+  --ah-success: #1c7531;
+  --ah-warning: #a35a00;
+  --ah-danger: #d70015;
+  --ah-info: #0060df;
+  /* elevation —— 多层小阴影（Apple 做法），不用单层大模糊 */
+  --ah-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.06), 0 1px 1px rgba(0, 0, 0, 0.04);
+  --ah-shadow-md: 0 4px 6px rgba(0, 0, 0, 0.06), 0 2px 4px rgba(0, 0, 0, 0.05);
+  --ah-shadow-lg: 0 10px 20px rgba(0, 0, 0, 0.09), 0 6px 6px rgba(0, 0, 0, 0.05);
+  /* material —— 毛玻璃导航层 */
+  --ah-material: rgba(255, 255, 255, 0.72);
+  --ah-material-strong: rgba(255, 255, 255, 0.85);
+  /* motion —— 与色调无关，只定义一次 */
+  --ah-dur-1: 140ms;
+  --ah-dur-2: 240ms;
+  --ah-dur-3: 420ms;
+  --ah-ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ah-ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+/* ---------- 深色模式：只覆写「模式相关」的部分 ----------
+   accent 不在这里定义 —— 交给下面的 data-accent 组，
+   否则一加主题就会被深色块里的蓝覆盖掉。 */
+[data-theme="dark"] {
+  color-scheme: dark;
+  --ah-bg: #1c1c1e;
+  --ah-bg-subtle: #161618;
+  --ah-surface: #2c2c2e;
+  --ah-surface-2: #3a3a3c;
+  --ah-border: rgba(255, 255, 255, 0.10);
+  --ah-border-strong: rgba(255, 255, 255, 0.20);
+  --ah-text: #f5f5f7;
+  --ah-text-2: #b2b2b8;       /* 对页面底 8.06:1 */
+  --ah-text-3: #949499;       /* 对页面底 5.64:1 */
+  --ah-success: #30d158;
+  --ah-warning: #ff9f0a;
+  --ah-danger: #ff453a;
+  --ah-info: #409cff;
+  --ah-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.45);
+  --ah-shadow-md: 0 4px 8px rgba(0, 0, 0, 0.45), 0 2px 4px rgba(0, 0, 0, 0.35);
+  --ah-shadow-lg: 0 12px 28px rgba(0, 0, 0, 0.55), 0 6px 10px rgba(0, 0, 0, 0.35);
+  --ah-material: rgba(28, 28, 30, 0.72);
+  --ah-material-strong: rgba(28, 28, 30, 0.85);
+  /* 深色模式的填充按钮用深色字：白字压亮色只有 3.6:1 左右 */
+  --ah-primary-fg: #0a0a0a;
+}
+
+/* ---------- 主题色调 ----------
+   每个色调给「浅色 + 深色」两组值。
+   深色模式在浅色底上会刺眼、浅色模式在深色底上会发灰，必须分别取。 */
+
+/* 蓝（:root 已是默认值，这里只补深色） */
+[data-theme="dark"][data-accent="blue"] {
+  --ah-primary: #0a84ff;
+  --ah-primary-hover: #3a9bff;
+  --ah-primary-soft: rgba(10, 132, 255, 0.16);
+  --ah-ring: rgba(10, 132, 255, 0.50);
+}
+
+/* 青 —— 与 success 距离 74，可区分 */
+[data-accent="teal"] {
+  --ah-primary: #0b6e79;      /* 白字 5.96:1 */
+  --ah-primary-hover: #095a63;
+  --ah-primary-soft: rgba(11, 110, 121, 0.10);
+  --ah-ring: rgba(11, 110, 121, 0.45);
+}
+[data-theme="dark"][data-accent="teal"] {
+  /* 深色模式填充按钮用深色字（白字压亮色只有 2~3:1） */
+  --ah-primary-fg: #0a0a0a;
+  --ah-primary: #3fc5d4;      /* 近黑字 9.57:1 */
+  --ah-primary-hover: #63d3df;
+  --ah-primary-soft: rgba(63, 197, 212, 0.16);
+  --ah-ring: rgba(63, 197, 212, 0.50);
+}
+
+/* 玫瑰 —— 与 danger 距离 110（danger 是正红，此为品红，可区分） */
+[data-accent="rose"] {
+  --ah-primary: #a8336b;      /* 白字 6.27:1 */
+  --ah-primary-hover: #8f2b5b;
+  --ah-primary-soft: rgba(168, 51, 107, 0.10);
+  --ah-ring: rgba(168, 51, 107, 0.45);
+}
+[data-theme="dark"][data-accent="rose"] {
+  /* 深色模式填充按钮用深色字（白字压亮色只有 2~3:1） */
+  --ah-primary-fg: #0a0a0a;
+  --ah-primary: #ff6b9d;      /* 近黑字 7.39:1 */
+  --ah-primary-hover: #ff8bb3;
+  --ah-primary-soft: rgba(255, 107, 157, 0.16);
+  --ah-ring: rgba(255, 107, 157, 0.50);
+}
+
+/* 石墨 —— 无彩色强调：把彩色留给状态，界面最安静 */
+[data-accent="graphite"] {
+  --ah-primary: #48484a;      /* 白字 9.12:1 */
+  --ah-primary-hover: #3a3a3c;
+  --ah-primary-soft: rgba(72, 72, 74, 0.12);
+  --ah-ring: rgba(72, 72, 74, 0.45);
+}
+[data-theme="dark"][data-accent="graphite"] {
+  /* 深色模式填充按钮用深色字（白字压亮色只有 2~3:1） */
+  --ah-primary-fg: #0a0a0a;
+  --ah-primary: #98989d;      /* 近黑字 6.89:1 */
+  --ah-primary-hover: #adadb2;
+  --ah-primary-soft: rgba(152, 152, 157, 0.18);
+  --ah-ring: rgba(152, 152, 157, 0.50);
+}
+
+/* ---------- shadcn / beUI compat layer ---------- */
+:root {
+  --background: var(--ah-bg);
+  --foreground: var(--ah-text);
+  --card: var(--ah-surface);
+  --card-foreground: var(--ah-text);
+  --popover: var(--ah-surface);
+  --popover-foreground: var(--ah-text);
+  --primary: var(--ah-primary);
+  --primary-foreground: var(--ah-primary-fg);
+  --secondary: var(--ah-surface-2);
+  --secondary-foreground: var(--ah-text);
+  --muted: var(--ah-surface-2);
+  --muted-foreground: var(--ah-text-2);
+  --accent: var(--ah-surface-2);
+  --accent-foreground: var(--ah-text);
+  --destructive: var(--ah-danger);
+  --destructive-foreground: #ffffff;
+  --border: var(--ah-border);
+  --border-strong: var(--ah-border-strong);
+  --input: var(--ah-border-strong);
+  --ring: var(--ah-ring);
+  --radius: 12px;
+}
+
+/* ---------- Tailwind theme mapping ---------- */
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  /* extended semantic tokens */
+  --color-bg-subtle: var(--ah-bg-subtle);
+  --color-surface: var(--ah-surface);
+  --color-surface-2: var(--ah-surface-2);
+  --color-ink-2: var(--ah-text-2);
+  --color-ink-3: var(--ah-text-3);
+  --color-primary-soft: var(--ah-primary-soft);
+  --color-primary-hover: var(--ah-primary-hover);
+  --color-success: var(--ah-success);
+  --color-warning: var(--ah-warning);
+  --color-info: var(--ah-info);
+  --color-danger: var(--ah-danger);
+  /* 毛玻璃层：导航 / 吸顶栏用半透明 + backdrop-blur 实现，不写死纯色 */
+  --color-material: var(--ah-material);
+  --color-material-strong: var(--ah-material-strong);
+
+  --shadow-sm: var(--ah-shadow-sm);
+  --shadow-md: var(--ah-shadow-md);
+  --shadow-lg: var(--ah-shadow-lg);
+
+  /* 圆角收紧到 Apple 区间：卡片 12–16 / 控件 10 */
+  --radius-sm: 8px;
+  --radius-md: 10px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-2xl: 20px;
+
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI Variable Text", "Segoe UI", "PingFang SC", "Microsoft YaHei UI", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+  --font-mono: "Cascadia Code", "JetBrains Mono", Consolas, "SFMono-Regular", Menlo, monospace;
+
+  --ease-out-expo: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+
+  --animate-fade-rise: fade-rise var(--ah-dur-2) var(--ah-ease-out) both;
+  --animate-pop-in: pop-in var(--ah-dur-2) var(--ah-ease-spring) both;
+  @keyframes fade-rise {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes pop-in {
+    from { opacity: 0; transform: scale(0.96); }
+    to { opacity: 1; transform: scale(1); }
+  }
+}
+
+/* ============================================================
+   Base
+   ============================================================ */
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+  html,
+  body,
+  #root {
+    height: 100%;
+    overflow: hidden;
+  }
+  html {
+    background: var(--ah-bg);
+  }
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    user-select: none;
+    cursor: default;
+    overscroll-behavior: none;
+  }
+  input,
+  textarea,
+  [contenteditable="true"],
+  .selectable {
+    user-select: text;
+  }
+  ::selection {
+    background: var(--ah-primary-soft);
+    color: var(--ah-text);
+  }
+  /* 焦点环：Apple 用柔和的 accent 光圈（HIG: 键盘可达性优先于视觉轻盈） */
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 1px;
+    border-radius: 4px;
+  }
+  /* 尊重系统「减少动态效果」设置 */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+/* ============================================================
+   Material —— 毛玻璃层
+   吸顶筛选台 / 标题栏 / 侧边栏统一用它，替代纯色背景
+   ============================================================ */
+@utility ah-material {
+  background: var(--ah-material);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+}
+@utility ah-material-strong {
+  background: var(--ah-material-strong);
+  backdrop-filter: saturate(180%) blur(24px);
+  -webkit-backdrop-filter: saturate(180%) blur(24px);
+}
+
+/* ---------- scrollbars ---------- */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: color-mix(in oklab, var(--ah-text-3) 38%, transparent);
+  border-radius: 8px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in oklab, var(--ah-text-3) 62%, transparent);
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* 隐藏滚动条但保持可滚动（用于横向胶囊条） */
+.ah-noscroll {
+  scrollbar-width: none;
+}
+.ah-noscroll::-webkit-scrollbar {
+  display: none;
+}
+
+/* ============================================================
+   Theme switch — radial expand / collapse (View Transitions)
+   明→暗：新主题从点击点圆形扩散
+   暗→明：旧暗色层收拢回点击点（旧层置顶收缩）
+   ============================================================ */
+html[data-vt]::view-transition-old(root),
+html[data-vt]::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+html[data-vt="expand"]::view-transition-new(root) {
+  animation: ah-vt-expand 600ms cubic-bezier(0.4, 0, 0.2, 1) both;
+}
+html[data-vt="collapse"]::view-transition-old(root) {
+  animation: ah-vt-collapse 600ms cubic-bezier(0.4, 0, 0.2, 1) both;
+  z-index: 10;
+}
+@keyframes ah-vt-expand {
+  from {
+    clip-path: circle(0px at var(--vt-x, 50%) var(--vt-y, 50%));
+  }
+  to {
+    clip-path: circle(var(--vt-r, 150%) at var(--vt-x, 50%) var(--vt-y, 50%));
+  }
+}
+@keyframes ah-vt-collapse {
+  from {
+    clip-path: circle(var(--vt-r, 150%) at var(--vt-x, 50%) var(--vt-y, 50%));
+  }
+  to {
+    clip-path: circle(0px at var(--vt-x, 50%) var(--vt-y, 50%));
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  html[data-vt]::view-transition-old(root),
+  html[data-vt]::view-transition-new(root) {
+    animation: none !important;
+  }
+}
+
+/* ============================================================
+   Markdown body
+   ============================================================ */
+.md-body {
+  font-size: 13.5px;
+  line-height: 1.75;
+  color: var(--ah-text);
+  word-break: break-word;
+}
+.md-body h1, .md-body h2, .md-body h3, .md-body h4 {
+  font-weight: 650;
+  line-height: 1.35;
+  margin: 1.4em 0 0.55em;
+  color: var(--ah-text);
+}
+.md-body h1 { font-size: 1.45em; padding-bottom: 0.3em; border-bottom: 1px solid var(--ah-border); }
+.md-body h2 { font-size: 1.25em; padding-bottom: 0.25em; border-bottom: 1px solid var(--ah-border); }
+.md-body h3 { font-size: 1.1em; }
+.md-body h4 { font-size: 1em; }
+.md-body p { margin: 0.65em 0; }
+.md-body a { color: var(--ah-primary); text-decoration: none; }
+.md-body a:hover { text-decoration: underline; }
+.md-body code {
+  font-family: var(--font-mono);
+  font-size: 0.88em;
+  background: var(--ah-surface-2);
+  border: 1px solid var(--ah-border);
+  border-radius: 6px;
+  padding: 0.1em 0.4em;
+}
+.md-body pre {
+  background: var(--ah-bg-subtle);
+  border: 1px solid var(--ah-border);
+  border-radius: 10px;
+  padding: 12px 14px;
+  overflow-x: auto;
+  margin: 0.8em 0;
+}
+.md-body pre code {
+  background: transparent;
+  border: none;
+  padding: 0;
+  font-size: 0.86em;
+  line-height: 1.6;
+}
+.md-body ul, .md-body ol { padding-left: 1.4em; margin: 0.6em 0; }
+.md-body ul { list-style: disc; }
+.md-body ol { list-style: decimal; }
+.md-body li { margin: 0.25em 0; }
+.md-body blockquote {
+  border-left: 3px solid var(--ah-primary);
+  background: var(--ah-primary-soft);
+  border-radius: 0 8px 8px 0;
+  padding: 0.5em 1em;
+  margin: 0.8em 0;
+  color: var(--ah-text-2);
+}
+.md-body table { border-collapse: collapse; margin: 0.8em 0; width: 100%; font-size: 0.92em; }
+.md-body th, .md-body td { border: 1px solid var(--ah-border); padding: 6px 10px; text-align: left; }
+.md-body th { background: var(--ah-surface-2); font-weight: 600; }
+.md-body hr { border: none; border-top: 1px solid var(--ah-border); margin: 1.4em 0; }
+.md-body :first-child { margin-top: 0; }

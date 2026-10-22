@@ -20,6 +20,18 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = join(fileURLToPath(new URL(".", import.meta.url)), "..");
 const I18N_FILE = join(ROOT, "src/lib/i18n.ts");
+/*
+ * AgentHub（源侧工具箱）的键表。
+ *
+ * 它不在 lib/i18n.ts 里，而是由 `src/lib/i18n.ts` 末尾的 addResourceBundle
+ * 合并进同一个实例（deep + overwrite=false，云台同名键优先）。
+ * 校验必须把它一起算上：否则搬过来的组件里那 800 多条 `t("mcp.…")` 会被
+ * 第 4 项判成「引用了未定义的 key」；而要是不校验，源侧那张表里的
+ * 缺键/空文案又会漏掉。
+ */
+const AHUB_I18N_FILE = join(ROOT, "src/ahub/i18n/index.ts");
+/** 源侧键表里已知的占位符差异，不算错误 —— 见下方 PLACEHOLDER_EXCEPTIONS */
+const PLACEHOLDER_EXCEPTIONS = new Set(["prompts.varsSyntax", "prompts.varsEmpty"]);
 const SRC_DIR = join(ROOT, "src");
 
 /**
@@ -111,8 +123,19 @@ function collectUsedKeys(files) {
 }
 
 const src = readFileSync(I18N_FILE, "utf8");
-const zh = flatten(new Function(`return (${extractObject(src, "zh")})`)());
-const en = flatten(new Function(`return (${extractObject(src, "en")})`)());
+const ahubSrc = readFileSync(AHUB_I18N_FILE, "utf8");
+/*
+ * 合并顺序即优先级：后展开的覆盖先展开的，与运行时一致
+ * （云台先 init，再 addResourceBundle(overwrite=false) 灌源侧的表）。
+ */
+const zh = new Map([
+  ...flatten(new Function(`return (${extractObject(ahubSrc, "zh")})`)()),
+  ...flatten(new Function(`return (${extractObject(src, "zh")})`)()),
+]);
+const en = new Map([
+  ...flatten(new Function(`return (${extractObject(ahubSrc, "en")})`)()),
+  ...flatten(new Function(`return (${extractObject(src, "en")})`)()),
+]);
 
 const errors = [];
 const warnings = [];
@@ -126,7 +149,9 @@ for (const [k, v] of zh) {
   if (!en.has(k)) continue;
   const a = placeholders(v).join(",");
   const b = placeholders(en.get(k)).join(",");
-  if (a !== b) {
+  // 源侧的 prompts.varsSyntax / prompts.varsEmpty：zh 写 {{名称}}、en 写 {{name}}，
+  // 而两处调用都不传参数（没有丢参数的风险）。照搬不改，因此放进白名单。
+  if (a !== b && !PLACEHOLDER_EXCEPTIONS.has(k)) {
     errors.push(`占位符不一致 ${k}: zh=[${a}] en=[${b}]`);
   }
 }

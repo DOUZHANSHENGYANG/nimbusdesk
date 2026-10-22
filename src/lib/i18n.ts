@@ -1,5 +1,6 @@
 import i18next from "i18next";
 import { I18nextProvider, useTranslation } from "react-i18next";
+import { ahubEn, ahubZh } from "@/ahub/i18n";
 
 export type Lang = "zh" | "en";
 
@@ -2081,6 +2082,20 @@ void i18n.init({
 export function changeLang(lang: Lang) {
   if (i18n.language !== lang) void i18n.changeLanguage(lang);
 }
+
+/*
+ * 桥②（语言）：把 AgentHub（源侧工具箱）的键表合并进**同一个**实例。
+ *
+ * 为什么必须同一个实例：搬过来的组件用的是 useTranslation()，而全应用由
+ * <I18nextProvider i18n={i18n}> 提供实例 —— 另起一套的话它们取不到键，
+ * 而 react-i18next 缺键不报错，只会把 key 字符串画在界面上。
+ *
+ * deep=true → 嵌套对象按叶子合并；overwrite=false → **云台已有的键一律不被覆盖**。
+ * 两张表有 19 个同名键（app.name、settings.theme…），那些属于云台自己的界面，
+ * 以云台为准。语言切换因此天然同时作用于两边，不必再写任何同步代码。
+ */
+i18n.addResourceBundle("zh", "translation", ahubZh, true, false);
+i18n.addResourceBundle("en", "translation", ahubEn, true, false);
 
 export { I18nextProvider, useTranslation };
 

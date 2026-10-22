@@ -90,6 +90,9 @@
   --color-border-strong: var(--input);
   --color-danger: var(--destructive);
   --color-bg-subtle: var(--muted);
+  /* 源侧的 glass 材质层（侧栏 / 标题栏用它做吸顶玻璃）→ 云台的玻璃功能层 */
+  --color-material: var(--glass);
+  --color-material-strong: var(--glass-strong);
 
   /*
    * 文件类型标识色。暴露成 tailwind color 之后组件里写 `text-file-pdf` 即可，
@@ -140,6 +143,35 @@
   --shadow-3: var(--pr-shadow-3);
   /* 玻璃功能层专用的浮层阴影 */
   --shadow-float: var(--pr-shadow-float);
+}
+
+/*
+ * 源应用（AgentHub）的**裸变量**桥。
+ *
+ * 从源侧搬过来的组件里有两处不经过 Tailwind 直接读变量：
+ * `var(--ah-primary)` 与 `var(--ah-primary-soft)`（写在内联 style 与
+ * `shadow-[0_0_0_3px_var(--ah-primary-soft)]` 这类任意值里），
+ * 云台的 @theme 里没有这两个名字，不给就静默变成透明。
+ *
+ * 值转指云台语义 token，因此明暗两档自动跟随（`var()` 在声明它的元素上
+ * 求值，而 .dark 就在 <html> 上）。注意源侧是按 `data-theme` 切主题、
+ * 云台是按 `.dark` 类切，所以这里刻意**不**引入源侧的 data-theme 规则。
+ */
+:root {
+  --ah-primary: var(--primary);
+  --ah-primary-soft: var(--accent);
+}
+
+/* 源侧的毛玻璃吸顶条（`ah-material`）→ 云台玻璃功能层 */
+@utility ah-material {
+  background: var(--glass);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+}
+@utility ah-material-strong {
+  background: var(--glass-strong);
+  backdrop-filter: saturate(180%) blur(24px);
+  -webkit-backdrop-filter: saturate(180%) blur(24px);
 }
 
 /* ── 基础 ─────────────────────────────────────────────── */
