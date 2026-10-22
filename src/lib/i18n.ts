@@ -27,6 +27,7 @@ const zh = {
     mcp: "MCP",
     skills: "技能",
     harness: "本机工具",
+    dataDir: "数据目录",
   },
   titlebar: {
     minimize: "最小化",
@@ -951,6 +952,7 @@ const en: typeof zh = {
     mcp: "MCP",
     skills: "Skills",
     harness: "Local tools",
+    dataDir: "Data folder",
   },
   titlebar: {
     minimize: "Minimize",

@@ -1,12 +1,14 @@
 import { useEffect, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { ChevronRight, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { ChevronRight, FolderOpen, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 import { useTranslation } from "react-i18next";
 import { useSettings } from "@/stores/settings";
 import { cn } from "@/lib/utils";
 import { inTauri } from "@/lib/tauri";
 import { useData } from "@/ahub/stores/data";
+import { useSettings as useAhubSettings } from "@/ahub/stores/settings";
+import { api as ahubApi } from "@/ahub/lib/api";
 import { NAV_GROUPS, type NavItem } from "./navigation";
 
 /** 与源侧侧栏同款的弹簧：滑得干脆、不来回晃。 */
@@ -66,6 +68,7 @@ export function Sidebar() {
   const setLibraryOpen = useSettings((s) => s.setLibraryGroupOpen);
   const setAiOpen = useSettings((s) => s.setAiGroupOpen);
   const counts = useToolboxCounts();
+  const dataRoot = useAhubSettings((s) => s.info?.dataDirs.root);
   const reduce = useReducedMotion();
   const listRef = useRef<HTMLDivElement>(null);
 
@@ -87,8 +90,8 @@ export function Sidebar() {
         onClick={() => navigate(to)}
         title={t(key)}
         className={cn(
-          "relative flex h-[30px] shrink-0 items-center gap-3 rounded-[10px] px-2.5 text-[13.5px] font-medium transition-colors duration-200",
-          active ? "text-sidebar-accent-foreground" : "text-sidebar-foreground hover:text-sidebar-accent-foreground",
+          "relative flex h-[28px] shrink-0 items-center gap-3 rounded-[10px] px-2.5 text-[13.5px] font-medium transition-colors duration-200 hover:bg-[color-mix(in_srgb,var(--foreground)_4%,transparent)]",
+          active ? "text-foreground" : "text-sidebar-foreground hover:text-foreground",
           collapsed && "justify-center px-0",
         )}
       >
@@ -105,11 +108,11 @@ export function Sidebar() {
         {!collapsed && (
           <span
             className={cn(
-              "relative z-10 ml-auto flex h-4 min-w-4 items-center justify-center rounded-full px-1 text-[10.5px] font-medium tabular-nums",
-              count === undefined ? "text-transparent" : active ? "bg-brand/15 text-brand" : "bg-muted text-muted-foreground",
+              "relative z-10 ml-auto min-w-4 text-right text-[10.5px] tabular-nums",
+              count === undefined ? "opacity-0" : active ? "text-brand" : "text-muted-foreground",
             )}
           >
-            {count ?? ""}
+            {count ?? 0}
           </span>
         )}
       </button>
@@ -139,12 +142,13 @@ export function Sidebar() {
                     onClick={state.toggle}
                     title={t(group.key)}
                     aria-expanded={state.open}
-                    className="flex h-5 shrink-0 items-center gap-3 rounded-[10px] px-2.5 text-[11px] font-medium text-muted-foreground transition-colors duration-200 hover:text-sidebar-accent-foreground"
+                    className="flex h-[18px] shrink-0 items-center gap-3 rounded-[10px] px-2.5 text-[11px] font-medium text-muted-foreground transition-colors duration-200 hover:text-sidebar-accent-foreground"
                   >
-                    <span aria-hidden className="size-4 shrink-0" />
+                    <group.icon aria-hidden className="size-3.5 shrink-0 opacity-60" strokeWidth={2} />
                     <span className="truncate">{t(group.key)}</span>
+                    <span aria-hidden className="h-px flex-1 bg-sidebar-border" />
                     <ChevronRight
-                      className={cn("ml-auto size-[11px] shrink-0 transition-transform duration-300", state.open && "rotate-90")}
+                      className={cn("size-[11px] shrink-0 opacity-50 transition-transform duration-300", state.open && "rotate-90")}
                       strokeWidth={2.2}
                     />
                   </button>
@@ -165,6 +169,20 @@ export function Sidebar() {
       <div className="flex-1" />
 
       <div className="flex flex-col gap-1 px-2 pb-1.5">
+        <div aria-hidden className="mx-1 h-px bg-sidebar-border" />
+        {!collapsed && dataRoot ? (
+          <button
+            type="button"
+            title={t("nav.dataDir")}
+            onClick={() => void ahubApi.revealPath(dataRoot)}
+            className="flex h-[28px] items-center gap-3 rounded-[10px] px-2.5 text-[12px] text-sidebar-foreground/75 transition-colors duration-200 hover:text-foreground"
+          >
+            <FolderOpen className="size-4 shrink-0" strokeWidth={1.8} />
+            <span className="truncate" dir="ltr">
+              {dataRoot}
+            </span>
+          </button>
+        ) : null}
         <SidebarBottomButton
           icon={collapsed ? PanelLeftOpen : PanelLeftClose}
           label={collapsed ? t("nav.expand") : t("nav.collapse")}
@@ -179,7 +197,7 @@ export function Sidebar() {
 /** 活跃指示药丸。全侧栏只有一个 `layoutId`，所以它会在条目之间滑动。 */
 function Pill() {
   return (
-    <motion.span layoutId="nav-pill" transition={PILL_SPRING} aria-hidden className="absolute inset-0 rounded-[10px] bg-sidebar-accent" />
+    <motion.span layoutId="nav-pill" transition={PILL_SPRING} aria-hidden className="absolute inset-0 rounded-[10px] bg-[color-mix(in_srgb,var(--foreground)_7%,transparent)]" />
   );
 }
 
@@ -202,7 +220,7 @@ function SidebarBottomButton({
       title={label}
       onClick={onClick}
       className={cn(
-        "flex h-[30px] items-center gap-3 rounded-[10px] px-2.5 text-[13.5px] font-medium transition-colors duration-200",
+        "flex h-[28px] items-center gap-3 rounded-[10px] px-2.5 text-[13.5px] font-medium transition-colors duration-200",
         active
           ? "bg-sidebar-accent text-sidebar-accent-foreground"
           : "text-sidebar-foreground/75 hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground",

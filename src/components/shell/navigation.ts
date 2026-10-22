@@ -1,4 +1,4 @@
-import { Home, FolderKanban, CalendarCheck2, CalendarClock, Folders, Newspaper, BookOpen, Wrench, Sparkles, MessageSquare, KeyRound, Plug, Terminal } from "lucide-react";
+import { Home, FolderKanban, CalendarCheck2, CalendarClock, Folders, Newspaper, BookOpen, Wrench, Sparkles, MessageSquare, KeyRound, Plug, Terminal, LayoutGrid, Library, Bot } from "lucide-react";
 
 export interface NavItem {
   to: string;
@@ -10,6 +10,8 @@ export interface NavItem {
 export interface NavGroup {
   /** 组标题的 i18n key */
   key: string;
+  /** 组标题的小图标：给标题一个视觉锚点，不再是悬空的字 */
+  icon: typeof Home;
   items: NavItem[];
 }
 
@@ -20,6 +22,7 @@ export interface NavGroup {
 export const NAV_GROUPS: NavGroup[] = [
   {
     key: "nav.workbench",
+    icon: LayoutGrid,
     items: [
       { to: "/", key: "nav.home", icon: Home },
       { to: "/plans", key: "nav.plans", icon: CalendarCheck2 },
@@ -29,6 +32,7 @@ export const NAV_GROUPS: NavGroup[] = [
   },
   {
     key: "nav.library",
+    icon: Library,
     items: [
       { to: "/files", key: "nav.files", icon: Folders },
       { to: "/knowledge", key: "nav.knowledge", icon: BookOpen },
@@ -37,6 +41,7 @@ export const NAV_GROUPS: NavGroup[] = [
   },
   {
     key: "nav.ai",
+    icon: Bot,
     items: [
       { to: "/agent", key: "nav.agent", icon: MessageSquare },
       { to: "/schedules", key: "nav.schedules", icon: CalendarClock },
