@@ -49,6 +49,7 @@ export function SessionsMenu() {
       user: t("agent.export.user"),
       assistant: t("agent.export.assistant"),
       tool: t("agent.export.tool"),
+      attach: t("agent.export.attach"),
     });
     const name = `${sessionTitle(session, untitled).replace(/[\\/:*?"<>|]/g, "-")}.md`;
     if (!inTauri) {

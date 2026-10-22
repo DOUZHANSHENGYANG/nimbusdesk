@@ -3,6 +3,7 @@ import { isToolUIPart } from "ai";
 import { useTranslation } from "react-i18next";
 import {
   Check,
+  ArrowDown,
   CircleAlert,
   CircleCheck,
   Copy,
@@ -37,7 +38,7 @@ import {
   TraceLine,
   TraceTitle,
 } from "@/components/ui/trace";
-import { metaOf, type AgentAttachmentMeta } from "../sessions";
+import { metaOf, messageText, type AgentAttachmentMeta } from "../sessions";
 import { useAgent, type AgentError } from "../store";
 import type { AgentMessage } from "../model";
 
@@ -71,7 +72,8 @@ function Actions({ message, items, onEdit }: { message: AgentMessage; items: Ext
   const [copied, setCopied] = useState(false);
   const regenerate = useAgent((state) => state.regenerate);
   const continueLast = useAgent((state) => state.continueLast);
-  const text = message.parts.filter((part) => part.type === "text").map((part) => part.text).join("");
+  // 复制的是用户自己写的那段（文本附件内联的包装不带给用户）
+  const text = messageText(message);
 
   const icon: Record<Extra, typeof Copy> = {
     copy: Copy,
@@ -124,7 +126,7 @@ function UserMessage({ message }: { message: AgentMessage }) {
   const time = meta.createdAt ? new Date(meta.createdAt).toLocaleTimeString() : null;
   const attachments = meta.attachments ?? [];
   const images = filesOf(message.parts).filter((part) => part.url);
-  const text = message.parts.filter((part) => part.type === "text").map((part) => part.text).join("");
+  const text = messageText(message);
 
   if (editing) {
     return (
@@ -156,9 +158,7 @@ function UserMessage({ message }: { message: AgentMessage }) {
 function MessageEditor({ message, onDone }: { message: AgentMessage; onDone: () => void }) {
   const { t } = useTranslation();
   const editMessage = useAgent((state) => state.editMessage);
-  const [text, setText] = useState(
-    message.parts.filter((part) => part.type === "text").map((part) => part.text).join(""),
-  );
+  const [text, setText] = useState(messageText(message));
   return (
     <div className="agent-edit">
       <textarea
@@ -432,6 +432,16 @@ function ResumeRow({ kind, messageId }: { kind: "stopped" | "incomplete"; messag
   );
 }
 
+/** 有没有可显示的内容：只有出错、没吐出任何东西的那一轮不该占一段空白。 */
+function hasContent(message: AgentMessage): boolean {
+  return message.parts.some((part) => {
+    if (part.type === "text") return Boolean(part.text.trim());
+    if (part.type === "file") return true;
+    if (part.type === "reasoning") return Boolean(part.text.trim());
+    return part.type === "dynamic-tool" || isToolUIPart(part);
+  });
+}
+
 export function Thread({ model }: { model: string }) {
   const { t } = useTranslation();
   const messages = useAgent((state) => state.messages);
@@ -445,18 +455,22 @@ export function Thread({ model }: { model: string }) {
   const retry = useAgent((state) => state.retry);
   const busy = status === "submitted" || status === "streaming";
   const last = messages[messages.length - 1];
-  const lastMeta = last ? metaOf(last) : {};
   const partial = error !== null && last?.role === "assistant"
     && last.parts.some((part) => part.type === "text" && part.text);
-  const liveElapsed = lastMeta.elapsedMs ?? elapsedMs;
-  const liveUsage = lastMeta.usage ?? usage;
-  const meta = [
-    lastMeta.model ?? model,
-    liveElapsed === null || liveElapsed === undefined
-      ? null
-      : t("agent.meta.elapsed", { seconds: (liveElapsed / 1000).toFixed(1) }),
-    liveUsage?.totalTokens == null ? null : t("agent.meta.tokens", { count: liveUsage.totalTokens }),
-  ].filter(Boolean);
+  /** 每条助手消息都把「模型 · 耗时 · token」摆在下面；只有最后一条缺数据时用运行态兜底。 */
+  const metaLine = (message: AgentMessage): string[] => {
+    const meta = metaOf(message);
+    const live = message === last;
+    const elapsed = meta.elapsedMs ?? (live ? elapsedMs : undefined);
+    const used = meta.usage ?? (live ? usage : undefined);
+    return [
+      meta.model ?? model,
+      elapsed === null || elapsed === undefined
+        ? null
+        : t("agent.meta.elapsed", { seconds: (elapsed / 1000).toFixed(1) }),
+      used?.totalTokens == null ? null : t("agent.meta.tokens", { count: used.totalTokens }),
+    ].filter(Boolean) as string[];
+  };
 
   return (
     <MessageScrollerProvider autoScroll>
@@ -473,6 +487,8 @@ export function Thread({ model }: { model: string }) {
             )}
             {messages.map((message) => {
               if (metaOf(message).hidden) return null;
+              if (message.role === "assistant" && !hasContent(message)) return null;
+              const meta = metaLine(message);
               return (
                 <MessageScrollerItem key={message.id} messageId={message.id}>
                   {message.role === "user" ? (
@@ -482,7 +498,7 @@ export function Thread({ model }: { model: string }) {
                       <MessageContent>
                         <AssistantParts message={message} streaming={busy && message === last} />
                         {/* 次要素级元信息：模型 · 耗时 · token，不抢正文 */}
-                        {message === last && !busy && !error && meta.length > 0 && (
+                        {!(busy && message === last) && meta.length > 0 && (
                           <MessageFooter className="agent-meta">{meta.join(" · ")}</MessageFooter>
                         )}
                         <Actions message={message} items={["copy", "regenerate", "continue"]} />
@@ -517,7 +533,10 @@ export function Thread({ model }: { model: string }) {
             )}
           </MessageScrollerContent>
         </MessageScrollerViewport>
-        <MessageScrollerButton />
+        <MessageScrollerButton className="agent-scroll-button">
+          <ArrowDown aria-hidden="true" />
+          <span>{t("agent.scrollToEnd")}</span>
+        </MessageScrollerButton>
       </MessageScroller>
     </MessageScrollerProvider>
   );

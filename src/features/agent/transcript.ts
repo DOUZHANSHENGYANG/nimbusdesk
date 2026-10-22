@@ -42,14 +42,21 @@ export interface AgentMeta {
   /** 系统插入的提示轮（例如「继续生成」），不在会话里显示成用户气泡。 */
   hidden?: boolean;
   attachments?: AgentAttachmentMeta[];
+  /**
+   * 用户气泡里显示的那段话。文本附件是**内联进发送文本**的（`<attachment>` 包一段），
+   * 那份带包装的全文只给模型看，气泡里显示这个字段，免得用户看见一堆 XML。
+   */
+  display?: string;
 }
 
 export function metaOf(message: { metadata?: unknown }): AgentMeta {
   return (message.metadata ?? {}) as AgentMeta;
 }
 
-/** 消息正文：只取 text part，用于标题、复制与导出。 */
+/** 消息正文：优先取用户气泡里显示的那段（见 `AgentMeta.display`），用于标题、复制与导出。 */
 export function messageText(message: TranscriptMessage): string {
+  const display = metaOf(message).display;
+  if (typeof display === "string") return display;
   return message.parts
     .filter((part) => part.type === "text")
     .map((part) => part.text ?? "")
@@ -161,7 +168,10 @@ const isToolPart = (part: TranscriptPart) =>
   part.type === "dynamic-tool" || (part.type ?? "").startsWith("tool-");
 
 /** 导出为 Markdown：给人看的，工具调用压成代码块。 */
-export function toMarkdown(session: ExportSession, labels: { user: string; assistant: string; tool: string }): string {
+export function toMarkdown(
+  session: ExportSession,
+  labels: { user: string; assistant: string; tool: string; attach: string },
+): string {
   const lines: string[] = [`# ${sessionTitle(session, session.id)}`, ""];
   const head = [session.providerId, session.model, stamp(session.createdAt)].filter(Boolean).join(" · ");
   if (head) lines.push(`> ${head}`, "");
@@ -170,17 +180,19 @@ export function toMarkdown(session: ExportSession, labels: { user: string; assis
     if (meta.hidden) continue;
     const time = stamp(meta.createdAt);
     lines.push(`## ${message.role === "user" ? labels.user : labels.assistant}${time ? ` · ${time}` : ""}`, "");
+    if (meta.display !== undefined && meta.display.trim()) lines.push(meta.display, "");
     for (const part of message.parts) {
       if (part.type === "text") {
-        if (part.text?.trim()) lines.push(part.text, "");
+        // 有 display 时正文已经在上面写过（附件内联的那份全文不重复导出）
+        if (part.text?.trim() && meta.display === undefined) lines.push(part.text, "");
+        continue;
+      }
+      if (part.type === "file") {
+        lines.push(`- ${labels.attach}: ${part.filename ?? part.mediaType ?? ""}`);
         continue;
       }
       if (part.type === "reasoning") {
         if (part.text?.trim()) lines.push("<details><summary>reasoning</summary>", "", part.text, "", "</details>", "");
-        continue;
-      }
-      if (part.type === "file") {
-        lines.push(`- ${labels.tool}: ${part.filename ?? part.mediaType ?? ""}`);
         continue;
       }
       if (isToolPart(part)) {

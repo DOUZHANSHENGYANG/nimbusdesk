@@ -726,6 +726,7 @@ const zh = {
     retry: "重试",
     newChat: "新会话",
     cancel: "取消",
+    scrollToEnd: "回到底部",
     thinking: "思考中…",
     thought: "已思考",
     noDesktop: "当前不是桌面应用，工具与凭据都不可用。",
@@ -778,6 +779,7 @@ const zh = {
       user: "我",
       assistant: "助手",
       tool: "工具",
+      attach: "附件",
     },
     attach: {
       action: "添加附件（图片或文本文件）",
@@ -1757,6 +1759,7 @@ const en: typeof zh = {
     retry: "Retry",
     newChat: "New chat",
     cancel: "Cancel",
+    scrollToEnd: "Back to bottom",
     thinking: "Thinking…",
     thought: "Thought",
     noDesktop: "Not running as a desktop app: tools and stored credentials are unavailable.",
@@ -1809,6 +1812,7 @@ const en: typeof zh = {
       user: "Me",
       assistant: "Assistant",
       tool: "Tool",
+      attach: "Attachment",
     },
     attach: {
       action: "Add attachments (images or text files)",
