@@ -26,7 +26,7 @@ export function PageTransition({ children }: { children: ReactNode }) {
   );
 
   return (
-    <div ref={ref} className="h-full min-h-0">
+    <div ref={ref} className="flex h-full min-h-0 min-w-0 flex-col">
       {children}
     </div>
   );
