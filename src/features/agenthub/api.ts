@@ -65,6 +65,31 @@ export interface TbSkillDoc {
   versionList: TbVersion[];
 }
 
+/** 技能目录里的一棵树（「文件」页签）。`isText` 为假的只列出，不尝试读数。 */
+export interface TbSkillFileNode {
+  /** 相对技能根的路径，用 `/` 分隔 */
+  path: string;
+  name: string;
+  isDir: boolean;
+  isText: boolean;
+  size: number;
+  ext: string;
+  /** dir | markdown | text | code | image | pdf | word | sheet | archive | symlink | other */
+  kind: string;
+  /** 只在根节点上：树因深度或条目上限被截断 */
+  truncated: boolean;
+  children: TbSkillFileNode[];
+}
+
+export interface TbSkillFileContent {
+  path: string;
+  name: string;
+  ext: string;
+  kind: string;
+  size: number;
+  text: string;
+}
+
 export interface TbRoots {
   root: string;
   skills: string;
@@ -139,6 +164,11 @@ export const tbSkillImport = (path: string) => invoke<TbSkillMeta>("tb_skill_imp
 export const tbSkillReveal = (dirName: string) => invoke<void>("tb_skill_reveal", { dirName });
 export const tbSkillRestore = (dirName: string, v: number) =>
   invoke<TbSkillDoc>("tb_skill_restore", { dirName, v });
+/** 只读：技能目录的文件树 */
+export const tbSkillListFiles = (dirName: string) => invoke<TbSkillFileNode>("tb_skill_list_files", { dirName });
+/** 只读：技能目录内的单个文本文件（越界/二进制/超限会报错，不截断） */
+export const tbSkillReadFile = (dirName: string, relPath: string) =>
+  invoke<TbSkillFileContent>("tb_skill_read_file", { dirName, relPath });
 
 export const tbPromptList = () => invoke<TbPrompt[]>("tb_prompt_list");
 export const tbPromptSave = (prompt: TbPrompt, publish: boolean) =>

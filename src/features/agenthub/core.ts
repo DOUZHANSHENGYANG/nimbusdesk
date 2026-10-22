@@ -321,3 +321,44 @@ export function bodyOf(content: string): string {
   return content.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n\r?\n?/, "");
 }
 
+/** 文件树节点的最小形状（Rust 侧的 TbSkillFileNode） */
+export interface FileTreeLike {
+  name: string;
+  children: FileTreeLike[];
+}
+
+/**
+ * 文件树筛选：命中自己就保留整棵（子节点让用户继续看），只命中子孙时保留祖先链。
+ * 与源侧同一语义，抽出来是因为这段递归值得单独测。
+ */
+export function filterTree<T extends FileTreeLike>(node: T, query: string): T | null {
+  const q = query.trim().toLowerCase();
+  if (!q) return node;
+  const kids = node.children.map((child) => filterTree(child as T, q)).filter((x): x is T => x !== null);
+  const hit = node.name.toLowerCase().includes(q);
+  if (!hit && kids.length === 0) return null;
+  return { ...node, children: hit ? node.children : kids };
+}
+
+/**
+ * 读文件失败的码。Rust 侧把码放在消息最前面（`too_large: …`），界面按码查文案；
+ * 认不出来的整条原样展示 —— 编不出解释时不假装懂。
+ */
+export const FILE_ERROR_CODES = ["escaped", "not_found", "is_dir", "not_text", "too_large", "read_failed"] as const;
+
+export type FileErrorCode = (typeof FILE_ERROR_CODES)[number];
+
+export const FILE_ERROR_KEYS: Record<FileErrorCode, string> = {
+  escaped: "toolbox.files.errEscaped",
+  not_found: "toolbox.files.errNotFound",
+  is_dir: "toolbox.files.errIsDir",
+  not_text: "toolbox.files.errNotText",
+  too_large: "toolbox.files.errTooLarge",
+  read_failed: "toolbox.files.errReadFailed",
+};
+
+export function fileErrorCode(message: string): FileErrorCode | "" {
+  const code = message.split(":")[0].trim();
+  return (FILE_ERROR_CODES as readonly string[]).includes(code) ? (code as FileErrorCode) : "";
+}
+

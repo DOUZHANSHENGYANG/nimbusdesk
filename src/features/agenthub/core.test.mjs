@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { addTags, bodyOf, collapseContext, collectTags, diffLines, diffStat, filterItems, formatPairs, matchQuery, matchTags, mcpEntry, mcpExport, mcpNameProblem, parseMcpJson, parsePairs, removeTag, sizeLabel, timeLabel } from './core.ts';
+import { addTags, bodyOf, collapseContext, collectTags, diffLines, diffStat, FILE_ERROR_CODES, FILE_ERROR_KEYS, fileErrorCode, filterItems, filterTree, formatPairs, matchQuery, matchTags, mcpEntry, mcpExport, mcpNameProblem, parseMcpJson, parsePairs, removeTag, sizeLabel, timeLabel } from './core.ts';
 
 test('搜索按多个词同时命中名字/描述/标签', () => {
   const items = [
@@ -138,4 +138,32 @@ test('MCP JSON 导入认四种包装，坏 JSON 不抛异常', () => {
   assert.deepEqual(parseMcpJson('不是 JSON'), []);
   assert.deepEqual(parseMcpJson('[]'), []);
   assert.deepEqual(parseMcpJson('{"mcpServers":{"bad":123}}'), [], '条目不是对象就整条丢掉');
+});
+
+test('文件树筛选保留命中节点及其祖先链', () => {
+  const tree = {
+    path: '',
+    name: 'demo',
+    children: [
+      { path: 'references', name: 'references', children: [{ path: 'references/guide.md', name: 'guide.md', children: [] }] },
+      { path: 'notes.txt', name: 'notes.txt', children: [] },
+    ],
+  };
+  assert.equal(filterTree(tree, ''), tree, '空查询原样返回，不做无谓的复制');
+  assert.deepEqual(filterTree(tree, 'notes').children.map((n) => n.name), ['notes.txt']);
+  const hit = filterTree(tree, 'guide');
+  assert.deepEqual(hit.children.map((n) => n.name), ['references'], '只命中子孙时保留祖先链');
+  assert.deepEqual(hit.children[0].children.map((n) => n.name), ['guide.md']);
+  assert.equal(filterTree(tree, 'references').children[0].children.length, 1, '命中目录本身时整棵留下');
+  assert.equal(filterTree(tree, 'missing'), null);
+  assert.equal(filterTree(tree, '  NOTES  ').children.length, 1, '大小写与空白不影响');
+});
+
+test('读文件错误码只认已知的几种，认不出来就原样露出', () => {
+  assert.equal(fileErrorCode('too_large: big.log 为 3000000 字节，上限 2097152'), 'too_large');
+  assert.equal(fileErrorCode('escaped: 不允许绝对路径'), 'escaped');
+  assert.equal(fileErrorCode('not_found: nope.txt'), 'not_found');
+  assert.equal(fileErrorCode('随便一条中文错误'), '');
+  assert.equal(fileErrorCode(''), '');
+  assert.equal(Object.keys(FILE_ERROR_KEYS).length, FILE_ERROR_CODES.length, '每个码都要有文案');
 });

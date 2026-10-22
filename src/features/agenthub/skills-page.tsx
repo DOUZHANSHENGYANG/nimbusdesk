@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Check, Columns2, Eye, FolderOpen, History, Paperclip, PencilLine, Plus, RefreshCw, Sparkles, Trash2, Upload } from "lucide-react";
 import { Button } from "@/components/motion/button/base";
+import { Tabs, TabsList, TabsTrigger } from "@/components/motion/tabs";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { pickFolder } from "@/lib/tauri";
@@ -13,6 +14,7 @@ import { ToolboxPage } from "./page";
 import { EmptyState } from "./shared/empty-state";
 import { Field, Input, Label, Textarea } from "./shared/form";
 import { MarkdownView } from "./shared/markdown";
+import { SkillFileBrowser } from "./skill-files";
 import { FilterBar, SearchBar } from "./shared/search-bar";
 import { TagFilter } from "./shared/tag-filter";
 import { TagInput } from "./shared/tag-input";
@@ -22,6 +24,9 @@ import "./toolbox.css";
 
 /** 正文区的三种呈现方式（与提示词页同一套） */
 type ContentMode = "edit" | "preview" | "split";
+
+/** 技能详情的两个页签。源侧还有「协议」与「安全审查」，云台不做那两件事。 */
+type DetailTab = "content" | "files";
 
 const CONTENT_MODES: { id: ContentMode; icon: typeof Eye; key: string }[] = [
   { id: "edit", icon: PencilLine, key: "toolbox.modeEdit" },
@@ -44,8 +49,9 @@ function compose(frontmatter: string, body: string): string {
  *
  * 与源侧不一致的（后端缺口，都不自己造）：
  * - 没有 协议（SKILL.toml）/ 安全审查（vet）/ AI 摘要 三个页签：云台都不做，
- *   所以详情里没有标签栏 —— 只剩「内容」一个页签时标签栏是空的装饰。
- * - 没有文件树页签：需要「列目录 + 读单个文件」两条只读命令（见交付说明）。
+ *   所以详情里只有「内容」与「文件」两个页签（源侧是四个）。
+ * - 「文件」页签只读：能列目录、读文本；源侧的内联图片/PDF、超限截断、
+ *   「用系统程序打开」都没有对应后端（只加了列目录与读文件两条只读命令）。
  * - frontmatter 是**原文文本框**而不是源侧的结构化字段：云台刻意不引入 YAML
  *   解析器，用户不写就不动它（源侧把 name/description 拆成字段，保存时会重排 YAML）。
  * - 没有多选批量（源侧的多选是为了打包与批量分发，云台没有打包）。
@@ -65,6 +71,7 @@ export function SkillsPage() {
   const [body, setBody] = useState("");
   const [tags, setTags] = useState<string[]>([]);
   const [contentMode, setContentMode] = useState<ContentMode>("edit");
+  const [detailTab, setDetailTab] = useState<DetailTab>("content");
   const [busy, setBusy] = useState(false);
 
   const [creating, setCreating] = useState(false);
@@ -96,6 +103,7 @@ export function SkillsPage() {
       setBody(next.body);
       setTags(next.meta.tags);
       setContentMode("edit");
+      setDetailTab("content");
       setFailure("");
     } catch (error) {
       toast.error(String(error));
@@ -384,11 +392,32 @@ export function SkillsPage() {
                 </Button>
               </div>
 
-              <Field label={t("toolbox.tags.title")}>
+              {/* 与 MCP 编辑弹窗同一套弹簧页签：药丸在两格之间弹过去，文字裁切过渡。 */}
+              <Tabs
+                value={detailTab}
+                onValueChange={(value) => setDetailTab(value as DetailTab)}
+                variant="segment"
+                className="w-fit shrink-0"
+              >
+                <TabsList>
+                  <TabsTrigger value="content" className="px-3 py-1 text-[11px]">
+                    {t("toolbox.skills.tabContent")}
+                  </TabsTrigger>
+                  <TabsTrigger value="files" className="px-3 py-1 text-[11px]">
+                    {t("toolbox.skills.tabFiles")}
+                  </TabsTrigger>
+                </TabsList>
+              </Tabs>
+
+              <Field label={t("toolbox.tags.title")} className={cn(detailTab === "files" && "hidden")}>
                 <TagInput value={tags} onChange={setTags} />
               </Field>
 
-              <Field label={t("toolbox.skills.frontmatter")} hint={t("toolbox.skills.frontmatterHint")}>
+              <Field
+                label={t("toolbox.skills.frontmatter")}
+                hint={t("toolbox.skills.frontmatterHint")}
+                className={cn(detailTab === "files" && "hidden")}
+              >
                 <Textarea
                   className="min-h-24 font-mono text-[12px]"
                   spellCheck={false}
@@ -397,7 +426,7 @@ export function SkillsPage() {
                 />
               </Field>
 
-              <div className="flex min-h-0 flex-1 flex-col gap-1.5">
+              <div className={cn("flex min-h-0 flex-1 flex-col gap-1.5", detailTab === "files" && "hidden")}>
                 <Label>{t("toolbox.skills.body")}</Label>
                 <div className="flex flex-wrap items-center gap-2">
                   <div className="flex shrink-0 items-center gap-0.5 rounded-lg border border-border bg-surface p-0.5">
@@ -472,8 +501,12 @@ export function SkillsPage() {
                 versions={doc.versionList}
                 current={compose(frontmatter, body)}
                 onRestore={(version) => void restore(version)}
-                className="max-h-[42%] overflow-y-auto"
+                className={cn("max-h-[42%] overflow-y-auto", detailTab === "files" && "hidden")}
               />
+
+              {/* 「文件」页签：只读的文件树（源侧同名页签）。
+                  编辑区在上面只是被隐藏 —— 看文件回来时输入框里的改动还在。 */}
+              {detailTab === "files" ? <SkillFileBrowser dirName={doc.meta.dirName} /> : null}
             </aside>
           ) : (
             <aside className="grid w-[360px] min-w-[300px] shrink-0 place-items-center rounded-xl border border-dashed border-border p-6 text-center">
