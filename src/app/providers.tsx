@@ -54,7 +54,7 @@ export function Providers({ children }: { children: ReactNode }) {
             <EdgeRuntime />
           </>}
           {children}
-          <Toaster position="bottom-right" />
+          <Toaster position="top-right" offset={56} />
         </TooltipProvider>
       </ModalProvider>
     </I18nextProvider>
