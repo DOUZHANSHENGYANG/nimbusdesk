@@ -5,6 +5,7 @@ import { Braces, Check, Copy, ListChecks, Plus, RefreshCw, ScanSearch, Server, T
 import { Button } from "@/components/motion/button/base";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsList, TabsTrigger } from "@/components/motion/tabs";
 import { cn } from "@/lib/utils";
 import { copyText } from "@/lib/clipboard";
 import { tbMcpDelete, tbMcpList, tbMcpSave, type TbMcpServer } from "./api";
@@ -455,27 +456,23 @@ export function McpPage() {
         <DialogContent className="flex max-h-[88vh] flex-col gap-3 sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>{saved ? t("toolbox.mcp.editTitle") : t("toolbox.mcp.newTitle")}</DialogTitle>
-            {/* 表单 / JSON 两种填法始终可用 —— 已经有服务时也应能直接粘一段 JSON 覆盖 */}
-            <div className="flex w-fit items-center gap-0.5 rounded-lg border border-border bg-surface p-0.5">
-              {(
-                [
-                  { id: "manual", key: "toolbox.mcp.tabManual" },
-                  { id: "json", key: "toolbox.mcp.tabJson" },
-                ] as const
-              ).map(({ id, key }) => (
-                <button
-                  key={id}
-                  type="button"
-                  onClick={() => setEditorTab(id)}
-                  className={cn(
-                    "rounded-md px-3 py-1 text-[11px] font-medium outline-none transition-colors",
-                    editorTab === id ? "bg-primary-soft text-primary" : "text-ink-3 hover:text-foreground",
-                  )}
-                >
-                  {t(key)}
-                </button>
-              ))}
-            </div>
+            {/* 表单 / JSON 两种填法始终可用 —— 已经有服务时也应能直接粘一段 JSON 覆盖。
+                用源侧那套 beUI 页签：药丸会从一格弹到另一格，文字在两格之间裁切过渡。 */}
+            <Tabs
+              value={editorTab}
+              onValueChange={(value) => setEditorTab(value as "manual" | "json")}
+              variant="segment"
+              className="w-fit"
+            >
+              <TabsList>
+                <TabsTrigger value="manual" className="px-3 py-1 text-[11px]">
+                  {t("toolbox.mcp.tabManual")}
+                </TabsTrigger>
+                <TabsTrigger value="json" className="px-3 py-1 text-[11px]">
+                  {t("toolbox.mcp.tabJson")}
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
           </DialogHeader>
 
           <DialogBody className="flex flex-col gap-4">
