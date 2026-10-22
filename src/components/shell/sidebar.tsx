@@ -69,8 +69,6 @@ export function Sidebar() {
   const setAiOpen = useSettings((s) => s.setAiGroupOpen);
   const counts = useToolboxCounts();
   const dataRoot = useAhubSettings((s) => s.info?.dataDirs.root);
-  /** 入口只显示最后一段目录名，完整路径放 title */
-  const dataRootLabel = dataRoot ? dataRoot.replace(/[\\/]+$/, "").split(/[\\/]/).pop() ?? "" : "";
   useEffect(() => {
     // 数据目录入口需要 ahub 的 settings.info，而宿主只在工具箱页挂载；
     // 用户可能停在主页——这里补一次（只读，三个列表查询都不发）。
@@ -187,7 +185,7 @@ export function Sidebar() {
           >
             <FolderOpen className="size-4 shrink-0" strokeWidth={1.6} />
             <span className="truncate" dir="ltr">
-              {dataRootLabel}
+              {t("nav.dataDir")}
             </span>
           </button>
         ) : null}
