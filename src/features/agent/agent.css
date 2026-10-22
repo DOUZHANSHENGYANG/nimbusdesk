@@ -126,6 +126,7 @@
 /* 上下文被裁掉时的提示条 */
 .agent-notice { display:flex; align-items:center; gap:8px; padding:8px 12px; border-radius:var(--pr-radius-md); background:color-mix(in srgb,var(--warning) 10%,transparent); color:var(--warning); font-size:11.5px; }
 .agent-notice svg { width:14px; height:14px; flex-shrink:0; }
+.agent-notice button { margin-left:auto; color:var(--warning); border-color:color-mix(in srgb,var(--warning) 40%,transparent); }
 
 /* 附件被拒时的一句话，贴在输入框上方 */
 .agent-composer-notice { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:7px; padding:6px 10px; border-radius:var(--pr-radius-sm); background:color-mix(in srgb,var(--destructive) 10%,transparent); color:var(--destructive); font-size:11px; }

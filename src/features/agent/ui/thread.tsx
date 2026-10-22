@@ -453,6 +453,7 @@ export function Thread({ model }: { model: string }) {
   const elapsedMs = useAgent((state) => state.elapsedMs);
   const usage = useAgent((state) => state.usage);
   const retry = useAgent((state) => state.retry);
+  const newSession = useAgent((state) => state.newSession);
   const busy = status === "submitted" || status === "streaming";
   const last = messages[messages.length - 1];
   const partial = error !== null && last?.role === "assistant"
@@ -482,6 +483,9 @@ export function Thread({ model }: { model: string }) {
                 <div className="agent-notice" role="status">
                   <CircleAlert />
                   <span>{t("agent.context.trimmed", { count: droppedContext })}</span>
+                  <Button size="sm" variant="outline" onClick={() => void newSession()}>
+                    {t("agent.newChat")}
+                  </Button>
                 </div>
               </MessageScrollerItem>
             )}
