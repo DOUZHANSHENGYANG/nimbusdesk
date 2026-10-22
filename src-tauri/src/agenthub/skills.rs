@@ -347,6 +347,239 @@ pub fn restore(skills_root: &Path, dir_name: &str, v: u32) -> Result<TbSkillDoc,
     read(skills_root, dir_name)
 }
 
+// ---------------- 文件树 / 单文件读取（只读） ----------------
+
+/// 目录树的深度与条目上限。超出就停下并把根节点标 `truncated`，
+/// 既不让一棵被塞满的目录拖住界面，也不静默地把文件藏起来。
+const TREE_MAX_DEPTH: usize = 6;
+const TREE_MAX_ENTRIES: usize = 2000;
+/// 单个文本文件的读取上限。超限**报错**而不是截断 —— 看一半的正文比看不了
+/// 更容易被当成完整内容（源侧是截断 + 提示条，这里改成明确失败）。
+const FILE_READ_LIMIT: u64 = 2 * 1024 * 1024;
+
+/// 扩展名 → 预览类别（与源侧同一张表）。
+fn file_kind(ext: &str) -> &'static str {
+    match ext {
+        "md" | "markdown" | "mdx" => "markdown",
+        "txt" | "log" | "text" => "text",
+        "json" | "toml" | "yaml" | "yml" | "ini" | "cfg" | "conf" | "env" => "code",
+        "py" | "js" | "mjs" | "cjs" | "ts" | "tsx" | "jsx" | "rs" | "go" | "java" | "c" | "h"
+        | "cpp" | "hpp" | "cs" | "rb" | "php" | "sh" | "bash" | "ps1" | "bat" | "cmd" | "sql"
+        | "html" | "htm" | "css" | "scss" | "less" | "vue" | "svelte" | "xml" | "svg" => "code",
+        "png" | "jpg" | "jpeg" | "gif" | "webp" | "bmp" | "ico" | "avif" => "image",
+        "pdf" => "pdf",
+        "doc" | "docx" | "rtf" | "odt" => "word",
+        "xls" | "xlsx" | "csv" | "ods" => "sheet",
+        "zip" | "gz" | "tar" | "7z" | "rar" | "skillpack" => "archive",
+        _ => "other",
+    }
+}
+
+/// 能按 UTF-8 当文本读给人看的类别。其余只列在树里。
+fn is_text_kind(kind: &str) -> bool {
+    matches!(kind, "markdown" | "text" | "code")
+}
+
+/// 错误码前缀。界面按码查 `toolbox.files.err<Code>`，码后的细节只给日志看。
+///
+/// `escaped` 路径越界 · `not_found` 不存在 · `is_dir` 目录 · `not_text` 非文本
+/// · `too_large` 超出读取上限 · `read_failed` 磁盘读失败
+fn node(
+    path: String,
+    name: String,
+    is_dir: bool,
+    size: u64,
+    ext: String,
+    kind: &str,
+    children: Vec<TbSkillFileNode>,
+) -> TbSkillFileNode {
+    TbSkillFileNode {
+        path,
+        name,
+        is_dir,
+        is_text: !is_dir && is_text_kind(kind),
+        size,
+        ext,
+        kind: kind.to_string(),
+        truncated: false,
+        children,
+    }
+}
+
+/// 遍历技能目录的树。跳过工具自己的 `.hub.json` 与 `*.agenthub-*` 备份，
+/// **绝不跟随**符号链接 / junction（只在树里标出来），以免顺着重解析点
+/// 走进技能目录之外。`budget`（剩余条目数）与 `max_depth` 由调用方给：
+/// 生产走常量，测试用很小的值就能验证截断而不必造两千个文件。
+fn walk_tree(
+    cur: &Path,
+    rel: &str,
+    depth: usize,
+    max_depth: usize,
+    budget: &mut usize,
+    truncated: &mut bool,
+) -> Result<Vec<TbSkillFileNode>, String> {
+    let mut out: Vec<TbSkillFileNode> = Vec::new();
+    if depth >= max_depth {
+        // 到此为止；目录里确实还有东西时如实标记截断，不假装已经列全
+        if std::fs::read_dir(cur).map(|mut i| i.next().is_some()).unwrap_or(false) {
+            *truncated = true;
+        }
+        return Ok(out);
+    }
+    let entries = std::fs::read_dir(cur).map_err(|e| format!("read_failed: {e}"))?;
+    for entry in entries {
+        let entry = entry.map_err(|e| format!("read_failed: {e}"))?;
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if name == HUB || name.starts_with(".agenthub-") {
+            continue;
+        }
+        if *budget == 0 {
+            *truncated = true;
+            break;
+        }
+        *budget -= 1;
+        let child_rel = if rel.is_empty() { name.clone() } else { format!("{rel}/{name}") };
+        // `file_type()` 不跟随链接：junction 能把自己挂成技能目录下的一个
+        // 「普通子目录」，跟随它就会把外面的树当成本技能的文件列出来。
+        let file_type = entry.file_type().map_err(|e| format!("read_failed: {e}"))?;
+        if file_type.is_symlink() {
+            out.push(node(child_rel, name, false, 0, String::new(), "symlink", Vec::new()));
+        } else if file_type.is_dir() {
+            let children = walk_tree(&entry.path(), &child_rel, depth + 1, max_depth, budget, truncated)?;
+            out.push(node(child_rel, name, true, 0, String::new(), "dir", children));
+        } else {
+            let ext = entry
+                .path()
+                .extension()
+                .map(|x| x.to_string_lossy().to_lowercase())
+                .unwrap_or_default();
+            let kind = file_kind(&ext);
+            // 已经确认不是符号链接，这里跟随后取大小不会走出技能目录
+            let size = entry.metadata().map(|m| m.len()).unwrap_or(0);
+            out.push(node(child_rel, name, false, size, ext, kind, Vec::new()));
+        }
+    }
+    // 目录在前，其次按名字（与源侧一致）
+    out.sort_by(|a, b| match (a.is_dir, b.is_dir) {
+        (true, false) => std::cmp::Ordering::Less,
+        (false, true) => std::cmp::Ordering::Greater,
+        _ => a.name.to_lowercase().cmp(&b.name.to_lowercase()),
+    });
+    Ok(out)
+}
+
+pub fn list_files(skills_root: &Path, dir_name: &str) -> Result<TbSkillFileNode, String> {
+    let dir_name = safe_dir_name(dir_name)?;
+    let dir = skills_root.join(&dir_name);
+    if !dir.is_dir() {
+        return Err(format!("not_found: 技能不存在: {dir_name}"));
+    }
+    let mut truncated = false;
+    let mut budget = TREE_MAX_ENTRIES;
+    let children = walk_tree(&dir, "", 0, TREE_MAX_DEPTH, &mut budget, &mut truncated)?;
+    Ok(TbSkillFileNode {
+        path: String::new(),
+        name: dir_name,
+        is_dir: true,
+        is_text: false,
+        size: 0,
+        ext: String::new(),
+        kind: "dir".into(),
+        truncated,
+        children,
+    })
+}
+
+/// 把「技能目录 + 相对路径」解析成绝对路径，并做目录穿越校验。
+///
+/// 防护要点：
+/// 1. 拒绝含空字节的路径（某些系统调用会截断）
+/// 2. 拒绝绝对路径与盘符（`C:\x`、`/etc/passwd`、UNC）
+/// 3. 任何 `..` 组件在拼接前就拦掉，不依赖 canonicalize 兜底
+/// 4. 拼接后 canonicalize 再做前缀校验，兜住符号链接 / junction 的间接跳转
+/// 5. 目录不当文件返回（`is_dir`），而不是让它掉进「读文件失败」
+pub fn resolve_within(root: &Path, rel_path: &str) -> Result<std::path::PathBuf, String> {
+    if !root.is_dir() {
+        return Err("not_found: 技能目录不存在".into());
+    }
+    if rel_path.contains('\0') {
+        return Err("escaped: 路径含空字节".into());
+    }
+    let normalized = rel_path.replace('\\', "/");
+    let trimmed = normalized.trim();
+    if trimmed.is_empty() {
+        return Err("escaped: 路径为空".into());
+    }
+    // 绝对路径 / 盘符 / UNC（`\\server\share` 归一化后以 `/` 开头）
+    if trimmed.starts_with('/') || trimmed.contains(":/") {
+        return Err("escaped: 不允许绝对路径".into());
+    }
+    if trimmed.split('/').any(|seg| seg == "..") {
+        return Err("escaped: 不允许上级目录".into());
+    }
+
+    let target = root.join(trimmed.replace('/', std::path::MAIN_SEPARATOR_STR));
+    let canon_root = root.canonicalize().map_err(|e| format!("read_failed: 技能目录无法解析: {e}"))?;
+    // 走链接解析：链接指向技能目录之外时，下面这次前缀校验会发现
+    let canon = target
+        .canonicalize()
+        .map_err(|_| format!("not_found: {rel_path}"))?;
+    if canon == canon_root || !canon.starts_with(&canon_root) {
+        return Err("escaped: 只能访问该技能目录内的文件".into());
+    }
+    if canon.is_dir() {
+        return Err(format!("is_dir: {rel_path}"));
+    }
+    Ok(canon)
+}
+
+/// 读技能目录内的一个文本文件。二进制、非 UTF-8、超限、越界一律报错，
+/// **不截断、不 lossy** —— 前端按错误码给一条明确的说明。
+pub fn read_file(skills_root: &Path, dir_name: &str, rel_path: &str) -> Result<TbSkillFileContent, String> {
+    let dir_name = safe_dir_name(dir_name)?;
+    let dir = skills_root.join(&dir_name);
+    if !dir.is_dir() {
+        return Err(format!("not_found: 技能不存在: {dir_name}"));
+    }
+    let canon = resolve_within(&dir, rel_path)?;
+
+    let name = canon.file_name().map(|x| x.to_string_lossy().into_owned()).unwrap_or_default();
+    let ext = canon
+        .extension()
+        .map(|x| x.to_string_lossy().to_lowercase())
+        .unwrap_or_default();
+    let kind = file_kind(&ext);
+    if !is_text_kind(kind) {
+        return Err(format!("not_text: {rel_path} 是 {kind}"));
+    }
+
+    let size = std::fs::metadata(&canon).map_err(|e| format!("read_failed: {e}"))?.len();
+    if size > FILE_READ_LIMIT {
+        return Err(format!("too_large: {rel_path} 为 {size} 字节，上限 {FILE_READ_LIMIT}"));
+    }
+    let bytes = std::fs::read(&canon).map_err(|e| format!("read_failed: {e}"))?;
+    // UTF-16 之类的「文本」含 NUL，是合法 UTF-8 却读不出人话，一起按非文本拒掉
+    if bytes.contains(&0) {
+        return Err(format!("not_text: {rel_path} 含空字节"));
+    }
+    let text = String::from_utf8(bytes).map_err(|_| format!("not_text: {rel_path} 不是 UTF-8"))?;
+
+    Ok(TbSkillFileContent {
+        path: normalized_rel(rel_path),
+        name,
+        ext,
+        kind: kind.to_string(),
+        size,
+        text,
+    })
+}
+
+/// 展示用的相对路径：统一成 `/`，去掉首尾空白与开头的 `./`。
+pub fn normalized_rel(rel_path: &str) -> String {
+    let slashed = rel_path.replace('\\', "/");
+    slashed.trim().trim_start_matches("./").to_string()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -528,5 +761,187 @@ mod tests {
         assert!(delete(&root, "..").is_err());
         assert!(push_to(&root, "a/b", &root).is_err());
         std::fs::remove_dir_all(&root).ok();
+    }
+
+    // ---------------- 文件树 / 单文件读取 ----------------
+
+    /// 造一个带资源的技能：SKILL.md + references/ + notes.txt + 一张图
+    fn skill_with_assets() -> (PathBuf, String) {
+        let root = tmp();
+        let meta = create(&root, "Files", "").unwrap();
+        let dir = root.join(&meta.dir_name);
+        std::fs::create_dir_all(dir.join("references").join("deep")).unwrap();
+        std::fs::write(dir.join("references").join("a.md"), "# note\n").unwrap();
+        std::fs::write(dir.join("references").join("deep").join("b.txt"), "deep").unwrap();
+        std::fs::write(dir.join("notes.txt"), "hello").unwrap();
+        std::fs::write(dir.join("pic.png"), [0x89u8, 0x50, 0x4e, 0x47]).unwrap();
+        (root, meta.dir_name)
+    }
+
+    #[test]
+    fn lists_the_skill_tree_and_reads_a_text_file() {
+        let (root, dir_name) = skill_with_assets();
+
+        let tree = list_files(&root, &dir_name).unwrap();
+        assert_eq!(tree.name, dir_name);
+        assert!(tree.is_dir && !tree.truncated);
+        assert!(
+            tree.children.iter().all(|n| n.name != HUB),
+            "工具自己的 .hub.json 不该出现在用户的文件树里"
+        );
+        let names: Vec<&str> = tree.children.iter().map(|n| n.name.as_str()).collect();
+        assert_eq!(names, vec!["references", "notes.txt", "pic.png", "SKILL.md"], "目录在前，其次按名字");
+
+        let refs = &tree.children[0];
+        assert!(refs.is_dir && refs.path == "references");
+        assert!(refs.children.iter().any(|n| n.path == "references/deep"));
+
+        let txt = tree.children.iter().find(|n| n.name == "notes.txt").unwrap();
+        assert!(txt.is_text && !txt.is_dir && txt.size == 5 && txt.kind == "text");
+
+        let png = tree.children.iter().find(|n| n.name == "pic.png").unwrap();
+        assert!(!png.is_text, "图片只列出来，不作为文本读");
+        assert_eq!(png.kind, "image");
+
+        let content = read_file(&root, &dir_name, "references/a.md").unwrap();
+        assert_eq!(content.text, "# note\n");
+        assert_eq!(content.kind, "markdown");
+        assert_eq!(content.path, "references/a.md");
+        assert_eq!(content.size, 7);
+
+        // 分隔符归一化：Windows 风格的 `\` 也认
+        assert!(read_file(&root, &dir_name, r"references\deep\b.txt").is_ok());
+        std::fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn escaping_paths_are_rejected_on_read() {
+        let (root, dir_name) = skill_with_assets();
+        std::fs::write(root.join("outside.txt"), "外面的文件").unwrap();
+
+        for bad in [
+            "../outside.txt",
+            "references/../../outside.txt",
+            r"..\outside.txt",
+            "C:/Windows/win.ini",
+            "/etc/passwd",
+            r"\\server\share\x",
+            "",
+            "  ",
+        ] {
+            let err = read_file(&root, &dir_name, bad).unwrap_err();
+            assert!(err.starts_with("escaped"), "{bad} 应被越界防护拦住，实际: {err}");
+        }
+        // 含空字节的路径也拦（某些系统调用会在这里截断）
+        assert!(read_file(&root, &dir_name, "notes.txt\0.png").is_err());
+        // 技能目录名本身也要挡住
+        assert!(read_file(&root, "..", "notes.txt").is_err());
+        std::fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn a_directory_cannot_be_read_as_a_text_file() {
+        let (root, dir_name) = skill_with_assets();
+        let err = read_file(&root, &dir_name, "references").unwrap_err();
+        assert!(err.starts_with("is_dir"), "目录当文件读要给出可区分的码，实际: {err}");
+        // 不存在的文件是 not_found，与越界区分开
+        let err = read_file(&root, &dir_name, "nope.txt").unwrap_err();
+        assert!(err.starts_with("not_found"), "实际: {err}");
+        std::fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn oversized_and_binary_files_are_refused_instead_of_truncated() {
+        let (root, dir_name) = skill_with_assets();
+        let dir = root.join(&dir_name);
+
+        let big = dir.join("big.log");
+        std::fs::write(&big, vec![b'a'; FILE_READ_LIMIT as usize + 1]).unwrap();
+        let err = read_file(&root, &dir_name, "big.log").unwrap_err();
+        assert!(err.starts_with("too_large"), "超限要报错而不是截断塞回来，实际: {err}");
+
+        // 非 UTF-8（GBK 一段）与含 NUL 的「文本」
+        std::fs::write(dir.join("gbk.txt"), [0xd6u8, 0xd0, 0xce, 0xc4]).unwrap();
+        let err = read_file(&root, &dir_name, "gbk.txt").unwrap_err();
+        assert!(err.starts_with("not_text"), "实际: {err}");
+        std::fs::write(dir.join("nul.txt"), b"a\0b").unwrap();
+        assert!(read_file(&root, &dir_name, "nul.txt").unwrap_err().starts_with("not_text"));
+
+        // 按扩展名就不是文本的一律不读
+        assert!(read_file(&root, &dir_name, "pic.png").unwrap_err().starts_with("not_text"));
+
+        // 边界值本身要能读（上限是「超过才拒」）
+        std::fs::write(dir.join("exact.txt"), vec![b'a'; FILE_READ_LIMIT as usize]).unwrap();
+        assert_eq!(read_file(&root, &dir_name, "exact.txt").unwrap().size, FILE_READ_LIMIT);
+        std::fs::remove_dir_all(&root).ok();
+    }
+
+    #[test]
+    fn tree_honours_entry_and_depth_caps() {
+        let root = tmp();
+        let meta = create(&root, "Caps", "").unwrap();
+        let dir = root.join(&meta.dir_name);
+        std::fs::create_dir_all(dir.join("a").join("b")).unwrap();
+        std::fs::write(dir.join("a").join("one.md"), "x").unwrap();
+        std::fs::write(dir.join("a").join("b").join("two.md"), "x").unwrap();
+
+        // 条目上限：名额是全树共用的，恰好用完两个就停，并如实标记截断
+        fn count(nodes: &[TbSkillFileNode]) -> usize {
+            nodes.iter().map(|n| 1 + count(&n.children)).sum()
+        }
+        let mut budget = 2usize;
+        let mut truncated = false;
+        let cut = walk_tree(&dir, "", 0, TREE_MAX_DEPTH, &mut budget, &mut truncated).unwrap();
+        assert_eq!(count(&cut), 2, "预算用完就停");
+        assert!(truncated, "被上限挡住时必须标出来，不能假装列全了");
+
+        // 深度上限：从根算起只走一层
+        let mut budget = TREE_MAX_ENTRIES;
+        let mut truncated = false;
+        let shallow = walk_tree(&dir, "", 0, 1, &mut budget, &mut truncated).unwrap();
+        assert!(truncated);
+        let a = shallow.iter().find(|n| n.name == "a").unwrap();
+        assert!(a.children.is_empty(), "深度上限之外的子目录不再展开");
+        std::fs::remove_dir_all(&root).ok();
+    }
+
+    /// junction 挂在技能目录里，看着像一个普通子目录 —— 不能顺着它列到外面，
+    /// 也不能顺着它读到外面的文件。
+    #[cfg(windows)]
+    #[test]
+    fn a_junction_inside_a_skill_is_not_followed() {
+        let (root, dir_name) = skill_with_assets();
+        let outside = tmp();
+        std::fs::write(outside.join("secret.md"), "机密").unwrap();
+        let link = root.join(&dir_name).join("outside-link");
+        // mklink /J 建 junction 不需要管理员；建不出来（权限或策略）就跳过
+        let made = std::process::Command::new("cmd")
+            .args(["/C", "mklink", "/J"])
+            .arg(&link)
+            .arg(&outside)
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false);
+        if !made {
+            eprintln!("跳过：本机不允许创建 junction");
+            std::fs::remove_dir_all(&root).ok();
+            std::fs::remove_dir_all(&outside).ok();
+            return;
+        }
+
+        let tree = list_files(&root, &dir_name).unwrap();
+        let node = tree.children.iter().find(|n| n.name == "outside-link").expect("链接要在树里可见");
+        assert_eq!(node.kind, "symlink");
+        assert!(!node.is_text);
+        assert!(node.children.is_empty(), "junction 不能被展开成子树");
+
+        let err = read_file(&root, &dir_name, "outside-link/secret.md").unwrap_err();
+        assert!(err.starts_with("escaped"), "顺着链接走出去必须拒，实际: {err}");
+
+        // 只删链接本身，别把外面的目录一起删了
+        std::fs::remove_dir(&link).ok();
+        assert!(outside.join("secret.md").exists(), "拒绝之后外部文件必须原样还在");
+        std::fs::remove_dir_all(&root).ok();
+        std::fs::remove_dir_all(&outside).ok();
     }
 }

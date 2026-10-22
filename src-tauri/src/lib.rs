@@ -155,6 +155,8 @@ pub fn run() {
             commands::agenthub::tb_skill_delete,
             commands::agenthub::tb_skill_import,
             commands::agenthub::tb_skill_reveal,
+            commands::agenthub::tb_skill_list_files,
+            commands::agenthub::tb_skill_read_file,
             commands::agenthub::tb_prompt_list,
             commands::agenthub::tb_prompt_save,
             commands::agenthub::tb_prompt_delete,

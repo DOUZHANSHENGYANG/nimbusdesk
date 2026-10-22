@@ -133,6 +133,41 @@ pub struct TbSkillDoc {
     pub version_list: Vec<TbVersion>,
 }
 
+/// 技能目录里的一棵树（「文件」页签用）。
+///
+/// 只读：浏览技能目录里的说明与脚本，不做新建/编辑/删除。
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TbSkillFileNode {
+    /// 相对技能根目录的路径（用 `/` 分隔）
+    pub path: String,
+    pub name: String,
+    pub is_dir: bool,
+    /// 是否为可读文本。非文本（图片/PDF/压缩包/符号链接）只列出，不尝试读数
+    pub is_text: bool,
+    pub size: u64,
+    /// 扩展名（小写，不含点）
+    pub ext: String,
+    /// 预览类别：dir | markdown | text | code | image | pdf | word | sheet | archive | symlink | other
+    pub kind: String,
+    /// 只可能出现在根节点上：树因深度或条目上限被截断
+    #[serde(default)]
+    pub truncated: bool,
+    pub children: Vec<TbSkillFileNode>,
+}
+
+/// 技能目录里单个文本文件的读取结果。
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TbSkillFileContent {
+    pub path: String,
+    pub name: String,
+    pub ext: String,
+    pub kind: String,
+    pub size: u64,
+    pub text: String,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TbSkillSave {

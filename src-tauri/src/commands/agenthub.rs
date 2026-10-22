@@ -89,6 +89,18 @@ pub async fn tb_skill_reveal(dir_name: String) -> Result<(), String> {
     .await
 }
 
+/// 只读：列出技能目录的文件树（深度与条目有上限，绝不跟随符号链接）。
+#[command]
+pub async fn tb_skill_list_files(dir_name: String) -> Result<TbSkillFileNode, String> {
+    blocking(move || skills::list_files(&crate::agenthub::skills_dir()?, &dir_name)).await
+}
+
+/// 只读：读技能目录内单个文本文件（越界/二进制/超限一律报错，不截断）。
+#[command]
+pub async fn tb_skill_read_file(dir_name: String, rel_path: String) -> Result<TbSkillFileContent, String> {
+    blocking(move || skills::read_file(&crate::agenthub::skills_dir()?, &dir_name, &rel_path)).await
+}
+
 #[command]
 pub async fn tb_root_reveal() -> Result<(), String> {
     blocking(move || {
