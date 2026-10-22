@@ -1,48 +1,82 @@
-import { useEffect, useRef } from "react";
+import { useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import {
-  PanelLeftClose,
-  PanelLeftOpen,
-} from "lucide-react";
+import { ChevronRight, PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { motion, useReducedMotion } from "motion/react";
 import { useTranslation } from "react-i18next";
-import { gsap, useGSAP, DUR, EASE } from "@/lib/gsap";
 import { useSettings } from "@/stores/settings";
 import { cn } from "@/lib/utils";
-import { NAV_ITEMS } from "./navigation";
+import { useToolboxCounts, type ToolboxCounts } from "@/features/agenthub/counts";
+import { AI_NAV, NAV_TOP, type NavItem } from "./navigation";
 
-/** 左侧导航：活跃胶囊指示器（GSAP 滑动） */
+/** 与源侧侧栏同款的弹簧：滑得干脆、不来回晃。 */
+const PILL_SPRING = { type: "spring", stiffness: 420, damping: 34 } as const;
+
+const COUNT_KEYS: Record<string, keyof ToolboxCounts> = {
+  "/toolbox/prompts": "prompts",
+  "/toolbox/mcp": "mcp",
+  "/toolbox/skills": "skills",
+  "/toolbox/harness": "harness",
+};
+
+/**
+ * 左侧导航：三层 —— 顶层项 / 可折叠的 AI 组 / 底部折叠按钮。
+ *
+ * 活跃指示是一枚 `layoutId` 药丸（motion）：它在所有条目之间只有一份，
+ * 换页时自动从旧位置滑到新位置，跨「组内 ↔ 组外」也成立。
+ * 外层标了 `layoutRoot`：侧栏宽度是 CSS 过渡在变的，不把投影根定在这里的话，
+ * 每次展开/收起都会把「容器在动」误读成药丸在动。
+ */
 export function Sidebar() {
   const { t } = useTranslation();
   const location = useLocation();
   const navigate = useNavigate();
   const collapsed = useSettings((s) => s.sidebarCollapsed);
   const setCollapsed = useSettings((s) => s.setSidebarCollapsed);
-
+  const aiOpenSetting = useSettings((s) => s.aiGroupOpen);
+  const setAiOpen = useSettings((s) => s.setAiGroupOpen);
+  const counts = useToolboxCounts(location.pathname);
+  const reduce = useReducedMotion();
   const listRef = useRef<HTMLDivElement>(null);
-  const pillRef = useRef<HTMLDivElement>(null);
 
-  // 活跃项指示器滑动
-  useGSAP(
-    () => {
-      const active = listRef.current?.querySelector<HTMLElement>('[data-active="true"]');
-      const pill = pillRef.current;
-      if (!active || !pill) return;
-      gsap.to(pill, {
-        y: active.offsetTop,
-        height: active.offsetHeight,
-        duration: DUR.base,
-        ease: EASE.out,
-      });
-    },
-    { dependencies: [location.pathname, collapsed], scope: listRef },
-  );
+  // 折叠后没有文字也没有角标，组头就没有意义了：直接摊开成图标列
+  const aiOpen = collapsed || aiOpenSetting;
+  const aiActive = AI_NAV.some((item) => item.to === location.pathname);
 
-  // 初次定位（无动画）
-  useEffect(() => {
-    const active = listRef.current?.querySelector<HTMLElement>('[data-active="true"]');
-    const pill = pillRef.current;
-    if (active && pill) gsap.set(pill, { y: active.offsetTop, height: active.offsetHeight });
-  }, []);
+  const item = ({ to, key, icon: Icon }: NavItem) => {
+    const active = location.pathname === to;
+    const count = COUNT_KEYS[to] ? counts[COUNT_KEYS[to]] : undefined;
+    return (
+      <button
+        key={to}
+        type="button"
+        data-active={active}
+        onClick={() => navigate(to)}
+        title={t(key)}
+        className={cn(
+          "relative flex h-9 shrink-0 items-center gap-3 rounded-[10px] px-2.5 text-[13.5px] font-medium transition-colors duration-200",
+          active ? "text-sidebar-accent-foreground" : "text-sidebar-foreground hover:text-sidebar-accent-foreground",
+          collapsed && "justify-center px-0",
+        )}
+      >
+        {active && <Pill />}
+        <Icon
+          className={cn("relative z-10 size-4 shrink-0 transition-colors duration-200", active ? "text-brand" : "opacity-70")}
+          strokeWidth={active ? 2.2 : 1.8}
+        />
+        {!collapsed && <span className="relative z-10 truncate">{t(key)}</span>}
+        {!collapsed && count !== undefined && (
+          <span
+            className={cn(
+              "relative z-10 ml-auto rounded-full px-1.5 py-0.5 text-[10px] font-medium tabular-nums",
+              active ? "bg-brand/15 text-brand" : "bg-muted text-muted-foreground",
+            )}
+          >
+            {count}
+          </span>
+        )}
+      </button>
+    );
+  };
 
   return (
     <nav
@@ -52,46 +86,45 @@ export function Sidebar() {
       )}
       style={{ transitionTimingFunction: "cubic-bezier(0.22, 1, 0.36, 1)" }}
     >
-      <div ref={listRef} className="relative flex flex-col gap-1 px-2 pt-2">
-        {/* 活跃胶囊 */}
-        <div
-          ref={pillRef}
-          aria-hidden
-          className="pointer-events-none absolute left-2 right-2 top-0 rounded-[10px] bg-sidebar-accent opacity-0"
-        />
-        {NAV_ITEMS.map(({ to, key, icon: Icon }) => {
-          const active = location.pathname === to;
-          return (
-            <button
-              key={to}
-              type="button"
-              data-active={active}
-              onClick={() => navigate(to)}
-              title={t(key)}
-              className={cn(
-                "relative z-10 flex h-9 items-center gap-3 rounded-[10px] px-2.5 text-[13.5px] font-medium transition-colors duration-200",
-                active
-                  ? "text-sidebar-accent-foreground"
-                  : "text-sidebar-foreground hover:text-sidebar-accent-foreground",
-                collapsed && "justify-center px-0",
-              )}
-            >
-              <Icon
-                className={cn(
-                  "size-4 shrink-0 transition-colors duration-200",
-                  active ? "text-brand" : "opacity-70",
-                )}
-                strokeWidth={active ? 2.2 : 1.8}
-              />
-              {!collapsed && <span className="truncate">{t(key)}</span>}
-            </button>
-          );
-        })}
-      </div>
+      <motion.div ref={listRef} layoutRoot className="relative flex min-h-0 flex-col gap-1 overflow-y-auto px-2 pt-2">
+        {NAV_TOP.map(item)}
+
+        {/* AI 组头：跟条目同宽同高，药丸在组头与子项之间直接滑过去 */}
+        <button
+          type="button"
+          data-active={aiActive && !aiOpen && !collapsed}
+          onClick={() => (collapsed ? setCollapsed(false) : setAiOpen(!aiOpenSetting))}
+          title={t("nav.ai")}
+          aria-expanded={aiOpen}
+          className={cn(
+            "relative flex h-9 shrink-0 items-center gap-3 rounded-[10px] px-2.5 text-[13.5px] font-medium transition-colors duration-200",
+            aiActive && !aiOpen && !collapsed ? "text-sidebar-accent-foreground" : "text-sidebar-foreground hover:text-sidebar-accent-foreground",
+            collapsed && "justify-center px-0",
+          )}
+        >
+          {aiActive && !aiOpen && !collapsed && <Pill />}
+          <span className="relative z-10 grid size-4 shrink-0 place-items-center">
+            <ChevronRight
+              className={cn("size-4 transition-transform duration-300", !collapsed && aiOpenSetting && "rotate-90", aiActive ? "text-brand" : "opacity-70")}
+              strokeWidth={aiActive ? 2.2 : 1.8}
+            />
+          </span>
+          {!collapsed && <span className="relative z-10 truncate">{t("nav.ai")}</span>}
+        </button>
+
+        {/* 组内条目：折叠态直接摊开，展开态由高度过渡收放 */}
+        <motion.div
+          initial={false}
+          animate={{ height: aiOpen ? "auto" : 0, opacity: aiOpen ? 1 : 0 }}
+          transition={reduce ? { duration: 0 } : PILL_SPRING}
+          className="flex flex-col gap-1 overflow-hidden"
+        >
+          <div className={cn("flex flex-col gap-1", !collapsed && "pl-3")}>{AI_NAV.map(item)}</div>
+        </motion.div>
+      </motion.div>
 
       <div className="flex-1" />
 
-      {/* 底部：折叠 */}
       <div className="flex flex-col gap-1 px-2 pb-2">
         <SidebarBottomButton
           icon={collapsed ? PanelLeftOpen : PanelLeftClose}
@@ -101,6 +134,13 @@ export function Sidebar() {
         />
       </div>
     </nav>
+  );
+}
+
+/** 活跃指示药丸。全侧栏只有一个 `layoutId`，所以它会在条目之间滑动。 */
+function Pill() {
+  return (
+    <motion.span layoutId="nav-pill" transition={PILL_SPRING} aria-hidden className="absolute inset-0 rounded-[10px] bg-sidebar-accent" />
   );
 }
 

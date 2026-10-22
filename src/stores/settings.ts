@@ -25,14 +25,15 @@ interface SettingsState {
   /** 勾选完成后自动把该项从列表移除（真删，可撤销） */
   autoClearDone: boolean;
   /** 桌面 Dock：贴边与开关（窗口本体常驻托盘之外，关闭=销毁窗口） */
-  dockEdge: "left" | "right" | "top";
-  dockOpen: boolean;
+  dockEdge: "left" | "right" | "top";  dockOpen: boolean;
   /** 收纳盒飞出面板的磁贴图标边长（Ctrl+滚轮调节，32–72） */
   dockTileSize: number;
   /** Dock 显隐全局快捷键（空 = 无）；按下在托盘外切换 Dock 显示 */
   dockShortcut: string;
   /** 检测到全屏应用时自动隐藏 Dock */
   dockAutoHide: boolean;
+  /** 侧栏 AI 组是否展开（折叠侧栏时该组强制摊开，与这个值无关） */
+  aiGroupOpen: boolean;
   setTheme: (theme: ThemeMode) => void;
   setLang: (lang: Lang) => void;
   setSidebarCollapsed: (v: boolean) => void;
@@ -48,6 +49,7 @@ interface SettingsState {
   setDockTileSize: (v: number) => void;
   setDockShortcut: (v: string) => void;
   setDockAutoHide: (v: boolean) => void;
+  setAiGroupOpen: (v: boolean) => void;
 }
 
 const PLANS_VIEWS: PlansView[] = ["outline", "timeline", "kanban", "calendar", "stats", "archive"];
@@ -79,6 +81,7 @@ export const useSettings = create<SettingsState>()(
       dockTileSize: 28,
       dockShortcut: "",
       dockAutoHide: false,
+      aiGroupOpen: true,
       setTheme: (theme) => set({ theme }),
       setLang: (lang) => set({ lang }),
       setSidebarCollapsed: (sidebarCollapsed) => set({ sidebarCollapsed }),
@@ -94,14 +97,16 @@ export const useSettings = create<SettingsState>()(
       setDockTileSize: (dockTileSize) => set({ dockTileSize: Math.min(72, Math.max(16, Math.round(dockTileSize))) }),
       setDockShortcut: (dockShortcut) => set({ dockShortcut }),
       setDockAutoHide: (dockAutoHide) => set({ dockAutoHide }),
+      setAiGroupOpen: (aiGroupOpen) => set({ aiGroupOpen }),
     }),
     {
       name: "settings",
       storage: createJSONStorage(() => tauriJsonStorage),
-      version: 3,
+      version: 4,
       /**
        * v1 → v2：新增 `plansView`（旧 settings.json 没这个键，pill 会全不亮）。
        * v2 → v3：新增 `autoSortDone` / `autoClearDone`。
+       * v3 → v4：新增 `aiGroupOpen`（侧栏 AI 组的展开态）。
        *
        * 迁移只补缺失字段、不改其它值；视图键顺手校验，手改坏的退回大纲
        * 而不是让整个页面白屏。
@@ -109,18 +114,17 @@ export const useSettings = create<SettingsState>()(
       migrate: (persisted, version) => {
         const s = persisted as Partial<SettingsState> | undefined;
         if (!s) return persisted as SettingsState;
-        if (version >= 3) {
-          // 旧默认磁贴偏大：静默并入新默认 28（用户手动调过的值不动）
-          if (s.dockTileSize === 46 || s.dockTileSize === 36) s.dockTileSize = 28;
-          return persisted as SettingsState;
-        }
-        return {
-          ...s,
-          plansView: isPlansView(s.plansView) ? s.plansView : "outline",
+        if (version < 3) {
+          s.plansView = isPlansView(s.plansView) ? s.plansView : "outline";
           // 缺失时才填默认：已经显式设过的（哪怕是 false）不能被覆盖
-          autoSortDone: s.autoSortDone ?? true,
-          autoClearDone: s.autoClearDone ?? false,
-        } as SettingsState;
+          s.autoSortDone = s.autoSortDone ?? true;
+          s.autoClearDone = s.autoClearDone ?? false;
+        } else if (s.dockTileSize === 46 || s.dockTileSize === 36) {
+          // 旧默认磁贴偏大：静默并入新默认 28（用户手动调过的值不动）
+          s.dockTileSize = 28;
+        }
+        if (version < 4) s.aiGroupOpen = true;
+        return s as SettingsState;
       },
     },
   ),

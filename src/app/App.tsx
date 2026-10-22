@@ -1,4 +1,4 @@
-import { HashRouter, Route, Routes, useLocation, useNavigate } from "react-router-dom";
+import { HashRouter, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { useEffect } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { inTauri } from "@/lib/tauri";
@@ -63,7 +63,12 @@ function Shell() {
               <Route path="/feeds" element={<FeedsPage />} />
               <Route path="/knowledge" element={<KnowledgePage />} />
               <Route path="/tools" element={<ToolsPage />} />
-              <Route path="/toolbox" element={<ToolboxPage />} />
+              {/* 工具箱拆成四个独立页（与源侧一致）；旧的单页路由保留为跳转 */}
+              <Route path="/toolbox" element={<Navigate to="/toolbox/skills" replace />} />
+              <Route path="/toolbox/skills" element={<ToolboxPage section="skills" />} />
+              <Route path="/toolbox/prompts" element={<ToolboxPage section="prompts" />} />
+              <Route path="/toolbox/mcp" element={<ToolboxPage section="mcp" />} />
+              <Route path="/toolbox/harness" element={<ToolboxPage section="harness" />} />
               <Route path="/agent" element={<AgentPage />} />
               <Route path="/settings" element={<SettingsPage />} />
             </Routes>

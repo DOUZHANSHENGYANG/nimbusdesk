@@ -17,8 +17,12 @@ const zh = {
     settings: "设置",
     collapse: "收起侧栏",
     expand: "展开侧栏",
-    toolbox: "工具箱",
-    agent: "AI",
+    ai: "AI",
+    agent: "对话",
+    prompts: "提示词",
+    mcp: "MCP",
+    skills: "技能",
+    harness: "本机工具",
   },
   titlebar: {
     minimize: "最小化",
@@ -459,12 +463,25 @@ const zh = {
     },
   },
   toolbox: {
-    title: "工具箱",
-    subtitle: "把技能、提示词与 MCP 配置收拢到一处，本机文件读写，不经过模型。",
+    section: {
+      skills: {
+        title: "技能",
+        subtitle: "放在本机数据目录的 SKILL.md，可搜索、编辑、导入，也能分发到别家工具。",
+      },
+      prompts: {
+        title: "提示词",
+        subtitle: "一句一句收起来的提示词，带标签与版本时间轴。",
+      },
+      mcp: {
+        title: "MCP 服务",
+        subtitle: "本机 MCP 服务的连接配置，可按需导出或分发到别家工具。",
+      },
+      harness: {
+        title: "本机工具",
+        subtitle: "这台机器上各 AI 工具现有什么，以及把条目在两个方向搬起来。",
+      },
+    },
     localOnly: "数据存在本机数据目录，不联网",
-    tabSkills: "技能",
-    tabPrompts: "提示词",
-    tabMcp: "MCP 服务",
     loading: "正在读取…",
     noMatch: "没有匹配的条目",
     refresh: "重新读取",
@@ -883,8 +900,12 @@ const en: typeof zh = {
     settings: "Settings",
     collapse: "Collapse sidebar",
     expand: "Expand sidebar",
-    toolbox: "Toolbox",
-    agent: "AI",
+    ai: "AI",
+    agent: "Chat",
+    prompts: "Prompts",
+    mcp: "MCP",
+    skills: "Skills",
+    harness: "Local tools",
   },
   titlebar: {
     minimize: "Minimize",
@@ -1331,12 +1352,25 @@ const en: typeof zh = {
     },
   },
   toolbox: {
-    title: "Toolbox",
-    subtitle: "Keep skills, prompts and MCP servers in one place, on local files, without calling a model.",
+    section: {
+      skills: {
+        title: "Skills",
+        subtitle: "SKILL.md files in your local data folder: search, edit, import, and distribute them.",
+      },
+      prompts: {
+        title: "Prompts",
+        subtitle: "Prompts kept one by one, with tags and a version timeline.",
+      },
+      mcp: {
+        title: "MCP servers",
+        subtitle: "Connection settings for local MCP servers; export or distribute them on demand.",
+      },
+      harness: {
+        title: "Local tools",
+        subtitle: "What each AI tool on this machine holds, and how to move entries both ways.",
+      },
+    },
     localOnly: "Stored in your local data folder, no network",
-    tabSkills: "Skills",
-    tabPrompts: "Prompts",
-    tabMcp: "MCP servers",
     loading: "Reading…",
     noMatch: "No matching items",
     refresh: "Reload",

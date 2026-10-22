@@ -2,21 +2,19 @@
    材质与间距全部走 tokens.css 的语义 token 与 --pr-* 原始名，不写死色值。 */
 
 .toolbox { display:flex; flex-direction:column; height:100%; min-width:0; overflow:hidden; font-size:13px; }
-.toolbox-header { display:flex; align-items:center; justify-content:space-between; gap:24px; flex-shrink:0; min-height:76px; padding:16px 30px; border-bottom:1px solid var(--workbench-line); }
-.toolbox-header h1 { font-size:20px; font-weight:650; line-height:1.3; letter-spacing:-.025em; }
-.toolbox-header p { margin-top:4px; color:var(--muted-foreground); font-size:11.5px; }
-.toolbox-root { display:flex; align-items:center; gap:8px; min-width:0; max-width:46%; padding:6px 9px; border:1px solid var(--workbench-line); border-radius:8px; color:var(--muted-foreground); font-size:11px; }
+/* 页面头：刻意不画底部分隔线 —— 分层靠留白与字重，不靠给标题加一条横线 */
+.toolbox-head { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; flex-shrink:0; padding:16px 20px 14px; }
+.toolbox-head h1 { font-size:20px; font-weight:600; line-height:1.25; letter-spacing:-.015em; }
+.toolbox-head p { margin-top:4px; color:var(--muted-foreground); font-size:11.5px; }
+.toolbox-head-actions { display:flex; align-items:center; gap:10px; flex-shrink:0; padding-top:2px; }
+.toolbox-root { display:flex; align-items:center; gap:8px; min-width:0; max-width:340px; padding:6px 9px; border:1px solid var(--workbench-line); border-radius:8px; color:var(--muted-foreground); font-size:11px; }
 .toolbox-root:hover { color:var(--foreground); background:var(--accent); }
 .toolbox-root svg { width:13px; height:13px; flex-shrink:0; }
 .toolbox-root code { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-family:var(--font-mono); font-size:10.5px; direction:rtl; text-align:left; }
+.toolbox-head-actions .toolbox-hint { display:inline-flex; align-items:center; gap:6px; }
+.toolbox-head-actions .toolbox-hint svg { width:14px; height:14px; }
 
-.toolbox-tabs { display:flex; align-items:center; gap:4px; flex-shrink:0; padding:12px 30px 0; }
-.toolbox-tabs > button { display:inline-flex; align-items:center; gap:7px; min-height:32px; padding:6px 12px; border-radius:8px; color:var(--muted-foreground); font-size:12px; }
-.toolbox-tabs > button:hover { color:var(--foreground); background:var(--surface-hover); }
-.toolbox-tabs > button[aria-current="page"] { color:var(--accent-foreground); background:var(--accent); font-weight:550; }
-.toolbox-tabs svg { width:15px; height:15px; }
-
-.toolbox-body { flex:1; min-height:0; padding:16px 30px 22px; }
+.toolbox-body { display:flex; flex-direction:column; flex:1; min-height:0; padding:0 20px 22px; }
 .toolbox-split { display:grid; grid-template-columns:minmax(220px,300px) minmax(0,1fr); gap:18px; height:100%; min-height:0; }
 .toolbox-column { display:flex; flex-direction:column; min-width:0; min-height:0; }
 .toolbox-column-panel { overflow-y:auto; scrollbar-gutter:stable; }
