@@ -174,6 +174,13 @@ const zh = {
     noRelated: "同目录没有别的笔记",
   },
   projects: {
+    views: {
+      empty: "把当前的迭代 / 状态 / 搜索存成一个视图，下次一键切回",
+      name: "视图名",
+      save: "保存",
+      saveCurrent: "保存当前筛选",
+      remove: "删除视图",
+    },
     title: "项目管理",
     empty: "项目管理将在后续版本到来",
   },
@@ -1146,6 +1153,13 @@ const en: typeof zh = {
     noRelated: "Nothing else in this folder",
   },
   projects: {
+    views: {
+      empty: "Save the current iteration / status / search as a view",
+      name: "View name",
+      save: "Save",
+      saveCurrent: "Save current filter",
+      remove: "Remove view",
+    },
     title: "Projects",
     empty: "Projects is coming in a later version",
   },

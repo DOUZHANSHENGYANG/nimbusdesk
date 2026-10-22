@@ -2,6 +2,7 @@ import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Bell, CalendarDays, ChevronRight, Folder, FolderKanban, Layers3, ListTodo, LoaderCircle, Pencil, Plus, Search, Trash2, X, ArrowRightLeft } from "lucide-react";
 import { toast } from "sonner";
+import { ProjectViewsBar } from "./views-bar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -148,6 +149,16 @@ function ProjectsWorkspace() {
       <Tabs value={tab} onValueChange={setTab} className="flex min-h-0 min-w-0 flex-col gap-0">
         {selectedProject && <div className="flex h-11 shrink-0 items-center border-b border-border px-3"><TabsList aria-label={selectedProject.name}><TabsTrigger value="tasks"><ListTodo />{c.tasks}</TabsTrigger><TabsTrigger value="files"><Folder />{c.files}</TabsTrigger></TabsList></div>}
         {tab === "files" && selectedProject ? <TabsContent value="files" aria-label={c.files} className="min-h-0 flex-1 overflow-auto p-3"><ProjectFiles projectId={selectedProject.id} folder={selectedProject.folder} onFolderChange={folder => state.updateProject(selectedProject.id, { folder })} /></TabsContent> : <TabsContent value="tasks" aria-label={c.tasks} className="flex min-h-0 flex-1 flex-col">
+          <ProjectViewsBar
+            iteration={iterationFilter}
+            status={statusFilter}
+            search={search}
+            onApply={(v) => {
+              setIterationFilter(v.iteration);
+              setStatusFilter(v.status);
+              setSearch(v.search);
+            }}
+          />
           <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border p-3"><div className="min-w-[150px] flex-1"><ProjectSelect label={c.iteration} value={iterationFilter} onChange={setIterationFilter} options={[{ value: "current", label: currentIteration ? `${c.currentIteration} · ${currentIteration.name}` : `${c.currentIteration} · ${c.noCurrentIteration}` }, { value: "none", label: c.unplanned }, { value: "all", label: c.allIterations }, ...iterations.map(i => ({ value: i.id, label: `${i.name} · ${i.start.slice(5)} – ${i.end.slice(5)}` }))]} /></div><Button variant="ghost" size="icon-sm" title={c.newIteration} aria-label={c.newIteration} onClick={() => setEditor({ kind: "iteration" })}><Plus /></Button>{selectedIteration && <Button variant="ghost" size="icon-sm" title={c.editIteration} aria-label={c.editIteration} onClick={() => setEditor({ kind: "iteration", id: selectedIteration.id })}><Pencil /></Button>}<div className="w-[110px]"><ProjectSelect label={c.status} value={statusFilter} onChange={setStatusFilter} options={[{ value: "open", label: c.open }, { value: "all", label: c.all }, { value: "todo", label: c.todo }, { value: "doing", label: c.doing }, { value: "done", label: c.done }, { value: "cancelled", label: c.cancelled }]} /></div><div className="relative min-w-[150px] flex-1"><Search className="pointer-events-none absolute top-2 left-2.5 size-4 text-muted-foreground" /><Input value={search} onChange={e => setSearch(e.target.value)} className="pr-7 pl-8" placeholder={c.search} aria-label={c.search} />{search && <Button className="absolute top-0.5 right-0.5" variant="ghost" size="icon-sm" title={c.clearSearch} aria-label={c.clearSearch} onClick={() => setSearch("")}><X /></Button>}</div></div>
           <div className="flex h-9 shrink-0 items-center justify-between border-b border-border px-4 text-xs text-muted-foreground"><span>{selectedIteration ? `${selectedIteration.start} – ${selectedIteration.end}` : iterationFilter === "all" ? c.allIterations : c.unplanned}</span><span className="tabular-nums" aria-live="polite">{filtered.length} {c.count}</span></div>
           {hiddenUnplannedSources > 0 && <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-border bg-muted/30 px-4 py-2" data-zen-unplanned-hint><p className="text-xs text-muted-foreground">{hiddenUnplannedSources} {z.hiddenUnplanned}</p><Button size="sm" variant="link" className="h-auto p-0" onClick={() => { chooseScope({ kind: "all" }); setIterationFilter("none"); setStatusFilter("all"); setSearch(""); }}>{z.showUnplanned}</Button></div>}
