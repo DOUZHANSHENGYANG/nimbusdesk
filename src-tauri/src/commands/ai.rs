@@ -412,6 +412,25 @@ pub async fn ai_delete_secret(id: String) -> Result<(), String> {
         .map_err(|_| "AI_TASK_FAILED")?
 }
 
+/// 定时任务（`ai_prompt` 动作）用：不经 IPC，按提供商配置 + 本机凭据发一次
+/// **非流式**对话。与 `ai_chat` 共用同一套校验、同一个 `request_chat`，
+/// 只是把「凭据从 Credential Manager 读」这一步放进函数内部，供后台线程直接调用。
+///
+/// `provider` 必须是 `ChatInput.provider` 的形状：
+/// `{ id, baseUrl, model, vision, parameters? }` —— 多一个字段都会被
+/// `deny_unknown_fields` 拒掉，这是刻意的：调用方不许往这里夹带凭据。
+pub(crate) fn chat_once(provider: Value, content: String) -> Result<String, String> {
+    let input: ChatInput = serde_json::from_value(serde_json::json!({
+        "provider": provider,
+        "messages": [{ "role": "user", "content": content }],
+        "useStoredKey": true,
+    }))
+    .map_err(|_| "AI_INVALID_PROVIDER".to_string())?;
+    validate_input(&input)?;
+    let secret = credentials::read(&input.provider.id)?;
+    request_chat(input, secret)
+}
+
 #[tauri::command]
 pub async fn ai_chat(input: ChatInput) -> Result<String, String> {
     validate_input(&input)?;

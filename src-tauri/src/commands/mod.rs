@@ -20,5 +20,7 @@ pub mod desktop_shortcut;
 pub mod desktop;
 pub mod search;
 
+pub mod schedule;
+
 pub mod quick_tools;
 

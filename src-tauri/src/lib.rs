@@ -12,6 +12,7 @@ mod tray;
 mod organization_clock;
 mod search;
 mod quick_tools;
+mod schedule;
 // AgentHub（源侧工具箱后端）原样搬进来的模块，独立在 ahub/ 下。
 mod ahub;
 
@@ -111,6 +112,14 @@ pub fn run() {
             commands::knowledge::knowledge_image,
             commands::data::get_data_dir,
             commands::data::set_data_dir,
+            commands::schedule::schedule_snapshot,
+            commands::schedule::schedule_save,
+            commands::schedule::schedule_delete,
+            commands::schedule::schedule_set_enabled,
+            commands::schedule::schedule_clear_history,
+            commands::schedule::schedule_run_now,
+            commands::schedule::schedule_preview,
+            commands::schedule::schedule_action_result,
             commands::backup::pick_backup_save_path,
             commands::backup::pick_backup_open_path,
             commands::backup::write_backup,
@@ -282,6 +291,7 @@ pub fn run() {
         .setup(|app| {
             tray::create(app)?;
             organization_clock::start(app.handle().clone())?;
+            schedule::engine::start(app.handle().clone());
             commands::search::start(app.handle().clone());
             commands::quick_tools::start(app.handle().clone());
             // AgentHub 原版启动清理：把 ZIP 的 DOS 纪元哨兵时间戳（1980-01-01）改写为
