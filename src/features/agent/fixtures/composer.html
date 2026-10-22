@@ -1,0 +1,117 @@
+<!doctype html>
+<html>
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  html,body{margin:0;height:100%;background:#111}
+  #shell{height:calc(100vh - 150px);display:flex;overflow:hidden}
+  #wire{height:150px;overflow:auto;margin:0;padding:6px 10px;border-top:1px solid #444;background:#000;color:#8f8;font:11px/1.5 ui-monospace,Consolas,monospace;white-space:pre-wrap}
+</style>
+</head>
+<body>
+<div id="shell"></div>
+<pre id="wire"></pre>
+<script type="module">
+/*
+ * AI 输入区的浏览器 mock 层（人工验收用，不参与打包）。
+ *
+ * 为什么需要它：`pnpm dev` 里没有 Tauri IPC，服务商永远读不到，输入区只能停在
+ * 「未配置服务商」的引导态 —— 那样就只剩肉眼看图。这里做两件事：
+ *   1. 用 `mockIPC` 喂一份服务商配置，让输入区进入可用状态；
+ *   2. 拦 `window.fetch`，把**真正发出去的请求体**原样贴到页面底部 ——
+ *      于是「智能体切计划后 instructions 里到底带了什么」是断言，不是猜测。
+ *
+ * 打开：http://127.0.0.1:17800/src/features/agent/fixtures/composer.html
+ */
+import { mockIPC, mockWindows } from '@tauri-apps/api/mocks';
+
+const provider = {
+  id: 'mock',
+  name: 'Mock',
+  baseUrl: 'https://mock.local/v1',
+  model: 'deepseek-chat',
+  vision: true,
+  models: [{ id: 'deepseek-chat', vision: true, parameters: { reasoningEffort: 'high' } }],
+};
+const fixtures = {
+  settings: { version: 7, state: { theme: 'dark', lang: 'zh' } },
+  'ai-providers': {
+    version: 1,
+    state: { providers: [provider], defaultTextId: 'mock', defaultVisionId: null, defaultVisionModel: null },
+  },
+  'ai-agent': { version: 1, state: { sessions: [], currentId: '' } },
+};
+
+mockIPC(async (cmd, args) => {
+  if (cmd === 'read_json') return structuredClone(fixtures[args.key] ?? null);
+  if (cmd === 'write_json') { fixtures[args.key] = structuredClone(args.value); return args.value; }
+  if (cmd === 'ai_fetch_cancel') return null;
+  /*
+   * 真机上请求走 `ai_fetch`（Rust 注入密钥转发），所以浏览器里断言「发出去的
+   * instructions」要在这里拦：`args.input.body` 就是 AI SDK 交给 fetch 的那份
+   * 请求体原文，逐字记录后按 Channel 协议回一段 SSE。
+   */
+  if (cmd === 'ai_fetch') {
+    const body = JSON.parse(args.input.body ?? '{}');
+    wire.push({ body, url: args.input.url });
+    draw();
+    const channel = args.onEvent;
+    let index = 0;
+    const send = (message) => window.__TAURI_INTERNALS__.runCallback(channel.id, { index: index++, message });
+    setTimeout(() => {
+      send({ kind: 'head', status: 200, headers: [['content-type', 'text/event-stream']] });
+      send({ kind: 'chunk', text: sse() });
+      send({ kind: 'end' });
+    }, 10);
+    return null;
+  }
+  return null;
+}, { shouldMockEvents: true });
+mockWindows('main');
+
+const wire = [];
+window.__agentWire = wire;
+
+const chunk = (delta, finish) => `data: ${JSON.stringify({
+  id: 'mock-1', object: 'chat.completion.chunk', created: 1, model: 'mock',
+  choices: [{ index: 0, delta, finish_reason: finish }],
+})}\n\n`;
+const sse = () => `${chunk({ role: 'assistant' }, null)}${chunk({ content: '收到（mock 回复）' }, null)}${chunk({}, 'stop')}data: [DONE]\n\n`;
+
+function draw() {
+  const systems = wire.map(({ body }, index) => {
+    const system = (body.messages ?? []).filter((item) => item.role === 'system').map((item) => item.content).join('\n');
+    const last = (body.messages ?? []).slice(-1)[0]?.content ?? '';
+    return `#${index + 1} 实际发出的 system/instructions：\n${system}\n   本次用户消息：${typeof last === 'string' ? last.slice(0, 40) : ''}\n   其他字段：reasoning_effort=${body.reasoning_effort ?? '(未发)'} tools=${(body.tools ?? []).map((tool) => tool.function?.name).join(',') || '(无)'}`;
+  });
+  document.getElementById('wire').textContent = systems.join('\n────────\n') || '(还没发出请求)';
+}
+
+window.fetch = async (input, init) => {
+  const url = typeof input === 'string' ? input : (input?.url ?? '');
+  if (!url.includes('/chat/completions')) return new Response('{}', { status: 404 });
+  const body = init?.body ? JSON.parse(String(init.body)) : {};
+  wire.push(body);
+  draw();
+  return new Response(sse(), { status: 200, headers: { 'content-type': 'text/event-stream' } });
+};
+draw();
+
+const React = (await import('react')).default;
+const { createRoot } = await import('react-dom/client');
+const { MemoryRouter } = await import('react-router-dom');
+const { I18nextProvider } = await import('react-i18next');
+const { i18n } = await import('/src/lib/i18n.ts');
+const { TooltipProvider } = await import('/src/components/ui/tooltip.tsx');
+await import('/src/index.css');
+const { AgentPage } = await import('/src/features/agent/panel.tsx');
+
+createRoot(document.getElementById('shell')).render(
+  React.createElement(I18nextProvider, { i18n },
+    React.createElement(TooltipProvider, { delayDuration: 300 },
+      React.createElement(MemoryRouter, { initialEntries: ['/agent'] },
+        React.createElement('div', { className: 'workbench-ui', style: { display: 'flex', flex: 1, minWidth: 0 } },
+          React.createElement(AgentPage))))),
+);
+</script>
+</body>
+</html>

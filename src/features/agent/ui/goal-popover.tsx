@@ -52,6 +52,7 @@ export function GoalPopover() {
           maxLength={GOAL_LIMIT}
           placeholder={t("agent.goal.placeholder")}
           aria-label={t("agent.goal.title")}
+          autoFocus
           onChange={(event) => setDraft(event.target.value)}
           onKeyDown={(event) => {
             if (event.key === "Enter" && !event.nativeEvent.isComposing) {
