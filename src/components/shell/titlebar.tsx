@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
-import { Minus, Square, Copy, X, Sun, Moon, Settings2, Search } from "lucide-react";
+import { Minus, Square, Copy, X, Sun, Moon, Settings2, Search, Pin, PinOff } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { inTauri } from "@/lib/tauri";
+import { inTauri, setMainAlwaysOnTop } from "@/lib/tauri";
 import { toggleThemeRadial } from "@/lib/theme";
 import { changeLang } from "@/lib/i18n";
 import { useSettings } from "@/stores/settings";
@@ -23,6 +23,8 @@ export function Titlebar() {
   const setTheme = useSettings((s) => s.setTheme);
   const lang = useSettings((s) => s.lang);
   const setLang = useSettings((s) => s.setLang);
+  const alwaysOnTop = useSettings((s) => s.alwaysOnTop);
+  const setAlwaysOnTop = useSettings((s) => s.setAlwaysOnTop);
 
   useEffect(() => {
     if (!appWindow) return;
@@ -55,6 +57,22 @@ export function Titlebar() {
     const next = lang === "zh" ? "en" : "zh";
     setLang(next);
     changeLang(next);
+  };
+
+  /*
+   * 置顶开关。
+   *
+   * 默认**不**置顶：窗口压住别人的应用是很强的主张，交给用户显式点。
+   * 先写设置（持久层，重启后仍然生效）再调 Rust（只改当前层级）；
+   * 命令失败就把设置回滚，否则按钮会显示一个没生效的状态。
+   */
+  const onPinClick = () => {
+    const next = !alwaysOnTop;
+    setAlwaysOnTop(next);
+    void setMainAlwaysOnTop(next).catch((error) => {
+      setAlwaysOnTop(!next);
+      toast.error(String(error));
+    });
   };
 
   return (
@@ -94,6 +112,15 @@ export function Titlebar() {
           >
             {theme === "dark" ? <Sun className="size-4" /> : <Moon className="size-4" />}
           </ToolbarButton>
+          {/* 置顶开关：图标反映状态（Pin = 已置顶，PinOff = 未置顶），aria-pressed 同步 */}
+          <ToolbarButton
+            title={alwaysOnTop ? t("titlebar.unpin") : t("titlebar.pin")}
+            active={alwaysOnTop}
+            pressed={alwaysOnTop}
+            onClick={onPinClick}
+          >
+            {alwaysOnTop ? <Pin className="size-4" /> : <PinOff className="size-4" />}
+          </ToolbarButton>
           <ToolbarButton
             title={t("nav.settings")}
             active={location.pathname === "/settings"}
@@ -125,15 +152,18 @@ export function Titlebar() {
   );
 }
 
-/** 标题栏工具按钮（语言/主题/设置） */
+/** 标题栏工具按钮（语言/主题/置顶/设置） */
 function ToolbarButton({
   title,
   active,
+  pressed,
   onClick,
   children,
 }: {
   title: string;
   active?: boolean;
+  /** 有「开/关」语义的按钮用它反映状态；纯动作按钮（语言/设置）不传 */
+  pressed?: boolean;
   onClick: (e: React.MouseEvent<HTMLButtonElement>) => void;
   children: React.ReactNode;
 }) {
@@ -142,6 +172,7 @@ function ToolbarButton({
       type="button"
       title={title}
       aria-label={title}
+      aria-pressed={pressed}
       onClick={onClick}
       className={cn(
         "grid size-8 place-items-center rounded-lg transition-colors duration-150",

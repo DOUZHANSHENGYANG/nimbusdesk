@@ -24,6 +24,8 @@ interface SettingsState {
   autoSortDone: boolean;
   /** 勾选完成后自动把该项从列表移除（真删，可撤销） */
   autoClearDone: boolean;
+  /** 主窗口是否置顶（默认关：窗口不该一直压住别的应用） */
+  alwaysOnTop: boolean;
   /** 桌面 Dock：贴边与开关（窗口本体常驻托盘之外，关闭=销毁窗口） */
   dockEdge: "left" | "right" | "top";  dockOpen: boolean;
   /** 收纳盒飞出面板的磁贴图标边长（Ctrl+滚轮调节，32–72） */
@@ -48,6 +50,7 @@ interface SettingsState {
   setAutoClearDone: (v: boolean) => void;
   setDockEdge: (edge: "left" | "right" | "top") => void;
   setDockOpen: (v: boolean) => void;
+  setAlwaysOnTop: (v: boolean) => void;
   setDockTileSize: (v: number) => void;
   setDockShortcut: (v: string) => void;
   setDockAutoHide: (v: boolean) => void;
@@ -82,6 +85,7 @@ export const useSettings = create<SettingsState>()(
       autoClearDone: false,
       dockEdge: "right",
       dockOpen: true,
+      alwaysOnTop: false,
       dockTileSize: 28,
       dockShortcut: "",
       dockAutoHide: false,
@@ -100,6 +104,7 @@ export const useSettings = create<SettingsState>()(
       setAutoClearDone: (autoClearDone) => set({ autoClearDone }),
       setDockEdge: (dockEdge) => set({ dockEdge }),
       setDockOpen: (dockOpen) => set({ dockOpen }),
+      setAlwaysOnTop: (alwaysOnTop) => set({ alwaysOnTop }),
       setDockTileSize: (dockTileSize) => set({ dockTileSize: Math.min(72, Math.max(16, Math.round(dockTileSize))) }),
       setDockShortcut: (dockShortcut) => set({ dockShortcut }),
       setDockAutoHide: (dockAutoHide) => set({ dockAutoHide }),
@@ -110,12 +115,14 @@ export const useSettings = create<SettingsState>()(
     {
       name: "settings",
       storage: createJSONStorage(() => tauriJsonStorage),
-      version: 5,
+      version: 6,
       /**
        * v1 → v2：新增 `plansView`（旧 settings.json 没这个键，pill 会全不亮）。
        * v2 → v3：新增 `autoSortDone` / `autoClearDone`。
        * v3 → v4：新增 `aiGroupOpen`（侧栏 AI 组的展开态）。
        * v4 → v5：侧栏改三个分区，新增 `workbenchGroupOpen` / `libraryGroupOpen`。
+       * v5 → v6：新增 `alwaysOnTop`（主窗口置顶）。老用户升级后一律**不**置顶：
+       *           旧版本没有这个开关，谈不上「他手动开过」。
        *
        * 迁移只补缺失字段、不改其它值；视图键顺手校验，手改坏的退回大纲
        * 而不是让整个页面白屏。
@@ -137,6 +144,7 @@ export const useSettings = create<SettingsState>()(
           s.workbenchGroupOpen = s.workbenchGroupOpen ?? true;
           s.libraryGroupOpen = s.libraryGroupOpen ?? true;
         }
+        if (version < 6) s.alwaysOnTop = s.alwaysOnTop ?? false;
         return s as SettingsState;
       },
     },

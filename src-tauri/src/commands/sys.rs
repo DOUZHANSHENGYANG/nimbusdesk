@@ -42,6 +42,19 @@ pub fn window_ready(window: tauri::Window) -> Result<(), String> {
     Ok(())
 }
 
+/// 主窗口置顶开关。
+///
+/// 默认**不**置顶：窗口层级只在用户显式要求时才改。之前主窗口被固定成
+/// 置顶层，别的应用永远盖不住它 —— 这条命令把「要不要压住别人」交回给
+/// 用户（标题栏的 Pin 按钮），并让它在重启后还能保持用户的选择。
+#[tauri::command]
+pub async fn set_main_always_on_top(app: AppHandle, on: bool) -> Result<(), String> {
+    let window = app
+        .get_webview_window("main")
+        .ok_or("主窗口不可用")?;
+    window.set_always_on_top(on).map_err(|e| e.to_string())
+}
+
 /// 打开某分类的桌面栅栏窗口；已存在则聚焦。
 #[tauri::command]
 pub async fn open_fence(

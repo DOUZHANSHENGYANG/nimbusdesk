@@ -133,6 +133,7 @@ pub fn run() {
             commands::task_attachments::task_attachments_import,
             commands::data::write_json,
             commands::sys::window_ready,
+            commands::sys::set_main_always_on_top,
             commands::sys::set_developer_mode,
             commands::sys::open_fence,
             commands::sys::close_fence,

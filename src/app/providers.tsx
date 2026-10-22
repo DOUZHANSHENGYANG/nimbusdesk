@@ -2,7 +2,7 @@ import { useEffect, useRef, type ReactNode } from "react";
 import { I18nextProvider } from "react-i18next";
 import { i18n, changeLang } from "@/lib/i18n";
 import { applyTheme, isThemeSwitching } from "@/lib/theme";
-import { getDataDir, windowReady, inTauri } from "@/lib/tauri";
+import { getDataDir, windowReady, setMainAlwaysOnTop, inTauri } from "@/lib/tauri";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { onStorageSynced } from "@/lib/storage";
 import { isPopupWindow } from "@/features/files/popup";
@@ -195,6 +195,25 @@ function SettingsSync() {
     if (!isThemeSwitching()) applyTheme(theme);
     changeLang(lang);
   }, [theme, lang]);
+
+  /*
+   * 主窗口置顶：挂载即应用一次（默认不置顶），之后跟着设置走。
+   *
+   * 用 subscribe 而不是把值放进依赖数组：persist 水合是异步的，挂载那一刻
+   * 读到的还是默认 false；水合时 zustand 会把磁盘上的值 setState 进来，
+   * 订阅者因此能补上「用户上次点了置顶」这件事，不必再等一次渲染。
+   */
+  useEffect(() => {
+    if (!inTauri || getCurrentWebviewWindow().label !== "main") return;
+    const apply = () => {
+      void setMainAlwaysOnTop(useSettings.getState().alwaysOnTop)
+        .catch((error) => console.error("[bootstrap] alwaysOnTop:", error));
+    };
+    apply();
+    return useSettings.subscribe((state, previous) => {
+      if (state.alwaysOnTop !== previous.alwaysOnTop) apply();
+    });
+  }, []);
 
   return null;
 }

@@ -34,6 +34,8 @@ const zh = {
     maximize: "最大化",
     restore: "还原",
     close: "关闭（隐藏到托盘）",
+    pin: "置顶窗口",
+    unpin: "取消置顶",
   },
   dock: {
     title: "桌面 Dock",
@@ -959,6 +961,8 @@ const en: typeof zh = {
     maximize: "Maximize",
     restore: "Restore",
     close: "Close (hide to tray)",
+    pin: "Keep window on top",
+    unpin: "Stop keeping on top",
   },
   dock: {
     title: "Desktop Dock",

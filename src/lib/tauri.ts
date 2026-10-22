@@ -34,6 +34,16 @@ export async function windowReady(): Promise<void> {
   await invoke("window_ready");
 }
 
+/**
+ * 主窗口置顶开关。
+ *
+ * 只对主窗口有意义：其余窗口（Dock/搜索/收集）各有自己的层级约定，
+ * 这条命令刻意不接受 label 参数，避免被误用到它们身上。
+ */
+export async function setMainAlwaysOnTop(on: boolean): Promise<void> {
+  await invoke("set_main_always_on_top", { on });
+}
+
 /** 打开/聚焦某分类的桌面栅栏窗口 */
 export async function openFence(
   categoryId: string,
