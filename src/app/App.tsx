@@ -16,10 +16,10 @@ import { SettingsPage } from "@/features/settings/page";
 import { KnowledgePage } from "@/features/knowledge/page";
 import { OrganizationActivity } from "@/features/knowledge/organization-activity";
 import { ToolsPage } from "@/features/tools/page";
-import { PromptsPage } from "@/features/agenthub/prompts-page";
+import { AhubPromptsPage } from "@/features/agenthub/ahub-host-prompts";
 import { AhubMcpPage } from "@/features/agenthub/ahub-host";
 import { SkillsPage } from "@/features/agenthub/skills-page";
-import { HarnessPage } from "@/features/agenthub/harness-page";
+import { AhubHarnessPage } from "@/features/agenthub/ahub-host-harness";
 import { AgentPage } from "@/features/agent/panel";
 import { AppContextMenu } from "@/components/shell/app-context-menu";
 
@@ -69,9 +69,9 @@ function Shell() {
               {/* 工具箱拆成四个独立页（与源侧一致）；旧的单页路由保留为跳转 */}
               <Route path="/toolbox" element={<Navigate to="/toolbox/skills" replace />} />
               <Route path="/toolbox/skills" element={<SkillsPage />} />
-              <Route path="/toolbox/prompts" element={<PromptsPage />} />
+              <Route path="/toolbox/prompts" element={<AhubPromptsPage />} />
               <Route path="/toolbox/mcp" element={<AhubMcpPage />} />
-              <Route path="/toolbox/harness" element={<HarnessPage />} />
+              <Route path="/toolbox/harness" element={<AhubHarnessPage />} />
               <Route path="/agent" element={<AgentPage />} />
               <Route path="/settings" element={<SettingsPage />} />
             </Routes>
