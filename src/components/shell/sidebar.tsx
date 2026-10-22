@@ -102,9 +102,6 @@ export function Sidebar() {
         )}
       >
         {active && <Pill />}
-        {active && (
-          <span aria-hidden className="absolute inset-y-0 left-0 z-10 w-[2.5px] rounded-r-[3px] bg-brand" />
-        )}
         <Icon
           className={cn("relative z-10 size-4 shrink-0 transition-colors duration-200", active ? "text-brand" : "opacity-70")}
           strokeWidth={active ? 2.2 : 1.8}
@@ -137,35 +134,38 @@ export function Sidebar() {
         {NAV_GROUPS.map((group, index) => {
           const state = groupState[group.key];
           const open = collapsed || state.open;
+          const groupActive = group.items.some((entry) => entry.to === location.pathname);
           return (
-            <div key={group.key} className={cn("flex flex-col gap-1.5", !collapsed && index > 0 && "mt-6")}>
-              {/* 折叠态：不显示组标题，组与组之间用一条发丝线分隔 */}
-              {collapsed
-                ? index > 0 && <div aria-hidden className="mx-1.5 my-1 h-px bg-sidebar-border" />
-                : (
-                  <button
-                    type="button"
-                    onClick={state.toggle}
-                    title={t(group.key)}
-                    aria-expanded={state.open}
-                    className="flex h-6 shrink-0 items-center gap-3 rounded-[10px] px-2.5 text-[11px] font-medium tracking-[0.06em] text-muted-foreground/80 transition-colors duration-200 hover:text-sidebar-accent-foreground"
-                  >
-                    <span aria-hidden className="size-4 shrink-0" />
-                    <span className="truncate">{t(group.key)}</span>
-                    <span aria-hidden className="h-px flex-1 bg-sidebar-border" />
-                    <ChevronRight
-                      className={cn("size-[11px] shrink-0 opacity-50 transition-transform duration-300", state.open && "rotate-90")}
-                      strokeWidth={2.2}
-                    />
-                  </button>
+            <div key={group.key} className={cn("flex flex-col gap-0.5", !collapsed && index > 0 && "mt-4")}>
+              {/* 一级就是一条正常导航项（图标 + 标签 + 箭头），不是分区小标签：
+                  按用户给的 Ant Pro 式参考，一级字号 ≥ 二级，二级选中时一级也变色。 */}
+              <button
+                type="button"
+                onClick={state.toggle}
+                title={t(group.key)}
+                aria-expanded={state.open}
+                className={cn(
+                  "relative flex h-[38px] shrink-0 items-center gap-3 rounded-[10px] px-2.5 text-[14px] font-semibold transition-colors duration-200 hover:bg-[color-mix(in_srgb,var(--foreground)_4%,transparent)]",
+                  groupActive ? "text-brand" : "text-foreground/85 hover:text-foreground",
+                  collapsed && "justify-center px-0",
                 )}
+              >
+                <group.icon className="size-4 shrink-0" strokeWidth={1.9} />
+                {!collapsed && <span className="truncate">{t(group.key)}</span>}
+                {!collapsed && (
+                  <ChevronRight
+                    className={cn("ml-auto size-3.5 shrink-0 opacity-45 transition-transform duration-300", state.open && "rotate-90")}
+                    strokeWidth={2.2}
+                  />
+                )}
+              </button>
               <motion.div
                 initial={false}
                 animate={{ height: open ? "auto" : 0, opacity: open ? 1 : 0 }}
                 transition={reduce ? { duration: 0 } : PILL_SPRING}
-                className="flex flex-col gap-1.5 overflow-hidden"
+                className="flex flex-col gap-0.5 overflow-hidden"
               >
-                {group.items.map(item)}
+                <div className={cn("flex flex-col gap-0.5", !collapsed && "pl-4")}>{group.items.map(item)}</div>
               </motion.div>
             </div>
           );
@@ -203,7 +203,7 @@ export function Sidebar() {
 /** 活跃指示药丸。全侧栏只有一个 `layoutId`，所以它会在条目之间滑动。 */
 function Pill() {
   return (
-    <motion.span layoutId="nav-pill" transition={PILL_SPRING} aria-hidden className="absolute inset-0 rounded-[10px] bg-[color-mix(in_srgb,var(--foreground)_7%,transparent)]" />
+    <motion.span layoutId="nav-pill" transition={PILL_SPRING} aria-hidden className="absolute inset-0 rounded-[10px] bg-[color-mix(in_srgb,var(--brand)_12%,transparent)]" />
   );
 }
 
