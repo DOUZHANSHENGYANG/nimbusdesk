@@ -1,22 +1,47 @@
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { ChevronRight, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 import { useTranslation } from "react-i18next";
 import { useSettings } from "@/stores/settings";
 import { cn } from "@/lib/utils";
-import { useToolboxCounts, type ToolboxCounts } from "@/features/agenthub/counts";
+import { inTauri } from "@/lib/tauri";
+import { useData } from "@/ahub/stores/data";
 import { NAV_GROUPS, type NavItem } from "./navigation";
 
 /** 与源侧侧栏同款的弹簧：滑得干脆、不来回晃。 */
 const PILL_SPRING = { type: "spring", stiffness: 420, damping: 34 } as const;
 
-const COUNT_KEYS: Record<string, keyof ToolboxCounts> = {
+/** 角标只数「摆在那里的条目」：本机工具是一次机器扫描的结果，不在这里数（见 `useToolboxCounts`）。 */
+const COUNT_KEYS: Record<string, "prompts" | "skills" | "mcp"> = {
   "/toolbox/prompts": "prompts",
-  "/toolbox/mcp": "mcp",
   "/toolbox/skills": "skills",
-  "/toolbox/harness": "harness",
+  "/toolbox/mcp": "mcp",
 };
+
+/**
+ * 侧栏角标的数字：读 ahub 自己的 store —— 与工具箱四个页面同一份数据，
+ * 页面内增删会自己刷新，这里不需要重复数。
+ *
+ * 只在首帧补一次 `loadAll()`：用户可能只在主页开局，从没进过工具箱，
+ * 那时 store 还是空的。它只发三条列表查询（提示词 / 技能 / MCP），
+ * 不碰机器。
+ *
+ * shortcut: 本机工具那格不做数字 —— 唯一来源 `scan_harnesses` 要扫一遍机器，
+ *           为一行小数字不值当（原 counts.ts 就记着这个代价）。要显示时改成
+ *           扫描完成事件驱动的失效通知，而不是每次路由变化重扫。
+ */
+function useToolboxCounts(): Partial<Record<"prompts" | "skills" | "mcp", number>> {
+  const prompts = useData((s) => s.prompts.length);
+  const skills = useData((s) => s.skills.length);
+  const mcp = useData((s) => s.mcp.length);
+  useEffect(() => {
+    // 浏览器预览没有 Tauri：invoke 会 reject，角标留空即可
+    if (!inTauri) return;
+    void useData.getState().loadAll();
+  }, []);
+  return { prompts, skills, mcp };
+}
 
 /**
  * 左侧导航：三个分区（工作台 / 资料 / AI），每区一个可折叠标题。
@@ -40,7 +65,7 @@ export function Sidebar() {
   const setWorkbenchOpen = useSettings((s) => s.setWorkbenchGroupOpen);
   const setLibraryOpen = useSettings((s) => s.setLibraryGroupOpen);
   const setAiOpen = useSettings((s) => s.setAiGroupOpen);
-  const counts = useToolboxCounts(location.pathname);
+  const counts = useToolboxCounts();
   const reduce = useReducedMotion();
   const listRef = useRef<HTMLDivElement>(null);
 
