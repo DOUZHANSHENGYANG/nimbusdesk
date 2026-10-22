@@ -27,7 +27,7 @@ export function HomePage() {
   const root = useKnowledge((state) => state.vaultRoot);
   const vaultName = useKnowledge((state) => state.vaultName);
   const [selected, setSelected] = useState<HomeModule | null>(null);
-  const [paused, setPaused] = useState(false);
+  const [paused, setPaused] = useState(true);
   /**
    * 主页有两种视图：默认「今天」的行式清单，「脉络」是原来的星图。
    * 星图是一屏计数概览，适合偶尔看一眼；每天真正要动手的是清单，
