@@ -89,6 +89,11 @@ function SearchSurface() {
   useEffect(() => {
     ensureVisible(selected);
   }, [selected, ensureVisible]);
+  /** 标记「这一次滚动是选中项驱动的」：批加载（用户自己往下滚）不该把列表拽回去 */
+  const pendingReveal = useRef<number | null>(null);
+  useEffect(() => {
+    pendingReveal.current = selected;
+  }, [selected]);
 
   function changeQuery(value: string) {
     resultsCurrent.current = false; gate.current.invalidate(); setQuery(value); setKeyboardSelected(false); setFailure(""); setNotice("");
@@ -175,8 +180,21 @@ function SearchSurface() {
     }) : null;
     return () => { homeRevision.current++; window.removeEventListener("focus", focus); window.removeEventListener("blur", blur); clearTimeout(blurTimer); stopStatusPoll(); for (const sub of [statusSub, focusSub, homeSub, appsSub, settingsSub]) void sub?.then(stop => stop()).catch(() => undefined); };
   }, []);
-  // 依赖里带 visibleHits：跨批导航时 ensureVisible 会先扩容，扩容后的这一次渲染才滚得动
-  useEffect(() => { list.current?.querySelector(`[data-search-index="${selected}"]`)?.scrollIntoView({ block: "nearest" }); }, [selected, visibleHits]);
+  /*
+   * 只滚「选中项变化」引起的那一次。
+   *
+   * 依赖里带 `visibleHits` 是为了「跨批导航」：选中项跑出已渲染范围时 `ensureVisible`
+   * 先扩容，扩容后的这次渲染才找得到节点。但批加载本身（用户滚到底、哨兵放下一批）
+   * 也会让 `visibleHits` 变 —— 那时绝不能滚，否则拖滚动条或触摸板翻页时，
+   * 列表每放一批就被拽回当前选中项（默认第 0 条），永远翻不过第二批。
+   * 所以用 `pendingReveal` 标记区分：只有它等于刚变的那个 `selected` 时才滚。
+   */
+  useEffect(() => {
+    const target = pendingReveal.current;
+    if (target === null) return;
+    list.current?.querySelector(`[data-search-index="${target}"]`)?.scrollIntoView({ block: "nearest" });
+    pendingReveal.current = null;
+  }, [selected, visibleHits]);
   async function hide() { if (inTauri) await getCurrentWebviewWindow().hide().catch(error => setFailure(String(error))); }
   async function activate(result: SearchHit, action: "open" | "reveal" = "open") {
     if (!resultsCurrent.current) return;

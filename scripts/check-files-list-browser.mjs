@@ -69,9 +69,30 @@ try {
   assert.ok(afterJump < TOTAL, `深链定位不应把整份列表铺开（当前 ${afterJump} / ${TOTAL}）`);
   console.log(`✓ 深链 /files?item=<第 200 条> 已滚进视野，此时渲染 ${afterJump} 张卡片`);
 
+  /* ── 带过滤时的深链：当前搜索词把目标筛掉，深链仍必须定位到它 ──
+     深链会自己清空搜索、切分类，那些状态到下一次渲染才生效；若按「旧过滤条件下找不到」
+     就放弃，用户从全局搜索跳过来只会看到网格顶部（上一轮 bug 的形态）。 */
+  await page.locator("input").first().fill("no-such-file-zzz");
+  await page.waitForTimeout(200);
+  await page.evaluate(() => { window.location.hash = "#/files?item=bulk-300"; });
+  await page.waitForFunction(
+    () => {
+      const card = [...document.querySelectorAll("[data-card]")]
+        .find(node => (node.getAttribute("data-item-id") ?? "") === "bulk-300");
+      if (!card) return false;
+      const box = card.getBoundingClientRect();
+      return box.top >= -8 && box.bottom <= window.innerHeight + 8;
+    },
+    undefined,
+    { timeout: 15000 },
+  );
+  const afterFilteredJump = await cards();
+  assert.ok(afterFilteredJump < TOTAL, `带过滤的深链也不该铺开全量（当前 ${afterFilteredJump} / ${TOTAL}）`);
+  console.log(`✓ 带过滤的深链 /files?item=<第 300 条> 已滚进视野，此时渲染 ${afterFilteredJump} 张卡片`);
+
   // 反复滚到底，看能不能续上
   let rounds = 0;
-  let previous = afterJump;
+  let previous = afterFilteredJump;
   while (previous < TOTAL && rounds < 40) {
     await page.evaluate(() => {
       document.querySelector("[data-card]:last-of-type")?.scrollIntoView({ block: "end" });

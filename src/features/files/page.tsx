@@ -190,41 +190,49 @@ export function FilesPage() {
   };
 
   const gridRef = useRef<HTMLDivElement>(null);
-  /** 深链要定位的条目 id：先记下来，等它在网格里被渲染出来再滚（网格是分片的） */
-  const pendingScroll = useRef<string | null>(null);
+  /** 深链要定位的条目：先记下来，等过滤条件落定、网格把它渲染出来之后再滚 */
+  const pendingScroll = useRef<{ id: string; categoryId: string } | null>(null);
   useEffect(() => {
     const request = `${location.key}:${requestedItem}`;
     if (!requestedItem || consumedSearch.current === request || !items.some(item => item.id === requestedItem)) return;
     consumedSearch.current = request;
     const item = items.find(item => item.id === requestedItem)!;
     setSelected(item.categoryId); setSearch(""); setActiveTags([]); setSelectedItemId(item.id);
-    pendingScroll.current = item.id;
+    pendingScroll.current = { id: item.id, categoryId: item.categoryId };
   }, [location.key, requestedItem, items]);
 
   /**
    * 把深链目标滚进视野。
    *
-   * 网格是分片渲染的：目标条目可能在 `filtered` 里排到第 200 位，而首批只铺 120 张卡片 ——
-   * 那时 DOM 里根本没有它，直接 `scrollIntoView` 会静默失败（用户从搜索/侧栏跳过来，
-   * 看到的还是网格顶部）。所以先算出它在 `filtered` 里的下标，交给 `ensureVisible`
-   * 把那一批补出来；补完会重渲染，本 effect 因为依赖里带了 `visibleCount` 再跑一次，
-   * 这次才真的滚过去。
+   * 两件事要一起处理，缺一个就会「静默丢目标」：
+   *
+   * 1. **过滤条件要落定**。深链会同时切分类、清空搜索与标签，这些改到下一次渲染才生效；
+   *    本 effect 在这次 commit 里拿到的 `filtered` 仍是**旧**过滤条件的结果 —— 用户本来
+   *    就在别的分类里（或搜索框有字）时，旧条件下根本没有目标条目。此时把它当成
+   *    「找不到、放弃」就正好丢目标，所以先等 `selected/search/activeTags` 追上目标状态。
+   * 2. **网格是分片的**。目标可能排在 `filtered` 第 200 位，而首批只铺 120 张卡片，
+   *    DOM 里没有它，直接 `scrollIntoView` 会失败；先算出下标交给 `ensureVisible`
+   *    把那一批补出来，补完重渲染（依赖里带 `visibleCount`）再滚。
    */
   useEffect(() => {
     const target = pendingScroll.current;
     if (!target) return;
+    // 目标已经从数据里消失了（别处删除、备份恢复）：不必再等
+    if (!items.some(item => item.id === target.id)) { pendingScroll.current = null; return; }
+    const settled = selected === target.categoryId && !search && activeTags.length === 0;
+    if (!settled) return;
     const card = Array.from(gridRef.current?.querySelectorAll<HTMLElement>(`[${ITEM_ATTR}]`) ?? [])
-      .find(node => node.getAttribute(ITEM_ATTR) === target);
+      .find(node => node.getAttribute(ITEM_ATTR) === target.id);
     if (card) {
       card.scrollIntoView({ block: "center", behavior: "instant" });
       pendingScroll.current = null;
       return;
     }
-    const index = filtered.findIndex(item => item.id === target);
-    // 过滤条件把它筛掉了（比如分类刚变、还没算进来）：不再等，避免永远挂着一个待滚目标
+    const index = filtered.findIndex(item => item.id === target.id);
+    // 过滤条件已落定仍找不到：目标不在这个分类里，放弃
     if (index < 0) { pendingScroll.current = null; return; }
     if (index >= visibleCount) ensureVisible(index);
-  }, [filtered, visibleCount, ensureVisible]);
+  }, [items, selected, search, activeTags, filtered, visibleCount, ensureVisible]);
   useGSAP(
     () => {
       const cards = gridRef.current?.querySelectorAll<HTMLElement>("[data-card]");
