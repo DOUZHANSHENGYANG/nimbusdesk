@@ -1,4 +1,4 @@
-// Run against Temp/search-review.html served by Vite. Reuses the installed browser runtime.
+// Run against src/features/search/fixtures/page.html served by Vite. Reuses the installed browser runtime.
 import { pathToFileURL } from 'node:url';
 import assert from 'node:assert/strict';
 
@@ -10,7 +10,7 @@ try {
   const page = await browser.newPage({ viewport: { width: 760, height: 560 } });
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
-  const url = `${process.env.SEARCH_REVIEW_ORIGIN || 'http://127.0.0.1:17802'}/Temp/search-review.html`;
+  const url = `${process.env.SEARCH_REVIEW_ORIGIN || 'http://127.0.0.1:17802'}/src/features/search/fixtures/page.html`;
   await page.goto(url);
   const input = page.getByRole('combobox');
   await input.waitFor();

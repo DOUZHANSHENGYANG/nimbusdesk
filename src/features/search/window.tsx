@@ -181,18 +181,21 @@ function SearchSurface() {
     return () => { homeRevision.current++; window.removeEventListener("focus", focus); window.removeEventListener("blur", blur); clearTimeout(blurTimer); stopStatusPoll(); for (const sub of [statusSub, focusSub, homeSub, appsSub, settingsSub]) void sub?.then(stop => stop()).catch(() => undefined); };
   }, []);
   /*
-   * 只滚「选中项变化」引起的那一次。
+   * 只滚「选中项变化」引起的那一次，并且**只在节点真的渲染出来之后**才消费标记。
    *
-   * 依赖里带 `visibleHits` 是为了「跨批导航」：选中项跑出已渲染范围时 `ensureVisible`
-   * 先扩容，扩容后的这次渲染才找得到节点。但批加载本身（用户滚到底、哨兵放下一批）
-   * 也会让 `visibleHits` 变 —— 那时绝不能滚，否则拖滚动条或触摸板翻页时，
-   * 列表每放一批就被拽回当前选中项（默认第 0 条），永远翻不过第二批。
-   * 所以用 `pendingReveal` 标记区分：只有它等于刚变的那个 `selected` 时才滚。
+   * 依赖里带 `visibleHits` 是为了跨批导航：选中项跑出已渲染范围时 `ensureVisible`
+   * 先扩容，扩容后的那次渲染才找得到节点 —— 所以节点不存在时不能清标记，
+   * 否则跨批那一次按键会被吃掉（选中项补进了 DOM 却停在视口外）。
+   *
+   * 反过来，纯批加载（用户滚到底、哨兵放下一批）时标记是 null，一次都不滚 ——
+   * 否则拖滚动条或触摸板翻页时，列表每放一批就被拽回当前选中项。
    */
   useEffect(() => {
     const target = pendingReveal.current;
     if (target === null) return;
-    list.current?.querySelector(`[data-search-index="${target}"]`)?.scrollIntoView({ block: "nearest" });
+    const node = list.current?.querySelector(`[data-search-index="${target}"]`);
+    if (!node) return; // 这一批还没渲染出来：保留标记，等 visibleHits 变化后再滚
+    node.scrollIntoView({ block: "nearest" });
     pendingReveal.current = null;
   }, [selected, visibleHits]);
   async function hide() { if (inTauri) await getCurrentWebviewWindow().hide().catch(error => setFailure(String(error))); }

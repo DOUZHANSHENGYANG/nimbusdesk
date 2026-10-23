@@ -83,11 +83,18 @@ react-i18next 缺键**不报错**，只把 key 原样画在界面上 —— 词�
   这些改到下一次渲染才生效；effect 在那次 commit 里拿到的 `filtered` 还是旧条件的结果，
   此时 `findIndex` 找不到目标**不代表目标不存在**。所以要等 `selected/search/activeTags`
   追上目标状态，再用 `ensureVisible` 把那一批补出来，补完才滚。
-- **批加载不能滚回选中项**。搜索结果的滚动只在「选中项变化」时发生（`pendingReveal` 标记），
-  否则用户拖滚动条翻页时，每放一批就被拽回第 0 条。
+- **批加载不能滚回选中项，但跨批导航必须滚到**。搜索结果的滚动由 `pendingReveal` 标记驱动：
+  只有「选中项变化」时才置位；纯批加载（哨兵放下一批）时标记为空，一次都不滚，否则用户拖
+  滚动条翻页时每放一批就被拽回第 0 条。**而标记只在节点真的渲染出来之后才消费** ——
+  跨批跳转（如第 0 条按 ↑ 回绕到最后一条）时 `ensureVisible` 先扩容、节点下一次渲染才出现，
+  提前清标记就会「补出了但停在视口外」。
 
 回归：`npm run check:files-list`（需要 `npm run dev`）—— 塞 800 条，断言首屏远小于总数、
-反复滚到底能铺满、全程无报错。
+反复滚到底能铺满、深链能定位到首批之外（含「当前有搜索词把目标筛掉」的情形）、全程无报错。
+`npm run check:search-window`（同样需要 dev server）—— 造 200 条命中，断言批加载不把列表
+拽回选中项、且「回绕跳转」那一下会把选中项滚进可视区。它用的夹具是已提交的
+`src/features/search/fixtures/page.html`（此前只在 gitignore 的 `/Temp/` 下有副本，
+搜索窗的回归因此进不了仓库，是这一轮的教训）。
 
 ### 轮询只在窗口可见时跑
 
@@ -150,8 +157,9 @@ npm run check:visibility      # 在产物上验：不可见时轮询停手、回
 `check:bundle` 没进 `npm run verify`：`verify` 是本地快闸（不构建），每次往里塞一次生产构建
 会让它慢一倍。体积闸门用 `verify:dist`，CI 与发版前跑它。
 
-另外两个要 dev server 的：`npm run check:files-list`（800 条分片渲染）、
-以及既有的 `scripts/check-*-browser.mjs`（业务夹具）。
+另外几个要 dev server 的：`npm run check:files-list`（800 条分片 + 深链）、
+`npm run check:search-window`（搜索窗批加载与跨批跳转）、以及既有的
+`scripts/check-*-browser.mjs`（业务夹具）。
 
 `check:split` / `check:visibility` 在普通浏览器里跑，桩了一个最小 `__TAURI_INTERNALS__`
 （IPC 一律返回空），所以它们只回答「chunk 该不该来、页面该不该渲染、轮询该不该跑」；

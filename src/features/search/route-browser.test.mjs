@@ -5,7 +5,7 @@ const browser = await chromium.launch({headless:true,executablePath:process.env.
 try {
  const page=await browser.newPage({viewport:{width:1300,height:880}});
  const errors=[];page.on('pageerror',error=>errors.push(error.message));
- const base=`${process.env.SEARCH_REVIEW_ORIGIN||'http://127.0.0.1:17802'}/Temp/search-review.html?integration`;
+ const base=`${process.env.SEARCH_REVIEW_ORIGIN||'http://127.0.0.1:17802'}/src/features/search/fixtures/page.html?integration`;
  await page.goto(base+'#/plans?date=2099-10-18&task=child');
  await page.locator('[data-search-task-id="child"]').waitFor();
  console.log('Route: dated task visible');

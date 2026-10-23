@@ -6,7 +6,7 @@ const browser=await chromium.launch({headless:true,executablePath:process.env.SE
 try {
   const page=await browser.newPage({viewport:{width:760,height:560}});
   const errors=[];page.on('pageerror',error=>errors.push(error.message));
-  await page.goto(`${process.env.SEARCH_REVIEW_ORIGIN||'http://127.0.0.1:17802'}/Temp/search-review.html`);
+  await page.goto(`${process.env.SEARCH_REVIEW_ORIGIN||'http://127.0.0.1:17802'}/src/features/search/fixtures/page.html`);
   const input=page.getByRole('combobox');await input.waitFor();
   await page.evaluate(()=>{
     window.searchReview.nativeIconData='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><rect width="20" height="20" fill="blue"/></svg>';
@@ -23,7 +23,7 @@ try {
   await page.evaluate(()=>{window.searchReview.nativeIconData=null;window.searchReview.resultOverride=[{id:'fallback',kind:'file',path:'C:/missing/fallback.pdf',score:1,title:'fallback.pdf',subtitle:'',snippet:''}];});
   await input.fill('fallback');await rows.filter({hasText:'fallback.pdf'}).waitFor();
   await rows.filter({hasText:'fallback.pdf'}).locator('svg.quick-search-kind-icon').waitFor();
-  await page.goto(`${process.env.SEARCH_REVIEW_ORIGIN||'http://127.0.0.1:17802'}/Temp/search-review.html?settings`);
+  await page.goto(`${process.env.SEARCH_REVIEW_ORIGIN||'http://127.0.0.1:17802'}/src/features/search/fixtures/page.html?settings`);
   await page.getByText('文档正文索引',{exact:true}).waitFor();
   await page.evaluate(()=>{const store=window.searchReview.store;store.setState({status:{...store.getState().status,files:{running:false,paused:false,total:4,processed:4,indexed:4,failed:0,current:null,error:null,updatedAt:1,nameRunning:false,nameTotal:300,nameIndexed:200}}});});
   await page.getByText('部分完成',{exact:true}).waitFor();

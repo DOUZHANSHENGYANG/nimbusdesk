@@ -1,0 +1,60 @@
+<!doctype html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head><body><div id="root"></div><script type="module">
+import {mockIPC,mockWindows} from '@tauri-apps/api/mocks';
+const fixtures={settings:{version:3,state:{theme:'dark',lang:'zh'}},'search-settings':{version:1,state:{shortcut:'Alt+K',fileBackend:'everything',everythingInstance:'work'}}};
+const integration=location.search.includes('integration');
+const notes=[{path:'inbox/first.md',title:'首篇默认笔记',kind:'inbox',preview:'默认内容',modifiedAt:1},{path:'inbox/target.md',title:'搜索目标笔记',kind:'inbox',preview:'目标原文',modifiedAt:2}];
+if(integration){
+ fixtures.settings.state.plansView='kanban';
+ const task=(id,title,parentId=null)=>({id,title,parentId,done:false,createdAt:1,updatedAt:1});
+ fixtures.plans={version:4,state:{days:{'2099-10-18':[task('parent','父级任务'),task('child','搜索目标任务','parent')]}}};
+ fixtures['plans-archive']={version:3,state:{days:{'2020-10-18':{archivedAt:1,tasks:[task('archived','归档搜索目标')]}}}};
+ fixtures['knowledge-settings']={version:1,state:{vaultRoot:'E:/MockVault',vaultName:'测试知识库',shortcut:'',folderBindings:{}}};
+ fixtures['feed-cache']={version:1,state:{entriesBySource:{'github-trending':[{id:'cached',title:'缓存搜索目标资讯',url:'https://example.test/cached',content:'缓存文章正文'}]}}};
+ fixtures.favorites={version:1,state:{items:[{id:'favorite',title:'收藏搜索目标资讯',url:'https://example.test/favorite',content:'收藏正文',savedAt:1}]}};
+ fixtures.files={version:1,state:{categories:[{id:'cat',name:'测试分类'}],items:[{id:'bookmark',categoryId:'cat',type:'url',title:'收藏搜索目标书签',path:'https://example.test/bookmark',tags:[]}]}};
+}
+window.searchReview={fixtures,calls:[],rejectShortcut:false,rejectWrite:false,indexedAt:1,pick:null,paused:false};
+mockIPC(async(cmd,args)=>{
+ const r=window.searchReview;r.calls.push({cmd,args});
+ if(cmd==='read_json')return structuredClone(fixtures[args.key]??null);
+ if(cmd==='write_json'){if(r.rejectWrite)throw new Error('WRITE_FAILED');fixtures[args.key]=structuredClone(args.value);return args.value;}
+ if(cmd==='search_set_shortcut'&&r.rejectShortcut)throw new Error('SHORTCUT_CONFLICT');
+ if(cmd==='search_status')return {count:48,indexing:false,lastIndexedAt:r.indexedAt,everythingAvailable:false,backend:'auto',files:{running:true,paused:r.paused,total:8,processed:3,indexed:2,failed:1,current:'E:/文档/示例.pdf',error:null,updatedAt:1,nameRunning:true,nameTotal:200,nameIndexed:160}};
+ if(cmd==='search_document_defaults')return ['E:/默认知识库','E:/默认附件'];
+ if(cmd==='search_index_pause'){r.paused=args.paused;return;}
+ if(cmd==='plugin:dialog|open'){const pick=r.pick;r.pick=null;return pick;}
+ if(cmd==='search_everything_start'&&r.rejectStart)throw new Error('START_FAILED');
+ if(cmd==='search_everything_detect'||cmd==='search_everything_start')return r.everythingState||{path:null,running:false,ipcAvailable:false,indexReady:null,state:'absent'};
+ if(cmd==='native_icon')return r.nativeIconData??null;
+ if(cmd==='search_query'){
+  if(r.resultOverride)return {results:r.resultOverride,total:r.resultOverride.length,indexing:false,warnings:[],elapsedMs:1};
+  if(args.query==='slow')await new Promise(resolve=>setTimeout(resolve,650));
+  if(args.scope==='file'&&r.slowFiles)await new Promise(resolve=>setTimeout(resolve,650));
+  if(args.scope==='file'&&r.rejectFiles)throw new Error('FILE_OFFLINE');
+  if(args.query==='broken')throw new Error('OFFLINE');
+  const results=[{id:'file-'+args.query,kind:'file',title:args.query+' · 项目资料.md',subtitle:'',snippet:'',path:'E:\\Workspace\\项目资料\\'+args.query+'-notes.md',score:100},{id:'plan-'+args.query,kind:'plan',title:'完成 '+args.query+' 的设计评审',subtitle:'2026-10-18 · 计划管理',snippet:'对照验收清单，确认交互与实现。',route:'/plans',score:90},{id:'knowledge-'+args.query,kind:'knowledge',title:args.query+' 工程笔记',subtitle:'团队知识 / 产品设计',snippet:'用具体证据记录决策与边界。',path:'E:\\Notes\\'+args.query+'.md',route:'/knowledge',score:80}].filter(result=>args.includeFiles===false?result.kind!=='file':args.scope==='file'?result.kind==='file':true);
+  if(args.query==='正文'&&args.scope==='file')results.push({...results[0],id:'content-match',path:results[0].path.replaceAll('\\','/').toLowerCase(),score:80,snippet:'文档正文摘要：项目验收要求'});
+  return {results,total:results.length,indexing:false,warnings:r.warning?['文件服务暂时不可用，保留工作台结果']:[],elapsedMs:4};
+ }
+ if(cmd==='search_preview')return {kind:'text',text:'# 项目资料\n\n统一搜索：索引、预览、键盘操作。'};
+ if(cmd==='knowledge_scan'||cmd==='knowledge_search')return notes;
+ if(cmd==='knowledge_captures'||cmd==='knowledge_templates')return [];
+ if(cmd==='knowledge_read')return {path:args.path,content:'# '+(notes.find(note=>note.path===args.path)?.title||'笔记')+'\n\n目标正文 '+args.path,fingerprint:'initial'};
+ if(cmd==='knowledge_update')return {path:args.input.path,content:args.input.content,fingerprint:'saved'};
+ if(cmd==='plugin:window|is_maximized')return false;
+ if(cmd==='plugin:window|get_all_windows'||cmd==='plugin:webview|get_all_webviews')return [];
+ return null;
+},{shouldMockEvents:true});
+mockWindows(integration?'main':'search');
+const React=(await import('react')).default;
+const {createRoot}=await import('react-dom/client');
+const {SearchWindow,SearchSettings}=await import('/src/features/search/index.ts');
+const {I18nextProvider}=await import('react-i18next');
+const {i18n}=await import('/src/lib/i18n.ts');
+await import('/src/index.css');
+window.searchReview.store=(await import('/src/features/search/store.ts')).useSearchStore;
+window.searchReview.emitNavigate=(await import('@tauri-apps/api/event')).emit;
+const settings=location.search.includes('settings');
+if(integration){const {SOURCE_LIST}=await import('/src/sources/registry.ts');for(const source of SOURCE_LIST)source.fetch=async()=>fixtures['feed-cache'].state.entriesBySource[source.id]||[];await import('/src/main.tsx');}
+else createRoot(document.getElementById('root')).render(settings?React.createElement(I18nextProvider,{i18n},React.createElement('div',{className:'workbench-ui',style:{padding:24,height:'100%',overflowY:'auto'}},React.createElement(SearchSettings))):React.createElement(SearchWindow));
+</script></body></html>
