@@ -1,5 +1,7 @@
 import {
   createContext,
+  lazy,
+  Suspense,
   useCallback,
   useContext,
   useEffect,
@@ -7,13 +9,20 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { CenterMorphModal, CenterMorphModalContent } from "@/components/motion/center-morph-modal";
-import { Button } from "@/components/motion/button/base";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { useTranslation } from "react-i18next";
+import type { ModalDialogRequest } from "./modal-dialog";
 
-/* ── 类型 ─────────────────────────────────────────────── */
+/**
+ * 确认/提示/输入对话框，走自建 Modal（禁用原生 confirm/alert/prompt）。
+ *
+ * 对话框的**界面**拆到 `./modal-dialog` 并在这里 `lazy` 拉取：那块是 motion 驱动的
+ * （`motion-dom` + `framer-motion` 上百 KB），而 `ModalProvider` 挂在**每个窗口**最外层 ——
+ * 以前它关着也一直挂在树上，于是「只显示一张便签」的小窗口也要解析整套动画运行时。
+ * 现在只有真的要弹时才加载；provider 自身只留状态与 Promise 结算。
+ *
+ * 时序上仍然是对的：打开时挂载（入场动画从 `initial` 播起），关闭后内容保留 500ms 再卸载
+ * （覆盖 `AnimatePresence` 的退场动画）。
+ */
 
 export interface ConfirmOptions {
   title?: string;
@@ -38,17 +47,9 @@ export interface PromptOptions {
   cancelText?: string;
 }
 
-interface ModalRequest {
-  title: string;
-  description?: ReactNode;
-  confirmText: string;
-  cancelText?: string;
-  danger?: boolean;
-  showInput?: boolean;
-  inputPlaceholder?: string;
+interface ModalRequest extends ModalDialogRequest {
   inputInitial?: string;
   resolve: (value: unknown) => void;
-  kind: "confirm" | "alert" | "prompt";
 }
 
 interface ModalContextValue {
@@ -57,6 +58,8 @@ interface ModalContextValue {
   prompt: (options?: PromptOptions) => Promise<string | null>;
 }
 
+const ModalDialog = lazy(() => import("./modal-dialog"));
+
 const ModalContext = createContext<ModalContextValue | null>(null);
 
 export function useModal(): ModalContextValue {
@@ -64,8 +67,6 @@ export function useModal(): ModalContextValue {
   if (!ctx) throw new Error("useModal must be used within <ModalProvider>");
   return ctx;
 }
-
-/* ── Provider ─────────────────────────────────────────── */
 
 export function ModalProvider({ children }: { children: ReactNode }) {
   const { t } = useTranslation();
@@ -140,7 +141,7 @@ export function ModalProvider({ children }: { children: ReactNode }) {
     if (!request) return;
     dataRef.current = null;
     setOpen(false);
-    // 等退场动画结束后再清内容，避免内容瞬间消失
+    // 等退场动画结束后再清内容（也从这里卸载对话框分片），避免内容瞬间消失
     closeTimer.current = window.setTimeout(() => {
       closeTimer.current = null;
       setData(current => current === request ? null : current);
@@ -183,79 +184,19 @@ export function ModalProvider({ children }: { children: ReactNode }) {
   return (
     <ModalContext.Provider value={{ confirm, alert, prompt }}>
       {children}
-      <CenterMorphModal
-        open={open}
-        onOpenChange={(o) => {
-          if (!o) close(isPrompt ? null : false);
-        }}
-      >
-        <CenterMorphModalContent
-          ariaLabel={data?.title ?? "Dialog"}
-          initialFocusRef={isPrompt ? inputRef : undefined}
-          className="max-w-[24rem] bg-popover text-popover-foreground"
-        >
-          {data && (
-            <div className="flex flex-col gap-4 px-6 pt-6 pb-5">
-              <div className="flex flex-col gap-1.5">
-                <h2 className="text-[15px] font-semibold leading-tight">{data.title}</h2>
-                {data.description != null && (
-                  <div className="text-muted-foreground text-[13px] leading-relaxed">
-                    {data.description}
-                  </div>
-                )}
-              </div>
-
-              {data.showInput && (
-                <div className="flex flex-col gap-1.5">
-                  <Label htmlFor="modal-input" className="sr-only">
-                    {data.title}
-                  </Label>
-                  <Input
-                    id="modal-input"
-                    ref={inputRef}
-                    value={input}
-                    placeholder={data.inputPlaceholder}
-                    onChange={(e) => setInput(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key !== "Enter") return;
-                      if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229 || e.repeat) {
-                        e.preventDefault();
-                        return;
-                      }
-                      e.preventDefault();
-                      close(input);
-                    }}
-                  />
-                </div>
-              )}
-
-              <div className="flex items-center justify-end gap-2 pt-1">
-                {data.kind !== "alert" && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => close(isPrompt ? null : false)}
-                  >
-                    {data.cancelText}
-                  </Button>
-                )}
-                <Button
-                  variant="primary"
-                  size="sm"
-                  className={
-                    data.danger
-                      ? "bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                      : ""
-                  }
-                  onClick={() => close(isPrompt ? input : true)}
-                >
-                  {data.confirmText}
-                </Button>
-              </div>
-            </div>
-          )}
-        </CenterMorphModalContent>
-      </CenterMorphModal>
+      {data && (
+        <Suspense fallback={null}>
+          <ModalDialog
+            request={data}
+            open={open}
+            input={input}
+            onInputChange={setInput}
+            inputRef={inputRef}
+            onConfirm={(value) => close(value)}
+            onCancel={() => close(isPrompt ? null : false)}
+          />
+        </Suspense>
+      )}
     </ModalContext.Provider>
   );
 }

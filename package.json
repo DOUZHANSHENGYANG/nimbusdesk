@@ -32,7 +32,8 @@
     "check:files-list": "node scripts/check-files-list-browser.mjs",
     "check:visibility": "node scripts/check-visibility-browser.mjs",
     "verify:dist": "node scripts/verify-dist.mjs",
-    "check:search-window": "node scripts/check-search-window-browser.mjs"
+    "check:search-window": "node scripts/check-search-window-browser.mjs",
+    "check:modal": "node scripts/check-modal-browser.mjs"
   },
   "dependencies": {
     "@ai-sdk/openai-compatible": "3.0.75",

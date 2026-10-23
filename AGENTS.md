@@ -23,8 +23,8 @@ node scripts/check-home-overview-browser.mjs
 
 断言要落在「用户能看见的东西」上（文本、`aria-pressed`、跳转落点），不要断言内部 state。
 
-`npm run verify:dist` 会自己起服务跑那四条（产物：`check:split` / `check:visibility`；
-夹具：`check:files-list` / `check:search-window`），手边有 dev server 时也可以单跑。
+`npm run verify:dist` 会自己起服务跑那五条（产物：`check:split` / `check:visibility`；
+夹具：`check:files-list` / `check:search-window` / `check:modal`），手边有 dev server 时也可以单跑。
 
 ## 上下文卫生（省内存，也省钱）
 

@@ -10,15 +10,15 @@
  * 两个阶段，服务端口不同：
  *   - 构建产物（`vite preview`，4179）：check:split、check:visibility
  *     —— 它们断言的是「懒加载边界」和「轮询门控」，必须在打包后的 bundle 上验；
- *   - 开发服务（`vite`，17800）：check:files-list、check:search-window
- *     —— 它们加载 `src/features/<feature>/fixtures/page.html`（夹具只在 dev 下由 Vite 现场转换），
+ *   - 开发服务（`vite`，17800）：check:files-list、check:search-window、check:modal
+ *     —— 它们加载各 feature 目录下的 `fixtures/page.html`（夹具只在 dev 下由 Vite 现场转换），
  *     而夹具是「真组件 + mock 原生 IPC」的那套，改动最多的正是它们。
  *
  * 已经开着的服务会**复用而不是杀掉**（开发时 17800 通常有人在用），只清理自己起的。
  *
  * 用法：`npm run verify:dist`
  *   PLAYWRIGHT_MODULE=…/playwright/index.mjs   浏览器检查需要（没有则由脚本自行解析）
- *   VERIFY_SKIP_DEV=1                          只验产物阶段（跳过两个夹具检查）
+ *   VERIFY_SKIP_DEV=1                          只验产物阶段（跳过三个夹具检查）
  */
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
@@ -166,6 +166,7 @@ async function main() {
   const devOrigin = { FIXTURE_ORIGIN: DEV_ORIGIN };
   ok = (await run("check:files-list", process.execPath, ["scripts/check-files-list-browser.mjs"], { env: devOrigin })) && ok;
   ok = (await run("check:search-window", process.execPath, ["scripts/check-search-window-browser.mjs"], { env: devOrigin })) && ok;
+  ok = (await run("check:modal", process.execPath, ["scripts/check-modal-browser.mjs"], { env: devOrigin })) && ok;
   if (dev) stopServer(dev);
 
   return ok;

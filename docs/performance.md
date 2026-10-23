@@ -8,9 +8,10 @@
 
 | | 改前 | 改后 |
 |---|---|---|
-| 入口静态闭包（任一窗口首屏必然解析） | 2977 KB（单包） | **789 KB**（27 块） |
+| 入口静态闭包（任一窗口首屏必然解析） | 2977 KB（单包） | **629 KB**（28 块） |
 | 其中 AI SDK（`ai` + `@ai-sdk/*` + zod） | 打在包里，人人有份 | 416 KB 只在 `/agent` 那一片 |
 | 其中 i18n 词表 | 185 KB（云台 + 工具箱两份，含双语） | 106 KB（工具箱那 79 KB 随页面走） |
+| 其中动画运行时（motion + gsap） | 每次都解析（对话框关着也挂着） | 只在第一次弹窗时按需 127 KB |
 | 首屏请求数 | 1 | 57（图标合并成一块后） |
 | 打开 `/agent` | 无额外开销 | 按需 488 KB |
 | 打开 `/plans` | 无额外开销 | 按需 6 块 |
@@ -142,7 +143,24 @@ react-i18next 缺键**不报错**，只把 key 原样画在界面上 —— 词�
 
 - 「陈旧窗口原样回写」不再触发一次原生合并，所以 tombstone 要靠跨窗口事件传回来 ——
   那条路径本来就有（`storage://changed`），不依赖这种空写；
-- `plans` 与 `plans-archive` 成对事务只在两侧都真的变了时才开；只改计划时就是一次单键写。
+- `plans` 与 `plans-archive` 成对事务只在两侧都真的变了时开；只改计划时就是一次单键写。
+
+### 对话框：打开那一刻才把动画运行时拉进来
+
+`ModalProvider` 挂在**每个窗口**最外层，而对话框界面（`center-morph-modal`）是 motion 驱动的
+（`motion-dom` + `framer-motion`）。以前对话框即使关着也一直挂在树上 —— 于是「只显示一张便签」
+的小窗口也要解析整套动画运行时，这一笔有 161 KB。
+
+现在界面拆到 `src/components/shell/modal-dialog.tsx`，provider 里 `lazy` 拉取，只在
+`data !== null`（真要弹）时才挂载。时序没有变：
+
+- **入场**：`CenterMorphModalContent` 是「挂载 → `mounted=true` → 播 `initial → animate`」，
+  延迟挂载只是把这段动画挪到打开那一刻；
+- **退场**：`AnimatePresence` + `open=false`，而 provider 保留内容 500ms 再卸载，正好盖住这段。
+
+回归：`npm run check:modal`（夹具 `src/components/shell/fixtures/page.html`）—— 断言「没弹之前
+DOM 里没有 `[role="dialog"]`」，以及确认/输入/提示三种都能弹、能把 Promise 结算成
+`false / true / 回填后的字符串`，退场后节点再次消失。
 
 ## 怎么验
 
@@ -154,8 +172,8 @@ npm run verify:dist
 
 它依次做：构建 → `check:bundle`（闭包体积 + AI SDK 是否漏进首屏）→ 起 `vite preview`（4179）
 跑 `check:split` / `check:visibility` → 起 `vite`（17800）跑 `check:files-list` /
-`check:search-window`。已经开着的服务会**复用而不是杀掉**，只清理自己起的；任一环节失败即
-非零退出并打印该环节输出。`VERIFY_SKIP_DEV=1` 可只验产物阶段。
+`check:search-window` / `check:modal`。已经开着的服务会**复用而不是杀掉**，只清理自己起的；
+任一环节失败即非零退出并打印该环节输出。`VERIFY_SKIP_DEV=1` 可只验产物阶段。
 
 单跑某一条（手边已有服务时最方便）：
 
@@ -165,6 +183,7 @@ npx vite preview --port 4179 --strictPort && npm run check:split
 npm run dev                   # 17800，夹具检查需要它
 npm run check:files-list      # 800 条分片 + 深链（含过滤态）
 npm run check:search-window   # 搜索窗批加载与跨批跳转
+npm run check:modal           # 对话框按需挂载 + 三种弹窗的结算
 ```
 
 为什么这些不在 `npm run verify` 里：`verify` 是本地快闸（单测 + 类型 + i18n，不构建、不起服务），
@@ -179,7 +198,7 @@ npm run check:search-window   # 搜索窗批加载与跨批跳转
 
 - **i18n 剩下的 106 KB**：云台自己的 zh 与 en 两份词表仍内联在同一个模块里、每个窗口都加载。
   按语言拆成两片（默认语言同步、另一种切换时再拉），能再省一半。
-- **入口那 324 KB**：现在是 `main.tsx` + `Providers` + 各 store 的同步逻辑。store 的 action 与
+- **入口那 262 KB**：现在是 `main.tsx` + `Providers` + 各 store 的同步逻辑。store 的 action 与
   初始状态可以再分一层，让「只显示一个便签」的窗口只加载它要的 store。
 - **页面内部的重量**：文件页（1228 行 + 拖放 + 栅栏）、知识库页本身还没做内部懒加载。
   长列表已分片（见上），但知识库以外的深列表（比如设置里的技能/提示词长表）还没接。
