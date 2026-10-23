@@ -241,6 +241,32 @@ pub async fn read_json(key: String) -> Result<Option<Value>, String> {
     blocking(move || blocking_read_json(key)).await?
 }
 
+/// `files` 行级表的读取入口（见 `crate::files_table`）。
+#[command]
+pub async fn files_load() -> Result<Value, String> {
+    blocking(|| {
+        with_data_dir(|root| {
+            let conn = database::open_at(root)?;
+            crate::files_table::ensure_schema(&conn)?;
+            crate::files_table::load(&conn)
+        })
+    })
+    .await?
+}
+
+/// 应用一份增量：只有真正变了的实体进来，写一条就是一条 UPDATE。
+#[command]
+pub async fn files_apply(delta: Value) -> Result<(), String> {
+    blocking(move || {
+        with_data_dir(|root| {
+            let mut conn = database::open_at(root)?;
+            crate::files_table::ensure_schema(&conn)?;
+            crate::files_table::apply(&mut conn, &delta)
+        })
+    })
+    .await?
+}
+
 #[command]
 pub async fn write_json(
     key: String,

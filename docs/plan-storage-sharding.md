@@ -1,7 +1,17 @@
-# 存储层：把「一个 key = 一份大 JSON」拆开（方案，待实施）
+# 存储层：把「一个 key = 一份大 JSON」拆开
 
-> 状态：**方案稿**。第一阶段（大文档批处理窗口 + 兜底落盘）已落地，见 `docs/performance.md`。
-> 本文档描述第二阶段：真正的数据模型拆分。动手前请先看「风险」与「验收」。
+> 状态：**阶段 1 已完成**（Rust 行级表 + `files_load` / `files_apply` + 单测，尚未被前端调用，
+> 因此**还没有性能变化**）；阶段 2 起是真正切换写入路径，见下面的「实施步骤」。
+> 第一阶段（大文档批处理窗口 + 兜底落盘）已上线，见 `docs/performance.md`。
+
+## 为什么是「行级表」而不是「分片 JSON」
+
+一开始的方案是按分类把 `files` 切成 `files:items:<categoryId>` 几个 key。放弃的原因很具体：
+**整目录映射进来的东西通常全在同一个分类里**，那一片就是整份文档，拆了等于没拆。
+真正让代价与总量脱钩的只有行级 —— 改一条就是一条 `UPDATE`。
+
+这也符合用户此前的判断：「合适用 sqlite3 保存，用它没问题；软件还在开发阶段，没有真实用户」——
+所以**不需要迁移**：旧 `files` 键直接弃用，读到空表时回退读一次旧键即可（兜底而非迁移）。
 
 ## 问题（实测）
 
@@ -72,12 +82,40 @@
 | 备份/恢复 | 枚举不全 = 静默丢数据 | 备份改为前缀枚举 + 导入后比对条目总数（数量不符直接失败） |
 | 搜索索引 | `sources_key(key)` 可能按 key 判断是否刷新 | 给分片 key 归一到同一个来源名 |
 
-## 实施步骤（每步都能独立验收，不必一次做完）
+## 实施步骤（每步都能独立验收）
 
-1. **只做 `files`**（收益最大、形状最平）：`files:meta` + `files:items:<categoryId>`，含迁移与回滚；
-   验收：`check:desktop`（目录映射/规范化的既有单测）、`npm run verify`、真机打开文件页确认条目在。
-2. **`plans`**：按天分片 + 成对事务扩展；验收：归档/恢复/撤销的单测与真机操作。
-3. **删除旧键与旧代码路径**：等分片跑过一个版本（至少一次真实升级）再删。
+1. **✅ 阶段 1（已完成）**：Rust 行级表 + 两个命令 + 单测。
+   - `src-tauri/src/files_table.rs`：`file_categories` / `file_items` 两张表（`payload` 存 JSON、
+     `ord` 单独一列存顺序），`load()` / `apply(delta)` / `search_entries()`；
+   - `commands/data.rs`：`files_load`、`files_apply`（在 `with_data_dir` 里跑，命令注册进 `lib.rs`）；
+   - 单测 4 项：增量只动变了的行、顺序跟随推送的 index、`reorder` 不动 payload、
+     删分类不留孤儿行、搜索读同一批行。`cargo test --lib` 628 项全绿。
+   - **尚未被前端调用，因此还没有性能变化。**
+
+2. **⚠️ 阶段 2（下一步）**：前端切到行级写入。
+   - `src/stores/files.ts`：把 `createJSONStorage(() => tauriJsonStorage)` 换成一个
+     `PersistStorage` 适配器：`getItem` → `files_load`（空表则回退读一次旧 `files` 键）；
+     `setItem` → 与上一份快照比对后只推增量（内容变了的带 `value`，只是位置变了的走 `reorder`），
+     调 `files_apply`；
+   - 增量的比对逻辑抽成纯函数（`src/lib/files-diff.ts`）并单测：新增/删除/改字段/移动/换分类；
+   - 跨窗口：`files_apply` 后由 Rust 发 `files://changed`（带同一份增量），
+     `providers.tsx` 的 `StorageSync` 监听并合并进本窗口的 store。
+
+3. **⚠️ 阶段 3（与阶段 2 同一个提交才有意义）**：把两个「读旧 blob」的读者切过来。
+   - `src-tauri/src/search/sources.rs`：`from_states` 里那段 `states["files"].items` 改成
+     读 `files_table::search_entries(&conn)`（调用方需要把连接传进来，`runtime.rs` 侧顺一遍）；
+   - `src/features/settings/backup.ts`：导出时 `readJson("files")` 改成 `invoke("files_load")`；
+     导入侧不用动（它只把数据写回 store，由新写入路径落库）；
+   - 验收：`cargo test --lib`、`npm run verify`、`npm run verify:dist`、
+     以及新加一条浏览器断言（文件页做一次编辑后，`files_apply` 的增量只含那一条）。
+
+4. **阶段 4**：删掉旧 `files` 键的回退读取与 `database.rs` 里 `"files"` 的命名空间映射。
+
+## 关于 `plans`
+
+**不建议现在动**：`plans` 的增长是自然的（一年约 0.5 MB），而它牵扯归档/恢复/撤销的**成对事务**
+（`write_plan_pair`），要改成「多行一个事务」。风险与收益不成比例 —— 等 `files` 这条路跑顺、
+并确认真机上 `plans` 确实变大之后再说。
 
 ## 我建议的前置条件
 

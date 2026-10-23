@@ -329,6 +329,11 @@ fn read_value(conn: &Connection, key: &str) -> Result<Option<Value>, String> {
     .transpose()
 }
 
+/// 打开数据目录下的数据库连接（行级表命令用；`open` 本身是私有的）。
+pub fn open_at(root: &Path) -> Result<Connection, String> {
+    open(root)
+}
+
 pub fn read_at(root: &Path, key: &str) -> Result<Option<Value>, String> {
     state_key(key)?;
     read_value(&open(root)?, key)

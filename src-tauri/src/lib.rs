@@ -2,6 +2,7 @@ use tauri::Manager;
 
 mod atomic;
 mod database;
+mod files_table;
 mod project_database;
 mod zentao;
 mod task_attachments;
@@ -128,6 +129,8 @@ pub fn run() {
             commands::backup::scan_dir_tree,
             commands::backup::restore_dir_tree,
             commands::data::read_json,
+            commands::data::files_load,
+            commands::data::files_apply,
             commands::task_attachments::task_attachments_add,
             commands::task_attachments::task_attachment_location,
             commands::task_attachments::task_attachments_export,
