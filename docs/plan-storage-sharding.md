@@ -101,8 +101,7 @@
      `ord` 单独一列存顺序），`load()` / `apply(delta)` / `search_entries()`；
    - `commands/data.rs`：`files_load`、`files_apply`（在 `with_data_dir` 里跑，命令注册进 `lib.rs`）；
    - 单测 4 项：增量只动变了的行、顺序跟随推送的 index、`reorder` 不动 payload、
-     删分类不留孤儿行、搜索读同一批行。`cargo test --lib` 628 项全绿。
-   - **尚未被前端调用，因此还没有性能变化。**
+     删分类不留孤儿行、搜索读同一批行。
 
 2. **✅ 阶段 2（已完成）**：前端切到行级写入。
    - `src/stores/files-storage.ts`（新）：`PersistStorage` 适配器 —— `getItem` 走 `files_load`
@@ -142,3 +141,20 @@
   不如把时间花在别处。
 - 若真要动，建议**只做 `files`**：它是唯一会随「整目录映射」线性膨胀的键，`plans` 的增长是自然增长
   （一年 0.5 MB），且它牵扯成对事务与归档语义，风险远大于收益。
+
+## 真机验证清单（只有你能跑，我这边没有 Tauri 运行时）
+
+浏览器夹具用的是假后端，`files_apply`/`files_load` 的**真实**边界（真 SQLite、真 IPC、真重启）
+只能在这台机器上确认。跑一次 `pnpm tauri dev`，按下面五项过一遍：
+
+1. **数据没丢**：打开文件页，分类和条目都在（读的是旧的 `files` 键回退，不是空库）。
+2. **第一次写入把它搬进表**：随便改一个条目标题 → 关掉应用 → 打开数据目录下的
+   `workbench.sqlite3`，`SELECT count(*) FROM file_items;` 应该等于条目数（不再是 0）。
+3. **重启后还在**：重开应用，刚才那处修改还在。
+4. **增量生效**：改一个条目后立刻关窗，重开确认落盘；同时留意写盘是否变轻
+   （资源监视器里该进程的磁盘写入，改一条不该再出现 MB 级写入）。
+5. **搜索仍能搜到文件**：全局搜索里搜一个文件名，命中的是「书签/文件」类结果
+   （这条验证 `files_apply → request_refresh()` 的接线）。
+
+任一项不对，把 `%APPDATA%\nimbusdesk`（或 `data.dir` 指向的目录）里的 `workbench.sqlite3` 留下，
+我可以按表里的实际状态定位。
