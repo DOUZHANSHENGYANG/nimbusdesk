@@ -950,6 +950,8 @@ const zh = {
   // 批量导入向导（skills-import）
   skillImport: {
     title: "批量导入技能",
+    detail: "详情",
+    detailHint: "导入前先看清楚：SKILL.md 正文与目录结构",
     hint: "程序先自动修复目录名与元信息，修不了的交给 AI；无法修复的目录会先汇总给你决定。",
     applying: "正在执行程序修复…",
     stepExplore: "探查结果",
@@ -2009,6 +2011,8 @@ const en: typeof zh = {
   // Batch import wizard (skills-import)
   skillImport: {
     title: "Batch import skills",
+    detail: "Details",
+    detailHint: "SKILL.md body and folder tree, before importing",
     hint: "Directory names and metadata are repaired first; what code cannot repair goes to AI. Unrepairable folders are listed for your decision.",
     applying: "Applying program fixes…",
     stepExplore: "Explore",

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Badge } from "@/ahub/components/ui/badge";
+import { SkillFileBrowser } from "@/ahub/components/SkillFileBrowser";
 import { Button } from "@/ahub/components/ui/button";
 import {
   Dialog,
@@ -58,6 +59,8 @@ export function ImportWizard({
   const [result, setResult] = useState<ImportBatchReport | null>(null);
   /** 决策 1：同名技能默认覆盖（用户可取消勾选，取消后同名冲突记为失败） */
   const [overwrite, setOverwrite] = useState(true);
+  /** 正在看详情的候选（SKILL.md 正文 + 目录树）；null = 没开 */
+  const [detail, setDetail] = useState<{ dirName: string; name: string } | null>(null);
   /** 全局设置：导入时自动生成摘要 —— 作为勾选框的初值 */
   const autoSummaryOnImport = useSettings((s) => s.info?.settings.autoSummaryOnImport ?? false);
   /** 本次导入是否生成摘要（初值跟随全局设置；只影响本次，不改全局） */
@@ -349,6 +352,13 @@ export function ImportWizard({
                           <span className="mt-1 block text-[10px] text-ink-3">{t("skillImport.noFix")}</span>
                         )}
                       </span>
+                      <button
+                        type="button"
+                        onClick={() => setDetail({ dirName: c.fixedName || c.originalName, name: c.fixedName || c.originalName })}
+                        className="shrink-0 rounded-md px-2 py-1 text-[11px] text-ink-3 transition-colors hover:bg-white/5 hover:text-foreground"
+                      >
+                        {t("skillImport.detail")}
+                      </button>
                     </li>
                   ))}
                   {!importable.length ? (
@@ -573,7 +583,19 @@ export function ImportWizard({
           )}
         </DialogBody>
 
-        <DialogFooter>
+        <Dialog open={!!detail} onOpenChange={(open) => { if (!open) setDetail(null); }}>
+        <DialogContent className="max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>{detail?.name ?? ""}</DialogTitle>
+            <DialogDescription>{t("skillImport.detailHint")}</DialogDescription>
+          </DialogHeader>
+          <DialogBody className="max-h-[60vh] overflow-y-auto">
+            {detail && <SkillFileBrowser dirName={detail.dirName} />}
+          </DialogBody>
+        </DialogContent>
+      </Dialog>
+
+      <DialogFooter>
           {step > 0 && !running && !result ? (
             <Button variant="secondary" onClick={prevStep} disabled={aiBusy}>
               {t("common.back")}
