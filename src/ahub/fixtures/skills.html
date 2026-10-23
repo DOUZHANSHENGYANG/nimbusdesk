@@ -1,0 +1,25 @@
+<!doctype html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body><div id="root" style="height:100vh"></div><script type="module">
+import React from 'react';
+import {createRoot} from 'react-dom/client';
+import {mockIPC,mockWindows} from '@tauri-apps/api/mocks';
+const calls=[];
+const skills=[{dirName:'code-review',name:'代码评审',description:'按团队规范过一遍 diff',frontmatter:{name:'代码评审',description:'按团队规范过一遍 diff'},body:'## 用途',versions:[],tags:[],status:'active'}];
+window.skillsReview={calls};
+const settingsInfo={settings:{dataDir:'E:/SkillsFixture',envRoot:'',language:'zh',theme:'dark',skillSourceDirs:[],harnessOrder:[],aiBaseUrl:'',aiApiKey:'',aiModel:'',autoSummaryOnImport:false,aiProviders:[],aiDefaultProviderId:'',aiLegacyMigrated:true},dataDirs:{root:'E:/SkillsFixture',prompts:'E:/SkillsFixture/prompts',mcp:'E:/SkillsFixture/mcp',skills:'E:/SkillsFixture/skills'}};
+mockIPC(async(cmd,args)=>{
+ calls.push({cmd,args});
+ if(cmd==='list_skills')return structuredClone(skills);
+ if(cmd==='get_settings')return structuredClone(settingsInfo);
+ if(cmd==='preset_list'||cmd==='list_prompts'||cmd==='list_mcp'||cmd==='list_harnesses')return [];
+ if(cmd==='plugin:event|listen')return 1;
+ if(cmd==='get_data_dir')return 'E:/SkillsFixture';
+ return null;
+});
+mockWindows('main');
+await import('/src/index.css');
+const {i18n,I18nextProvider}=await import('/src/lib/i18n.ts');
+const {AhubSkillsPage}=await import('/src/features/agenthub/ahub-host-skills.tsx');
+const {Toaster}=await import('/src/components/ui/sonner.tsx');
+document.documentElement.classList.add('dark');
+createRoot(document.getElementById('root')).render(React.createElement(I18nextProvider,{i18n},React.createElement('div',{className:'flex min-h-0 flex-1 flex-col',style:{height:'100vh'}},React.createElement(AhubSkillsPage)),React.createElement(Toaster)));
+</script></body></html>

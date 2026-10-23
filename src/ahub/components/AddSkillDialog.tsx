@@ -15,10 +15,12 @@ import {
   Store,
   X,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
+import { getCurrentWebview } from "@tauri-apps/api/webview";
+import { ImportWizard } from "@/ahub/components/ImportWizard";
 import { Markdown } from "@/ahub/components/Markdown";
 import { TagInput } from "@/ahub/components/TagInput";
 import { Badge } from "@/ahub/components/ui/badge";
@@ -36,7 +38,8 @@ import { Field, Input, Textarea } from "@/ahub/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/ahub/components/ui/select";
 import { Switch } from "@/ahub/components/motion/switch";
 import { api } from "@/ahub/lib/api";
-import type { ImportPreview, MarketCategory, MarketSkill } from "@/ahub/lib/types";
+import { needsExplore, slotAtPoint, splitDroppedPaths } from "@/ahub/lib/skill-drop";
+import type { ExploreReport, ImportPreview, MarketCategory, MarketSkill } from "@/ahub/lib/types";
 import { cn } from "@/ahub/lib/utils";
 
 /** 三种添加方式；`create` 默认选中（自己新建，零依赖） */
@@ -242,14 +245,45 @@ export function AddSkillDialog({ onDone }: { onDone: () => void }) {
     }
   };
 
-  // ── 从文件夹导入 ──────────────────────────────────────
-  const importFolders = async () => {
-    const picked = await openFileDialog({ directory: true, multiple: true, title: t("skills.folderPick") });
-    if (!picked) return;
-    const paths = (Array.isArray(picked) ? picked : [picked]).filter(Boolean) as string[];
+  // ── 从文件导入（文件夹 / ZIP）：按钮与拖放走同一条路 ──────────────
+  /** 拖放的落点：Tauri 的 drop 只给光标位置，所以自己拿 boundingClientRect 比 */
+  const folderSlot = useRef<HTMLDivElement | null>(null);
+  const zipSlot = useRef<HTMLDivElement | null>(null);
+  const [dropSlot, setDropSlot] = useState<"folder" | "zip" | null>(null);
+  /** 有探查报告时打开批量导入向导（父目录里装着多个技能、或需要修复/补描述时走这里） */
+  const [wizard, setWizard] = useState<ExploreReport | null>(null);
+
+  /** 探查一批路径 → 合并成一份报告 → 交给向导（多候选 / 需修复 / 有无法修复的目录）。 */
+  const exploreAndWizard = async (paths: string[]) => {
+    setBusy(true);
+    try {
+      const merged: ExploreReport = { sessionId: "", root: paths.length === 1 ? paths[0] : "", candidates: [], unrepairable: [] };
+      for (const path of paths) {
+        try {
+          const report = await api.skillImportExplore(path, merged.sessionId || undefined);
+          if (!merged.sessionId) merged.sessionId = report.sessionId;
+          merged.candidates.push(...report.candidates);
+          merged.unrepairable.push(...report.unrepairable);
+        } catch (error) {
+          // 单个路径失败不阻断其余（例如拖进一个 rar）
+          merged.unrepairable.push({ path, reason: String(error) });
+        }
+      }
+      if (!merged.candidates.length && !merged.unrepairable.length) {
+        toast.warning(t("skillImport.empty"));
+        return;
+      }
+      setWizard(merged);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const importFolderPaths = async (paths: string[]) => {
     if (!paths.length) return;
     setBusy(true);
     let ok = 0;
+    const toExplore: string[] = [];
     try {
       for (const p of paths) {
         try {
@@ -258,39 +292,104 @@ export function AddSkillDialog({ onDone }: { onDone: () => void }) {
           toast.success(t("skills.imported", { name: meta.name }));
         } catch (e) {
           const msg = String(e);
-          if (msg.includes("exists:")) toast.warning(t("skills.skippedExists", { name: p.split(/[\\/]/).pop() }));
+          // 拖进来的是一个装着若干技能的父目录：交给探查 + 向导，而不是当失败弹红字
+          if (needsExplore(msg)) toExplore.push(p);
+          else if (msg.includes("exists:")) toast.warning(t("skills.skippedExists", { name: p.split(/[\\/]/).pop() }));
           else toast.error(`${p.split(/[\\/]/).pop()}: ${msg}`);
         }
       }
-      toast.info(t("skills.getDone", { ok, total: paths.length }));
-      onDone();
-      if (ok > 0) close();
+      if (ok) {
+        toast.info(t("skills.getDone", { ok, total: paths.length }));
+        onDone();
+      }
+      if (toExplore.length) await exploreAndWizard(toExplore);
+      else if (ok) close();
     } finally {
       setBusy(false);
     }
   };
 
-  // ── 从 ZIP 导入 ───────────────────────────────────────
-  const importZip = async () => {
-    const picked = await openFileDialog({
-      directory: false,
-      multiple: false,
-      title: t("skills.zipPick"),
-      filters: [{ name: "ZIP", extensions: ["zip"] }],
-    });
-    if (typeof picked !== "string" || !picked) return;
+  const importZipPaths = async (paths: string[]) => {
+    if (!paths.length) return;
     setBusy(true);
+    let ok = 0;
     try {
-      const meta = await api.importSkillZip(picked, overwrite);
-      toast.success(t("skills.imported", { name: meta.name }));
-      onDone();
-      close();
-    } catch (e) {
-      toast.error(String(e));
+      for (const p of paths) {
+        try {
+          const meta = await api.importSkillZip(p, overwrite);
+          ok += 1;
+          toast.success(t("skills.imported", { name: meta.name }));
+        } catch (e) {
+          toast.error(`${p.split(/[\\/]/).pop()}: ${String(e)}`);
+        }
+      }
+      if (ok) { onDone(); close(); }
     } finally {
       setBusy(false);
     }
   };
+
+  const importFolders = async () => {
+    const picked = await openFileDialog({ directory: true, multiple: true, title: t("skills.folderPick") });
+    if (!picked) return;
+    await importFolderPaths((Array.isArray(picked) ? picked : [picked]).filter(Boolean) as string[]);
+  };
+
+  const importZip = async () => {
+    const picked = await openFileDialog({
+      directory: false,
+      multiple: true,
+      title: t("skills.zipPick"),
+      filters: [{ name: "ZIP", extensions: ["zip"] }],
+    });
+    if (!picked) return;
+    await importZipPaths((Array.isArray(picked) ? picked : [picked]).filter(Boolean) as string[]);
+  };
+
+  /**
+   * 文件导入模式打开时挂 webview 的拖放：Tauri 的 HTML5 drop 不携带真实路径，
+   * 只有 onDragDropEvent 能拿到绝对路径与光标位置。按位置高亮那张卡，松手按卡的语义装。
+   */
+  useEffect(() => {
+    if (!open || mode !== "file") { setDropSlot(null); return; }
+    let unlisten: (() => void) | undefined;
+    let cancelled = false;
+    const slotOf = (position?: { x: number; y: number }) => {
+      if (!position) return null;
+      const scale = window.devicePixelRatio || 1;
+      const rect = (el: HTMLDivElement | null) => el ? el.getBoundingClientRect() : null;
+      return slotAtPoint({ folder: rect(folderSlot.current), zip: rect(zipSlot.current) }, position.x / scale, position.y / scale);
+    };
+    void getCurrentWebview()
+      .onDragDropEvent((event) => {
+        const payload = event.payload;
+        if (payload.type === "enter" || payload.type === "over") setDropSlot(slotOf(payload.position));
+        else if (payload.type === "leave") setDropSlot(null);
+        else if (payload.type === "drop") {
+          const paths = (payload.paths ?? []).filter(Boolean);
+          setDropSlot(null);
+          if (!paths.length) return;
+          const split = splitDroppedPaths(paths);
+          const slot = slotOf(payload.position);
+          if (slot === "zip" && split.zips.length) void importZipPaths(split.zips);
+          else if (slot === "folder" && split.folders.length) void importFolderPaths(split.folders);
+          else {
+            if (split.folders.length) void importFolderPaths(split.folders);
+            if (split.zips.length) void importZipPaths(split.zips);
+          }
+        }
+      })
+      .then((u) => {
+        if (cancelled) u();
+        else unlisten = u;
+      });
+    return () => {
+      cancelled = true;
+      unlisten?.();
+    };
+    // importFolderPaths / importZipPaths 只依赖 setState 与 toast，打开时注册一次即可
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, mode]);
 
   // ── git ───────────────────────────────────────────────
   const discover = async (url?: string) => {
@@ -739,28 +838,46 @@ export function AddSkillDialog({ onDone }: { onDone: () => void }) {
               </form>
             ) : null}
 
-            {/* ── 方式二：从文件导入（文件夹 / ZIP） ── */}
+            {/* ── 方式二：从文件导入（文件夹 / ZIP）——两张卡本身就是拖放落点 ── */}
             {mode === "file" ? (
               <div className="grid min-h-0 flex-1 gap-3 sm:grid-cols-2">
-                <div className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4">
+                <div ref={folderSlot} data-drop-slot="folder"
+                  onDragOver={(e) => { e.preventDefault(); setDropSlot("folder"); }}
+                  onDragLeave={() => setDropSlot(null)}
+                  onDrop={(e) => { e.preventDefault(); setDropSlot(null); }}
+                  className={cn("flex flex-col gap-3 rounded-xl border bg-card p-4 transition-colors",
+                    dropSlot === "folder" ? "border-primary ring-2 ring-primary/30" : "border-border")}>
                   <div className="flex items-center gap-2">
                     <FolderInput className="size-4 shrink-0 text-primary" />
                     <span className="text-[13px] font-medium text-foreground">{t("skills.importFolderTitle")}</span>
                   </div>
                   <p className="text-[11px] leading-relaxed text-ink-3">{t("skills.importFolderDesc")}</p>
-                  <Button className="mt-auto w-full" onClick={() => void importFolders()} disabled={busy}>
+                  <div className={cn("flex min-h-28 flex-1 items-center justify-center rounded-lg border border-dashed px-3 text-center text-[11px] leading-relaxed transition-colors",
+                    dropSlot === "folder" ? "border-primary text-primary" : "border-border text-ink-3")}>
+                    {t("skills.dropFolderHint")}
+                  </div>
+                  <Button className="w-full" onClick={() => void importFolders()} disabled={busy}>
                     {busy ? <Loader2 className="animate-spin" /> : <FolderInput />}
                     {t("skills.folderPickBtn")}
                   </Button>
                 </div>
 
-                <div className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4">
+                <div ref={zipSlot} data-drop-slot="zip"
+                  onDragOver={(e) => { e.preventDefault(); setDropSlot("zip"); }}
+                  onDragLeave={() => setDropSlot(null)}
+                  onDrop={(e) => { e.preventDefault(); setDropSlot(null); }}
+                  className={cn("flex flex-col gap-3 rounded-xl border bg-card p-4 transition-colors",
+                    dropSlot === "zip" ? "border-primary ring-2 ring-primary/30" : "border-border")}>
                   <div className="flex items-center gap-2">
                     <FileArchive className="size-4 shrink-0 text-primary" />
                     <span className="text-[13px] font-medium text-foreground">{t("skills.importZipTitle")}</span>
                   </div>
                   <p className="text-[11px] leading-relaxed text-ink-3">{t("skills.importZipDesc")}</p>
-                  <Button className="mt-auto w-full" onClick={() => void importZip()} disabled={busy}>
+                  <div className={cn("flex min-h-28 flex-1 items-center justify-center rounded-lg border border-dashed px-3 text-center text-[11px] leading-relaxed transition-colors",
+                    dropSlot === "zip" ? "border-primary text-primary" : "border-border text-ink-3")}>
+                    {t("skills.dropZipHint")}
+                  </div>
+                  <Button className="w-full" onClick={() => void importZip()} disabled={busy}>
                     {busy ? <Loader2 className="animate-spin" /> : <FileArchive />}
                     {t("skills.zipPickBtn")}
                   </Button>
@@ -988,6 +1105,13 @@ export function AddSkillDialog({ onDone }: { onDone: () => void }) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* 批量导入向导：拖进来的父目录里装着多个技能（或需要修复）时，在这里接手 */}
+      <ImportWizard
+        report={wizard}
+        onOpenChange={(value) => !value && setWizard(null)}
+        onDone={() => { onDone(); setWizard(null); close(); }}
+      />
     </>
   );
 }

@@ -15,7 +15,7 @@
     "check:i18n": "node scripts/check-i18n.mjs",
     "check:rust": "cargo test --manifest-path src-tauri/Cargo.toml --lib",
     "check:knowledge": "node --test src/features/knowledge/background-organization-core.test.mjs src/features/knowledge/background-organization.test.mjs src/features/knowledge/auto-organize.test.mjs src/features/knowledge/recipe.test.mjs src/features/knowledge/organize.test.mjs src/features/knowledge/markdown-links.test.mjs src/features/knowledge/metadata.test.mjs src/features/knowledge/reader-presentation.test.mjs src/features/ai/core.test.mjs src/features/ai/setup.test.mjs src/features/knowledge/folders.test.mjs src/features/knowledge/shortcut-keys.test.mjs src/features/knowledge/organization-materials.test.mjs",
-    "verify": "npm run check:i18n && npm run check:contrast && npm run check:preview && tsc --noEmit && npm run check:tools && npm run check:agent && npm run check:search && npm run check:feeds && npm run check:schedule && npm run check:knowledge && npm run check:desktop && npm run check:plans && npm run check:home && npm run check:projects && npm run check:rust",
+    "verify": "npm run check:i18n && npm run check:contrast && npm run check:preview && tsc --noEmit && npm run check:tools && npm run check:agent && npm run check:search && npm run check:feeds && npm run check:schedule && npm run check:knowledge && npm run check:desktop && npm run check:plans && npm run check:home && npm run check:ahub && npm run check:projects && npm run check:rust",
     "check:feeds": "node --test src/features/feeds/reliability.test.mjs",
     "check:schedule": "node --test src/features/schedule/core.test.mjs",
     "check:contrast": "node scripts/check-contrast.mjs",
@@ -23,6 +23,7 @@
     "check:preview": "node scripts/check-preview-sync.mjs",
     "check:plans": "node --test src/features/plans/attachment-api.test.mjs src/features/settings/backup.test.mjs src/lib/storage.test.mjs src/features/plans/paper-window.test.mjs src/features/plans/paper-interactions.test.mjs src/features/plans/store-batch.test.mjs src/features/plans/paper-row.test.mjs",
     "check:home": "node --test src/features/home/overview-core.test.mjs",
+    "check:ahub": "node --test src/ahub/lib/skill-drop.test.mjs",
     "check:desktop": "node --test src/features/files/desktop.test.mjs src/features/files/fence-edge.test.mjs src/features/desktop/edge-core.test.mjs src/features/files/fence-interaction.test.mjs src/features/files/menu-popup-interaction.test.mjs src/features/desktop/queue-core.test.mjs src/features/desktop/queue-registry.test.mjs src/features/desktop/edge-runtime-core.test.mjs src/features/desktop/edge-runtime.test.mjs src/features/desktop/edge-dock.test.mjs src/features/files/import-files.test.mjs src/features/files/use-file-drop.test.mjs src/features/files/desktop-actions.test.mjs src/features/files/fence-presentation.test.mjs src/features/desktop/sticky-presentation.test.mjs src/features/files/directory-mapping-core.test.mjs src/features/files/directory-mapping.test.mjs"
   },
   "dependencies": {

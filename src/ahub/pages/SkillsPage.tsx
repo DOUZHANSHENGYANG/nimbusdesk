@@ -1,4 +1,4 @@
-import { Archive, ArrowRight, Boxes, Check, ChevronDown, ChevronRight, CircleAlert, Clock, CloudUpload, Columns2, Eye, Filter, FolderDown, FolderOpen, GitCompare, History, LayoutGrid, Layers, ListChecks, Loader2, Package, Paperclip, Pencil, Plus, RefreshCw, RotateCw, Save, ScanSearch, Settings2, ShieldAlert, ShieldCheck, Sparkles, Tag, Trash2, X, Zap } from "lucide-react";
+import { Archive, ArrowRight, Boxes, Check, ChevronDown, ChevronRight, CircleAlert, Clock, CloudUpload, Columns2, Eye, Filter, FolderOpen, GitCompare, History, LayoutGrid, Layers, ListChecks, Loader2, Package, Paperclip, Pencil, Plus, RefreshCw, RotateCw, Save, ScanSearch, Settings2, ShieldAlert, ShieldCheck, Sparkles, Tag, Trash2, X, Zap } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -33,14 +33,12 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/ahub/components/motion/switch";
 import { api } from "@/ahub/lib/api";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
-import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { AddSkillDialog } from "@/ahub/components/AddSkillDialog";
-import { ImportWizard } from "@/ahub/components/ImportWizard";
 import { PresetBar } from "@/ahub/components/PresetBar";
 import { PresetDialog } from "@/ahub/components/PresetDialog";
 import { PresetManager } from "@/ahub/components/PresetManager";
 import { presetErrorText } from "@/ahub/lib/presetErrors";
-import type { ExploreReport, Preset, SkillDoc, SkillMeta } from "@/ahub/lib/types";
+import type { Preset, SkillDoc, SkillMeta } from "@/ahub/lib/types";
 import { cn } from "@/ahub/lib/utils";
 import { useData } from "@/ahub/stores/data";
 import { useSettings } from "@/ahub/stores/settings";
@@ -184,8 +182,6 @@ export function SkillsPage() {
   const [extRuntime, setExtRuntime] = useState({ requires_scripts: "none", requires_network: "none", min_protocol: 1, config: "" });
   const [extUpstream, setExtUpstream] = useState({ watch: false, mode: "manual", remote: "" });
   // 批量导入向导（skills-import）
-  const [wizard, setWizard] = useState<ExploreReport | null>(null);
-  const [dragOver, setDragOver] = useState(false);
   // AI 摘要（skills-summary）：单技能生成中 / 批量生成中
   const [summaryBusy, setSummaryBusy] = useState(false);
   const [batchSummaryBusy, setBatchSummaryBusy] = useState(false);
@@ -323,97 +319,6 @@ export function SkillsPage() {
       toast.error(String(e));
     }
   };
-
-  // ── 批量导入（skills-import）：拖拽 / 选择文件夹或 zip → 探查 → 向导 ──
-
-  /**
-   * 对多个路径（文件夹 / zip）逐个探查并合并成一份报告。
-   * zip 由后端解压（rar 会返回明确错误）；合并后一次向导处理全部候选。
-   *
-   * 所有路径共用一个暂存会话（sessionId 由第一次探查生成后复用），
-   * 向导关闭时只需清理这一个暂存根目录。
-   */
-  const explorePaths = async (paths: string[]) => {
-    if (!paths.length) return;
-    setBusy(true);
-    try {
-      const merged: ExploreReport = {
-        sessionId: "",
-        root: paths.length === 1 ? paths[0] : "",
-        candidates: [],
-        unrepairable: [],
-      };
-      for (const p of paths) {
-        try {
-          const r = await api.skillImportExplore(p, merged.sessionId || undefined);
-          if (!merged.sessionId) merged.sessionId = r.sessionId;
-          merged.candidates.push(...r.candidates);
-          merged.unrepairable.push(...r.unrepairable);
-        } catch (e) {
-          // 单个路径失败不阻断其余（例如拖进一个 rar）
-          merged.unrepairable.push({ path: p, reason: String(e) });
-        }
-      }
-      if (!merged.candidates.length && !merged.unrepairable.length) {
-        toast.warning(t("skillImport.empty"));
-        return;
-      }
-      setWizard(merged);
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const pickFolders = async () => {
-    const picked = await openDialog({
-      directory: true,
-      multiple: true,
-      title: t("skillImport.pickFolderTitle"),
-    });
-    const paths = (Array.isArray(picked) ? picked : picked ? [picked] : []).filter(Boolean) as string[];
-    await explorePaths(paths);
-  };
-
-  const pickZips = async () => {
-    const picked = await openDialog({
-      directory: false,
-      multiple: true,
-      title: t("skillImport.pickTitle"),
-      filters: [{ name: "ZIP", extensions: ["zip"] }],
-    });
-    const paths = (Array.isArray(picked) ? picked : picked ? [picked] : []).filter(Boolean) as string[];
-    await explorePaths(paths);
-  };
-
-  /**
-   * 拖拽导入。Tauri 的 HTML5 drop 不携带真实文件路径，必须走 webview 的
-   * onDragDropEvent 才能拿到绝对路径。
-   */
-  useEffect(() => {
-    let un: (() => void) | undefined;
-    let cancelled = false;
-    void getCurrentWebview()
-      .onDragDropEvent((e) => {
-        if (e.payload.type === "enter" || e.payload.type === "over") {
-          setDragOver(true);
-        } else if (e.payload.type === "leave") {
-          setDragOver(false);
-        } else if (e.payload.type === "drop") {
-          setDragOver(false);
-          void explorePaths(e.payload.paths ?? []);
-        }
-      })
-      .then((u) => {
-        if (cancelled) u();
-        else un = u;
-      });
-    return () => {
-      cancelled = true;
-      un?.();
-    };
-    // explorePaths 只依赖 setState 与 t/toast（稳定引用），挂载时注册一次即可
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   // detail dialog
   const [detail, setDetail] = useState<SkillDoc | null>(null);  const [detailLoading, setDetailLoading] = useState(false);
@@ -756,10 +661,6 @@ export function SkillsPage() {
       actions={
         <>
           <SearchBar value={query} onChange={setQuery} placeholder={t("skills.searchPlaceholder")} className="w-56" />
-          <Button variant="secondary" onClick={() => void pickFolders()} disabled={busy}>
-            {busy ? <Loader2 className="animate-spin" /> : <FolderDown />}
-            {t("skillImport.entry")}
-          </Button>
           <AddSkillDialog onDone={() => void loadSkills()} />
           <Button variant="secondary" onClick={() => setScanOpen(true)}>
             <ScanSearch />
@@ -781,46 +682,6 @@ export function SkillsPage() {
         }}
       />
 
-      {/* 拖拽导入区域（skills-import）：拖入文件夹 / zip 批量探查 */}
-      <div
-        data-anim
-        onDragOver={(e) => {
-          // 阻止默认行为让 Tauri 的 drop 事件生效（真实路径由 webview 事件提供）
-          e.preventDefault();
-          setDragOver(true);
-        }}
-        onDragLeave={() => setDragOver(false)}
-        onDrop={(e) => {
-          e.preventDefault();
-          setDragOver(false);
-        }}
-        className={cn(
-          "mb-3 flex shrink-0 flex-wrap items-center gap-2 rounded-xl border border-dashed px-3 py-2 text-[11px] transition-colors",
-          dragOver
-            ? "border-primary bg-primary-soft text-primary"
-            : "border-border text-ink-3",
-        )}
-      >
-        <FolderDown className="size-3.5 shrink-0" />
-        <span>{t("skillImport.dropHint")}</span>
-        <button
-          type="button"
-          className="ml-auto shrink-0 text-primary outline-none hover:underline disabled:opacity-40"
-          disabled={busy}
-          onClick={() => void pickFolders()}
-        >
-          {t("skillImport.pickFolderBtn")}
-        </button>
-        <span className="text-ink-3/50">·</span>
-        <button
-          type="button"
-          className="shrink-0 text-primary outline-none hover:underline disabled:opacity-40"
-          disabled={busy}
-          onClick={() => void pickZips()}
-        >
-          {t("skillImport.pickZipBtn")}
-        </button>
-      </div>
 
       {/* ── 吸顶筛选台：来源工具 · 标签 · 视图 · 批量 ── */}
       {skills.length > 0 ? (
@@ -1855,12 +1716,6 @@ export function SkillsPage() {
       />
 
 
-      {/* ── 批量导入向导（skills-import） ── */}
-      <ImportWizard
-        report={wizard}
-        onOpenChange={(v) => !v && setWizard(null)}
-        onDone={() => void loadSkills()}
-      />
 
       <ConfirmDialog
         open={clearVerOpen}
