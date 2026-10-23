@@ -4,6 +4,7 @@ import { listen } from "@tauri-apps/api/event";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { Search, X, FileText, Folder, CalendarCheck, BookOpen, Rss, Bookmark, FolderKanban, Copy, FolderOpen, Eye, CornerDownLeft, AppWindow, Pin, PinOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { ListSentinel, useIncrementalCount } from "@/components/ui/incremental-list";
 import { i18n } from "@/lib/i18n";
 import { applyTheme } from "@/lib/theme";
 import { inTauri, readJson, windowReady } from "@/lib/tauri";
@@ -72,6 +73,21 @@ function SearchSurface() {
   const hits = isHome ? [...groups.pinned, ...groups.recent] : reply?.results ?? [];
   const pinnedIds = new Set(home.pinned.map(searchHitIdentity));
   const hit = hits[selected];
+
+  /**
+   * 搜索结果分片渲染。
+   *
+   * 文件检索走 Everything，一次能回来上千条；以前整批铺进 DOM，键盘连按时每一帧都在
+   * 重排。现在先铺一批，滚到底部续下一批；键盘导航仍然能走到全部 —— `ensureVisible`
+   * 会把选中项所在的那一批补出来，`aria-activedescendant` 指向的节点因此始终存在。
+   */
+  const { count: visibleHits, hasMore, sentinelRef, ensureVisible } = useIncrementalCount(hits.length, {
+    step: 80,
+    resetKey: `${isHome ? "home" : query}|${scope}`,
+  });
+  useEffect(() => {
+    ensureVisible(selected);
+  }, [selected, ensureVisible]);
 
   function changeQuery(value: string) {
     resultsCurrent.current = false; gate.current.invalidate(); setQuery(value); setKeyboardSelected(false); setFailure(""); setNotice("");
@@ -205,7 +221,7 @@ function SearchSurface() {
     <div className="quick-search-body">
       <div id="quick-search-results" ref={list} tabIndex={0} role="listbox" aria-label={c.title} aria-activedescendant={hit ? `search-hit-${selected}` : undefined} className="quick-search-results">
         {!hits.length && <div className="quick-search-empty"><Search size={28} strokeWidth={1.3} /><strong>{query.trim() ? loading ? c.searching : c.noResults : c.empty}</strong><p>{query.trim() ? c.tryAgain : c.emptyHint}</p></div>}
-        {hits.map((result, index) => { const Icon = icons[result.kind] ?? FileText; const pinned = pinnedIds.has(searchHitIdentity(result)); return <div className="quick-search-entry" key={searchHitIdentity(result)}>
+        {hits.slice(0, visibleHits).map((result, index) => { const Icon = icons[result.kind] ?? FileText; const pinned = pinnedIds.has(searchHitIdentity(result)); return <div className="quick-search-entry" key={searchHitIdentity(result)}>
           {isHome && (index === 0 || index === groups.pinned.length) && <div className="quick-search-group"><span>{index < groups.pinned.length ? c.pinned : c.recent}</span>{index >= groups.pinned.length && <Button size="sm" variant="ghost" disabled={homeBusy} onClick={() => void updateHome(clearSearchRecent)}>{c.clearRecent}</Button>}</div>}
           <div id={`search-hit-${index}`} data-search-index={index} role="option" aria-selected={index === selected} className="quick-search-result" onMouseEnter={() => { setSelected(index); setKeyboardSelected(false); selectionId.current = searchHitIdentity(result); }}>
           {(result.kind === "file" || result.kind === "folder" || result.kind === "app") && result.path
@@ -222,6 +238,7 @@ function SearchSurface() {
             <Button variant="ghost" size="icon-xs" aria-label={c.copy} title={c.copy} onClick={() => void copy(result)}><Copy /></Button>
           </div>
         </div></div>; })}
+        <ListSentinel sentinelRef={sentinelRef} hasMore={hasMore} />
       </div>
       {preview && <aside className="quick-search-preview" aria-label={c.preview}><div><strong title={preview.title}>{preview.title}</strong><Button variant="ghost" size="icon-xs" aria-label={c.closePreview} onClick={() => { previewRevision.current++; setPreview(null); }}><X /></Button></div>{!preview.data ? <p>{c.previewLoading}</p> : preview.data.kind === "text" ? <pre>{preview.data.text}</pre> : preview.data.kind === "image" && preview.data.dataUrl?.startsWith("data:image/") ? <img src={preview.data.dataUrl} alt={preview.title} /> : <p>{c.noPreview}</p>}</aside>}
     </div>

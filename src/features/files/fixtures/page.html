@@ -13,9 +13,10 @@ mockIPC(async(cmd,args)=>{
   for(const [id,listener]of listeners)if(listener.event===args.event&&(!args.target?.label||listener.target.kind==='Any'||listener.target.label===args.target.label)&&window.__TAURI_INTERNALS__.callbacks.has(id))window.__TAURI_INTERNALS__.runCallback(id,{event:args.event,payload:args.payload,id});
   return null;
  }
- if(cmd==='read_json')return structuredClone(fixtures[args.key]??null);
- if(cmd==='write_json'){fixtures[args.key]=structuredClone(args.value);return args.value;}
+ if(cmd==='read_json')return structuredClone(fixtures[args.key]??null); if(cmd==='write_json'){fixtures[args.key]=structuredClone(args.value);return args.value;}
  if(cmd==='get_data_dir')return 'E:/OwnedFilesFixture';
+ // 侧栏角标会读工具箱三张表；返回 null 会让 store 变成 null 并使侧栏崩掉
+ if(cmd==='list_prompts'||cmd==='list_skills'||cmd==='list_mcp'||cmd==='preset_list')return [];
  if(cmd==='pick_folder')return r.pickFolder;
  if(cmd==='file_directory_snapshot'){if(r.snapshotError)throw Error(r.snapshotError);const value=r.snapshots[args.root];if(!value)throw Error('directory-map:not-found');return structuredClone(value);}
  if(cmd==='probe_paths'){if(r.probeDelay)await new Promise(resolve=>setTimeout(resolve,r.probeDelay));return args.paths.map(path=>({path,name:path.replaceAll('\\','/').split('/').filter(Boolean).at(-1),kind:path.includes('missing')?'missing':path.endsWith('项目')?'folder':'file'}));}

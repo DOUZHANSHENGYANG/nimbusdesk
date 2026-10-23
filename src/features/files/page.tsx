@@ -32,6 +32,7 @@ import {
   fetchSiteMeta,
 } from "@/lib/tauri";
 import { useModal } from "@/components/shell/modal-host";
+import { ListSentinel, useIncrementalCount } from "@/components/ui/incremental-list";
 import { copyText } from "@/lib/clipboard";
 import { motion } from "motion/react";
 import { ItemIcon } from "@/features/files/icons";
@@ -167,6 +168,18 @@ export function FilesPage() {
           i.path.toLowerCase().includes(q),
       );
   }, [scoped, activeTags, search]);
+
+  /**
+   * 条目网格分片渲染。
+   *
+   * 文件页的条目可能上千（整目录映射进来时尤其明显）：以前是一次性把整批卡片铺进 DOM，
+   * 每次筛选重算都要重排整张网格。这里只先铺一批，滚到底部自动续下一批 ——
+   * DOM 数量有上界，布局仍然交给浏览器（不需要按行高算位置，卡片换行也不会错位）。
+   * 换分类 / 改标签 / 改搜索词都回到第一批。
+   */
+  const { count: visibleCount, hasMore, sentinelRef } = useIncrementalCount(filtered.length, {
+    resetKey: `${selected ?? ""}|${activeTags.join(",")}|${search}`,
+  });
 
   /** 分类显示名（子分类带父名前缀）；找不到时回退空串 */
   const categoryLabelOf = (categoryId: string): string => {
@@ -648,7 +661,7 @@ export function FilesPage() {
           }}
           className="relative grid min-h-24 grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-2.5"
         >
-            {filtered.map((item) => (
+            {filtered.slice(0, visibleCount).map((item) => (
               <div
                 key={item.id}
                 {...{ [ITEM_ATTR]: item.id }}
@@ -757,6 +770,8 @@ export function FilesPage() {
                   </div>
               </div>
             ))}
+          {/* 分片哨兵：滚到这里就再铺一批（没有更多时它渲染为 null） */}
+          <ListSentinel sentinelRef={sentinelRef} hasMore={hasMore} className="col-span-full h-px w-full" />
           {/* 拖拽落点竖线 */}
           {drop && (
             <span
