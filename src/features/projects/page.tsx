@@ -1,9 +1,10 @@
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Bell, CalendarDays, ChevronRight, Folder, FolderKanban, Layers3, ListTodo, LoaderCircle, Pencil, Plus, Search, SquareKanban, Trash2, X, ArrowRightLeft } from "lucide-react";
+import { Bell, CalendarDays, ChevronRight, Folder, FolderKanban, Layers3, LayoutDashboard, ListTodo, LoaderCircle, Pencil, Plus, Search, SquareKanban, Trash2, X, ArrowRightLeft } from "lucide-react";
 import { toast } from "sonner";
 import { ProjectViewsBar } from "./views-bar";
 import { ProjectsBoard } from "./board";
+import { ProjectsOverview } from "./overview";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -25,7 +26,7 @@ import "./projects.css";
 
 type Scope = { kind: "all" | "unclassified" | "unassigned" } | { kind: "area" | "project"; id: string };
 type Editor = { kind: "project" | "iteration" | "item"; id?: string } | { kind: "reminder"; projectId?: string; itemId?: string } | null;
-type WorkTab = "tasks" | "board" | "files";
+type WorkTab = "overview" | "tasks" | "board" | "files";
 
 const projectStores = [useProjects, usePlans, usePlansArchive, useZentao] as const;
 const projectStorageKeys = ["projects", "plans", "plans-archive", "zentao"];
@@ -58,7 +59,7 @@ function ProjectsWorkspace() {
     }
     return counts;
   }, [planDays, archivedDays]);
-  const [scope, setScope] = useState<Scope>({ kind: "all" }), [iterationFilter, setIterationFilter] = useState("current"), [statusFilter, setStatusFilter] = useState("open"), [search, setSearch] = useState(""), [selectedId, setSelectedId] = useState<string | null>(null), [tab, setTab] = useState<WorkTab>("tasks"), [editor, setEditor] = useState<Editor>(null), [showArchived, setShowArchived] = useState(false);
+  const [scope, setScope] = useState<Scope>({ kind: "all" }), [iterationFilter, setIterationFilter] = useState("current"), [statusFilter, setStatusFilter] = useState("open"), [search, setSearch] = useState(""), [selectedId, setSelectedId] = useState<string | null>(null), [tab, setTab] = useState<WorkTab>("overview"), [editor, setEditor] = useState<Editor>(null), [showArchived, setShowArchived] = useState(false);
   const query = useDeferredValue(search.trim().toLocaleLowerCase()), today = todayStr();
   const iterations = useMemo(() => [...state.iterations].sort((a, b) => b.start.localeCompare(a.start) || b.createdAt - a.createdAt), [state.iterations]);
   const currentIteration = iterations.find(i => i.start <= today && i.end >= today);
@@ -68,7 +69,7 @@ function ProjectsWorkspace() {
   const selectedIteration = iterations.find(i => i.id === filteredIterationId);
   // 单一真相：tab 只有落在「有对应面板」的值上，才当成当前页。文件页没有选中项目时退回任务列表，
   // 这样任何 setTab 写错值都不会出现「切过去一片空白」。
-  const activeTab: WorkTab = tab === "board" ? "board" : tab === "files" && selectedProject ? "files" : "tasks";
+  const activeTab: WorkTab = tab === "overview" ? "overview" : tab === "board" ? "board" : tab === "files" && selectedProject ? "files" : "tasks";
   // activeTab 到 "files" 时一定选着项目（见上），这里再算一次只为让类型也跟着收窄。
   const filesProject = activeTab === "files" ? selectedProject : undefined;
   const effectiveArea = (item: ItemRecord) => item.areaId ?? state.projects.find(p => p.id === item.projectId)?.areaId ?? null;
@@ -76,7 +77,9 @@ function ProjectsWorkspace() {
     const membership = filteredIterationId ? state.memberships.find(m => m.itemId === item.id && m.iterationId === filteredIterationId && m.leftAt !== null) : undefined;
     return membership?.snapshot ? { ...item, ...membership.snapshot, activeIterationId: filteredIterationId } : item;
   };
-  const filtered = useMemo(() => state.items.filter(item => {
+  // 一份筛选谓词，两处消费：列表与看板要状态和搜索，总览只要范围与迭代——
+  // 总览展示的就是状态分布，先按状态筛再统计会自相矛盾。
+  function itemMatches(item: ItemRecord, withStatus: boolean, withQuery: boolean): boolean {
     const project = state.projects.find(p => p.id === item.projectId), areaId = item.areaId ?? project?.areaId ?? null, shown = historicalItem(item);
     if (scope.kind === "project" && item.projectId !== scope.id) return false;
     if (scope.kind === "area" && areaId !== scope.id) return false;
@@ -87,13 +90,18 @@ function ProjectsWorkspace() {
       if (iterationFilter === "none" || (iterationFilter === "current" && !filteredIterationId)) { if (item.activeIterationId !== null) return false; }
       else if (!state.memberships.some(m => m.itemId === item.id && m.iterationId === filteredIterationId) && item.activeIterationId !== filteredIterationId) return false;
     }
-    if (statusFilter === "open" && (shown.status === "done" || shown.status === "cancelled")) return false;
-    if (statusFilter !== "open" && statusFilter !== "all" && shown.status !== statusFilter) return false;
-    return !query || [shown.title, item.title, item.note, project?.name, state.areas.find(a => a.id === areaId)?.name].some(value => value?.toLocaleLowerCase().includes(query));
-  }).sort((a, b) => {
+    if (withStatus) {
+      if (statusFilter === "open" && (shown.status === "done" || shown.status === "cancelled")) return false;
+      if (statusFilter !== "open" && statusFilter !== "all" && shown.status !== statusFilter) return false;
+    }
+    return !withQuery || !query || [shown.title, item.title, item.note, project?.name, state.areas.find(a => a.id === areaId)?.name].some(value => value?.toLocaleLowerCase().includes(query));
+  }
+  const filtered = useMemo(() => state.items.filter(item => itemMatches(item, true, true)).sort((a, b) => {
     const aShown = historicalItem(a), bShown = historicalItem(b), aClosed = aShown.status === "done" || aShown.status === "cancelled", bClosed = bShown.status === "done" || bShown.status === "cancelled";
     return Number(aClosed) - Number(bClosed) || (itemDeadline(aShown, state.iterations) ?? "9999").localeCompare(itemDeadline(bShown, state.iterations) ?? "9999") || a.createdAt - b.createdAt;
   }), [state.items, state.projects, state.areas, state.memberships, state.iterations, scope, iterationFilter, filteredIterationId, statusFilter, query, showArchived]);
+  // 总览那一批：同样的范围与迭代，但不吃状态与搜索，且套上历史迭代快照（口径与列表一致）。
+  const overviewItems = useMemo(() => state.items.filter(item => itemMatches(item, false, false)).map(historicalItem), [state.items, state.projects, state.areas, state.memberships, state.iterations, scope, iterationFilter, filteredIterationId, statusFilter, query, showArchived]);
   const visibleItemIds = new Set(filtered.map(item => item.id));
   const linkedItemIds = new Set(state.remoteLinks.map(link => link.itemId));
   const hiddenUnplannedSources = state.items.filter(item => linkedItemIds.has(item.id) && !item.mergedIntoId && item.activeIterationId === null && !visibleItemIds.has(item.id)).length;
@@ -113,7 +121,12 @@ function ProjectsWorkspace() {
     window.addEventListener("keydown", keydown);
     return () => window.removeEventListener("keydown", keydown);
   }, [selectedId, editor]);
-  useEffect(() => { if (scope.kind === "project" && !state.projects.some(p => p.id === scope.id) || scope.kind === "area" && !state.areas.some(a => a.id === scope.id)) setScope({ kind: "all" }); setTab("tasks"); }, [scope, state.projects, state.areas]);
+  // 范围指向的项目/业务范围被删掉时退回「全部项目」，并回到列表（那一层的资料与看板已经没有意义）。
+  useEffect(() => {
+    const gone = (scope.kind === "project" && !state.projects.some(p => p.id === scope.id)) || (scope.kind === "area" && !state.areas.some(a => a.id === scope.id));
+    if (!gone) return;
+    setScope({ kind: "all" }); setTab("tasks");
+  }, [scope, state.projects, state.areas]);
   // A search hit opens the row it names. The row only renders when it survives the
   // filters, so the target's own scope replaces the current narrow one, and the
   // parameters are applied once so closing the details later keeps them closed.
@@ -136,13 +149,16 @@ function ProjectsWorkspace() {
     setScope(item.projectId ? { kind: "project", id: item.projectId } : { kind: "all" });
     setIterationFilter("all"); setStatusFilter("all"); setSelectedId(item.id); setTab("tasks");
   }, [focusItem, focusProject, state.items, state.projects]);
-  function chooseScope(next: Scope) { setScope(next); setTab("tasks"); setSelectedId(null); }
+  function chooseScope(next: Scope) { setScope(next); setSelectedId(null); }
   async function editArea(id?: string) {
     const area = state.areas.find(a => a.id === id), name = await modal.prompt({ title: area ? c.editArea : c.newArea, initial: area?.name ?? "", confirmText: c.save });
     if (!name?.trim()) return;
     try { if (area) state.updateArea(area.id, name.trim()); else chooseScope({ kind: "area", id: state.addArea(name.trim()) }); } catch { toast.error(c.failed); }
   }
   async function deleteArea(id: string) { if (await modal.confirm({ title: c.deleteArea, description: c.deleteAreaHint, confirmText: c.remove, danger: true })) state.removeArea(id); }
+  const iterationOptions = [{ value: "current", label: currentIteration ? `${c.currentIteration} · ${currentIteration.name}` : `${c.currentIteration} · ${c.noCurrentIteration}` }, { value: "none", label: c.unplanned }, { value: "all", label: c.allIterations }, ...iterations.map(i => ({ value: i.id, label: `${i.name} · ${i.start.slice(5)} – ${i.end.slice(5)}` }))];
+  /** 总览里点「项目进度」的一行：把范围收到那一组。 */
+  function openGroup(key: string) { if (key === "none") chooseScope({ kind: "unassigned" }); else if (key.startsWith("area:")) chooseScope({ kind: "area", id: key.slice(5) }); else chooseScope({ kind: "project", id: key }); }
   const title = selectedProject?.name ?? selectedArea?.name ?? (scope.kind === "unclassified" ? c.unclassified : scope.kind === "unassigned" ? c.noProject : c.title);
   const countOpen = (projectId: string) => state.items.filter(item => item.projectId === projectId && item.status !== "done" && item.status !== "cancelled").length;
   const projectRows = (areaId: string | null) => state.projects.filter(p => p.areaId === areaId && (showArchived || p.status !== "archived")).map(p => <button key={p.id} onClick={() => chooseScope({ kind: "project", id: p.id })} className={cn("group flex w-full min-w-0 items-center gap-2 rounded-md py-1.5 pr-2 pl-5 text-left text-[13px] outline-none focus-visible:ring-2 focus-visible:ring-ring", scope.kind === "project" && scope.id === p.id ? "bg-accent text-accent-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground")} title={p.name}><Folder className="size-3.5 shrink-0" /><span className={cn("min-w-0 flex-1 truncate", p.status === "archived" && "opacity-60")}>{p.name}</span><span className="text-[11px] tabular-nums">{p.status === "archived" ? c.archived : countOpen(p.id) || ""}</span></button>);
@@ -157,8 +173,8 @@ function ProjectsWorkspace() {
         <div className="mt-2 space-y-2 border-t border-border pt-2"><Button className="w-full justify-start" variant="ghost" size="sm" onClick={() => setEditor({ kind: "project" })}><Plus />{c.newProject}</Button><label className="flex cursor-pointer items-center gap-2 px-2 pb-1 text-[11px] text-muted-foreground"><input type="checkbox" className="accent-primary" checked={showArchived} onChange={e => setShowArchived(e.target.checked)} />{c.showArchived}</label></div>
       </nav>
       <Tabs value={activeTab} onValueChange={value => setTab(value as WorkTab)} className="flex min-h-0 min-w-0 flex-col gap-0">
-        <div className="flex h-11 shrink-0 items-center border-b border-border px-3"><TabsList aria-label={title}><TabsTrigger value="tasks"><ListTodo />{c.tasks}</TabsTrigger><TabsTrigger value="board"><SquareKanban />{c.board}</TabsTrigger>{selectedProject && <TabsTrigger value="files"><Folder />{c.files}</TabsTrigger>}</TabsList></div>
-        {activeTab !== "files" && <>
+        <div className="flex h-11 shrink-0 items-center border-b border-border px-3"><TabsList aria-label={title}><TabsTrigger value="overview"><LayoutDashboard />{c.overview}</TabsTrigger><TabsTrigger value="tasks"><ListTodo />{c.tasks}</TabsTrigger><TabsTrigger value="board"><SquareKanban />{c.board}</TabsTrigger>{selectedProject && <TabsTrigger value="files"><Folder />{c.files}</TabsTrigger>}</TabsList></div>
+        {(activeTab === "tasks" || activeTab === "board") && <>
           <ProjectViewsBar
             iteration={iterationFilter}
             status={statusFilter}
@@ -169,9 +185,9 @@ function ProjectsWorkspace() {
               setSearch(v.search);
             }}
           />
-          <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border p-3"><div className="min-w-[150px] flex-1"><ProjectSelect label={c.iteration} value={iterationFilter} onChange={setIterationFilter} options={[{ value: "current", label: currentIteration ? `${c.currentIteration} · ${currentIteration.name}` : `${c.currentIteration} · ${c.noCurrentIteration}` }, { value: "none", label: c.unplanned }, { value: "all", label: c.allIterations }, ...iterations.map(i => ({ value: i.id, label: `${i.name} · ${i.start.slice(5)} – ${i.end.slice(5)}` }))]} /></div><Button variant="ghost" size="icon-sm" title={c.newIteration} aria-label={c.newIteration} onClick={() => setEditor({ kind: "iteration" })}><Plus /></Button>{selectedIteration && <Button variant="ghost" size="icon-sm" title={c.editIteration} aria-label={c.editIteration} onClick={() => setEditor({ kind: "iteration", id: selectedIteration.id })}><Pencil /></Button>}<div className="w-[110px]"><ProjectSelect label={c.status} value={statusFilter} onChange={setStatusFilter} options={[{ value: "open", label: c.open }, { value: "all", label: c.all }, { value: "todo", label: c.todo }, { value: "doing", label: c.doing }, { value: "done", label: c.done }, { value: "cancelled", label: c.cancelled }]} /></div><div className="relative min-w-[150px] flex-1"><Search className="pointer-events-none absolute top-2 left-2.5 size-4 text-muted-foreground" /><Input value={search} onChange={e => setSearch(e.target.value)} className="pr-7 pl-8" placeholder={c.search} aria-label={c.search} />{search && <Button className="absolute top-0.5 right-0.5" variant="ghost" size="icon-sm" title={c.clearSearch} aria-label={c.clearSearch} onClick={() => setSearch("")}><X /></Button>}</div></div>
+          <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border p-3"><div className="min-w-[150px] flex-1"><ProjectSelect label={c.iteration} value={iterationFilter} onChange={setIterationFilter} options={iterationOptions} /></div><Button variant="ghost" size="icon-sm" title={c.newIteration} aria-label={c.newIteration} onClick={() => setEditor({ kind: "iteration" })}><Plus /></Button>{selectedIteration && <Button variant="ghost" size="icon-sm" title={c.editIteration} aria-label={c.editIteration} onClick={() => setEditor({ kind: "iteration", id: selectedIteration.id })}><Pencil /></Button>}<div className="w-[110px]"><ProjectSelect label={c.status} value={statusFilter} onChange={setStatusFilter} options={[{ value: "open", label: c.open }, { value: "all", label: c.all }, { value: "todo", label: c.todo }, { value: "doing", label: c.doing }, { value: "done", label: c.done }, { value: "cancelled", label: c.cancelled }]} /></div><div className="relative min-w-[150px] flex-1"><Search className="pointer-events-none absolute top-2 left-2.5 size-4 text-muted-foreground" /><Input value={search} onChange={e => setSearch(e.target.value)} className="pr-7 pl-8" placeholder={c.search} aria-label={c.search} />{search && <Button className="absolute top-0.5 right-0.5" variant="ghost" size="icon-sm" title={c.clearSearch} aria-label={c.clearSearch} onClick={() => setSearch("")}><X /></Button>}</div></div>
         </>}
-        {activeTab === "board" ? <TabsContent value="board" aria-label={c.board} className="flex min-h-0 flex-1 flex-col"><ProjectsBoard items={boardItems} selectedId={selectedId} onSelect={setSelectedId} carriedIds={carriedItemIds} statusFilter={statusFilter} onShowAllStatuses={() => setStatusFilter("all")} /></TabsContent> : filesProject ? <TabsContent value="files" aria-label={c.files} className="min-h-0 flex-1 overflow-auto p-3"><ProjectFiles projectId={filesProject.id} folder={filesProject.folder} onFolderChange={folder => state.updateProject(filesProject.id, { folder })} /></TabsContent> : <TabsContent value="tasks" aria-label={c.tasks} className="flex min-h-0 flex-1 flex-col">
+        {activeTab === "overview" ? <TabsContent value="overview" aria-label={c.overview} className="flex min-h-0 flex-1 flex-col"><ProjectsOverview items={overviewItems} selectedId={selectedId} onSelect={setSelectedId} iterationFilter={iterationFilter} onIterationFilter={setIterationFilter} iterationOptions={iterationOptions} onOpenGroup={openGroup} /></TabsContent> : activeTab === "board" ? <TabsContent value="board" aria-label={c.board} className="flex min-h-0 flex-1 flex-col"><ProjectsBoard items={boardItems} selectedId={selectedId} onSelect={setSelectedId} carriedIds={carriedItemIds} statusFilter={statusFilter} onShowAllStatuses={() => setStatusFilter("all")} /></TabsContent> : filesProject ? <TabsContent value="files" aria-label={c.files} className="min-h-0 flex-1 overflow-auto p-3"><ProjectFiles projectId={filesProject.id} folder={filesProject.folder} onFolderChange={folder => state.updateProject(filesProject.id, { folder })} /></TabsContent> : <TabsContent value="tasks" aria-label={c.tasks} className="flex min-h-0 flex-1 flex-col">
           <div className="flex h-9 shrink-0 items-center justify-between border-b border-border px-4 text-xs text-muted-foreground"><span>{selectedIteration ? `${selectedIteration.start} – ${selectedIteration.end}` : iterationFilter === "all" ? c.allIterations : c.unplanned}</span><span className="tabular-nums" aria-live="polite">{filtered.length} {c.count}</span></div>
           {hiddenUnplannedSources > 0 && <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-border bg-muted/30 px-4 py-2" data-zen-unplanned-hint><p className="text-xs text-muted-foreground">{hiddenUnplannedSources} {z.hiddenUnplanned}</p><Button size="sm" variant="link" className="h-auto p-0" onClick={() => { chooseScope({ kind: "all" }); setIterationFilter("none"); setStatusFilter("all"); setSearch(""); }}>{z.showUnplanned}</Button></div>}
           <div className="min-h-0 flex-1 overflow-y-auto">{!filtered.length ? <div className="flex h-full min-h-[200px] flex-col items-center justify-center gap-3 p-6 text-center"><ListTodo className="size-8 text-muted-foreground/50" /><div><p className="text-sm font-medium">{query ? c.noMatches : c.noItems}</p>{!query && <p className="mt-1 text-xs text-muted-foreground">{c.firstItem}</p>}</div>{!query && <Button size="sm" variant="outline" onClick={() => setEditor({ kind: "item" })}><Plus />{c.newItem}</Button>}</div> : <div role="list">{filtered.map(item => {

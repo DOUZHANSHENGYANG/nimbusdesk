@@ -10,10 +10,11 @@ const column = name => page.locator(`section[aria-label^="${name}"]`);
 const iteration = () => page.getByRole("combobox", { name: "迭代", exact: true });
 try {
   await page.goto(`${process.env.ZENTAO_FIXTURE_ORIGIN ?? "http://127.0.0.1:17800"}/src/features/projects/fixtures/page.html`);
-  await page.locator('[data-work-item="item-portal"]').first().waitFor();
-
+  await page.getByRole("tab", { name: "总览" }).waitFor();
   // 看板在「全部项目」范围也在：不再依赖选中某个项目。
-  assert.deepEqual(await page.getByRole("tab").allTextContents(), ["工作项", "看板"], "Board tab must exist without a selected project; files stays project-only");
+  assert.deepEqual(await page.getByRole("tab").allTextContents(), ["总览", "工作项", "看板"], "Board tab must exist without a selected project; files stays project-only");
+  await page.getByRole("tab", { name: "工作项" }).click();
+  await page.locator('[data-work-item="item-portal"]').first().waitFor();
   await page.getByRole("tab", { name: "看板" }).click();
   for (const name of ["待办", "进行中", "已完成", "已取消"]) assert.equal(await column(name).count(), 1, `${name} column must exist`);
 
@@ -53,7 +54,7 @@ try {
 
   // 选中项目后多出「项目资料」：栏位条件没被移到 Tabs 外面时也不会丢。
   await page.locator(".projects-nav button.pl-5").first().click();
-  assert.deepEqual(await page.getByRole("tab").allTextContents(), ["工作项", "看板", "项目资料"], "Files tab must come back for a selected project");
+  assert.deepEqual(await page.getByRole("tab").allTextContents(), ["总览", "工作项", "看板", "项目资料"], "Files tab must come back for a selected project");
   await page.getByRole("tab", { name: "项目资料" }).click();
   await page.waitForTimeout(150);
   assert.equal((await page.locator("[data-slot='tabs-content']").first().innerText()).trim().length > 0, true, "Files panel must render its content");
