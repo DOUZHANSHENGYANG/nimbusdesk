@@ -1,5 +1,5 @@
 import { HashRouter, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
-import { useEffect } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { inTauri } from "@/lib/tauri";
 import { Providers } from "@/app/providers";
@@ -8,22 +8,34 @@ import { StorageAlert } from "@/components/shell/storage-alert";
 import { Sidebar } from "@/components/shell/sidebar";
 import { PageTransition } from "@/components/shell/page-transition";
 import { HomePage } from "@/features/home/page";
-import { ProjectsPage } from "@/features/projects/page";
-import { PlansPage } from "@/features/plans/page";
-import { FilesPage } from "@/features/files/page";
-import { FeedsPage } from "@/features/feeds/page";
-import { SettingsPage } from "@/features/settings/page";
-import { KnowledgePage } from "@/features/knowledge/page";
 import { OrganizationActivity } from "@/features/knowledge/organization-activity";
-import { ToolsPage } from "@/features/tools/page";
-import { AhubPromptsPage } from "@/features/agenthub/ahub-host-prompts";
-import { AhubMcpPage } from "@/features/agenthub/ahub-host";
-import { AhubSkillsPage } from "@/features/agenthub/ahub-host-skills";
-import { AhubHarnessPage } from "@/features/agenthub/ahub-host-harness";
-import { AgentPage } from "@/features/agent/panel";
-import { SchedulePage } from "@/features/schedule/page";
 import { ScheduleRuntime } from "@/features/schedule/runtime";
 import { AppContextMenu } from "@/components/shell/app-context-menu";
+
+/**
+ * 路由级按需加载。
+ *
+ * 首页（落点）保持静态：它是启动后第一屏，懒加载只会把首屏往后推。
+ * 其余页面各自一个 chunk —— 它们之间的依赖差得很远（工具箱四页带着 ahub 全套与
+ * AI SDK，文件页带 dnd，设置页带整套备份/导入），以前全塞在一个 3.6 MB 的包里，
+ * 打开应用就得先解析完「技能市场」「禅道」「备份恢复」这些可能这辈子都不点的代码。
+ *
+ * 页面内容里没有 Suspense 边界的话，切换瞬间会白一下；这里统一在
+ * `PageTransition` 内层兜住，过渡动画（GSAP，依赖 pathname）照旧只在路由变化时跑一次。
+ */
+const ProjectsPage = lazy(() => import("@/features/projects/page").then((m) => ({ default: m.ProjectsPage })));
+const PlansPage = lazy(() => import("@/features/plans/page").then((m) => ({ default: m.PlansPage })));
+const FilesPage = lazy(() => import("@/features/files/page").then((m) => ({ default: m.FilesPage })));
+const FeedsPage = lazy(() => import("@/features/feeds/page").then((m) => ({ default: m.FeedsPage })));
+const SettingsPage = lazy(() => import("@/features/settings/page").then((m) => ({ default: m.SettingsPage })));
+const KnowledgePage = lazy(() => import("@/features/knowledge/page").then((m) => ({ default: m.KnowledgePage })));
+const ToolsPage = lazy(() => import("@/features/tools/page").then((m) => ({ default: m.ToolsPage })));
+const AhubSkillsPage = lazy(() => import("@/features/agenthub/ahub-host-skills").then((m) => ({ default: m.AhubSkillsPage })));
+const AhubPromptsPage = lazy(() => import("@/features/agenthub/ahub-host-prompts").then((m) => ({ default: m.AhubPromptsPage })));
+const AhubMcpPage = lazy(() => import("@/features/agenthub/ahub-host").then((m) => ({ default: m.AhubMcpPage })));
+const AhubHarnessPage = lazy(() => import("@/features/agenthub/ahub-host-harness").then((m) => ({ default: m.AhubHarnessPage })));
+const AgentPage = lazy(() => import("@/features/agent/panel").then((m) => ({ default: m.AgentPage })));
+const SchedulePage = lazy(() => import("@/features/schedule/page").then((m) => ({ default: m.SchedulePage })));
 
 function SearchNavigationBridge() {
   const navigate = useNavigate();
@@ -60,7 +72,8 @@ function Shell() {
         {!standalone && <Sidebar />}
         <main className="mat-surface relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-[var(--pr-radius-xl)]">
           <PageTransition>
-            <Routes>
+            <Suspense fallback={null}>
+              <Routes>
               <Route path="/" element={<HomePage />} />
               <Route path="/projects" element={<ProjectsPage />} />
               <Route path="/plans" element={<PlansPage />} />
@@ -77,7 +90,8 @@ function Shell() {
               <Route path="/agent" element={<AgentPage />} />
               <Route path="/schedules" element={<SchedulePage />} />
               <Route path="/settings" element={<SettingsPage />} />
-            </Routes>
+              </Routes>
+            </Suspense>
           </PageTransition>
         </main>
       </div>
