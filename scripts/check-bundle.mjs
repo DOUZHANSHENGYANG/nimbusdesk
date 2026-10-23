@@ -67,6 +67,16 @@ const leaked = rows.filter(([file]) => {
   return aiMarkers.some((marker) => code.includes(marker));
 });
 
+/*
+ * 英文词表必须是**按需**的。
+ *
+ * 它由 `ensureLanguage("en")` 动态 import（启动时按 localStorage 提示、或用户切到英文时）。
+ * 一旦有人把它静态 import 回入口，每个窗口就又要多解析这 30 多 KB —— 这条断言用来防这个。
+ */
+const EN_MARKER = "The action aborted unexpectedly"; // 只在英文词表里出现的句子
+const enInEager = rows.filter(([file]) => fs.readFileSync(path.join(ASSETS, file), "utf8").includes(EN_MARKER));
+const enChunks = fs.readdirSync(ASSETS).filter((file) => /^en-.*\.js$/.test(file));
+
 let failed = false;
 if (total > LIMIT_KB) {
   console.error(`\n✗ 入口静态闭包 ${total} KB，超过 ${LIMIT_KB} KB：又有依赖被拉进公共路径了。`);
@@ -76,5 +86,13 @@ if (leaked.length) {
   console.error(`\n✗ AI SDK 出现在首屏闭包里：${leaked.map(([file]) => file).join(", ")}`);
   failed = true;
 }
+if (enInEager.length) {
+  console.error(`\n✗ 英文词表被打回入口闭包：${enInEager.map(([file]) => file).join(", ")}`);
+  failed = true;
+}
+if (!enChunks.length) {
+  console.error("\n✗ 找不到英文词表分片（en-*.js）：按需加载没生效");
+  failed = true;
+}
 if (failed) process.exit(1);
-console.log(`\n✓ 入口静态闭包 ${total} KB，AI SDK 不在其中`);
+console.log(`\n✓ 入口静态闭包 ${total} KB，AI SDK 不在其中，英文词表是独立分片（${enChunks.join(", ")}）`);

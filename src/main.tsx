@@ -2,6 +2,7 @@ import React, { lazy, Suspense } from "react";
 import ReactDOM from "react-dom/client";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { Providers } from "@/app/providers";
+import { i18n, ensureLanguage, readLanguageHint } from "@/lib/i18n";
 import { POPUP_LABEL } from "@/features/files/popup";
 import "@/index.css";
 
@@ -70,10 +71,22 @@ if (windowLabel.startsWith("edge-hub-")) {
   root = <App />;
 }
 
-ReactDOM.createRoot(document.getElementById("root")!).render(
-  <React.StrictMode>
-    {/* 窗口内容懒加载期间的占位：窗口本身在 windowReady() 之前是隐藏的（主窗口）
-        或由打开方定位后 show()（菜单/栅栏），这段空白不会闪给用户看。 */}
-    <Suspense fallback={null}>{root}</Suspense>
-  </React.StrictMode>,
-);
+/*
+ * 先把「要用的语言」准备好再渲染。
+ *
+ * 默认语言（中文）内联在入口，这一步是个已 resolve 的 Promise（只让出一个微任务）；
+ * 英文是独立分片，只有语言提示为 en 时才真的去拉。窗口在 `windowReady()` 之前是隐藏的，
+ * 而那是 Providers 挂载后的事 —— 所以英文用户不会先看到一闪中文。
+ */
+const languageHint = readLanguageHint();
+void (async () => {
+  await ensureLanguage(languageHint);
+  if (languageHint === "en") await i18n.changeLanguage("en");
+  ReactDOM.createRoot(document.getElementById("root")!).render(
+    <React.StrictMode>
+      {/* 窗口内容懒加载期间的占位：窗口本身在 windowReady() 之前是隐藏的（主窗口）
+          或由打开方定位后 show()（菜单/栅栏），这段空白不会闪给用户看。 */}
+      <Suspense fallback={null}>{root}</Suspense>
+    </React.StrictMode>,
+  );
+})();

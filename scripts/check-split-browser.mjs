@@ -50,7 +50,7 @@ const STUB_ARTIFACTS = [
 const { chromium } = await loadPlaywright();
 const browser = await chromium.launch({ executablePath: resolveBrowser(), headless: true });
 
-async function newPage() {
+async function newPage(options = {}) {
   const page = await browser.newPage({ viewport: { width: 1440, height: 900 } });
   const errors = [];
   const chunks = [];
@@ -58,12 +58,13 @@ async function newPage() {
   page.on("request", (request) => {
     if (/\/assets\/[^/]+\.js$/.test(request.url())) chunks.push(request.url().split("/").pop());
   });
-  await page.addInitScript(() => {
+  await page.addInitScript((settings) => {
     const callbacks = new Map();
     let seq = 0;
     const respond = (cmd, args) => {
       if (cmd === "plugin:event|listen") return args?.handler ?? null;
       if (cmd.startsWith("plugin:event|")) return null;
+      if (cmd === "read_json" && args?.key === "settings" && settings) return settings;
       if (/^list_|_list$/.test(cmd)) return [];
       if (cmd === "get_data_dir") return "C:/Users/dz/AppData/Roaming/nimbusdesk";
       return null;
@@ -79,7 +80,7 @@ async function newPage() {
       convertFileSrc: (value) => value,
       metadata: { currentWindow: { label: "main" }, currentWebview: { label: "main", windowLabel: "main" } },
     };
-  });
+  }, options.settings ?? null);
   const realErrors = () => errors.filter((message) => !STUB_ARTIFACTS.some((pattern) => pattern.test(message)));
   /** hash 导航不会重载文档，模块状态会跨路由串味 —— 换查询串 + reload 强制整页重载。 */
   const open = async (hash, { fresh = false } = {}) => {
@@ -121,7 +122,23 @@ try {
   const splitErrors = [...home.realErrors(), ...plans.realErrors()];
   assert.deepEqual(splitErrors, [], "分包改动不应引入运行时错误");
 
-  // ── B. 全路由词表完整性（每页强制整页重载）────────────────────────
+  // ── B. 英文启动：英文词表是分片，真源语言来自 settings（水合后）────────
+  //    断言：真的拉到了 en-* 分片、正文是英文、且没有缺键（缺键就是分片没到/漏键）。
+  const english = await newPage({ settings: { version: 8, state: { theme: "dark", lang: "en" } } });
+  await english.open("/");
+  await english.page.waitForFunction(
+    () => /Home|Today|Overview/.test(document.body.innerText),
+    undefined,
+    { timeout: 20000 },
+  );
+  const englishChunks = english.chunks().filter((file) => /^en-/.test(file));
+  assert.equal(englishChunks.length, 1, "英文语言应拉取 en-* 分片（且只拉一次）");
+  const englishMissing = await english.page.evaluate(() => window.__i18nMissing ?? []);
+  assert.deepEqual(englishMissing, [], `英文模式不应缺键：${englishMissing.slice(0, 5).join(", ")}`);
+  console.log(`✓ 英文：加载 ${englishChunks.join(", ")}，正文为英文且无缺键`);
+  await english.page.close();
+
+  // ── B2. 全路由词表完整性（每页强制整页重载）────────────────────────
   const sweep = await newPage();
   const missing = [];
   for (const route of ROUTES) {

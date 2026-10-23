@@ -25,7 +25,9 @@ import {
     weekdayNames,
 } from "./core.ts";
 
-const I18N_FILE = join(fileURLToPath(new URL(".", import.meta.url)), "../../lib/i18n.ts");
+const I18N_DIR = new URL("../../lib/locales/", import.meta.url);
+const ZH_FILE = fileURLToPath(new URL("zh.ts", I18N_DIR));
+const EN_FILE = fileURLToPath(new URL("en.ts", I18N_DIR));
 
 function extractObject(src, name) {
     const m = new RegExp(`const ${name}\\s*(?::[^=]+)?=\\s*\\{`).exec(src);
@@ -65,8 +67,8 @@ function makeT(table) {
     };
 }
 
-const zhTable = new Function(`return (${extractObject(readFileSync(I18N_FILE, "utf8"), "zh")})`)();
-const enTable = new Function(`return (${extractObject(readFileSync(I18N_FILE, "utf8"), "en")})`)();
+const zhTable = new Function(`return (${extractObject(readFileSync(ZH_FILE, "utf8"), "zh")})`)();
+const enTable = new Function(`return (${extractObject(readFileSync(EN_FILE, "utf8"), "en")})`)();
 const tZh = makeT(zhTable);
 const tEn = makeT(enTable);
 

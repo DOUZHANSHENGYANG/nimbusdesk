@@ -19,7 +19,9 @@ import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = join(fileURLToPath(new URL(".", import.meta.url)), "..");
-const I18N_FILE = join(ROOT, "src/lib/i18n.ts");
+/** 云台自己的词表：默认语言内联在入口，另一门语言是独立分片（`src/lib/locales/en.ts`）。 */
+const I18N_DIR = join(ROOT, "src/lib/locales");
+const I18N_FILES = { zh: join(I18N_DIR, "zh.ts"), en: join(I18N_DIR, "en.ts") };
 /*
  * AgentHub（源侧工具箱）的键表。
  *
@@ -122,7 +124,8 @@ function collectUsedKeys(files) {
   return { literal, prefixes, candidates };
 }
 
-const src = readFileSync(I18N_FILE, "utf8");
+const appZhSrc = readFileSync(I18N_FILES.zh, "utf8");
+const appEnSrc = readFileSync(I18N_FILES.en, "utf8");
 const ahubSrc = readFileSync(AHUB_I18N_FILE, "utf8");
 /*
  * 合并顺序即优先级：后展开的覆盖先展开的，与运行时一致
@@ -130,11 +133,11 @@ const ahubSrc = readFileSync(AHUB_I18N_FILE, "utf8");
  */
 const zh = new Map([
   ...flatten(new Function(`return (${extractObject(ahubSrc, "zh")})`)()),
-  ...flatten(new Function(`return (${extractObject(src, "zh")})`)()),
+  ...flatten(new Function(`return (${extractObject(appZhSrc, "zh")})`)()),
 ]);
 const en = new Map([
   ...flatten(new Function(`return (${extractObject(ahubSrc, "en")})`)()),
-  ...flatten(new Function(`return (${extractObject(src, "en")})`)()),
+  ...flatten(new Function(`return (${extractObject(appEnSrc, "en")})`)()),
 ]);
 
 const errors = [];
