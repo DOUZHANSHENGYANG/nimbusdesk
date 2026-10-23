@@ -124,9 +124,24 @@
    - ✅ `providers.tsx` 里 `storage://changed` 的旧 `files` 分支（整份文档回灌）；
    - ✅ **补上搜索刷新**：以前 `write_json("files")` 会经 `sources_key()` 触发索引重建，现在写路径换了，
      所以 `files_apply` 成功后显式 `request_refresh()` —— 漏了这条就是「改了文件但搜索里还是旧的」；
-   - ⏳ **保留**：`files-storage.ts` 里「表为空时回退读一次旧 `files` 键」。删它的那天我试过，
+   - ✅ **保留**：`files-storage.ts` 里「表为空时回退读一次旧 `files` 键」。删它的那天我试过，
      夹具立刻挂了 —— 那正是真机上的症状：**表刚上线时表还是空的，数据还在旧键里**，
      直接删回退 = 用户第一次启动看到空的文件库。等表里确认有数据、并跑过一次真实升级后再删。
+   - ✅ **已删（按用户决定）**：上面这条回退读取。现在 `files_load` 是唯一真源。
+
+## 旧数据怎么办
+
+删掉回退之后，`module_state` 里那份旧的整份 `files` JSON **仍然在库里**（没人删它，也没人读它）。
+如果某台机器上恰好只有那份旧数据、表还是空的，界面会显示空文件库 —— 数据没丢，只是读不到。
+两种找回方式：
+
+- 临时恢复一次回退：把 `files-storage.ts` 的 `getItem` 改回「表空则读旧键」，启动一次让它按增量
+  搬进表，然后再删掉；
+- 或者手工搬：读 `SELECT value_json FROM module_state WHERE key='files';` 拿到
+  `{state:{categories,items}}`，用 `files_apply` 的形状（`categories.upsert` / `items.upsert`，
+  每项带 `order`）拼一份增量，对着表跑一次即可。
+
+确认表里有了数据之后，那条 `module_state` 行可以顺手删掉（也可以留着，cost 只是几 MB 磁盘）。
 
 ## 关于 `plans`
 

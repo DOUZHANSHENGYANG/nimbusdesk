@@ -1,7 +1,6 @@
 import type { PersistStorage } from "zustand/middleware";
 import { invoke } from "@tauri-apps/api/core";
 import { emit } from "@tauri-apps/api/event";
-import { readJson } from "@/lib/tauri";
 import { applyFilesDelta, diffFiles, isEmptyDelta, type FilesDelta, type FilesSnapshot } from "@/lib/files-diff";
 import type { FileCategory, FileItem } from "./files";
 
@@ -11,20 +10,15 @@ import type { FileCategory, FileItem } from "./files";
  * 以前 zustand persist 每次 `set()` 都把**整份** `{categories, items}` 序列化成一个 key 里的一整行
  * —— 8000 条时单次 12 ms 序列化 + IPC + SQLite 重写整行。现在：
  *
- * - `getItem` → `files_load`（行级表 = 真源）；读到空表时**回退读一次**老键 `files`
- *   （开发期兜底：万一还有旧数据，第一次写入就会把它按增量搬进表里）；
+ * - `getItem` → `files_load`（行级表是唯一真源；不再有「回退读旧 `files` 键」的兼容路径）；
  * - `setItem` → 与「上一次落库的快照」比对，只把真正变了的实体推给 `files_apply`；
  * - 跨窗口 → 推成功后就地广播同一份增量，别的窗口 `applyFilesDelta` 合进本窗口的 store，
  *   期间 `applyingRemote` 让回灌引起的 `set()` 只更新快照、**不回写**（否则会来回弹）。
+ *
+ * 注意：`module_state` 里那份旧的整份 `files` JSON **没有被删除**，只是不再被读取。
+ * 万一某台机器上还有这样一份数据且需要找回，见 `docs/plan-storage-sharding.md` 末尾的说明。
  */
 const EVENT = "files://changed";
-/**
- * 旧版把整份 `{categories, items}` 放在这个 key 里。表刚上线时表还是空的 —— 直接删掉这条
- * 回退，真机上第一次启动就会看到**空的文件库**（数据还在旧键里，没被搬过来）。
- * 所以保留一次读取：读到空表就回退读旧键，随后第一次写入会把它们按增量搬进表。
- * 等表里确认有数据之后再删（`docs/plan-storage-sharding.md` 阶段 4）。
- */
-const LEGACY_KEY = "files";
 const VERSION = 2;
 const source = typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}`;
 
@@ -61,20 +55,10 @@ export const filesTableStorage: PersistStorage<FilesPersisted> = {
   async getItem() {
     try {
       const loaded = await invoke<{ categories: FileCategory[]; items: FileItem[] }>("files_load");
-      let state: FilesSnapshot = {
+      const state: FilesSnapshot = {
         categories: Array.isArray(loaded?.categories) ? loaded.categories : [],
         items: Array.isArray(loaded?.items) ? loaded.items : [],
       };
-      if (state.categories.length === 0 && state.items.length === 0) {
-        // 表是空的：可能是全新安装，也可能是「数据还在旧键里、还没搬过」——回退读一次
-        const legacy = await readJson<{ state?: Partial<FilesPersisted> }>(LEGACY_KEY).catch(() => null);
-        if (legacy?.state) {
-          state = {
-            categories: Array.isArray(legacy.state.categories) ? legacy.state.categories : [],
-            items: Array.isArray(legacy.state.items) ? legacy.state.items : [],
-          };
-        }
-      }
       snapshot = state;
       return { state: state as FilesPersisted, version: VERSION };
     } catch {
