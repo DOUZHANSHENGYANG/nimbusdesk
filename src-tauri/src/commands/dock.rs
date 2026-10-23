@@ -190,10 +190,17 @@ pub async fn dock_spring_box(
         .and_then(|win| win.scale_factor().ok())
         .unwrap_or(1.0);
     let hwnd_raw = hwnd_of(&app, &label)?.0 as isize;
+    /*
+     * 曲线参数直接对应 iOS 的叫法：response 0.38s、damping 0.78。
+     *   freq  = 1 / response            = 2.63 Hz
+     *   decay = damping · 2π · freq     = 12.9
+     *   duration ≈ 1.2 × response       = 460ms（走完一个完整的回弹）
+     * stiff 是收起用：更快、几乎不回弹（response 0.24、damping 1.0）。
+     */
     let (freq, decay, duration_ms) = if style == "stiff" {
-        (3.8, 22.0, 260.0)
+        (4.17, 26.2, 300.0)
     } else {
-        (2.2, 11.0, 420.0)
+        (2.63, 12.9, 460.0)
     };
     std::thread::spawn(move || {
         let hwnd = HWND(hwnd_raw as *mut _);
