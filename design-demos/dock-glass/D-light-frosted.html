@@ -1,0 +1,495 @@
+<!doctype html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>云台 Dock · 浅色磨砂（选定方向）</title>
+<link rel="stylesheet" href="../../src/styles/tokens.css">
+<style>
+/* ── 浅色磨砂 · 三层材质 ─────────────────────────────────────
+   窗（white .84）/ 面（white .55 + 发丝线）/ 内嵌（gray .04）
+   深色那版靠提亮分层次，浅色这版靠**灰阶 + 发丝线 + 内阴影**分层次，
+   颜色全部取自 tokens：--pr-mat-* / --pr-gray-* / --pr-brand-*。 */
+:root {
+  --lf-window: oklch(1 0 0 / 0.84);
+  --lf-window-2: oklch(1 0 0 / 0.72);
+  --lf-face: oklch(1 0 0 / 0.56);
+  --lf-inset: oklch(0.24 0.01 250 / 0.045);
+  --lf-edge: oklch(1 0 0 / 0.75);
+  --lf-ring: 0 0 0 1px oklch(0.22 0.012 250 / 0.1);
+  --lf-shadow: 0 28px 64px oklch(0.16 0.02 250 / 0.24), 0 6px 16px oklch(0.16 0.02 250 / 0.12);
+  --lf-hair: oklch(0.22 0.012 250 / 0.1);
+  --lf-ink: var(--pr-gray-850);
+  --lf-ink-2: var(--pr-gray-700);
+  --lf-ink-3: var(--pr-gray-600);
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 44px 24px 64px;
+  background:
+    radial-gradient(64% 40% at 50% 0%, oklch(0.56 0.055 246), transparent 72%),
+    radial-gradient(92% 62% at 10% 6%, oklch(0.44 0.07 266 / 0.9), transparent 66%),
+    radial-gradient(70% 40% at 92% 92%, oklch(0.42 0.05 210 / 0.6), transparent 70%),
+    linear-gradient(180deg, oklch(0.4 0.042 254) 0%, oklch(0.31 0.036 258) 48%, oklch(0.2 0.026 260) 100%);
+  color: var(--lf-ink);
+  font-family: "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI", sans-serif;
+  font-size: 13px; -webkit-font-smoothing: antialiased;
+}
+svg.ic { width: 15px; height: 15px; flex: none; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+svg.ic.sm { width: 12px; height: 12px; }
+kbd { font: inherit; font-size: 10px; padding: 1px 5px; border-radius: 4px; border: 1px solid var(--lf-hair); color: var(--lf-ink-2); background: oklch(1 0 0 / 0.5); }
+
+/* ── 卡片 ── */
+.card {
+  position: relative; width: 660px; border-radius: 24px; overflow: hidden;
+  background: linear-gradient(180deg, var(--lf-window), var(--lf-window-2));
+  -webkit-backdrop-filter: blur(44px) saturate(190%); backdrop-filter: blur(44px) saturate(190%);
+  border: 1px solid var(--lf-edge);
+  box-shadow: var(--lf-ring), var(--lf-shadow), inset 0 1px 0 oklch(1 0 0 / 0.9);
+  display: flex; flex-direction: column;
+}
+.card::before {
+  content: ""; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(180deg, oklch(1 0 0 / 0.5), transparent 18%);
+}
+.card > * { position: relative; }
+
+/* 头：身份行 */
+.head { display: flex; align-items: center; gap: 8px; padding: 11px 13px 8px; }
+.orb { width: 18px; height: 18px; border-radius: 999px; flex: none;
+  background: radial-gradient(circle at 32% 28%, var(--pr-brand-200), var(--pr-brand-500) 46%, var(--pr-brand-700) 80%);
+  box-shadow: 0 2px 6px oklch(0.55 0.19 256 / 0.35), inset 0 0 0 0.5px oklch(1 0 0 / 0.5); }
+.nm { font-size: 12.5px; font-weight: 600; letter-spacing: 0.01em; }
+.sep { width: 1px; height: 14px; background: var(--lf-hair); }
+.st { font-size: 11px; color: var(--lf-ink-2); display: flex; align-items: center; gap: 5px; }
+.st b { color: var(--lf-ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+.dot-ok { width: 5px; height: 5px; border-radius: 999px; background: var(--pr-green-600); }
+.tm { margin-left: 2px; font-size: 11px; color: var(--lf-ink-2); font-variant-numeric: tabular-nums; }
+.acts { margin-left: auto; display: flex; gap: 1px; }
+.icon-btn { display: grid; place-items: center; width: 26px; height: 26px; border: 0; border-radius: 8px; background: transparent; color: var(--lf-ink-2); cursor: pointer; transition: background 120ms, color 120ms, transform 120ms; }
+.icon-btn:hover { background: oklch(0.24 0.01 250 / 0.07); color: var(--lf-ink); }
+.icon-btn:active { transform: scale(0.94); }
+.icon-btn .out { position: absolute; right: 1px; bottom: 1px; opacity: 0.55; }
+
+/* 分段 tab（浅色：白底 + 内阴影的凹槽） */
+.tabs { display: flex; gap: 2px; margin: 0 13px 10px; padding: 3px; border-radius: 12px; background: oklch(0.24 0.01 250 / 0.055); box-shadow: inset 0 1px 2px oklch(0.24 0.01 250 / 0.07); }
+.tab { position: relative; flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 5px; height: 27px; border: 0; border-radius: 9px; background: transparent; color: var(--lf-ink-2); font: inherit; font-size: 11.5px; cursor: pointer; transition: color 140ms, background 160ms; }
+.tab:hover { color: var(--lf-ink); }
+.tab[aria-selected="true"] { background: oklch(1 0 0 / 0.95); color: var(--lf-ink); font-weight: 600; box-shadow: 0 1px 2px oklch(0.24 0.01 250 / 0.14), 0 0 0 1px oklch(0.24 0.01 250 / 0.06); }
+.tab[aria-selected="true"] svg.ic { color: var(--pr-brand-600); }
+
+.body { padding: 0 13px; min-height: 458px; display: grid; gap: 9px; align-content: start; }
+.panel[hidden] { display: none; }
+
+/* 统计条 */
+.stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 7px; }
+.stat { padding: 8px 9px; border-radius: 12px; background: var(--lf-face); border: 1px solid var(--lf-hair); box-shadow: inset 0 1px 0 oklch(1 0 0 / 0.7); }
+.stat .n { font-size: 18px; font-weight: 650; letter-spacing: -0.02em; line-height: 1.1; font-variant-numeric: tabular-nums; }
+.stat .l { margin-top: 1px; font-size: 10px; color: var(--lf-ink-2); }
+.stat.is-warn .n { color: oklch(0.53 0.13 60); }
+.stat.is-good .n { color: var(--pr-green-600); }
+.stat.is-brand .n { color: var(--pr-brand-600); }
+
+/* 面板 */
+.panel { border-radius: 14px; background: var(--lf-face); border: 1px solid var(--lf-hair); overflow: hidden; box-shadow: inset 0 1px 0 oklch(1 0 0 / 0.6); }
+.panel-head { display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-bottom: 1px solid var(--lf-hair); background: oklch(1 0 0 / 0.28); }
+.panel-title { font-size: 10px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--lf-ink-2); }
+.panel-meta { margin-left: auto; font-size: 10px; color: var(--lf-ink-3); font-variant-numeric: tabular-nums; }
+
+/* 行：两行式 */
+.rows { padding: 4px; }
+.row { position: relative; display: grid; grid-template-columns: 15px 1fr auto; align-items: center; gap: 9px; padding: 5px 8px; border-radius: 9px; cursor: pointer; transition: background 120ms; }
+.row:hover { background: oklch(1 0 0 / 0.62); }
+.row::before { content: ""; position: absolute; left: 0; top: 9px; bottom: 9px; width: 2px; border-radius: 2px; background: var(--pr-brand-500); opacity: 0; transform: translateX(-4px); transition: opacity 170ms, transform 170ms; }
+.row:hover::before { opacity: 1; transform: none; }
+.cb { width: 14px; height: 14px; border-radius: 4.5px; border: 1.5px solid oklch(0.62 0 0); display: grid; place-items: center; color: #fff; transition: background 140ms, border-color 140ms; }
+.cb svg.ic { width: 10px; height: 10px; stroke-width: 3.2; stroke-dasharray: 22; stroke-dashoffset: 22; transition: stroke-dashoffset 220ms ease 40ms; }
+.cb.on { background: var(--pr-brand-600); border-color: var(--pr-brand-600); }
+.cb.on svg.ic { stroke-dashoffset: 0; }
+.t { min-width: 0; }
+.t .ti { font-size: 12.5px; line-height: 1.3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.t .me { margin-top: 1px; display: flex; gap: 8px; font-size: 10px; color: var(--lf-ink-3); font-variant-numeric: tabular-nums; }
+.t .me .late { color: oklch(0.5 0.14 30); font-weight: 600; }
+.row.done .ti { color: var(--lf-ink-3); text-decoration: line-through; }
+.pri { width: 5px; height: 5px; border-radius: 999px; background: oklch(0.53 0.13 60); }
+.pri.low { background: oklch(0.68 0 0); }
+.qadd { display: flex; align-items: center; gap: 7px; height: 32px; padding: 0 9px; margin-top: 2px; border-radius: 10px; border: 1px dashed oklch(0.24 0.01 250 / 0.18); color: var(--lf-ink-3); font-size: 11.5px; }
+.qadd .k { margin-left: auto; }
+
+/* 搜索 */
+.field { display: flex; align-items: center; gap: 9px; height: 38px; padding: 0 10px; border-radius: 12px; background: oklch(1 0 0 / 0.7); border: 1px solid var(--lf-hair); box-shadow: inset 0 1px 2px oklch(0.24 0.01 250 / 0.05); }
+.field input { flex: 1; min-width: 0; border: 0; background: transparent; outline: none; font: inherit; font-size: 12.5px; color: var(--lf-ink); }
+.field input::placeholder { color: var(--lf-ink-3); }
+.chips { display: flex; gap: 5px; flex-wrap: wrap; }
+.chip { height: 23px; padding: 0 9px; border-radius: 999px; border: 1px solid var(--lf-hair); background: oklch(1 0 0 / 0.5); color: var(--lf-ink-2); font: inherit; font-size: 10.5px; cursor: pointer; transition: background 120ms, color 120ms, border-color 120ms; }
+.chip:hover { background: oklch(1 0 0 / 0.85); color: var(--lf-ink); }
+.chip.is-on { background: var(--pr-brand-600); border-color: transparent; color: #fff; font-weight: 600; }
+mark { background: oklch(0.55 0.19 256 / 0.16); color: var(--pr-brand-700); border-radius: 3px; padding: 0 2px; }
+.group-label { display: flex; align-items: center; gap: 6px; font-size: 9.5px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--lf-ink-3); }
+.group-label::after { content: ""; flex: 1; height: 1px; background: var(--lf-hair); }
+.res { display: flex; align-items: center; gap: 8px; padding: 4px 6px; border-radius: 8px; cursor: pointer; font-size: 12px; }
+.res:hover { background: oklch(1 0 0 / 0.62); }
+.res .m { margin-left: auto; font-size: 10px; color: var(--lf-ink-3); white-space: nowrap; }
+.fdot { width: 7px; height: 7px; border-radius: 2px; flex: none; }
+.fdot.pdf { background: var(--pr-file-pdf); } .fdot.xls { background: var(--pr-file-sheet); }
+.fdot.doc { background: var(--pr-file-doc); } .fdot.img { background: var(--pr-file-image); }
+.fdot.note { background: var(--pr-brand-500); }
+
+/* 收集 */
+.composer { border-radius: 14px; background: var(--lf-face); border: 1px solid var(--lf-hair); padding: 9px 11px 8px; box-shadow: inset 0 1px 0 oklch(1 0 0 / 0.6); }
+.composer textarea { width: 100%; min-height: 62px; resize: none; border: 0; background: transparent; outline: none; font: inherit; font-size: 12.5px; line-height: 1.5; color: var(--lf-ink); display: block; }
+.composer textarea::placeholder { color: var(--lf-ink-3); }
+.cbar { display: flex; align-items: center; gap: 7px; padding-top: 5px; }
+.seg { display: flex; gap: 1px; padding: 2px; border-radius: 8px; background: var(--lf-inset); }
+.seg button { height: 22px; padding: 0 9px; border: 0; border-radius: 6px; background: transparent; color: var(--lf-ink-2); font: inherit; font-size: 10.5px; cursor: pointer; }
+.seg button.is-on { background: oklch(1 0 0 / 0.95); color: var(--lf-ink); font-weight: 600; box-shadow: 0 1px 2px oklch(0.24 0.01 250 / 0.12); }
+.btn-primary { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 11px; border: 0; border-radius: 8px; background: var(--pr-brand-600); color: #fff; font: inherit; font-size: 11px; font-weight: 600; cursor: pointer; transition: transform 140ms cubic-bezier(.34,1.42,.64,1), filter 140ms; }
+.btn-primary:hover { filter: brightness(1.06); }
+.btn-primary:active { transform: scale(0.96); }
+.dropzone { display: flex; align-items: center; justify-content: center; gap: 7px; height: 54px; border-radius: 12px; border: 1px dashed oklch(0.24 0.01 250 / 0.2); background: oklch(1 0 0 / 0.34); color: var(--lf-ink-3); font-size: 11px; text-align: center; padding: 0 12px; transition: background 160ms, border-color 160ms, color 160ms; }
+.dropzone.is-hot { border-color: var(--pr-brand-500); color: var(--pr-brand-700); background: oklch(0.55 0.19 256 / 0.1); }
+
+/* 日历 */
+.cal-wrap { display: grid; grid-template-columns: 1fr 208px; gap: 12px; }
+.cal-head { display: flex; align-items: center; gap: 6px; margin-bottom: 6px; }
+.cal-head .m { font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.cal-head .sp { flex: 1; }
+.cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
+.cal-grid .w { text-align: center; font-size: 9.5px; color: var(--lf-ink-3); padding-bottom: 2px; }
+.day { position: relative; height: 31px; border: 0; border-radius: 8px; background: transparent; color: var(--lf-ink); font: inherit; font-size: 11px; font-variant-numeric: tabular-nums; cursor: pointer; display: grid; place-items: center; transition: background 120ms; }
+.day:hover { background: oklch(1 0 0 / 0.7); }
+.day.is-out { color: oklch(0.72 0 0); }
+.day.is-today { background: var(--pr-brand-600); color: #fff; font-weight: 600; box-shadow: 0 4px 12px oklch(0.55 0.19 256 / 0.35); }
+.day.has::after { content: ""; position: absolute; bottom: 3px; width: 3px; height: 3px; border-radius: 999px; background: var(--pr-brand-500); }
+.day.is-today.has::after { background: #fff; }
+.agenda { border-left: 1px solid var(--lf-hair); padding-left: 12px; }
+.agenda .d { font-size: 10px; color: var(--lf-ink-3); margin-bottom: 6px; }
+.ag { position: relative; padding: 0 0 9px 11px; }
+.ag::before { content: ""; position: absolute; left: 0; top: 5px; width: 5px; height: 5px; border-radius: 999px; background: var(--pr-brand-500); }
+.ag::after { content: ""; position: absolute; left: 2px; top: 13px; bottom: 0; width: 1px; background: var(--lf-hair); }
+.ag:last-child::after { display: none; }
+.ag .tm { font-size: 10px; color: var(--lf-ink-3); font-variant-numeric: tabular-nums; }
+.ag .tt { font-size: 11.5px; line-height: 1.35; }
+.ag.done .tt { color: var(--lf-ink-3); text-decoration: line-through; }
+
+/* 资讯 */
+.feed-wrap { display: grid; grid-template-columns: 1fr 174px; gap: 10px; }
+.f-item { display: grid; grid-template-columns: 17px 1fr auto; gap: 8px; align-items: baseline; padding: 4px 7px; border-radius: 8px; cursor: pointer; transition: background 110ms; }
+.f-item:hover { background: oklch(1 0 0 / 0.62); }
+.f-rank { font-size: 9.5px; color: var(--lf-ink-3); font-variant-numeric: tabular-nums; }
+.f-item:nth-child(-n+3) .f-rank { color: var(--pr-brand-600); font-weight: 700; }
+.f-tt { font-size: 11.5px; line-height: 1.4; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.f-mm { font-size: 9.5px; color: var(--lf-ink-3); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.hot { padding: 6px 8px; display: grid; gap: 6px; }
+.hot-row { display: grid; grid-template-columns: 13px 1fr; gap: 6px; align-items: center; }
+.hot-rank { font-size: 9.5px; color: var(--lf-ink-3); font-variant-numeric: tabular-nums; }
+.hot-tt { font-size: 10.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.hot-bar { margin-top: 3px; height: 3px; border-radius: 2px; background: oklch(0.24 0.01 250 / 0.1); overflow: hidden; }
+.hot-bar span { display: block; height: 100%; border-radius: 2px; background: linear-gradient(90deg, var(--pr-brand-600), var(--pr-brand-400)); }
+
+/* 底部 */
+.foot { display: flex; align-items: center; gap: 8px; margin-top: 10px; padding: 7px 13px; border-top: 1px solid var(--lf-hair); background: oklch(1 0 0 / 0.3); font-size: 10px; color: var(--lf-ink-3); }
+.foot .sp { flex: 1; }
+.foot .go { display: inline-flex; align-items: center; gap: 3px; color: var(--pr-brand-700); font-weight: 600; }
+
+/* 状态区（空 / 载入 / 错误） */
+.states { width: 660px; margin-top: 14px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 9px; }
+.state { border-radius: 14px; background: var(--lf-face); border: 1px solid var(--lf-hair); padding: 10px; box-shadow: inset 0 1px 0 oklch(1 0 0 / 0.6); }
+.state .cap { font-size: 9.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--lf-ink-3); margin-bottom: 8px; }
+.state .h { font-size: 12px; font-weight: 600; margin-bottom: 3px; }
+.state .p { font-size: 10.5px; color: var(--lf-ink-2); line-height: 1.45; }
+.state .act { margin-top: 8px; height: 24px; display: inline-flex; align-items: center; padding: 0 9px; border-radius: 7px; border: 1px solid var(--lf-hair); background: oklch(1 0 0 / 0.8); font-size: 10.5px; color: var(--lf-ink); }
+.sk { height: 9px; border-radius: 4px; background: linear-gradient(90deg, oklch(0.24 0.01 250 / 0.07) 25%, oklch(0.24 0.01 250 / 0.13) 37%, oklch(0.24 0.01 250 / 0.07) 63%); background-size: 400% 100%; animation: sh 1.4s ease-in-out infinite; margin-bottom: 6px; }
+@keyframes sh { 0% { background-position: 100% 0; } 100% { background-position: 0 0; } }
+.err { display: flex; align-items: center; gap: 6px; font-size: 11px; color: oklch(0.47 0.16 27); }
+
+/* 微交互 */
+.micro { width: 660px; margin-top: 14px; padding: 11px 13px; border-radius: 16px; background: oklch(1 0 0 / 0.5); border: 1px solid var(--lf-hair); box-shadow: inset 0 1px 0 oklch(1 0 0 / 0.7); }
+.micro-h { font-size: 9.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--lf-ink-3); margin-bottom: 8px; }
+.micro-row { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
+.m-tile { position: relative; overflow: hidden; width: 100px; padding: 8px 10px; text-align: left; border-radius: 11px; border: 1px solid var(--lf-hair); background: oklch(1 0 0 / 0.8); color: var(--lf-ink); font: inherit; cursor: pointer; transition: transform 220ms cubic-bezier(.34,1.42,.64,1), box-shadow 220ms; }
+.m-tile:hover { transform: translateY(-2px); box-shadow: 0 10px 22px oklch(0.2 0.02 250 / 0.16); }
+.m-tile::after { content: ""; position: absolute; inset: 0; opacity: 0; transition: opacity 200ms; background: radial-gradient(90px circle at var(--mx,50%) var(--my,50%), oklch(0.55 0.19 256 / 0.16), transparent 70%); }
+.m-tile:hover::after { opacity: 1; }
+.m-num { display: block; font-size: 16px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.m-lb { font-size: 9.5px; color: var(--lf-ink-2); }
+.m-seg { position: relative; display: flex; padding: 3px; border-radius: 10px; background: var(--lf-inset); }
+.m-seg button { position: relative; z-index: 1; height: 23px; padding: 0 11px; border: 0; background: transparent; color: var(--lf-ink-2); font: inherit; font-size: 10.5px; cursor: pointer; transition: color 150ms; }
+.m-seg button.is-on { color: var(--lf-ink); font-weight: 600; }
+.m-thumb { position: absolute; top: 3px; left: 3px; height: 23px; width: 30px; border-radius: 7px; background: oklch(1 0 0 / 0.95); box-shadow: 0 1px 2px oklch(0.24 0.01 250 / 0.14); transition: transform 320ms cubic-bezier(.34,1.42,.64,1), width 320ms cubic-bezier(.34,1.42,.64,1); }
+.m-check { display: inline-flex; align-items: center; gap: 6px; height: 25px; padding: 0 9px; border-radius: 8px; border: 1px solid var(--lf-hair); background: oklch(1 0 0 / 0.8); color: var(--lf-ink); font: inherit; font-size: 10.5px; cursor: pointer; transition: background 140ms, color 140ms, border-color 140ms; }
+.m-check[aria-pressed="true"] { background: var(--pr-brand-600); border-color: transparent; color: #fff; }
+.m-btn { height: 25px; padding: 0 11px; border: 0; border-radius: 8px; background: var(--pr-brand-600); color: #fff; font: inherit; font-size: 10.5px; font-weight: 600; cursor: pointer; transition: transform 140ms cubic-bezier(.34,1.42,.64,1), filter 140ms; }
+.m-btn:hover { filter: brightness(1.06); }
+.m-btn:active { transform: scale(0.955); }
+.m-bar { width: 100px; height: 6px; border-radius: 3px; background: oklch(0.24 0.01 250 / 0.12); overflow: hidden; }
+.m-bar span { display: block; height: 100%; border-radius: 3px; background: linear-gradient(90deg, var(--pr-brand-600), var(--pr-brand-400)); transition: width 380ms cubic-bezier(.22,1,.36,1); }
+.m-rows { width: 132px; }
+.m-row { position: relative; padding: 4px 8px; border-radius: 8px; font-size: 10.5px; color: var(--lf-ink-2); cursor: pointer; transition: background 120ms; }
+.m-row:hover { background: oklch(1 0 0 / 0.8); color: var(--lf-ink); }
+.m-row::before { content: ""; position: absolute; left: 0; top: 6px; bottom: 6px; width: 2px; border-radius: 2px; background: var(--pr-brand-500); opacity: 0; transform: translateX(-4px); transition: opacity 170ms, transform 170ms; }
+.m-row:hover::before { opacity: 1; transform: none; }
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7.5"/><path d="m20.5 20.5-4.4-4.4"/></symbol>
+<symbol id="i-todo" viewBox="0 0 24 24"><path d="M3 6.5h11M3 12h9M3 17.5h7"/><path d="m15.5 16.5 2 2 3.5-4"/></symbol>
+<symbol id="i-inbox" viewBox="0 0 24 24"><path d="M4 13h4l1.5 3h5L16 13h4"/><path d="M5.5 5.5h13l2.5 7.5v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4z"/></symbol>
+<symbol id="i-cal" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2.5"/><path d="M8 3v4M16 3v4M3 10h18"/></symbol>
+<symbol id="i-news" viewBox="0 0 24 24"><path d="M4 21h14a2 2 0 0 0 2-2V4a1.5 1.5 0 0 0-1.5-1.5H7.5A1.5 1.5 0 0 0 6 4v15"/><path d="M4 21a2 2 0 0 1-2-2V9h4"/><path d="M9.5 7.5h7M9.5 11h7M9.5 14.5h4"/></symbol>
+<symbol id="i-cog" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.2 5.2l2.1 2.1M16.7 16.7l2.1 2.1M18.8 5.2l-2.1 2.1M7.3 16.7l-2.1 2.1"/></symbol>
+<symbol id="i-chev" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
+<symbol id="i-left" viewBox="0 0 24 24"><path d="m14 6-6 6 6 6"/></symbol>
+<symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+<symbol id="i-check" viewBox="0 0 24 24"><path d="m20 6-11 11-5-5"/></symbol>
+<symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 1.8"/></symbol>
+<symbol id="i-flame" viewBox="0 0 24 24"><path d="M12 2.5c3 3.5 4 6 4 8a4 4 0 0 1-8 0c0-1 .4-2 1-3-1.8 1.6-4 4-4 7.2A7 7 0 0 0 19 15c0-4-3.5-7.5-7-12.5z"/></symbol>
+<symbol id="i-out" viewBox="0 0 24 24"><path d="M9 5h9a2 2 0 0 1 2 2v9"/><path d="M15 15 20 10 15 5"/><path d="M4 20 14.5 9.5"/></symbol>
+<symbol id="i-file" viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></symbol>
+<symbol id="i-flag" viewBox="0 0 24 24"><path d="M5 21V4h9l-1 3h6l-2 5 2 5h-6l1 3"/></symbol>
+<symbol id="i-link" viewBox="0 0 24 24"><path d="M10.5 13.5a4.5 4.5 0 0 0 6.4 0l2.1-2.1a4.5 4.5 0 0 0-6.4-6.4l-1 1"/><path d="M13.5 10.5a4.5 4.5 0 0 0-6.4 0l-2.1 2.1a4.5 4.5 0 0 0 6.4 6.4l1-1"/></symbol>
+</defs></svg>
+<div>
+  <div class="card">
+    <div class="head">
+      <span class="orb"></span>
+      <span class="nm">云台</span>
+      <span class="sep"></span>
+      <span class="st"><span class="dot-ok"></span><b>3</b> 项待办 · <b>2</b> 条待整理</span>
+      <span class="tm">17:15</span>
+      <div class="acts">
+        <button class="icon-btn" title="设置（打开主窗口）"><svg class="ic"><use href="#i-cog"/></svg><svg class="ic out" style="width:8px;height:8px"><use href="#i-out"/></svg></button>
+        <button class="icon-btn" title="收起"><svg class="ic"><use href="#i-chev"/></svg></button>
+      </div>
+    </div>
+
+    <div class="tabs" role="tablist">
+      <button class="tab" role="tab" aria-selected="true" data-panel="search"><svg class="ic"><use href="#i-search"/></svg>搜索</button>
+      <button class="tab" role="tab" aria-selected="false" data-panel="plan"><svg class="ic"><use href="#i-todo"/></svg>计划待办</button>
+      <button class="tab" role="tab" aria-selected="false" data-panel="collect"><svg class="ic"><use href="#i-inbox"/></svg>收集</button>
+      <button class="tab" role="tab" aria-selected="false" data-panel="cal"><svg class="ic"><use href="#i-cal"/></svg>日历</button>
+      <button class="tab" role="tab" aria-selected="false" data-panel="news"><svg class="ic"><use href="#i-news"/></svg>资讯</button>
+    </div>
+
+    <div class="body">
+      <!-- 搜索 -->
+      <section class="panel" data-view="search" style="border:0;background:transparent;box-shadow:none">
+        <div style="display:grid;gap:9px">
+          <div class="field">
+            <svg class="ic" style="color:var(--lf-ink-3)"><use href="#i-search"/></svg>
+            <input placeholder="搜文件、笔记、计划、网站…" value="预算" />
+            <kbd>Ctrl K</kbd>
+          </div>
+          <div class="chips">
+            <button class="chip is-on">全部</button><button class="chip">文件</button><button class="chip">知识</button><button class="chip">计划</button><button class="chip">网站</button>
+          </div>
+          <div class="group-label">文件 · 3</div>
+          <div class="res"><span class="fdot xls"></span><span>2026Q3 <mark>预算</mark>表.xlsx</span><span class="m">D:工作财务</span></div>
+          <div class="res"><span class="fdot pdf"></span><span><mark>预算</mark>评审纪要.pdf</span><span class="m">3 天前</span></div>
+          <div class="res"><span class="fdot xls"></span><span>月度<mark>预算</mark>滚动表.xlsx</span><span class="m">上周</span></div>
+          <div class="group-label">知识 · 2</div>
+          <div class="res"><span class="fdot note"></span><span>把 <mark>预算</mark> 表拆成「月度滚动」的两个坑</span><span class="m">开发经验</span></div>
+          <div class="res"><span class="fdot note"></span><span>Q4 <mark>预算</mark>口径对齐会 · 纪要</span><span class="m">开发配方</span></div>
+          <div class="group-label">计划 · 1</div>
+          <div class="res"><span class="fdot doc"></span><span>对齐 Q4 <mark>预算</mark>口径</span><span class="m">9/2 待办</span></div>
+          <div class="qadd"><svg class="ic sm"><use href="#i-search"/></svg><span>最近搜过：季度报表 / 归档 / 栅栏<span class="k">回车在卡片内展开全部</span></span></div>
+        </div>
+      </section>
+
+      <!-- 计划待办 -->
+      <section class="panel" data-view="plan" hidden style="border:0;background:transparent;box-shadow:none">
+        <div style="display:grid;gap:9px">
+          <div class="stats">
+            <div class="stat"><div class="n">9</div><div class="l">今日合计</div></div>
+            <div class="stat is-brand"><div class="n">6</div><div class="l">待办</div></div>
+            <div class="stat is-warn"><div class="n">1</div><div class="l">逾期</div></div>
+            <div class="stat is-good"><div class="n">3</div><div class="l">已完成</div></div>
+          </div>
+          <div class="panel">
+            <div class="panel-head"><span class="panel-title">今日 · 8/31 周一</span><span class="panel-meta">完成 33% · 剩余 4h20m</span></div>
+            <div class="rows">
+              <div class="row done"><span class="cb on"><svg class="ic"><use href="#i-check"/></svg></span><div class="t"><div class="ti">整理上周归档</div><div class="me"><span>09:10</span><span>工作</span></div></div><span class="pri low"></span></div>
+              <div class="row"><span class="cb"><svg class="ic"><use href="#i-check"/></svg></span><div class="t"><div class="ti">对齐 Q4 预算口径</div><div class="me"><span>14:00</span><span>子 2/3</span><span>财务</span></div></div><span class="pri"></span></div>
+              <div class="row"><span class="cb"><svg class="ic"><use href="#i-check"/></svg></span><div class="t"><div class="ti">评审：文件库行级表迁移</div><div class="me"><span>16:30</span><span>子 1/4</span><span>存储</span></div></div><span class="pri"></span></div>
+              <div class="row"><span class="cb"><svg class="ic"><use href="#i-check"/></svg></span><div class="t"><div class="ti">给「收集」加拖入类型判定</div><div class="me"><span>今天</span><span>设计</span></div></div><span class="pri low"></span></div>
+              <div class="row"><span class="cb"><svg class="ic"><use href="#i-check"/></svg></span><div class="t"><div class="ti">回复 zentao 上的两个问题</div><div class="me"><span class="late">逾期 1 天</span><span>协作</span></div></div><span class="pri"></span></div>
+              <div class="row"><span class="cb"><svg class="ic"><use href="#i-check"/></svg></span><div class="t"><div class="ti">写 docs/dock-capsule.md</div><div class="me"><span>无时间</span><span>文档</span></div></div><span class="pri low"></span></div>
+              <div class="row done"><span class="cb on"><svg class="ic"><use href="#i-check"/></svg></span><div class="t"><div class="ti">站会</div><div class="me"><span>09:30</span><span>例会</span></div></div><span class="pri low"></span></div>
+            </div>
+          </div>
+          <div class="qadd"><svg class="ic sm"><use href="#i-plus"/></svg><span>加一条待办，回车保存<span class="k">支持 14:00 / 明天</span></span></div>
+        </div>
+      </section>
+
+      <!-- 收集 -->
+      <section class="panel" data-view="collect" hidden style="border:0;background:transparent;box-shadow:none">
+        <div style="display:grid;gap:9px">
+          <div class="composer">
+            <textarea placeholder="记点什么，或把文件 / 截图 / 网页拖进来…"></textarea>
+            <div class="cbar">
+              <div class="seg"><button class="is-on">笔记</button><button>链接</button><button>文件</button></div>
+              <button class="btn-primary">收进收集箱 <kbd style="border-color:oklch(1 0 0 / .3);color:oklch(1 0 0 / .8);background:transparent">Ctrl ↵</kbd></button>
+            </div>
+          </div>
+          <div class="dropzone" data-drop><svg class="ic"><use href="#i-inbox"/></svg>拖入即收纳 · 按扩展名落到「文件」，网址落到「链接」</div>
+          <div class="panel">
+            <div class="panel-head"><span class="panel-title">待整理 · 2</span><span class="panel-meta">共 6 条</span></div>
+            <div class="rows">
+              <div class="row"><span class="fdot note"></span><div class="t"><div class="ti">窗口透明 + 圆角白边：圆角必须裁在根节点</div><div class="me"><span>2 分钟前</span><span>笔记</span></div></div><span class="pri low"></span></div>
+              <div class="row"><span class="fdot img"></span><div class="t"><div class="ti">截图 2026-08-31 171512.png</div><div class="me"><span>今天 17:15</span><span>图片</span></div></div><span class="pri low"></span></div>
+            </div>
+          </div>
+          <div class="panel">
+            <div class="panel-head"><span class="panel-title">最近收集</span><span class="panel-meta">4 条</span></div>
+            <div class="rows">
+              <div class="row"><span class="fdot pdf"></span><div class="t"><div class="ti">dsh-orb 可行性分析.pdf</div><div class="me"><span>昨天</span><span>文件</span></div></div><span class="pri low"></span></div>
+              <div class="row"><span class="fdot note"></span><div class="t"><div class="ti">浅色磨砂的三层材质怎么分</div><div class="me"><span>昨天</span><span>笔记</span></div></div><span class="pri low"></span></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 日历 -->
+      <section class="panel" data-view="cal" hidden style="border:0;background:transparent;box-shadow:none">
+        <div class="panel">
+          <div class="panel-head"><span class="panel-title">日历</span><span class="panel-meta">3 项安排 · 2 个计划日</span></div>
+          <div class="cal-wrap" style="padding:8px 10px">
+            <div>
+              <div class="cal-head">
+                <button class="icon-btn" style="width:22px;height:22px"><svg class="ic sm"><use href="#i-left"/></svg></button>
+                <span class="m">2026 年 8 月</span>
+                <span class="sp"></span>
+                <button class="chip" style="height:21px">今天</button>
+              </div>
+              <div class="cal-grid">
+                <span class="w">一</span><span class="w">二</span><span class="w">三</span><span class="w">四</span><span class="w">五</span><span class="w">六</span><span class="w">日</span>
+                <button class="day is-out">27</button><button class="day is-out">28</button><button class="day is-out">29</button><button class="day is-out">30</button><button class="day is-out">31</button><button class="day has">1</button><button class="day">2</button>
+                <button class="day">3</button><button class="day has">4</button><button class="day">5</button><button class="day">6</button><button class="day has">7</button><button class="day">8</button><button class="day">9</button>
+                <button class="day">10</button><button class="day has">11</button><button class="day">12</button><button class="day">13</button><button class="day has">14</button><button class="day">15</button><button class="day">16</button>
+                <button class="day">17</button><button class="day">18</button><button class="day has">19</button><button class="day">20</button><button class="day">21</button><button class="day">22</button><button class="day">23</button>
+                <button class="day">24</button><button class="day has">25</button><button class="day">26</button><button class="day">27</button><button class="day has">28</button><button class="day">29</button><button class="day">30</button>
+                <button class="day is-today has">31</button><button class="day is-out">1</button><button class="day is-out">2</button><button class="day is-out">3</button><button class="day is-out">4</button><button class="day is-out">5</button><button class="day is-out">6</button>
+              </div>
+            </div>
+            <div class="agenda">
+              <div class="d">8 月 31 日 · 周一</div>
+              <div class="ag done"><div class="tm">09:30</div><div class="tt">站会</div></div>
+              <div class="ag"><div class="tm">14:00</div><div class="tt">对齐 Q4 预算口径</div></div>
+              <div class="ag"><div class="tm">16:30</div><div class="tt">评审：行级表迁移</div></div>
+              <div class="ag"><div class="tm">20:00</div><div class="tt">归档今日计划</div></div>
+            </div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><span class="panel-title">本周要点</span><span class="panel-meta">3 项</span></div>
+          <div class="rows">
+            <div class="row"><span class="fdot note"></span><div class="t"><div class="ti">周三前交月度滚动预算</div><div class="me"><span>9/2</span><span>财务</span></div></div><span class="pri"></span></div>
+            <div class="row"><span class="fdot note"></span><div class="t"><div class="ti">周五发 v2 视觉稿</div><div class="me"><span>9/4</span><span>设计</span></div></div><span class="pri low"></span></div>
+            <div class="row"><span class="fdot note"></span><div class="t"><div class="ti">月末归档 + 备份 U 盘</div><div class="me"><span>9/6</span><span>运维</span></div></div><span class="pri low"></span></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 资讯 -->
+      <section class="panel" data-view="news" hidden style="border:0;background:transparent;box-shadow:none">
+        <div class="panel">
+          <div class="panel-head"><span class="panel-title">资讯</span><span class="panel-meta">更新 17:10 · 82 条</span></div>
+          <div class="feed-wrap" style="padding:6px">
+            <div>
+              <div class="f-item"><span class="f-rank">01</span><span class="f-tt">DeepSeek Harness 0.2.1 发布：插件协议与沙箱策略变更</span><span class="f-mm">V2EX 12m</span></div>
+              <div class="f-item"><span class="f-rank">02</span><span class="f-tt">Tauri 2.5：多窗口透明与 DWM 材质的新接口</span><span class="f-mm">GitHub 40m</span></div>
+              <div class="f-item"><span class="f-rank">03</span><span class="f-tt">为什么玻璃拟态在 WebView2 里糊不动桌面</span><span class="f-mm">少数派 1h</span></div>
+              <div class="f-item"><span class="f-rank">04</span><span class="f-tt">行级表 vs 整份 JSON：桌面应用本地存储实测</span><span class="f-mm">掘金 2h</span></div>
+              <div class="f-item"><span class="f-rank">05</span><span class="f-tt">灵动岛式交互在 Windows 上的五个坑</span><span class="f-mm">知乎 3h</span></div>
+              <div class="f-item"><span class="f-rank">06</span><span class="f-tt">Rust 1.90：async closures 进入稳定通道</span><span class="f-mm">官方 4h</span></div>
+              <div class="f-item"><span class="f-rank">07</span><span class="f-tt">Obsidian 1.11 数据库视图与属性面板</span><span class="f-mm">官方 5h</span></div>
+            </div>
+            <div class="hot">
+              <div class="hot-row"><span class="hot-rank">1</span><div><div class="hot-tt">大模型价格战</div><div class="hot-bar"><span style="width:92%"></span></div></div></div>
+              <div class="hot-row"><span class="hot-rank">2</span><div><div class="hot-tt">Win11 液态玻璃</div><div class="hot-bar"><span style="width:78%"></span></div></div></div>
+              <div class="hot-row"><span class="hot-rank">3</span><div><div class="hot-tt">Rust 重写桌面端</div><div class="hot-bar"><span style="width:64%"></span></div></div></div>
+              <div class="hot-row"><span class="hot-rank">4</span><div><div class="hot-tt">RSC 之争</div><div class="hot-bar"><span style="width:52%"></span></div></div></div>
+              <div class="hot-row"><span class="hot-rank">5</span><div><div class="hot-tt">本地优先回潮</div><div class="hot-bar"><span style="width:41%"></span></div></div></div>
+            </div>
+          </div>
+        </div>
+        <div class="panel">
+          <div class="panel-head"><span class="panel-title">稍后读</span><span class="panel-meta">3 条 · 共 12 分钟</span></div>
+          <div class="rows">
+            <div class="row"><span class="fdot note"></span><div class="t"><div class="ti">桌面应用的 60fps：合成层与 backdrop-filter</div><div class="me"><span>web.dev</span><span>6 分钟</span></div></div><span class="pri low"></span></div>
+            <div class="row"><span class="fdot note"></span><div class="t"><div class="ti">SQLite 行级存储的迁移姿势</div><div class="me"><span>掘金</span><span>4 分钟</span></div></div><span class="pri low"></span></div>
+            <div class="row"><span class="fdot note"></span><div class="t"><div class="ti">pnpm 11 的 minimumReleaseAge</div><div class="me"><span>npm</span><span>2 分钟</span></div></div><span class="pri low"></span></div>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <div class="foot">
+      <span>9 项待办 · 收集箱 2 条</span>
+      <span class="sp"></span>
+      <kbd>Ctrl K</kbd> 搜索 · <kbd>Esc</kbd> 收起
+      <span class="go">设置<svg class="ic sm"><use href="#i-out"/></svg></span>
+    </div>
+  </div>
+
+  <section class="states">
+    <div class="state"><div class="cap">空态</div><div class="h">今天还没有计划</div><div class="p">从模板生成，或加一条。</div><div class="act">用模板生成</div></div>
+    <div class="state"><div class="cap">载入态</div><div class="sk" style="width:80%"></div><div class="sk" style="width:95%"></div><div class="sk" style="width:62%"></div><div class="p" style="margin-top:6px">正在读 plans.json</div></div>
+    <div class="state"><div class="cap">错误态</div><div class="err"><svg class="ic sm"><use href="#i-flag"/></svg>数据目录不可写</div><div class="p" style="margin-top:4px">换一个数据目录，或检查磁盘权限。</div><div class="act">打开设置</div></div>
+  </section>
+
+  
+<section class="micro">
+  <div class="micro-h">微交互（可点，浅色版同一套曲线）</div>
+  <div class="micro-row">
+    <button class="m-tile" data-glow><span class="m-num">24</span><span class="m-lb">光斑跟随</span></button>
+    <div class="m-seg" data-seg><span class="m-thumb"></span><button class="is-on">日</button><button>周</button><button>月</button></div>
+    <button class="m-check" aria-pressed="false"><svg class="ic"><use href="#i-check"/></svg><span>勾选描边</span></button>
+    <button class="m-btn">按压回弹</button>
+    <div class="m-bar"><span style="width:64%"></span></div>
+    <div class="m-rows"><div class="m-row">hover 指示条</div></div>
+  </div>
+</section>
+</div>
+<script>
+  document.querySelectorAll(".tab").forEach(function (t) {
+    t.addEventListener("click", function () {
+      document.querySelectorAll(".tab").forEach(function (x) { x.setAttribute("aria-selected", String(x === t)); });
+      document.querySelectorAll("[data-view]").forEach(function (v) { v.hidden = v.dataset.view !== t.dataset.panel; });
+    });
+  });
+  document.querySelectorAll(".row").forEach(function (r) {
+    r.addEventListener("click", function (e) {
+      var cb = e.target.closest(".cb");
+      if (cb) { cb.classList.toggle("on"); return; }
+      r.classList.toggle("done");
+    });
+  });
+  document.querySelectorAll("[data-glow], .m-tile").forEach(function (el) {
+    el.addEventListener("pointermove", function (e) {
+      var b = el.getBoundingClientRect();
+      el.style.setProperty("--mx", (e.clientX - b.left) + "px");
+      el.style.setProperty("--my", (e.clientY - b.top) + "px");
+    });
+  });
+  var seg = document.querySelector("[data-seg]");
+  if (seg) {
+    var thumb = seg.querySelector(".m-thumb");
+    seg.querySelectorAll("button").forEach(function (b) {
+      b.addEventListener("click", function () {
+        seg.querySelectorAll("button").forEach(function (x) { x.classList.toggle("is-on", x === b); });
+        thumb.style.width = b.offsetWidth + "px";
+        thumb.style.transform = "translateX(" + (b.offsetLeft - 3) + "px)";
+      });
+    });
+  }
+  var mc = document.querySelector(".m-check");
+  if (mc) mc.addEventListener("click", function () { mc.setAttribute("aria-pressed", mc.getAttribute("aria-pressed") === "true" ? "false" : "true"); });
+  var bar = document.querySelector(".m-bar span");
+  if (bar) setInterval(function () { bar.style.width = (35 + Math.random() * 60) + "%"; }, 2600);
+  var dz = document.querySelector("[data-drop]");
+  if (dz) { ["dragenter","dragover"].forEach(function (e) { dz.addEventListener(e, function (ev) { ev.preventDefault(); dz.classList.add("is-hot"); }); });
+    ["dragleave","drop"].forEach(function (e) { dz.addEventListener(e, function () { dz.classList.remove("is-hot"); }); }); }
+</script>
+</body>
+</html>
