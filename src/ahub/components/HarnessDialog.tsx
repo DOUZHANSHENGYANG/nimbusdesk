@@ -155,14 +155,17 @@ export function HarnessDialog({
     try {
       const rs = await api.scanHarnesses();
       setReports(rs);
-      if (kind === "mcp") {
-        // 默认全选扫描到的全部 MCP
-        const init: Record<string, Set<string>> = {};
-        rs.forEach((r) => {
-          if (r.mcpServers.length) init[r.id] = new Set(r.mcpServers.map((x) => x.name));
-        });
-        setCollectSel(init);
-      }
+      /*
+       * 默认全选扫描到的全部条目 —— MCP 与 skills 一视同仁。
+       * 之前只有 MCP 这么做，skills 打开是一片空勾选，用户得手点
+       * 「一键收集全部」，于是感觉「第一次打开没激活」。
+       */
+      const init: Record<string, Set<string>> = {};
+      rs.forEach((r) => {
+        const names = kind === "mcp" ? r.mcpServers.map((x) => x.name) : r.skills.map((x) => x.name);
+        if (names.length) init[r.id] = new Set(names);
+      });
+      if (Object.keys(init).length) setCollectSel(init);
     } catch (e) {
       toast.error(String(e));
     } finally {
