@@ -4,9 +4,9 @@
   "version": "0.1.0",
   "identifier": "com.nimbusdesk.app",
   "build": {
-    "beforeDevCommand": "pnpm dev",
+    "beforeDevCommand": "npm run dev",
     "devUrl": "http://127.0.0.1:17800",
-    "beforeBuildCommand": "pnpm build",
+    "beforeBuildCommand": "npm run build",
     "frontendDist": "../dist"
   },
   "app": {
