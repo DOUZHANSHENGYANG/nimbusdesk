@@ -28,8 +28,9 @@
     "check:home": "node --test src/features/home/overview-core.test.mjs",
     "check:ahub": "node --test src/ahub/lib/skill-drop.test.mjs",
     "check:desktop": "node --test src/features/files/desktop.test.mjs src/features/files/fence-edge.test.mjs src/features/desktop/edge-core.test.mjs src/features/files/fence-interaction.test.mjs src/features/files/menu-popup-interaction.test.mjs src/features/desktop/queue-core.test.mjs src/features/desktop/queue-registry.test.mjs src/features/desktop/edge-runtime-core.test.mjs src/features/desktop/edge-runtime.test.mjs src/features/desktop/edge-dock.test.mjs src/features/files/import-files.test.mjs src/features/files/use-file-drop.test.mjs src/features/files/desktop-actions.test.mjs src/features/files/fence-presentation.test.mjs src/features/desktop/sticky-presentation.test.mjs src/features/files/directory-mapping-core.test.mjs src/features/files/directory-mapping.test.mjs",
-    "check:incremental": "node --test src/lib/incremental.test.mjs",
-    "check:files-list": "node scripts/check-files-list-browser.mjs"
+    "check:incremental": "node --test src/lib/incremental.test.mjs src/lib/visibility.test.mjs",
+    "check:files-list": "node scripts/check-files-list-browser.mjs",
+    "check:visibility": "node scripts/check-visibility-browser.mjs"
   },
   "dependencies": {
     "@ai-sdk/openai-compatible": "3.0.75",

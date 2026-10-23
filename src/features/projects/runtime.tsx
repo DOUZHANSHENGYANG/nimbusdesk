@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { startForegroundInterval } from "@/lib/visibility";
 import { toast } from "sonner";
 import { useProjects } from "./store";
 import { createProjectReminderRunner } from "./runtime-core";
@@ -29,9 +30,9 @@ export function ProjectRuntime() {
     let stopped = false;
     const run = () => { if (!stopped && useProjects.persist.hasHydrated()) void tick().catch(error => toast.error(String(error))); };
     const unsubscribe = useProjects.persist.onFinishHydration(run);
-    run(); const timer = window.setInterval(run, 30_000);
+    run(); const stop = startForegroundInterval(run, 30_000, { catchUp: false });
     window.addEventListener("focus", run); document.addEventListener("visibilitychange", run);
-    return () => { stopped = true; unsubscribe(); clearInterval(timer); window.removeEventListener("focus", run); document.removeEventListener("visibilitychange", run); };
+    return () => { stopped = true; unsubscribe(); stop(); window.removeEventListener("focus", run); document.removeEventListener("visibilitychange", run); };
   }, []);
   return null;
 }

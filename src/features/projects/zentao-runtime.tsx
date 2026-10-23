@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { startForegroundInterval } from "@/lib/visibility";
 import { useZentao } from "./zentao-store";
 import { useProjects } from "./store";
 import { usePlans, usePlansArchive } from "../plans/store";
@@ -19,9 +20,9 @@ export function ZentaoRuntime() {
       }
     };
     const unsubscribers = [useZentao, useProjects, usePlans, usePlansArchive].map(s => s.persist.onFinishHydration(tick));
-    const unsubscribe = useZentao.subscribe(tick), timer = setInterval(tick, 30_000);
+    const unsubscribe = useZentao.subscribe(tick), stop = startForegroundInterval(tick, 30_000, { catchUp: false });
     window.addEventListener("focus", tick); tick();
-    return () => { clearInterval(timer); unsubscribe(); unsubscribers.forEach(fn => fn()); window.removeEventListener("focus", tick); };
+    return () => { stop(); unsubscribe(); unsubscribers.forEach(fn => fn()); window.removeEventListener("focus", tick); };
   }, []);
   return null;
 }

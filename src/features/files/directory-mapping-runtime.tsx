@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { startForegroundInterval } from "@/lib/visibility";
 import { inTauri } from "@/lib/tauri";
 import { useFiles } from "@/stores/files";
 import { refreshMappedCategory } from "./directory-mapping";
@@ -24,13 +25,13 @@ export function startDirectoryMappingRuntime(): () => void {
   };
   const unsubscribe = useFiles.subscribe(() => inspect());
   const unhydrate = useFiles.persist.onFinishHydration(() => inspect());
-  const interval = setInterval(() => inspect(true), DIRECTORY_MAPPING_INTERVAL_MS);
+  const interval = startForegroundInterval(() => inspect(true), DIRECTORY_MAPPING_INTERVAL_MS, { catchUp: false });
   const focus = () => inspect(true);
   if (typeof window !== "undefined") window.addEventListener("focus", focus);
   inspect();
   return () => {
     stopped = true;
-    clearInterval(interval);
+    interval();
     unsubscribe();
     unhydrate();
     if (typeof window !== "undefined") window.removeEventListener("focus", focus);

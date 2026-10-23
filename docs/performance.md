@@ -80,6 +80,28 @@ react-i18next 缺键**不报错**，只把 key 原样画在界面上 —— 词�
 回归：`npm run check:files-list`（需要 `npm run dev`）—— 塞 800 条，断言首屏远小于总数、
 反复滚到底能铺满、全程无报错。
 
+### 轮询只在窗口可见时跑
+
+`src/lib/visibility.ts` 提供一个受前台门控的轮询 `startForegroundInterval(run, ms, opts)`：
+定时器照常按节奏走，但 `document.visibilityState === "hidden"`（最小化 / 被完全遮住）时
+**跳过干活**，回到前台立刻补一拍。
+
+口径要注意：`hidden` 是「这个窗口看不见」，不是「失焦」。切到别的应用但窗口还在屏幕上时
+仍是 `visible` —— 暂停的只是用户根本看不见的那种。
+
+已接入的 7 处（都是纯刷新，不可见时问了也没人看）：搜索状态 ×2、应用索引状态、Everything 探测、
+目录映射的 5 秒目录扫描、项目 tick、禅道同步检查。后四个自己已经挂了 `focus`/`visibilitychange`
+监听，所以传 `catchUp: false`，免得同一件事做两遍。
+
+**刻意没接的三类**（写进代码注释了，别顺手改）：
+
+- 边缘坞 / 显示器的 2.5 秒轮询：它就是靠轮询感知鼠标贴边的，窗口不可见时最需要它；
+- 桌面便签的提醒调度：不可见也必须按时触发；
+- GitHub 设备码登录轮询：用户正是要切到浏览器去授权，此时本窗口不可见。
+
+回归：`npm run check:visibility`（需要构建产物 + preview）—— 把文档标成 hidden，断言
+`search_status` 在 4.2 秒内一次都不再出现；恢复 visible 后 600 毫秒内补上一拍。
+
 ## 怎么验
 
 ```powershell
@@ -87,11 +109,16 @@ npm run build                 # 出产物
 npm run check:bundle          # 入口闭包体积 + AI SDK 是否漏进首屏
 npx vite preview --port 4179 --strictPort
 npm run check:split           # 在产物上验：首页不背对话页、/agent 与 /plans 各自按需到达
+npm run check:visibility      # 在产物上验：不可见时轮询停手、回前台补一拍
 ```
 
-`check:split` 在普通浏览器里跑，桩了一个最小 `__TAURI_INTERNALS__`（IPC 一律返回空），
-所以它只回答「chunk 该不该来、页面该不该渲染」；业务行为仍由 `src/features/*/fixtures` 那套
-夹具负责。桩自身造成的报错（事件解绑、命令返回 null 后读属性）在脚本里显式豁免。
+另外两个要 dev server 的：`npm run check:files-list`（800 条分片渲染）、
+以及既有的 `scripts/check-*-browser.mjs`（业务夹具）。
+
+`check:split` / `check:visibility` 在普通浏览器里跑，桩了一个最小 `__TAURI_INTERNALS__`
+（IPC 一律返回空），所以它们只回答「chunk 该不该来、页面该不该渲染、轮询该不该跑」；
+业务行为仍由 `src/features/*/fixtures` 那套夹具负责。桩自身造成的报错（事件解绑、
+命令返回 null 后读属性）在脚本里显式豁免。
 
 ## 还没做的（下一步）
 
@@ -101,8 +128,5 @@ npm run check:split           # 在产物上验：首页不背对话页、/agent
   初始状态可以再分一层，让「只显示一个便签」的窗口只加载它要的 store。
 - **页面内部的重量**：文件页（1228 行 + 拖放 + 栅栏）、知识库页本身还没做内部懒加载。
   长列表已分片（见上），但知识库以外的深列表（比如设置里的技能/提示词长表）还没接。
-- **后台轮询**：13 处 `setInterval`（边缘坞 2.5 s、搜索 3 s、目录映射 5 s、知识 20 s、项目/禅道 30 s）
-  在窗口不可见时照常跑，可按 `document.visibilityState` 暂停 —— 但边缘坞那类「靠轮询感知鼠标贴边」
-  的不能盲停，要逐个甄别。
-- **存储层写放大**：19 个 persist store 每个都是整份 JSON 重写（IPC + 250 ms 防抖），
+- **存储层写放大**（接下来要做）：19 个 persist store 每个都是整份 JSON 重写（IPC + 250 ms 防抖），
   `plans` 还要和 `plans-archive` 成对写；数据一多，改一个字段就是一次全量序列化。

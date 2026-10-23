@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { startForegroundInterval } from "@/lib/visibility";
 import { useTranslation } from "react-i18next";
 import { Search, ExternalLink, RefreshCw, CheckCircle2, Circle, FolderPlus, X, Pause, Play, FileSearch } from "lucide-react";
 import { openUrl } from "@tauri-apps/plugin-opener";
@@ -40,13 +41,15 @@ export function SearchSettings() {
   }, [hydrated, settings.everythingPath, settings.everythingInstance]);
   useEffect(() => {
     const update = () => { void updateSearchStatus().catch(() => undefined); };
-    update(); const timer = setInterval(update, 3000);
-    return () => clearInterval(timer);
+    update();
+    // 设置页开着时轮询索引状态；窗口不可见就问不着了，切回来自动补一拍
+    return startForegroundInterval(update, 3000);
   }, []);
   useEffect(() => {
     if (!hydrated || dirty || action !== null || everything?.state !== "indexing") return;
     let active = true, pending = false;
-    const timer = setInterval(() => {
+    // 索引进行中才轮询 Everything 的探测；窗口不可见时停手，切回来补一拍
+    const stop = startForegroundInterval(() => {
       if (pending) return;
       pending = true;
       const ticket = probeRevision.current;
@@ -54,7 +57,7 @@ export function SearchSettings() {
         if (active && ticket === probeRevision.current) setEverything(value);
       }).catch(() => undefined).finally(() => { pending = false; });
     }, 3000);
-    return () => { active = false; clearInterval(timer); };
+    return () => { active = false; stop(); };
   }, [hydrated, dirty, action, everything?.state, settings.everythingPath, settings.everythingInstance]);
   async function loadDefaults() {
     try { setDefaults(await searchDocumentDefaults()); setDefaultsError(""); }

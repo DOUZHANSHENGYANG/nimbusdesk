@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { startForegroundInterval } from "@/lib/visibility";
 import { listen } from "@tauri-apps/api/event";
 import { AppWindow, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -12,9 +13,11 @@ export function SearchAppsSettings({ en }: { en: boolean }) {
   useEffect(() => {
     active.current = true;
     const update = () => { void searchAppsStatus().then(value => { if (active.current) { setStatus(value); setError(""); } }).catch(error => { if (active.current) setError(String(error)); }); };
-    update(); const timer = setInterval(update, 3000);
+    update();
+    // 应用索引状态：窗口不可见时不问，切回来再补
+    const stop = startForegroundInterval(update, 3000);
     const subscription = inTauri ? listen<SearchAppsStatus>("search://apps-status", event => setStatus(event.payload)) : null;
-    return () => { active.current = false; clearInterval(timer); void subscription?.then(stop => stop()).catch(() => undefined); };
+    return () => { active.current = false; stop(); void subscription?.then(unlisten => unlisten()).catch(() => undefined); };
   }, []);
   async function refresh() {
     setRefreshing(true); setError("");

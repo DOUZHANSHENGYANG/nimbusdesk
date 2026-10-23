@@ -123,14 +123,21 @@ test('background scans have at most two native calls active; an offline root can
 
 test('runtime waits for hydration, observes new mappings, polls and releases timers/subscriptions', async () => {
   let hydrated = false, hydrate, listener, interval, cleared = false, unsubscribed = false;
+  const polls = [];
   let categories = [{ id: 'legacy', dir: 'D:\\Legacy' }, category('a')];
   const calls = [];
   const useFiles = { getState: () => ({ categories }), subscribe: fn => { listener = fn; return () => { unsubscribed = true; }; },
     persist: { hasHydrated: () => hydrated, onFinishHydration: fn => { hydrate = fn; return () => {}; } } };
+  // 前台门控本身由 src/lib/visibility.test.mjs 覆盖；这里只验「运行时装了轮询、并能拆干净」，
+  // 所以把 startForegroundInterval 换成一个能手动打拍子的替身。
   const runtime = load('./directory-mapping-runtime.tsx', { '@/stores/files': { useFiles }, '@/lib/tauri': { inTauri: true },
-    './directory-mapping': { refreshMappedCategory: async id => { calls.push(id); } } }, { setInterval: fn => { interval = fn; return 7; }, clearInterval: id => { cleared = id === 7; } });
+    '@/lib/visibility': { startForegroundInterval: (run, ms, options) => { polls.push({ ms, options }); interval = run; return () => { cleared = true; }; } },
+    './directory-mapping': { refreshMappedCategory: async id => { calls.push(id); } } });
   assert.equal(typeof runtime.startDirectoryMappingRuntime, 'function');
   const stop = runtime.startDirectoryMappingRuntime();
+  assert.equal(polls.length, 1, '启动时应注册一次轮询');
+  assert.equal(polls[0].ms, runtime.DIRECTORY_MAPPING_INTERVAL_MS);
+  assert.equal(polls[0].options.catchUp, false, '运行时自己挂了 focus 监听，不该再让轮询补拍');
   assert.deepEqual(calls, []);
   hydrated = true; hydrate();
   assert.deepEqual(calls, ['a']);

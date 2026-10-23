@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
+import { startForegroundInterval } from "@/lib/visibility";
 import { I18nextProvider, useTranslation } from "react-i18next";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
@@ -159,7 +160,7 @@ function SearchSurface() {
     };
     focus(); window.addEventListener("focus", focus);
     window.addEventListener("blur", blur);
-    const timer = setInterval(update, 3000);
+    const stopStatusPoll = startForegroundInterval(update, 3000);
     const statusSub = inTauri ? listen<SearchStatus>("search://status", event => useSearchStore.setState({ status: event.payload })) : null;
     const focusSub = inTauri ? listen("search://focus", focus) : null;
     const homeSub = inTauri ? listen("search://home", () => void loadHome()) : null;
@@ -168,7 +169,7 @@ function SearchSurface() {
       if (payload.key !== "search-settings") return;
       resultsCurrent.current = false; gate.current.invalidate(); setReply(null); setHome({ pinned: [], recent: [] }); setHomeReady(false); previewRevision.current++; setPreview(null); setSettingsRevision(value => value + 1); void loadHome();
     }) : null;
-    return () => { homeRevision.current++; window.removeEventListener("focus", focus); window.removeEventListener("blur", blur); clearTimeout(blurTimer); clearInterval(timer); for (const sub of [statusSub, focusSub, homeSub, appsSub, settingsSub]) void sub?.then(stop => stop()).catch(() => undefined); };
+    return () => { homeRevision.current++; window.removeEventListener("focus", focus); window.removeEventListener("blur", blur); clearTimeout(blurTimer); stopStatusPoll(); for (const sub of [statusSub, focusSub, homeSub, appsSub, settingsSub]) void sub?.then(stop => stop()).catch(() => undefined); };
   }, []);
   useEffect(() => { list.current?.querySelector(`[data-search-index="${selected}"]`)?.scrollIntoView({ block: "nearest" }); }, [selected]);
   async function hide() { if (inTauri) await getCurrentWebviewWindow().hide().catch(error => setFailure(String(error))); }
