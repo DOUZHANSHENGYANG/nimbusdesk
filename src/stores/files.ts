@@ -10,10 +10,19 @@ import { normalizedMappingPath, reconcileDirectoryItems } from "@/features/files
 
 export type ItemType = "folder" | "file" | "url";
 
+/**
+ * 收纳盒的三种语义：
+ *  - shortcut：只存引用（文件 / 文件夹 / .lnk / 网址），原文件不动
+ *  - storage ：把文件移动进应用自己的 stash，条目指向副本
+ *  - mapped  ：指向一个真实文件夹，内容由目录扫描生成（即 syncDir）
+ */
+export type CategoryKind = "shortcut" | "storage" | "mapped";
 export interface FileCategory {
   id: string;
   name: string;
   createdAt: number;
+  /** 缺省按老数据推导：有 syncDir 视为 mapped，否则 shortcut（见 categoryKind） */
+  kind?: CategoryKind;
   /** 绑定的真实磁盘目录：右键「新建文件/文件夹」在此目录中创建 */
   dir?: string;
   /** Opt-in live folder mapping. A legacy dir alone is only a creation destination. */
@@ -26,6 +35,17 @@ export interface FileCategory {
   updatedAt?: number;
 }
 
+/**
+ * 分类的真实语义。
+ *
+ * 老数据没有 kind 字段：syncDir（联动目录）是 mapped 的旧写法，其余一律
+ * shortcut。不在读取时回写 —— 推导是纯函数、零风险；等用户真正编辑分类
+ * 时再把 kind 落盘。
+ */
+export function categoryKind(category: Pick<FileCategory, "kind" | "syncDir">): CategoryKind {
+  if (category.kind) return category.kind;
+  return category.syncDir ? "mapped" : "shortcut";
+}
 /** 顶级分类按展示顺序排列：sortOrder 升序，缺省按创建时间兜底（兼容旧数据） */
 export function sortedTopCategories(categories: FileCategory[]): FileCategory[] {
   return categories
@@ -56,7 +76,7 @@ interface FilesState {
   categories: FileCategory[];
   items: FileItem[];
   /** 新建分类；parentId 给定时建为子分类 */
-  addCategory: (name: string, parentId?: string) => string;
+  addCategory: (name: string, parentId?: string, kind?: CategoryKind) => string;
   renameCategory: (id: string, name: string) => void;
   removeCategory: (id: string) => void;
   /** 把分类移到另一个父分类下（null = 提升为顶级） */
@@ -131,7 +151,7 @@ export const useFiles = create<FilesState>()(
         return { items, categories };
       }),
 
-      addCategory: (name, parentId) => {
+      addCategory: (name, parentId, kind) => {
         const clean = name.trim();
         // 同名防重：同一层级内已存在（忽略大小写）直接返回既有 id
         const dup = get().categories.find(
@@ -144,7 +164,7 @@ export const useFiles = create<FilesState>()(
         set((s) => ({
           categories: [
             ...s.categories,
-            { id, name: clean, createdAt: Date.now(), updatedAt: Date.now(), parentId,
+            { id, name: clean, kind: kind ?? "shortcut", createdAt: Date.now(), updatedAt: Date.now(), parentId,
               ...(parentId ? {} : { sortOrder: sortedTopCategories(s.categories).length }) },
           ],
         }));
