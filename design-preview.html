@@ -88,6 +88,19 @@
   --pr-mat-hairline: oklch(0.2 0 0 / 0.1); /* 发丝线 */
 
   /*
+   * Material · Dock（悬浮层专用，2026-10-31）
+   *
+   * 为什么不用 --pr-mat-glass：那套玻璃是「浮在应用内内容面之上」的，
+   * 深色只有 8.5% 白。Dock 浮在**桌面壁纸**上，壁纸不可控 —— 一张雪山
+   * 就会从正文底下透出来。所以悬浮层要自己的一档：实底 + 一层薄玻璃。
+   * 三档：窗（卡片底）/ 面（面板、统计块）/ 内嵌（分段槽、输入）。
+   */
+  --pr-mat-dock-fill: oklch(1 0 0 / 0.84); /* 窗：浅色近白，底下的壁纸只留一点气息 */
+  --pr-mat-dock-face: oklch(1 0 0 / 0.56); /* 面：面板与统计块 */
+  --pr-mat-dock-inset: oklch(0.24 0.01 250 / 0.045); /* 内嵌：凹槽 */
+  --pr-mat-dock-edge: oklch(1 0 0 / 0.75); /* 边缘高光：浮起的那一圈 */
+
+  /*
    * Status · 状态色
    * 分浅/深两档：浅色模式下用 -600（足够暗），深色模式下用 -400（足够亮）。
    * 同色相不同明度，而不是两套色相 —— 这样语义色在两种主题里是「同一个颜色」。
@@ -269,6 +282,11 @@
   --glass-strong: var(--pr-mat-glass-strong);
   --glass-edge: var(--pr-mat-glass-edge);
   --hairline: var(--pr-mat-hairline);
+  /* 悬浮层（Dock）：与上面三件套分开命名，避免「应用内玻璃」再被拿去糊桌面 */
+  --dock-fill: var(--pr-mat-dock-fill);
+  --dock-face: var(--pr-mat-dock-face);
+  --dock-inset: var(--pr-mat-dock-inset);
+  --dock-edge: var(--pr-mat-dock-edge);
 
   --chart-1: var(--pr-brand-600);
   --chart-2: var(--pr-green-600);
@@ -296,6 +314,10 @@ html[data-theme="dark"] {
   --pr-mat-glass-strong: oklch(1 0 0 / 0.14);
   --pr-mat-glass-edge: oklch(1 0 0 / 0.14);
   --pr-mat-hairline: oklch(1 0 0 / 0.11);
+  --pr-mat-dock-fill: oklch(0.246 0.01 252 / 0.95);
+  --pr-mat-dock-face: oklch(0.29 0.011 252 / 0.97);
+  --pr-mat-dock-inset: oklch(0 0 0 / 0.22);
+  --pr-mat-dock-edge: oklch(1 0 0 / 0.14);
 
   --background: var(--pr-mat-window);
   --foreground: var(--pr-gray-50);
@@ -343,6 +365,11 @@ html[data-theme="dark"] {
   --glass-strong: var(--pr-mat-glass-strong);
   --glass-edge: var(--pr-mat-glass-edge);
   --hairline: var(--pr-mat-hairline);
+  /* 悬浮层（Dock）：与上面三件套分开命名，避免「应用内玻璃」再被拿去糊桌面 */
+  --dock-fill: var(--pr-mat-dock-fill);
+  --dock-face: var(--pr-mat-dock-face);
+  --dock-inset: var(--pr-mat-dock-inset);
+  --dock-edge: var(--pr-mat-dock-edge);
 
   --chart-1: var(--pr-brand-400);
   --chart-2: var(--pr-green-400);

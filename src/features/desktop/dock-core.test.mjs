@@ -11,6 +11,7 @@ function load(file) {
 }
 
 const { dockBounds, dockSpringPair, DOCK_RAIL_W, DOCK_RAIL_H, DOCK_FLYOUT_W, DOCK_PANEL_H } = load("./dock-core.ts");
+const { dockFloatBounds, dockFloatSpringPair, DOCK_FLOAT_GAP, DOCK_CAPSULE_W, DOCK_CAPSULE_H, DOCK_CARD_W, DOCK_CARD_H } = load("./dock-core.ts");
 const area = { x: -1920, y: 0, w: 1920, h: 1080 };
 /** 侧栏在垂直方向居中时的 y */
 const railY = area.y + Math.round((area.h - DOCK_RAIL_H) / 2);
@@ -87,4 +88,45 @@ test("anchor pops the flyout next to the triggering icon, clamped to the work ar
   const topAnchored = dockBounds(area, "top", "flyout", 600);
   assert.equal(topAnchored.x, area.x + area.w - DOCK_FLYOUT_W, "top edge anchors horizontally, clamped");
   assert.equal(dockBounds(area, "right", "strip", 400).y, railY, "non-flyout modes stay centered");
+});
+
+/* ── 悬浮锚点：卡片化的 Dock 不贴边 ───────────────────────── */
+
+test("float anchor centers both forms and keeps a fixed gap from the top", () => {
+  const capsule = dockFloatBounds(area, "strip");
+  const card = dockFloatBounds(area, "flyout");
+  assert.deepEqual(capsule, {
+    x: area.x + Math.round((area.w - DOCK_CAPSULE_W) / 2),
+    y: area.y + DOCK_FLOAT_GAP,
+    w: DOCK_CAPSULE_W,
+    h: DOCK_CAPSULE_H,
+  });
+  assert.deepEqual(card, {
+    x: area.x + Math.round((area.w - DOCK_CARD_W) / 2),
+    y: area.y + DOCK_FLOAT_GAP,
+    w: DOCK_CARD_W,
+    h: DOCK_CARD_H,
+  });
+  assert.equal(capsule.x + capsule.w / 2, card.x + card.w / 2, "两种形态共用一条中心线，切换时只变宽高");
+  assert.equal(dockBounds(area, "left", "strip").y, railY, "侧栏几何不受悬浮锚点影响");
+});
+
+test("float anchor never leaves the work area", () => {
+  const narrow = { x: 0, y: 0, w: 400, h: 900 };
+  const clampedWidth = dockFloatBounds(narrow, "flyout");
+  assert.equal(clampedWidth.w, 400, "窄工作区按宽度裁");
+  assert.equal(clampedWidth.x, 0);
+
+  const short = { x: 0, y: 0, w: 1920, h: 300 };
+  const clampedHeight = dockFloatBounds(short, "flyout");
+  assert.equal(clampedHeight.h, 300, "矮工作区按高度裁");
+  assert.equal(clampedHeight.y, 0, "放不下 12px 间距时贴顶，不留缝");
+  assert.ok(clampedHeight.y + clampedHeight.h <= short.h);
+});
+
+test("float spring pair keeps the center line while only the size changes", () => {
+  const { from, to } = dockFloatSpringPair(area, "strip", "flyout");
+  assert.equal(from.x + from.w / 2, to.x + to.w / 2, "中心线不动");
+  assert.equal(from.y, to.y, "顶边不动");
+  assert.ok(to.w > from.w && to.h > from.h);
 });

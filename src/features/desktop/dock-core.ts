@@ -58,6 +58,35 @@ export function dockBounds(area: DockArea, edge: DockEdge, mode: DockMode, ancho
 }
 
 /** 弹簧动画的起止矩形：只变 x/宽度，y/高度保持不动（顶缘直接落位，不走弹簧）。 */
+/* ── 悬浮锚点（卡片化）────────────────────────────────────
+ * 侧栏与顶条都是「贴着某条边」；卡片化的 Dock 不贴边 —— 它浮在工作区顶边
+ * 下方一小段、水平居中。形式上是同一个窗口换了锚点，所以不进 DockEdge：
+ * 吸附逻辑（nearestDockEdge / settings.dockEdge）仍然只认三条边。
+ * 两个形态共用一条中心线，切换时只变宽高，和侧栏「只变宽度」是同一思路。
+ */
+
+/** 距工作区顶边的距离（逻辑像素）。 */
+export const DOCK_FLOAT_GAP = 12;
+/** 胶囊态：窗口不能按内容自适应宽度，给一个放得下「云台 · 3 项待办 · 17:15」的保守值。 */
+export const DOCK_CAPSULE_W = 464;
+export const DOCK_CAPSULE_H = 44;
+/** 卡片态：五页共用一个矩形，切页不跳窗（视觉稿实测 660 × 591）。 */
+export const DOCK_CARD_W = 660;
+export const DOCK_CARD_H = 591;
+
+/** 悬浮锚点的窗口矩形：水平居中、距顶固定间距；工作区不够高时贴底，绝不越过。 */
+export function dockFloatBounds(area: DockArea, mode: DockMode): DockBounds {
+  const w = Math.min(area.w, mode === "flyout" ? DOCK_CARD_W : DOCK_CAPSULE_W);
+  const h = Math.min(area.h, mode === "flyout" ? DOCK_CARD_H : DOCK_CAPSULE_H);
+  const x = area.x + Math.round((area.w - w) / 2);
+  const y = Math.min(area.y + DOCK_FLOAT_GAP, area.y + area.h - h);
+  return { x, y, w, h };
+}
+
+export function dockFloatSpringPair(area: DockArea, from: DockMode, to: DockMode): { from: DockBounds; to: DockBounds } {
+  return { from: dockFloatBounds(area, from), to: dockFloatBounds(area, to) };
+}
+
 export function dockSpringPair(area: DockArea, edge: DockEdge, from: DockMode, to: DockMode, anchor?: number, height?: number): { from: DockBounds; to: DockBounds } {
   return { from: dockBounds(area, edge, from, anchor, height), to: dockBounds(area, edge, to, anchor, height) };
 }
