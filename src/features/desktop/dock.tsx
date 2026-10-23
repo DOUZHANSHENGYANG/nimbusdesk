@@ -15,7 +15,7 @@ import { toast } from "sonner";
 import { useModal } from "@/components/shell/modal-host";
 import { inTauri, openPath, openUrl } from "@/lib/tauri";
 import { useSettings } from "@/stores/settings";
-import { sortedTopCategories, useFiles } from "@/stores/files";
+import { categoryKind, sortedTopCategories, useFiles } from "@/stores/files";
 import { usePlans } from "@/features/plans/store";
 import { todayStr } from "@/features/plans/types";
 import { addTaskAttachment, attachmentSize, openTaskAttachment, unlinkTaskAttachment } from "@/features/plans/attachment-api";
@@ -193,8 +193,25 @@ export function DockWindow() {
         const state = useFiles.getState();
         const tops = sortedTopCategories(state.categories);
         const categoryId = tops[0]?.id ?? state.addCategory(t("dock.fences"));
-        state.addItems(paths.map((p) => ({ title: basename(p), type: kindOf(p), path: p, categoryId, tags: [] })));
-        toast.success(t("dock.dropStashed", { count: paths.length }));
+        const category = useFiles.getState().categories.find((item) => item.id === categoryId);
+        /*
+         * 存储盒：拖进来 = 文件真的搬进 <数据目录>/stash/<分类 id>/，
+         * 条目指向副本；快捷盒仍然只记引用。两种盒子的差别就这一处，
+         * 所以分派放在 drop 这里，而不是让每个调用方自己判断。
+         */
+        if (category && categoryKind(category) === "storage") {
+          void invoke<string[]>("stash_import", { categoryId, paths })
+            .then((moved) => {
+              useFiles.getState().addItems(moved.map((p) => ({
+                title: basename(p), type: kindOf(p), path: p, categoryId, tags: [],
+              })));
+              toast.success(t("dock.dropStashed", { count: moved.length }));
+            })
+            .catch((error) => toast.error(String(error)));
+        } else {
+          state.addItems(paths.map((p) => ({ title: basename(p), type: kindOf(p), path: p, categoryId, tags: [] })));
+          toast.success(t("dock.dropStashed", { count: paths.length }));
+        }
       } else if (key === "plans") {
         const date = todayStr();
         for (const p of paths) {

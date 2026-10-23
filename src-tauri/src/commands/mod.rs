@@ -14,6 +14,7 @@ pub mod directory_map;
 pub mod newfile;
 pub mod shellicon;
 pub mod site;
+pub mod stash;
 pub mod sys;
 pub mod fence_drop;
 pub mod desktop_shortcut;

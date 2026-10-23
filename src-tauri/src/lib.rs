@@ -43,6 +43,7 @@ pub fn run() {
             commands::dock::dock_close,
             commands::dock::dock_set_enabled,
             commands::dock::dock_spring,
+            commands::stash::stash_import,
             commands::dock::dock_spring_box,
             commands::dock::window_show_no_activate,
             commands::dock::window_set_bounds,
