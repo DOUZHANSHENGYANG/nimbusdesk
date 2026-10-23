@@ -6,7 +6,7 @@ import ts from 'typescript';
 const native=createRequire(import.meta.url);
 function load(file,deps={},globals={}){if(!existsSync(new URL(file,import.meta.url)))return{};const module={exports:{}};const code=ts.transpileModule(readFileSync(new URL(file,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.CommonJS,target:ts.ScriptTarget.ES2022}}).outputText;new Function('require','module','exports',...Object.keys(globals),code)(name=>deps[name]??native(name),module,module.exports,...Object.values(globals));return module.exports;}
 function fixture(){
- const {useFiles,useFences,DEFAULT_FENCE}=load('../../stores/files.ts',{'@/lib/storage':{tauriJsonStorage:{getItem:()=>null,setItem:()=>{}}},'@/features/desktop/sticky-presentation':load('../desktop/sticky-presentation.ts'),'@/features/files/directory-mapping-core':load('./directory-mapping-core.ts')});
+ const {useFiles,useFences,DEFAULT_FENCE}=load('../../stores/files.ts',{'@/lib/storage':{tauriJsonStorage:{getItem:()=>null,setItem:()=>{}}},'./files-storage': { filesTableStorage: { getItem: () => null, setItem: () => {}, removeItem: () => {} } }, '@/features/desktop/sticky-presentation':load('../desktop/sticky-presentation.ts'),'@/features/files/directory-mapping-core':load('./directory-mapping-core.ts')});
  const {queueWindowOperation}=load('../desktop/edge-core.ts');
  useFiles.setState({categories:[{id:'a',name:'A',createdAt:1},{id:'b',name:'B',parentId:'a',createdAt:1}],items:[]});
  useFences.setState({fences:{a:{...DEFAULT_FENCE,open:true,x:211,w:333,pinned:true,form:'capsule',edge:'right',edgeMonitor:'primary'}}});

@@ -1,8 +1,20 @@
 # 存储层：把「一个 key = 一份大 JSON」拆开
 
-> 状态：**阶段 1 已完成**（Rust 行级表 + `files_load` / `files_apply` + 单测，尚未被前端调用，
-> 因此**还没有性能变化**）；阶段 2 起是真正切换写入路径，见下面的「实施步骤」。
-> 第一阶段（大文档批处理窗口 + 兜底落盘）已上线，见 `docs/performance.md`。
+> 状态：**阶段 1–3 已完成并上线**（Rust 行级表 + 前端增量写入 + 搜索/备份读表）。
+> 阶段 4（删除旧 `files` 键的回退读取）留到下一版。第一阶段（大文档批处理窗口 + 兜底落盘）
+> 见 `docs/performance.md`。
+
+## 效果
+
+| | 之前 | 现在 |
+|---|---|---|
+| 改一个条目 | 整份文档序列化（8000 条 ≈ 12 ms）+ IPC 2.5 MB + SQLite 重写整行 | **一条 `UPDATE`**：增量里只有那一条 |
+| 拖动排序 | 整份重写 | 只推 `reorder`（位置），**不重写任何 payload** |
+| 搜索索引 | 读 `module_state['files']` 整份 blob | 读 `file_items` 行 |
+| 备份导出 | `readJson("files")` | `files_load`（形状不变，导入侧不用改） |
+
+浏览器回归里的实测断言：800 条批量导入 → 一次 `files_apply`（800 条 upsert）；随后只改一条
+→ 下一次 `files_apply` 的增量里**只有 1 条 upsert**（`check:files-list` 里那条「行级写入：改一条只推一条」）。
 
 ## 为什么是「行级表」而不是「分片 JSON」
 
@@ -11,7 +23,7 @@
 真正让代价与总量脱钩的只有行级 —— 改一条就是一条 `UPDATE`。
 
 这也符合用户此前的判断：「合适用 sqlite3 保存，用它没问题；软件还在开发阶段，没有真实用户」——
-所以**不需要迁移**：旧 `files` 键直接弃用，读到空表时回退读一次旧键即可（兜底而非迁移）。
+所以**不需要迁移**：旧 `files` 键不回写，读到空表时回退读一次旧键（兜底而非迁移）。
 
 ## 问题（实测）
 
@@ -92,24 +104,23 @@
      删分类不留孤儿行、搜索读同一批行。`cargo test --lib` 628 项全绿。
    - **尚未被前端调用，因此还没有性能变化。**
 
-2. **⚠️ 阶段 2（下一步）**：前端切到行级写入。
-   - `src/stores/files.ts`：把 `createJSONStorage(() => tauriJsonStorage)` 换成一个
-     `PersistStorage` 适配器：`getItem` → `files_load`（空表则回退读一次旧 `files` 键）；
-     `setItem` → 与上一份快照比对后只推增量（内容变了的带 `value`，只是位置变了的走 `reorder`），
-     调 `files_apply`；
-   - 增量的比对逻辑抽成纯函数（`src/lib/files-diff.ts`）并单测：新增/删除/改字段/移动/换分类；
-   - 跨窗口：`files_apply` 后由 Rust 发 `files://changed`（带同一份增量），
-     `providers.tsx` 的 `StorageSync` 监听并合并进本窗口的 store。
+2. **✅ 阶段 2（已完成）**：前端切到行级写入。
+   - `src/stores/files-storage.ts`（新）：`PersistStorage` 适配器 —— `getItem` 走 `files_load`
+     （空表回退读一次旧 `files` 键）、`setItem` 与上一份落库快照比对后只推增量、成功后广播
+     `files://changed`；
+   - `src/lib/files-diff.ts`（新）+ 7 项单测：`diffFiles`（靠**引用相等**比对，不做序列化）与
+     `applyFilesDelta`（按 `order` 重排，幂等）；
+   - `src/app/providers.tsx`：`StorageSync` 增加 `files://changed` 监听，用
+     `applyingRemote` 把回灌引起的 `set()` 挡在回写之外。
 
-3. **⚠️ 阶段 3（与阶段 2 同一个提交才有意义）**：把两个「读旧 blob」的读者切过来。
-   - `src-tauri/src/search/sources.rs`：`from_states` 里那段 `states["files"].items` 改成
-     读 `files_table::search_entries(&conn)`（调用方需要把连接传进来，`runtime.rs` 侧顺一遍）；
-   - `src/features/settings/backup.ts`：导出时 `readJson("files")` 改成 `invoke("files_load")`；
-     导入侧不用动（它只把数据写回 store，由新写入路径落库）；
-   - 验收：`cargo test --lib`、`npm run verify`、`npm run verify:dist`、
-     以及新加一条浏览器断言（文件页做一次编辑后，`files_apply` 的增量只含那一条）。
+3. **✅ 阶段 3（已完成）**：两个读旧 blob 的读者切过来。
+   - `src-tauri/src/search/sources.rs`：`from_states` 增加 `files_items` 参数，优先用行表数据，
+     表空时回退整份 blob；`search/runtime.rs` 的 `rebuild` 从 `files_table::search_entries` 取；
+   - `src/features/settings/backup.ts`：导出时用 `files_load`（放在附件导出之后，保持「先校验
+     材料再动元数据」的既有次序），备份文件形状不变，导入侧零改动。
 
-4. **阶段 4**：删掉旧 `files` 键的回退读取与 `database.rs` 里 `"files"` 的命名空间映射。
+4. **阶段 4（下一版）**：删掉旧 `files` 键的回退读取、`database.rs` 里 `"files"` 的命名空间映射、
+   以及 `sources.rs` 里那段 blob 回退。
 
 ## 关于 `plans`
 

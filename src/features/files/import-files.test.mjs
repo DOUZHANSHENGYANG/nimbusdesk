@@ -19,7 +19,7 @@ async function load(path, deps = {}) {
 async function harness(probe) {
   const writes = [];
   const { useFiles } = await load('../../stores/files.ts', { create, persist, createJSONStorage,
-    tauriJsonStorage: { getItem: () => null, setItem: (_key, value) => writes.push(JSON.parse(value)) } });
+    tauriJsonStorage: { getItem: () => null, setItem: (_key, value) => writes.push(JSON.parse(value)) }, filesTableStorage: { getItem: () => null, setItem: (_name, value) => writes.push(value), removeItem: () => {} } });
   let flushes = 0;
   let flush = async () => { flushes++; };
   const api = await load('./import-files.ts', { useFiles, probePaths: probe, flushAllStorage: () => flush() });

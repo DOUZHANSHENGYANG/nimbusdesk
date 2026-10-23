@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import { tauriJsonStorage } from "@/lib/storage";
+import { filesTableStorage } from "./files-storage";
 import type { DirectorySnapshot, MovedFenceEntry } from "@/lib/tauri";
 import { stickyAppearancePatch, type StickyAppearance } from "@/features/desktop/sticky-presentation";
 import { normalizedMappingPath, reconcileDirectoryItems } from "@/features/files/directory-mapping-core";
@@ -308,7 +309,8 @@ export const useFiles = create<FilesState>()(
     }),
     {
       name: "files",
-      storage: createJSONStorage(() => tauriJsonStorage),
+      // 行级表 + 增量写入：见 `./files-storage.ts`（不再是「整份文档一个 key」）
+      storage: filesTableStorage,
       version: 2,
       /**
        * v1 → v2：补 `updatedAt`（备份合并要「同 id 比时间新者胜」）。

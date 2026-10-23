@@ -14,8 +14,14 @@ function load(file, deps = {}, clock = globalThis) {
 const core = load('./directory-mapping-core.ts');
 function harness(scan) {
   let writes = 0;
-  const files = load('../../stores/files.ts', { '@/lib/storage': { tauriJsonStorage: { getItem: () => null, setItem: () => { writes++; } } },
-    '@/features/desktop/sticky-presentation': load('../desktop/sticky-presentation.ts'), '@/features/files/directory-mapping-core': core });
+  // 文件库现在走行级表（`files-storage.ts`）：这里把它换成一个「记录写入次数」的内存桩，
+  // 目录映射的断言只关心「未变化的轮询不写存储」，与具体存储实现无关。
+  const files = load('../../stores/files.ts', {
+    '@/lib/storage': { tauriJsonStorage: { getItem: () => null, setItem: () => { writes++; } } },
+    './files-storage': { filesTableStorage: { getItem: () => null, setItem: () => { writes++; }, removeItem: () => { writes++; } } },
+    '@/features/desktop/sticky-presentation': load('../desktop/sticky-presentation.ts'),
+    '@/features/files/directory-mapping-core': core,
+  });
   const api = load('./directory-mapping.ts', { '@/stores/files': files, '@/lib/tauri': { fileDirectorySnapshot: scan }, './directory-mapping-core': core });
   return { useFiles: files.useFiles, ...api, get writes() { return writes; } };
 }

@@ -49,6 +49,8 @@ test('per-category and per-date settings preserve geometry, legacy fields and in
   const helper = load('./sticky-presentation.ts');
   const storage = { tauriJsonStorage: { getItem: () => null, setItem: () => {} }, onStorageSynced: () => () => {} };
   const dependencies = { '@/lib/storage': storage, '@/features/desktop/sticky-presentation': helper,
+    // 文件库走行级表：这三个测试只关心几何/呈现，用一个空存储桩顶掉
+    './files-storage': { filesTableStorage: { getItem: () => null, setItem: () => {}, removeItem: () => {} } },
     '@/features/files/directory-mapping-core': load('../files/directory-mapping-core.ts') };
   for (const [file, storeName, mapName, defaults] of [
     ['../../stores/files.ts', 'useFences', 'fences', 'DEFAULT_FENCE'],

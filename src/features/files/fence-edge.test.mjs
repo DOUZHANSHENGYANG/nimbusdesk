@@ -6,7 +6,7 @@ import {create} from 'zustand';
 import {persist,createJSONStorage} from 'zustand/middleware';
 async function load(path,deps={}){const key='__fenceEdgeTest';const code=ts.transpileModule(await readFile(new URL(path,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText.replace(/^import[\s\S]*?;\s*/gm,'');globalThis[key]=deps;try{return await import(`data:text/javascript;base64,${Buffer.from(`const {${Object.keys(deps).join(',')}}=globalThis.${key};\n${code}`).toString('base64')}`);}finally{delete globalThis[key];}}
 test('docking and restoring fences preserves normal geometry and prior settings',async()=>{
- const {useFences}=await load('../../stores/files.ts',{create,persist,createJSONStorage,tauriJsonStorage:{getItem:()=>null,setItem:()=>{}}});
+ const {useFences}=await load('../../stores/files.ts',{create,persist,createJSONStorage,tauriJsonStorage:{getItem:()=>null,setItem:()=>{}},filesTableStorage:{getItem:()=>null,setItem:()=>{},removeItem:()=>{}}});
  const store=useFences.getState();store.setGeometry('a',{x:-800,y:50,w:320,h:400});store.setPinned('a',true);store.setEdge('a','left');store.setEdgeY('a',240);store.setForm('a','capsule');
  assert.deepEqual(useFences.getState().fences.a,{x:-800,y:50,w:320,h:400,ghost:true,open:false,viewMode:'icons',locked:false,pinned:true,edge:'left',edgeY:240,form:'capsule'});
  useFences.getState().setForm('a','paper');assert.equal(useFences.getState().fences.a.w,320);assert.equal(useFences.getState().fences.a.edgeY,240);

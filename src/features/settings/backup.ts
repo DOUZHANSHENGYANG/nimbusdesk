@@ -443,6 +443,7 @@ export interface ExportOptions {
 export async function buildBackup(opts: ExportOptions): Promise<BackupFile> {
   const data: BackupFile["data"] = {};
   for (const key of BACKUP_KEYS) {
+    if (key === "files") continue; // 已搬进行级表，单独读（见下）
     const v = await readJson<unknown>(key);
     if (v != null) {
       if (key === "ai-providers") {
@@ -456,6 +457,22 @@ export async function buildBackup(opts: ExportOptions): Promise<BackupFile> {
   const paths = collectAttachmentPaths(data);
   const material = paths.length ? await invoke<BackupAttachmentFile[]>("task_attachments_export", { paths }) : [];
   const attachments = validateAttachmentFiles(data, material);
+
+  /*
+   * `files` 已搬进行级表（不再是 module_state 里的整份 JSON）：从表里读，
+   * 备份文件里的形状保持不变（`{ state: { categories, items }, version }`），
+   * 导入侧因此不用改 —— 它把数据写回 store，由新的写入路径落到表里。
+   *
+   * 放在附件导出**之后**读：附件只挂在计划任务上，但「先校验材料再动元数据」是这个文件的既有
+   * 次序约定，别为了一个键把它打乱。
+   */
+  if (BACKUP_KEYS.includes("files")) {
+    const snapshot = await invoke<{ categories: unknown[]; items: unknown[] }>("files_load").catch(() => null);
+    if (snapshot && Array.isArray(snapshot.categories) && Array.isArray(snapshot.items)
+      && (snapshot.categories.length > 0 || snapshot.items.length > 0)) {
+      data.files = { state: snapshot, version: 2 };
+    }
+  }
 
   let dirs: string[] | undefined;
   let root: string | null = null;

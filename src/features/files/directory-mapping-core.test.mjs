@@ -14,6 +14,7 @@ function load(file, deps = {}) {
 const core = load('./directory-mapping-core.ts');
 function store() {
   return load('../../stores/files.ts', { '@/lib/storage': { tauriJsonStorage: { getItem: () => null, setItem: () => {} } },
+    './files-storage': { filesTableStorage: { getItem: () => null, setItem: () => {}, removeItem: () => {} } },
     '@/features/desktop/sticky-presentation': load('../desktop/sticky-presentation.ts'),
     '@/features/files/directory-mapping-core': core }).useFiles;
 }

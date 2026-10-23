@@ -18,7 +18,8 @@ function projectModule(name){if(projectModules.has(name))return projectModules.g
 const projectBackup=projectModule('./backup');
 async function loadBackup(dependencies) {
   const key = `__backupTest${++sequence}`;
-  globalThis[key] = { cleanProvider, getProviderModels, collectAttachmentPaths, validateAttachmentFiles, ...projectBackup, ...dependencies };
+  // `files` 导出走 files_load（行级表）：默认给一个「空表」的桩，需要断言的用例自己覆盖 invoke
+  globalThis[key] = { cleanProvider, getProviderModels, collectAttachmentPaths, validateAttachmentFiles, invoke: async () => null, ...projectBackup, ...dependencies };
   const code = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2020 } }).outputText
     .replace(/^import[\s\S]*?from ["'][^"']+["'];\r?\n/gm, "")
     .replace(/import\("([^"]+)"\)/g, (_, name) => `getModule(${JSON.stringify(name)})`);
@@ -59,14 +60,21 @@ test("rejects unsafe metadata and attachment totals above the raw backup limit",
 test("exports all current module keys, attachment bytes and sanitized provider metadata", async () => {
   const read = [];
   const provider = { id: "p", name: "Local", model: "m", baseUrl: "http://localhost:8000/v1", vision: false, apiKey: "must-be-removed" };
+  const filesSnapshot = { categories: [{ id: "work", name: "工作", createdAt: 1 }], items: [{ id: "a", categoryId: "work", type: "file", title: "A", path: "E:/a.txt", tags: [], createdAt: 1 }] };
   const api = await loadBackup({
     readJson: async (key) => { read.push(key); return key === "plans" ? plans : key === "ai-providers" ? { state: { providers: [provider], llmApiKey: "also-removed" }, version: 1 } : null; },
-    invoke: async (command, args) => { assert.equal(command, "task_attachments_export"); assert.deepEqual(args, { paths: [path] }); return [material]; },
+    invoke: async (command, args) => {
+      // `files` 走行级表：导出时从表里读，不再是 module_state 里的整份 JSON
+      if (command === "files_load") return filesSnapshot;
+      assert.equal(command, "task_attachments_export"); assert.deepEqual(args, { paths: [path] }); return [material];
+    },
   });
   const result = await api.buildBackup({ includeDirs: false });
-  assert.deepEqual(read, api.BACKUP_KEYS);
+  // 除 files 之外的键都还从 readJson 读；files 单独走 files_load
+  assert.deepEqual(read, api.BACKUP_KEYS.filter((key) => key !== "files"));
   for (const key of ["todo-papers", "reminders", "favorites", "custom-feeds", "ai-providers", "knowledge-settings"]) assert.ok(read.includes(key));
   assert.ok(!read.includes("ai-settings"));
+  assert.deepEqual(result.data.files, { state: filesSnapshot, version: 2 });
   assert.deepEqual(result.attachments, [material]);
   assert.ok(!JSON.stringify(result).includes("must-be-removed"));
   assert.ok(!JSON.stringify(result).includes("also-removed"));

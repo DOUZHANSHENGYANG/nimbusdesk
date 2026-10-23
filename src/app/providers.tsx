@@ -4,10 +4,13 @@ import { i18n, changeLang } from "@/lib/i18n";
 import { applyTheme, isThemeSwitching } from "@/lib/theme";
 import { getDataDir, windowReady, setMainAlwaysOnTop, inTauri } from "@/lib/tauri";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
+import { listen } from "@tauri-apps/api/event";
 import { onStorageSynced } from "@/lib/storage";
 import { isPopupWindow } from "@/features/files/popup";
 import { useSettings, useSettingsHydrated } from "@/stores/settings";
 import { useFiles, useFences } from "@/stores/files";
+import { applyRemoteFilesDelta, type FilesPersisted } from "@/stores/files-storage";
+import type { FilesDelta } from "@/lib/files-diff";
 import { ModalProvider } from "@/components/shell/modal-host";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Toaster } from "@/components/ui/sonner";
@@ -47,8 +50,7 @@ export function Providers({ children }: { children: ReactNode }) {
  */
 function StorageSync() {
   useEffect(() => {
-    return onStorageSynced((key, value) => {
-      if (!value || typeof value !== "object") return;
+    return onStorageSynced((key, value) => {      if (!value || typeof value !== "object") return;
       // zustand persist 的落盘结构是 { state, version }
       const data = (value as { state?: Record<string, unknown> }).state;
       if (!data) return;
@@ -85,6 +87,35 @@ function StorageSync() {
       }
     });
   }, []);
+
+  /*
+   * `files` 走行级表之后，跨窗口同步不再是「整份文档变了重读」，而是**一份增量**：
+   * 写成功的窗口广播 `files://changed`，这里把同一份增量合进本窗口的 store。
+   * `applyRemoteFilesDelta` 内部会置 `applyingRemote`，让这次回灌引起的 `set()`
+   * 只更新落库快照、不回写（否则两个窗口会来回弹）。
+   */
+  useEffect(() => {
+    if (!inTauri) return;
+    let stop: (() => void) | undefined;
+    let alive = true;
+    void listen<{ delta?: FilesDelta }>("files://changed", ({ payload }) => {
+      if (!payload?.delta) return;
+      void applyRemoteFilesDelta(payload.delta, {
+        getState: () => useFiles.getState() as unknown as FilesPersisted,
+        setState: (partial) => useFiles.setState(partial as never),
+      });
+    })
+      .then((unlisten) => {
+        if (alive) stop = unlisten;
+        else unlisten();
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+      stop?.();
+    };
+  }, []);
+
   return null;
 }
 

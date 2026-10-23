@@ -100,7 +100,7 @@ fn plan_subtasks_archives_and_attachment_names_keep_distinct_destinations() {
             json!({"state":{"days":{"2026-10-17":{"tasks":[{"id":"a","title":"父任务"}]}}}}),
         ),
     ]);
-    let docs = super::sources::from_states(&states);
+    let docs = super::sources::from_states(&states, &[]);
     assert_eq!(docs.len(), 3);
     assert!(
         docs.iter()
@@ -137,7 +137,7 @@ fn content_sources_deduplicate_articles_and_never_index_provider_credentials() {
             json!({"state":{"secret":"NEVER_INDEX_THIS"}}),
         ),
     ]);
-    let docs = super::sources::from_states(&states);
+    let docs = super::sources::from_states(&states, &[]);
     assert_eq!(docs.len(), 1);
     assert!(docs[0].body.contains("正文"));
     assert!(!docs[0].body.contains("NEVER_INDEX_THIS"));
@@ -210,7 +210,7 @@ fn projects_and_their_work_items_are_searchable_with_a_focusing_route() {
             ]
         }}),
     )]);
-    let docs = super::sources::from_states(&states);
+    let docs = super::sources::from_states(&states, &[]);
     // Merged items are aliases of a surviving row and must not add a second hit.
     assert_eq!(docs.len(), 4);
     assert!(docs.iter().all(|d| d.hit.kind == "project"));

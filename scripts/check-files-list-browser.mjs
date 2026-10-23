@@ -51,6 +51,19 @@ try {
   assert.ok(first < TOTAL, `首屏不能一次铺完（当前 ${first} / ${TOTAL}）——分片没生效`);
   console.log(`✓ 首屏渲染 ${first} / ${TOTAL} 张卡片（分片生效）`);
 
+  /* ── 行级增量写入：改一条只推一条，不做整份重写 ── */
+  await page.evaluate(async () => {
+    const { useFiles } = await import("/src/stores/files.ts");
+    const items = useFiles.getState().items.map((item, index) => (index === 0 ? { ...item, title: "只改这一条" } : item));
+    useFiles.setState({ items });
+  });
+  await page.waitForFunction(() => window.filesReview.applied.length > 0, undefined, { timeout: 10000 });
+  const applied = await page.evaluate(() => window.filesReview.applied.at(-1));
+  assert.equal(applied.items.upsert.length, 1, `改一条应只推一条（实际 ${applied.items.upsert.length}）`);
+  assert.equal(applied.items.upsert[0].value.title, "只改这一条");
+  assert.equal(applied.items.reorder.length, 0, "内容变了但位置没变，不该产生 reorder");
+  console.log("✓ 行级写入：改一条只推一条");
+
   /* ── 深链定位：目标条目排在第 200 位（远超首批），也必须被滚进视野 ──
      这一步必须在「滚满全量」之前做，否则目标早就在 DOM 里，测不出分片下的定位逻辑。 */
   await page.evaluate(() => { window.location.hash = "#/files?item=bulk-200"; });

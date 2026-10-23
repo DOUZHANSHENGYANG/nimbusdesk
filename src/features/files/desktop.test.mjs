@@ -5,7 +5,7 @@ import ts from 'typescript';
 import {create} from 'zustand';import {persist,createJSONStorage} from 'zustand/middleware';
 let sequence=0;
 async function load(path,deps={}){const key=`__desktopTest${++sequence}`;const code=ts.transpileModule(await readFile(new URL(path,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText.replace(/^import[\s\S]*?;\s*/gm,'');globalThis[key]=deps;try{return await import(`data:text/javascript;base64,${Buffer.from(`const {${Object.keys(deps).join(',')}}=globalThis.${key};\n${code}`).toString('base64')}`);}finally{delete globalThis[key];}}
-async function files(){return(await load('../../stores/files.ts',{create,persist,createJSONStorage,tauriJsonStorage:{getItem:()=>null,setItem:()=>{}}})).useFiles;}
+async function files(){return(await load('../../stores/files.ts',{create,persist,createJSONStorage,tauriJsonStorage:{getItem:()=>null,setItem:()=>{}},filesTableStorage:{getItem:()=>null,setItem:()=>{},removeItem:()=>{}}})).useFiles;}
 const item=(id,path,categoryId='old')=>({id,path,categoryId,title:path.split('/').at(-1),type:'file',tags:['kept'],createdAt:1});
 
 test('moving dropped entries updates existing references and descendants, adds the destination once',async()=>{

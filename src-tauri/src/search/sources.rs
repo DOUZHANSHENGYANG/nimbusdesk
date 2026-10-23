@@ -46,7 +46,7 @@ fn hit(id: String, kind: &str, title: String, subtitle: String, route: String) -
         score: 0.0,
     }
 }
-pub fn from_states(states: &BTreeMap<String, Value>) -> Vec<SearchDocument> {
+pub fn from_states(states: &BTreeMap<String, Value>, files_items: &[Value]) -> Vec<SearchDocument> {
     let mut docs = vec![];
     for (key, archived) in [("plans", false), ("plans-archive", true)] {
         let Some(days) = states
@@ -238,14 +238,20 @@ pub fn from_states(states: &BTreeMap<String, Value>) -> Vec<SearchDocument> {
         );
     }
     docs.extend(articles.into_values());
-    for item in states
-        .get("files")
-        .map(state)
-        .and_then(|s| s.get("items"))
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
-    {
+    // 条目已经搬进行级表：优先用调用方查出来的行；表还空着（老数据尚未搬）时回退读整份 blob
+    let legacy_items: Vec<Value> = if files_items.is_empty() {
+        states
+            .get("files")
+            .map(state)
+            .and_then(|s| s.get("items"))
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default()
+    } else {
+        Vec::new()
+    };
+    let legacy_items = legacy_items.as_slice();
+    for item in if files_items.is_empty() { legacy_items } else { files_items } {
         let id = text(item, "id");
         let path = text(item, "path");
         let mut row = hit(

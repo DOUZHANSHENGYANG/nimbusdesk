@@ -143,14 +143,21 @@ pub fn start(app: tauri::AppHandle) {
     });
 }
 fn rebuild() -> Result<(u64, bool, Vec<String>), String> {
-    let (root, states) = crate::commands::data::with_data_dir(|root| {
+    let (root, states, files_items) = crate::commands::data::with_data_dir(|root| {
         let mut values = BTreeMap::new();
         for key in sources::KEYS {
             if let Some(value) = crate::database::read_at(root, key)? {
                 values.insert((*key).into(), value);
             }
         }
-        Ok((root.to_path_buf(), values))
+        // 文件条目已搬进行级表：索引直接读表，不再为建索引反序列化整份文档
+        let files_items = crate::database::open_at(root)
+            .and_then(|conn| {
+                crate::files_table::ensure_schema(&conn)?;
+                crate::files_table::search_entries(&conn)
+            })
+            .unwrap_or_default();
+        Ok((root.to_path_buf(), values, files_items))
     })?;
     let knowledge = states.get("knowledge-settings").map(sources::state);
     let vault = knowledge
@@ -195,7 +202,7 @@ fn rebuild() -> Result<(u64, bool, Vec<String>), String> {
     if index.stamp().as_deref() == Some(&stamp) {
         return Ok((index.count()?, false, warnings));
     }
-    let mut documents = sources::from_states(&states);
+    let mut documents = sources::from_states(&states, &files_items);
     let mut retry_read = false;
     for file in notes {
         if file.size > 1024 * 1024 {
