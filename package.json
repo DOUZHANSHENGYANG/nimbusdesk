@@ -7,7 +7,7 @@
     "check:tools": "node --test src/features/tools/core.test.mjs src/features/quick-tools/core.test.mjs",
     "check:agent": "node --test src/features/agent/transcript.test.mjs src/features/agent/composer-core.test.mjs",
     "check:search": "node --test src/features/search/core.test.mjs",
-    "check:projects": "node --test src/features/projects/core.test.mjs src/features/projects/store.test.mjs src/features/projects/runtime-core.test.mjs src/features/projects/backup.test.mjs src/features/projects/project-files.test.mjs src/features/projects/zentao-core.test.mjs src/features/projects/zentao-controller.test.mjs src/features/projects/zentao-store.test.mjs src/features/projects/zentao-runtime.test.mjs src/features/projects/zentao-writeback-core.test.mjs src/features/projects/zentao-writeback-controller.test.mjs",
+    "check:projects": "node --test src/features/projects/core.test.mjs src/features/projects/board-core.test.mjs src/features/projects/store.test.mjs src/features/projects/runtime-core.test.mjs src/features/projects/backup.test.mjs src/features/projects/project-files.test.mjs src/features/projects/zentao-core.test.mjs src/features/projects/zentao-controller.test.mjs src/features/projects/zentao-store.test.mjs src/features/projects/zentao-runtime.test.mjs src/features/projects/zentao-writeback-core.test.mjs src/features/projects/zentao-writeback-controller.test.mjs",
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",

@@ -1,8 +1,9 @@
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { Bell, CalendarDays, ChevronRight, Folder, FolderKanban, Layers3, ListTodo, LoaderCircle, Pencil, Plus, Search, Trash2, X, ArrowRightLeft } from "lucide-react";
+import { Bell, CalendarDays, ChevronRight, Folder, FolderKanban, Layers3, ListTodo, LoaderCircle, Pencil, Plus, Search, SquareKanban, Trash2, X, ArrowRightLeft } from "lucide-react";
 import { toast } from "sonner";
 import { ProjectViewsBar } from "./views-bar";
+import { ProjectsBoard } from "./board";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
@@ -24,6 +25,7 @@ import "./projects.css";
 
 type Scope = { kind: "all" | "unclassified" | "unassigned" } | { kind: "area" | "project"; id: string };
 type Editor = { kind: "project" | "iteration" | "item"; id?: string } | { kind: "reminder"; projectId?: string; itemId?: string } | null;
+type WorkTab = "tasks" | "board" | "files";
 
 const projectStores = [useProjects, usePlans, usePlansArchive, useZentao] as const;
 const projectStorageKeys = ["projects", "plans", "plans-archive", "zentao"];
@@ -56,7 +58,7 @@ function ProjectsWorkspace() {
     }
     return counts;
   }, [planDays, archivedDays]);
-  const [scope, setScope] = useState<Scope>({ kind: "all" }), [iterationFilter, setIterationFilter] = useState("current"), [statusFilter, setStatusFilter] = useState("open"), [search, setSearch] = useState(""), [selectedId, setSelectedId] = useState<string | null>(null), [tab, setTab] = useState("tasks"), [editor, setEditor] = useState<Editor>(null), [showArchived, setShowArchived] = useState(false);
+  const [scope, setScope] = useState<Scope>({ kind: "all" }), [iterationFilter, setIterationFilter] = useState("current"), [statusFilter, setStatusFilter] = useState("open"), [search, setSearch] = useState(""), [selectedId, setSelectedId] = useState<string | null>(null), [tab, setTab] = useState<WorkTab>("tasks"), [editor, setEditor] = useState<Editor>(null), [showArchived, setShowArchived] = useState(false);
   const query = useDeferredValue(search.trim().toLocaleLowerCase()), today = todayStr();
   const iterations = useMemo(() => [...state.iterations].sort((a, b) => b.start.localeCompare(a.start) || b.createdAt - a.createdAt), [state.iterations]);
   const currentIteration = iterations.find(i => i.start <= today && i.end >= today);
@@ -64,6 +66,11 @@ function ProjectsWorkspace() {
   const selectedProject = scope.kind === "project" ? state.projects.find(p => p.id === scope.id) : undefined;
   const selectedArea = scope.kind === "area" ? state.areas.find(a => a.id === scope.id) : undefined;
   const selectedIteration = iterations.find(i => i.id === filteredIterationId);
+  // 单一真相：tab 只有落在「有对应面板」的值上，才当成当前页。文件页没有选中项目时退回任务列表，
+  // 这样任何 setTab 写错值都不会出现「切过去一片空白」。
+  const activeTab: WorkTab = tab === "board" ? "board" : tab === "files" && selectedProject ? "files" : "tasks";
+  // activeTab 到 "files" 时一定选着项目（见上），这里再算一次只为让类型也跟着收窄。
+  const filesProject = activeTab === "files" ? selectedProject : undefined;
   const effectiveArea = (item: ItemRecord) => item.areaId ?? state.projects.find(p => p.id === item.projectId)?.areaId ?? null;
   const historicalItem = (item: ItemRecord): ItemRecord => {
     const membership = filteredIterationId ? state.memberships.find(m => m.itemId === item.id && m.iterationId === filteredIterationId && m.leftAt !== null) : undefined;
@@ -90,6 +97,9 @@ function ProjectsWorkspace() {
   const visibleItemIds = new Set(filtered.map(item => item.id));
   const linkedItemIds = new Set(state.remoteLinks.map(link => link.itemId));
   const hiddenUnplannedSources = state.items.filter(item => linkedItemIds.has(item.id) && !item.mergedIntoId && item.activeIterationId === null && !visibleItemIds.has(item.id)).length;
+  const carriedItemIds = new Set(filtered.filter(item => filteredIterationId && item.activeIterationId !== filteredIterationId).map(item => item.id));
+  // 看板与列表同一批卡片：套过历史迭代快照，顺序沿用列表的排序。
+  const boardItems = filtered.map(historicalItem);
   const selectedItem = filtered.find(item => item.id === selectedId);
   function closeDetails() {
     const id = selectedId;
@@ -103,7 +113,7 @@ function ProjectsWorkspace() {
     window.addEventListener("keydown", keydown);
     return () => window.removeEventListener("keydown", keydown);
   }, [selectedId, editor]);
-  useEffect(() => { if (scope.kind === "project" && !state.projects.some(p => p.id === scope.id) || scope.kind === "area" && !state.areas.some(a => a.id === scope.id)) setScope({ kind: "all" }); }, [scope, state.projects, state.areas]);
+  useEffect(() => { if (scope.kind === "project" && !state.projects.some(p => p.id === scope.id) || scope.kind === "area" && !state.areas.some(a => a.id === scope.id)) setScope({ kind: "all" }); setTab("tasks"); }, [scope, state.projects, state.areas]);
   // A search hit opens the row it names. The row only renders when it survives the
   // filters, so the target's own scope replaces the current narrow one, and the
   // parameters are applied once so closing the details later keeps them closed.
@@ -139,16 +149,16 @@ function ProjectsWorkspace() {
   return <div className="projects-page flex h-full min-h-0 flex-col p-4 lg:p-6">
     <header className="mb-4 flex shrink-0 flex-wrap items-center justify-between gap-3"><div className="flex min-w-0 items-center gap-2"><FolderKanban className="size-5 shrink-0 text-primary" /><h1 className="truncate text-xl font-semibold tracking-tight">{title}</h1>{selectedProject?.status === "archived" && <span className="rounded bg-muted px-1.5 py-0.5 text-xs text-muted-foreground">{c.archived}</span>}{selectedProject && <><Button variant="ghost" size="icon-sm" title={c.editProject} aria-label={c.editProject} onClick={() => setEditor({ kind: "project", id: selectedProject.id })}><Pencil /></Button><Button variant="ghost" size="icon-sm" title={c.reminderProject} aria-label={c.reminderProject} onClick={() => setEditor({ kind: "reminder", projectId: selectedProject.id })}><Bell /></Button></>}</div><div className="flex flex-wrap gap-2"><ZenConnectionsButton onClick={() => setZenOpen(true)} /><Button variant="outline" title={c.reminderGlobal} aria-label={c.reminderGlobal} size="icon" onClick={() => setEditor({ kind: "reminder" })}><Bell /></Button><Button onClick={() => setEditor({ kind: "item" })}><Plus />{c.newItem}</Button></div></header>
     {zenOpen && <ZenPanel onClose={() => setZenOpen(false)} />}
-    <div className="projects-workspace min-h-0 flex-1 overflow-hidden rounded-xl border border-border bg-background"><div className={cn("projects-layout relative h-full min-h-0", selectedItem && tab === "tasks" && "has-details")}>
+    <div className="projects-workspace min-h-0 flex-1 overflow-hidden rounded-xl border border-border bg-background"><div className={cn("projects-layout relative h-full min-h-0", selectedItem && activeTab !== "files" && "has-details")}>
       <nav className="projects-nav flex min-h-0 flex-col border-r border-border bg-muted/15 p-2" aria-label={c.projects}>
         <div className="space-y-0.5"><button onClick={() => chooseScope({ kind: "all" })} className={cn("projects-nav-row", scope.kind === "all" && "is-active")}><Layers3 className="size-4" /><span>{c.allProjects}</span><span className="ml-auto text-xs tabular-nums">{state.projects.filter(p => p.status === "active").length}</span></button><button onClick={() => chooseScope({ kind: "unassigned" })} className={cn("projects-nav-row", scope.kind === "unassigned" && "is-active")}><ListTodo className="size-4" /><span>{c.noProject}</span></button></div>
         <div className="mt-4 mb-1 flex items-center justify-between px-2"><h2 className="text-[11px] font-medium text-muted-foreground">{c.areas}</h2><Button variant="ghost" size="icon-xs" title={c.newArea} aria-label={c.newArea} onClick={() => void editArea()}><Plus /></Button></div>
         <div className="min-h-0 flex-1 overflow-y-auto space-y-2">{state.areas.map(area => <div key={area.id}><div className="group flex items-center"><button onClick={() => chooseScope({ kind: "area", id: area.id })} className={cn("projects-nav-row min-w-0 flex-1", scope.kind === "area" && scope.id === area.id && "is-active")} title={area.name}><ChevronRight className="size-3 shrink-0 text-muted-foreground" /><span className="truncate">{area.name}</span></button><div className="flex shrink-0 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100"><Button variant="ghost" size="icon-xs" title={`${c.editArea} · ${area.name}`} aria-label={`${c.editArea} · ${area.name}`} onClick={() => void editArea(area.id)}><Pencil /></Button><Button variant="ghost" size="icon-xs" title={`${c.deleteArea} · ${area.name}`} aria-label={`${c.deleteArea} · ${area.name}`} onClick={() => void deleteArea(area.id)}><Trash2 /></Button></div></div>{projectRows(area.id)}</div>)}<div><button onClick={() => chooseScope({ kind: "unclassified" })} className={cn("projects-nav-row", scope.kind === "unclassified" && "is-active")}><ChevronRight className="size-3 text-muted-foreground" /><span>{c.unclassified}</span></button>{projectRows(null)}</div></div>
         <div className="mt-2 space-y-2 border-t border-border pt-2"><Button className="w-full justify-start" variant="ghost" size="sm" onClick={() => setEditor({ kind: "project" })}><Plus />{c.newProject}</Button><label className="flex cursor-pointer items-center gap-2 px-2 pb-1 text-[11px] text-muted-foreground"><input type="checkbox" className="accent-primary" checked={showArchived} onChange={e => setShowArchived(e.target.checked)} />{c.showArchived}</label></div>
       </nav>
-      <Tabs value={tab} onValueChange={setTab} className="flex min-h-0 min-w-0 flex-col gap-0">
-        {selectedProject && <div className="flex h-11 shrink-0 items-center border-b border-border px-3"><TabsList aria-label={selectedProject.name}><TabsTrigger value="tasks"><ListTodo />{c.tasks}</TabsTrigger><TabsTrigger value="files"><Folder />{c.files}</TabsTrigger></TabsList></div>}
-        {tab === "files" && selectedProject ? <TabsContent value="files" aria-label={c.files} className="min-h-0 flex-1 overflow-auto p-3"><ProjectFiles projectId={selectedProject.id} folder={selectedProject.folder} onFolderChange={folder => state.updateProject(selectedProject.id, { folder })} /></TabsContent> : <TabsContent value="tasks" aria-label={c.tasks} className="flex min-h-0 flex-1 flex-col">
+      <Tabs value={activeTab} onValueChange={value => setTab(value as WorkTab)} className="flex min-h-0 min-w-0 flex-col gap-0">
+        <div className="flex h-11 shrink-0 items-center border-b border-border px-3"><TabsList aria-label={title}><TabsTrigger value="tasks"><ListTodo />{c.tasks}</TabsTrigger><TabsTrigger value="board"><SquareKanban />{c.board}</TabsTrigger>{selectedProject && <TabsTrigger value="files"><Folder />{c.files}</TabsTrigger>}</TabsList></div>
+        {activeTab !== "files" && <>
           <ProjectViewsBar
             iteration={iterationFilter}
             status={statusFilter}
@@ -160,6 +170,8 @@ function ProjectsWorkspace() {
             }}
           />
           <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border p-3"><div className="min-w-[150px] flex-1"><ProjectSelect label={c.iteration} value={iterationFilter} onChange={setIterationFilter} options={[{ value: "current", label: currentIteration ? `${c.currentIteration} · ${currentIteration.name}` : `${c.currentIteration} · ${c.noCurrentIteration}` }, { value: "none", label: c.unplanned }, { value: "all", label: c.allIterations }, ...iterations.map(i => ({ value: i.id, label: `${i.name} · ${i.start.slice(5)} – ${i.end.slice(5)}` }))]} /></div><Button variant="ghost" size="icon-sm" title={c.newIteration} aria-label={c.newIteration} onClick={() => setEditor({ kind: "iteration" })}><Plus /></Button>{selectedIteration && <Button variant="ghost" size="icon-sm" title={c.editIteration} aria-label={c.editIteration} onClick={() => setEditor({ kind: "iteration", id: selectedIteration.id })}><Pencil /></Button>}<div className="w-[110px]"><ProjectSelect label={c.status} value={statusFilter} onChange={setStatusFilter} options={[{ value: "open", label: c.open }, { value: "all", label: c.all }, { value: "todo", label: c.todo }, { value: "doing", label: c.doing }, { value: "done", label: c.done }, { value: "cancelled", label: c.cancelled }]} /></div><div className="relative min-w-[150px] flex-1"><Search className="pointer-events-none absolute top-2 left-2.5 size-4 text-muted-foreground" /><Input value={search} onChange={e => setSearch(e.target.value)} className="pr-7 pl-8" placeholder={c.search} aria-label={c.search} />{search && <Button className="absolute top-0.5 right-0.5" variant="ghost" size="icon-sm" title={c.clearSearch} aria-label={c.clearSearch} onClick={() => setSearch("")}><X /></Button>}</div></div>
+        </>}
+        {activeTab === "board" ? <TabsContent value="board" aria-label={c.board} className="flex min-h-0 flex-1 flex-col"><ProjectsBoard items={boardItems} selectedId={selectedId} onSelect={setSelectedId} carriedIds={carriedItemIds} statusFilter={statusFilter} onShowAllStatuses={() => setStatusFilter("all")} /></TabsContent> : filesProject ? <TabsContent value="files" aria-label={c.files} className="min-h-0 flex-1 overflow-auto p-3"><ProjectFiles projectId={filesProject.id} folder={filesProject.folder} onFolderChange={folder => state.updateProject(filesProject.id, { folder })} /></TabsContent> : <TabsContent value="tasks" aria-label={c.tasks} className="flex min-h-0 flex-1 flex-col">
           <div className="flex h-9 shrink-0 items-center justify-between border-b border-border px-4 text-xs text-muted-foreground"><span>{selectedIteration ? `${selectedIteration.start} – ${selectedIteration.end}` : iterationFilter === "all" ? c.allIterations : c.unplanned}</span><span className="tabular-nums" aria-live="polite">{filtered.length} {c.count}</span></div>
           {hiddenUnplannedSources > 0 && <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-border bg-muted/30 px-4 py-2" data-zen-unplanned-hint><p className="text-xs text-muted-foreground">{hiddenUnplannedSources} {z.hiddenUnplanned}</p><Button size="sm" variant="link" className="h-auto p-0" onClick={() => { chooseScope({ kind: "all" }); setIterationFilter("none"); setStatusFilter("all"); setSearch(""); }}>{z.showUnplanned}</Button></div>}
           <div className="min-h-0 flex-1 overflow-y-auto">{!filtered.length ? <div className="flex h-full min-h-[200px] flex-col items-center justify-center gap-3 p-6 text-center"><ListTodo className="size-8 text-muted-foreground/50" /><div><p className="text-sm font-medium">{query ? c.noMatches : c.noItems}</p>{!query && <p className="mt-1 text-xs text-muted-foreground">{c.firstItem}</p>}</div>{!query && <Button size="sm" variant="outline" onClick={() => setEditor({ kind: "item" })}><Plus />{c.newItem}</Button>}</div> : <div role="list">{filtered.map(item => {
@@ -168,7 +180,7 @@ function ProjectsWorkspace() {
           })}</div>}</div>
         </TabsContent>}
       </Tabs>
-      {selectedItem && tab === "tasks" && <div className="projects-details min-h-0"><ItemDetails key={selectedItem.id} item={selectedItem} onClose={closeDetails} onEdit={() => setEditor({ kind: "item", id: selectedItem.id })} onReminder={() => setEditor({ kind: "reminder", itemId: selectedItem.id })} /></div>}
+      {selectedItem && activeTab !== "files" && <div className="projects-details min-h-0"><ItemDetails key={selectedItem.id} item={selectedItem} onClose={closeDetails} onEdit={() => setEditor({ kind: "item", id: selectedItem.id })} onReminder={() => setEditor({ kind: "reminder", itemId: selectedItem.id })} /></div>}
     </div></div>
     {editor?.kind === "project" && <ProjectEditor key={editor.id ?? "new-project"} project={state.projects.find(p => p.id === editor.id)} areaId={selectedArea?.id} onClose={() => setEditor(null)} onSaved={id => { setEditor(null); chooseScope({ kind: "project", id }); }} />}
     {editor?.kind === "iteration" && <IterationEditor key={editor.id ?? "new-iteration"} iteration={state.iterations.find(i => i.id === editor.id)} onClose={() => setEditor(null)} onSaved={id => { setEditor(null); setIterationFilter(id); }} />}
