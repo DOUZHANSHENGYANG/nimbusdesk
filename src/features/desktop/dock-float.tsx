@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { useTranslation } from "react-i18next";
 import {
   AppWindow, ArrowLeft, BookOpen, Bookmark, CalendarCheck, ChevronDown, ExternalLink, FileText, Folder,
@@ -15,6 +16,7 @@ import { useFeeds } from "@/stores/feeds";
 import { useFavorites } from "@/stores/favorites";
 import { ArticleReader } from "@/features/feeds/article-reader";
 import { openUrl } from "@/lib/tauri";
+import { useSettings } from "@/stores/settings";
 import { ageBucket, summarizeDay } from "./dock-float-core";
 import "./dock-float.css";
 
@@ -77,7 +79,20 @@ export function DockFloat({ onExpand, onHide, panels }: {
   return (
     <div className="df-root" data-open={open}>
       {!open && (
-        <div className="df-capsule">
+        <div className="df-capsule"
+          data-drag
+          onPointerDown={(event) => {
+            // 空白处/文字上按住就拖走；图标按钮照常点击
+            if (event.button !== 0 || (event.target as HTMLElement).closest("button")) return;
+            const win = getCurrentWebviewWindow();
+            void (async () => {
+              await win.startDragging();
+              const pos = await win.outerPosition();
+              const monitor = await import("@tauri-apps/api/window").then((m) => m.currentMonitor());
+              const scale = monitor?.scaleFactor ?? 1;
+              useSettings.getState().setDockFloatX(pos.x / scale);
+            })().catch(() => undefined);
+          }}>
           <span className="df-orb" aria-hidden="true" />
           <span className="df-name">{t("dockFloat.title")}</span>
           <span className="df-sep" aria-hidden="true" />

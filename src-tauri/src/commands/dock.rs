@@ -164,6 +164,77 @@ pub async fn dock_spring(
     Ok(())
 }
 
+/// 四元组弹簧：胶囊 ⇄ 卡片用这一条。
+///
+/// 与 dock_spring 的区别：那个只插值 x/宽度（贴边侧栏只变宽），
+/// 胶囊展开时四个量都要动 —— 居中、变宽、变高、往下长。曲线沿用同一条
+/// （1 - cos·e^-decay），代数计数器共享，所以「展开到一半再点收起」
+/// 会从中断处弹向新目标，而不是跳回起点。
+#[tauri::command]
+pub async fn dock_spring_box(
+    app: AppHandle,
+    label: String,
+    from_x: f64,
+    from_y: f64,
+    from_w: f64,
+    from_h: f64,
+    to_x: f64,
+    to_y: f64,
+    to_w: f64,
+    to_h: f64,
+    style: String,
+) -> Result<(), String> {
+    let id = DOCK_SPRING.fetch_add(1, Ordering::SeqCst) + 1;
+    let scale = app
+        .get_webview_window(&label)
+        .and_then(|win| win.scale_factor().ok())
+        .unwrap_or(1.0);
+    let hwnd_raw = hwnd_of(&app, &label)?.0 as isize;
+    let (freq, decay, duration_ms) = if style == "stiff" {
+        (3.8, 22.0, 260.0)
+    } else {
+        (2.2, 11.0, 420.0)
+    };
+    std::thread::spawn(move || {
+        let hwnd = HWND(hwnd_raw as *mut _);
+        let started = std::time::Instant::now();
+        let duration = std::time::Duration::from_millis(duration_ms as u64);
+        let place = |x: f64, y: f64, w: f64, h: f64| unsafe {
+            let _ = SetWindowPos(
+                hwnd,
+                None,
+                (x * scale).round() as i32,
+                (y * scale).round() as i32,
+                (w * scale).round() as i32,
+                (h * scale).round() as i32,
+                SWP_NOACTIVATE | SWP_NOZORDER,
+            );
+        };
+        while started.elapsed() < duration {
+            std::thread::sleep(std::time::Duration::from_millis(8));
+            if DOCK_SPRING.load(Ordering::SeqCst) != id {
+                return;
+            }
+            let elapsed = started.elapsed().as_secs_f64();
+            if elapsed / (duration_ms / 1000.0) >= 1.0 {
+                break;
+            }
+            let spring =
+                1.0 - (freq * elapsed * 2.0 * std::f64::consts::PI).cos() * (-decay * elapsed).exp();
+            place(
+                from_x + (to_x - from_x) * spring,
+                from_y + (to_y - from_y) * spring,
+                from_w + (to_w - from_w) * spring,
+                from_h + (to_h - from_h) * spring,
+            );
+        }
+        if DOCK_SPRING.load(Ordering::SeqCst) == id {
+            place(to_x, to_y, to_w, to_h);
+        }
+    });
+    Ok(())
+}
+
 /// 创建（或激活）dock 窗口。位置与显示由前端在算出工作区后
 /// 通过 `window_set_bounds` + `window_show_no_activate` 完成。
 #[tauri::command]

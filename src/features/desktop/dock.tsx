@@ -94,16 +94,32 @@ export function DockWindow() {
     });
   }, [edge, resolveArea, setMode]);
 
-  /** 胶囊形态：同一个窗口换锚点 —— 水平居中、距顶 12；展开与收起只变宽高。 */
+  /**
+   * 胶囊形态：同一个窗口换锚点 —— 水平居中、距顶 12。
+   *
+   * 用 dock_spring_box 逐帧插值四个量，而不是一次性 set_bounds：
+   * 灵动岛的「灵」全在这条曲线上，硬切就是一块会跳的方板。
+   * 代数计数器在 Rust 侧共享，所以展开到一半再点收起会从中断处弹回去。
+   */
   const applyFloat = useCallback(async (open: boolean) => {
     const resolved = await resolveArea();
     if (!resolved) return;
     const { area, scale } = resolved;
     areaRef.current = area;
-    const bounds = dockFloatBounds(area, open ? "flyout" : "strip");
-    await invoke("window_set_bounds", {
-      label: LABEL, x: Math.round(bounds.x * scale), y: Math.round(bounds.y * scale),
-      width: Math.round(bounds.w * scale), height: Math.round(bounds.h * scale),
+    const base = dockFloatBounds(area, open ? "flyout" : "strip");
+    // 拖过就待在拖到的位置（只挪 x，纵向仍吸在顶部 12）；没拖过就是居中
+    const saved = useSettings.getState().dockFloatX;
+    const target = saved === null
+      ? base
+      : { ...base, x: Math.min(Math.max(saved, area.x), area.x + area.w - base.w) };
+    const win = getCurrentWebviewWindow();
+    const [pos, size] = await Promise.all([win.outerPosition(), win.outerSize()]);
+    await invoke("dock_spring_box", {
+      label: LABEL,
+      fromX: pos.x / scale, fromY: pos.y / scale,
+      fromW: size.width / scale, fromH: size.height / scale,
+      toX: target.x, toY: target.y, toW: target.w, toH: target.h,
+      style: open ? "soft" : "stiff",
     });
   }, [resolveArea]);
 
