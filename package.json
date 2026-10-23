@@ -21,6 +21,7 @@
     "check:contrast": "node scripts/check-contrast.mjs",
     "build:preview": "node scripts/build-preview.mjs",
     "check:preview": "node scripts/check-preview-sync.mjs",
+    "measure:memory": "node scripts/measure-agent-memory.mjs",
     "check:plans": "node --test src/features/plans/attachment-api.test.mjs src/features/settings/backup.test.mjs src/lib/storage.test.mjs src/features/plans/paper-window.test.mjs src/features/plans/paper-interactions.test.mjs src/features/plans/store-batch.test.mjs src/features/plans/paper-row.test.mjs",
     "check:home": "node --test src/features/home/overview-core.test.mjs",
     "check:ahub": "node --test src/ahub/lib/skill-drop.test.mjs",
