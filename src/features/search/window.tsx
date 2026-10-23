@@ -148,7 +148,9 @@ function SearchSurface() {
   }, [query, scope, composing, c.error, c.fileError, status?.lastIndexedAt, status?.files?.updatedAt, apps?.lastIndexedAt, settingsRevision, homeReady]);
   useEffect(() => {
     const update = () => { void updateSearchStatus().catch(() => undefined); void searchAppsStatus().then(setApps).catch(() => undefined); };
-    const focus = () => { input.current?.focus(); update(); void loadHome(); };
+    // 不在这里 update()：状态轮询的 catchUp 已经在获焦/变可见时补过一拍，
+    // 再调一次就会每次获焦打两遍 IPC。`search://focus` 那条原生事件另算（它不走 DOM 焦点）。
+    const focus = () => { input.current?.focus(); void loadHome(); };
     let blurTimer: ReturnType<typeof setTimeout> | undefined;
     const blur = () => {
       clearTimeout(blurTimer);
@@ -158,11 +160,13 @@ function SearchSurface() {
         if (inTauri && !document.hasFocus() && !composingNow.current) void getCurrentWebviewWindow().hide().catch(() => undefined);
       }, 180);
     };
-    focus(); window.addEventListener("focus", focus);
+    // 挂载时先拉一次状态（之后交给前台门控的轮询与 catchUp）
+    update(); focus(); window.addEventListener("focus", focus);
     window.addEventListener("blur", blur);
     const stopStatusPoll = startForegroundInterval(update, 3000);
     const statusSub = inTauri ? listen<SearchStatus>("search://status", event => useSearchStore.setState({ status: event.payload })) : null;
-    const focusSub = inTauri ? listen("search://focus", focus) : null;
+    // 原生唤起（全局热键）不走 DOM 焦点，状态得自己再拉一次
+    const focusSub = inTauri ? listen("search://focus", () => { focus(); update(); }) : null;
     const homeSub = inTauri ? listen("search://home", () => void loadHome()) : null;
     const appsSub = inTauri ? listen<SearchAppsStatus>("search://apps-status", event => setApps(event.payload)) : null;
     const settingsSub = inTauri ? listen<{ key: string }>("storage://changed", ({ payload }) => {
@@ -171,7 +175,8 @@ function SearchSurface() {
     }) : null;
     return () => { homeRevision.current++; window.removeEventListener("focus", focus); window.removeEventListener("blur", blur); clearTimeout(blurTimer); stopStatusPoll(); for (const sub of [statusSub, focusSub, homeSub, appsSub, settingsSub]) void sub?.then(stop => stop()).catch(() => undefined); };
   }, []);
-  useEffect(() => { list.current?.querySelector(`[data-search-index="${selected}"]`)?.scrollIntoView({ block: "nearest" }); }, [selected]);
+  // 依赖里带 visibleHits：跨批导航时 ensureVisible 会先扩容，扩容后的这一次渲染才滚得动
+  useEffect(() => { list.current?.querySelector(`[data-search-index="${selected}"]`)?.scrollIntoView({ block: "nearest" }); }, [selected, visibleHits]);
   async function hide() { if (inTauri) await getCurrentWebviewWindow().hide().catch(error => setFailure(String(error))); }
   async function activate(result: SearchHit, action: "open" | "reveal" = "open") {
     if (!resultsCurrent.current) return;

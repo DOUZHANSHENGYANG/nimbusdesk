@@ -51,10 +51,18 @@ export async function acceptCommittedStorage(values: Record<string, unknown>): P
   for (const [key, value] of Object.entries(values)) {
     reads.set(key, (reads.get(key) ?? 0) + 1);
     known.set(key, value);
+    // 这份内容已经落盘了：去重记录跟上，免得下次原样回写时又是一次多余的 IPC
+    rememberCommitted(key, value);
     if (!pending.has(key) && !writing.has(key)) applyRemote(key, value);
     useStorageHealth.getState().clear(key);
   }
   if (inTauri) for (const key of Object.keys(values)) await emit(EV_STORAGE, { key, source }).catch(() => undefined);
+}
+
+/** 把「磁盘上现在就是这份内容」记进去重表（value 为 null 表示这个 key 已被删掉）。 */
+function rememberCommitted(key: string, value: unknown) {
+  if (value == null) sent.delete(key);
+  else sent.set(key, JSON.stringify(value));
 }
 
 function clearTimer(key: string) {
@@ -167,7 +175,10 @@ if (inTauri) {
     try {
       await flush(key);
       const value = await readJson<unknown>(key);
-      if (reads.get(key) === generation && !pending.has(key) && !writing.has(key)) applyRemote(key, value);
+      if (reads.get(key) === generation && !pending.has(key) && !writing.has(key)) {
+        rememberCommitted(key, value);
+        applyRemote(key, value);
+      }
     } catch (error) { reportFailure("unavailable", key, error); }
   }).catch(() => undefined);
 }

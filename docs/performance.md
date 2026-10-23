@@ -90,8 +90,13 @@ react-i18next 缺键**不报错**，只把 key 原样画在界面上 —— 词�
 仍是 `visible` —— 暂停的只是用户根本看不见的那种。
 
 已接入的 7 处（都是纯刷新，不可见时问了也没人看）：搜索状态 ×2、应用索引状态、Everything 探测、
-目录映射的 5 秒目录扫描、项目 tick、禅道同步检查。后四个自己已经挂了 `focus`/`visibilitychange`
-监听，所以传 `catchUp: false`，免得同一件事做两遍。
+目录映射的 5 秒目录扫描、项目 tick、禅道同步检查。
+
+「回到前台补一拍」只有一个 owner：`startForegroundInterval` 的 `catchUp`（默认开）。目录映射、
+项目、禅道这三个运行时原本各自挂 `focus` 监听（只有项目同时挂了 `visibilitychange`），
+既重复又漏了「变可见但没拿到焦点」那一拍 —— 现在这些自挂监听已删掉，统一交给 `catchUp`。
+搜索窗的 DOM `focus` 处理器也去掉了 `update()`（catchUp 已经补过），只有原生 `search://focus`
+事件还会额外刷新一次（那条不经过 DOM 焦点）。
 
 **刻意没接的三类**（写进代码注释了，别顺手改）：
 
@@ -126,12 +131,15 @@ react-i18next 缺键**不报错**，只把 key 原样画在界面上 —— 词�
 ## 怎么验
 
 ```powershell
-npm run build                 # 出产物
-npm run check:bundle          # 入口闭包体积 + AI SDK 是否漏进首屏
+npm run verify:dist           # build + 入口闭包体检（CI/发版前跑这个）
+npm run check:bundle          # 只体检已有 dist：闭包体积 + AI SDK 是否漏进首屏
 npx vite preview --port 4179 --strictPort
-npm run check:split           # 在产物上验：首页不背对话页、/agent 与 /plans 各自按需到达
+npm run check:split           # 在产物上验：首页不背对话页、/agent 与 /plans 各自按需到达、全路由无缺键
 npm run check:visibility      # 在产物上验：不可见时轮询停手、回前台补一拍
 ```
+
+`check:bundle` 没进 `npm run verify`：`verify` 是本地快闸（不构建），每次往里塞一次生产构建
+会让它慢一倍。体积闸门用 `verify:dist`，CI 与发版前跑它。
 
 另外两个要 dev server 的：`npm run check:files-list`（800 条分片渲染）、
 以及既有的 `scripts/check-*-browser.mjs`（业务夹具）。

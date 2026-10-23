@@ -20,9 +20,10 @@ export function ZentaoRuntime() {
       }
     };
     const unsubscribers = [useZentao, useProjects, usePlans, usePlansArchive].map(s => s.persist.onFinishHydration(tick));
-    const unsubscribe = useZentao.subscribe(tick), stop = startForegroundInterval(tick, 30_000, { catchUp: false });
-    window.addEventListener("focus", tick); tick();
-    return () => { stop(); unsubscribe(); unsubscribers.forEach(fn => fn()); window.removeEventListener("focus", tick); };
+    // 唤醒（focus / 变可见）由 startForegroundInterval 的 catchUp 负责，不再自己挂监听
+    const unsubscribe = useZentao.subscribe(tick), stop = startForegroundInterval(tick, 30_000);
+    tick();
+    return () => { stop(); unsubscribe(); unsubscribers.forEach(fn => fn()); };
   }, []);
   return null;
 }

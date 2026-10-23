@@ -36,11 +36,15 @@ const ROUTES = [
   "/settings",
 ];
 
-/** 桩的局限造成的报错（不是应用的问题，和分包无关）。 */
+/**
+ * 桩的局限造成的报错（不是应用的问题，和分包无关）。
+ *
+ * 刻意只列**具体两条**，不用「读 null 的 find/length/... 」这种通配 ——
+ * 那会把「某页因为桩数据真的崩了」一起吞掉。桩一旦补好，这两条也该删。
+ */
 const STUB_ARTIFACTS = [
-  /unregisterListener/,
-  /transformCallback/,
-  /Cannot read properties of (null|undefined) \(reading '(find|length|map|filter|some)'\)/,
+  /unregisterListener/, // 桩没有实现 unlisten 的返回对象
+  /transformCallback/, // 桩没有完整的 Channel 实现
 ];
 
 const { chromium } = await loadPlaywright();

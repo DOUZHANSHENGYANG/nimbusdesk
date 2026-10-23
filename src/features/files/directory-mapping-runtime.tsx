@@ -25,16 +25,13 @@ export function startDirectoryMappingRuntime(): () => void {
   };
   const unsubscribe = useFiles.subscribe(() => inspect());
   const unhydrate = useFiles.persist.onFinishHydration(() => inspect());
-  const interval = startForegroundInterval(() => inspect(true), DIRECTORY_MAPPING_INTERVAL_MS, { catchUp: false });
-  const focus = () => inspect(true);
-  if (typeof window !== "undefined") window.addEventListener("focus", focus);
+  const interval = startForegroundInterval(() => inspect(true), DIRECTORY_MAPPING_INTERVAL_MS);
   inspect();
   return () => {
     stopped = true;
     interval();
     unsubscribe();
     unhydrate();
-    if (typeof window !== "undefined") window.removeEventListener("focus", focus);
   };
 }
 

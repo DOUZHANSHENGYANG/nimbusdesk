@@ -51,9 +51,27 @@ try {
   assert.ok(first < TOTAL, `首屏不能一次铺完（当前 ${first} / ${TOTAL}）——分片没生效`);
   console.log(`✓ 首屏渲染 ${first} / ${TOTAL} 张卡片（分片生效）`);
 
+  /* ── 深链定位：目标条目排在第 200 位（远超首批），也必须被滚进视野 ──
+     这一步必须在「滚满全量」之前做，否则目标早就在 DOM 里，测不出分片下的定位逻辑。 */
+  await page.evaluate(() => { window.location.hash = "#/files?item=bulk-200"; });
+  await page.waitForFunction(
+    () => {
+      const card = [...document.querySelectorAll("[data-card]")]
+        .find(node => (node.getAttribute("data-item-id") ?? "") === "bulk-200");
+      if (!card) return false;
+      const box = card.getBoundingClientRect();
+      return box.top >= -8 && box.bottom <= window.innerHeight + 8;
+    },
+    undefined,
+    { timeout: 15000 },
+  );
+  const afterJump = await cards();
+  assert.ok(afterJump < TOTAL, `深链定位不应把整份列表铺开（当前 ${afterJump} / ${TOTAL}）`);
+  console.log(`✓ 深链 /files?item=<第 200 条> 已滚进视野，此时渲染 ${afterJump} 张卡片`);
+
   // 反复滚到底，看能不能续上
   let rounds = 0;
-  let previous = first;
+  let previous = afterJump;
   while (previous < TOTAL && rounds < 40) {
     await page.evaluate(() => {
       document.querySelector("[data-card]:last-of-type")?.scrollIntoView({ block: "end" });
@@ -74,7 +92,7 @@ try {
   console.log(`✓ 滚动续批 ${rounds} 轮后铺满 ${previous} 条`);
 
   assert.deepEqual(errors, [], "分片渲染不应产生运行时错误");
-  console.log("\nPASS 文件页：分片渲染生效，滚动可续至全量，无运行时报错");
+  console.log("\nPASS 文件页：分片渲染生效，滚动可续至全量，深链能定位到首批之外的条目，无运行时报错");
 } finally {
   await browser.close();
 }

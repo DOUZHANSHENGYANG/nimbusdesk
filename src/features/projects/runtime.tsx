@@ -30,9 +30,10 @@ export function ProjectRuntime() {
     let stopped = false;
     const run = () => { if (!stopped && useProjects.persist.hasHydrated()) void tick().catch(error => toast.error(String(error))); };
     const unsubscribe = useProjects.persist.onFinishHydration(run);
-    run(); const stop = startForegroundInterval(run, 30_000, { catchUp: false });
-    window.addEventListener("focus", run); document.addEventListener("visibilitychange", run);
-    return () => { stopped = true; unsubscribe(); stop(); window.removeEventListener("focus", run); document.removeEventListener("visibilitychange", run); };
+    // 唤醒（focus / 变可见）统一交给 startForegroundInterval 的 catchUp，
+    // 不再各自挂监听 —— 否则同一件事会有两个owner，且隐藏时也会被触发一次
+    run(); const stop = startForegroundInterval(run, 30_000);
+    return () => { stopped = true; unsubscribe(); stop(); };
   }, []);
   return null;
 }

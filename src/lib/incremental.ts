@@ -28,8 +28,14 @@ export function nextCount(count: number, total: number, step = DEFAULT_STEP): nu
  * 让第 `index` 条处在已显示的范围内 —— 键盘导航用。
  *
  * 搜索结果里用户按住向下键一路走到底时，选中项会跑到已渲染范围之外；
- * 这时把显示条数补到「覆盖它的那一批」，选中项才不会凭空消失。
+ * 这时把显示条数补到「覆盖它的那一批」，选中项才不会凭空消失
+ * （`aria-activedescendant` 指向的节点必须存在，否则读屏与滚动都会落空）。
  * 已经可见就原样返回（不改变分片，避免每按一次键就多渲染一批）。
+ *
+ * 已知代价：列表在首项按 ↑ 回绕到最后一条时，`index` 就是 `total-1`，
+ * 这里会一次把整份扩容出来。要避免它得把「显示条数」换成「显示窗口 [start,end)」，
+ * 但那会让向上滚动出现空洞（上面那批没渲染过），需要在两个调用点各自处理，
+ * 属于另一层改动；当前实现选择「保证选中项在 DOM 里」，代价只落在这一次回绕上。
  */
 export function revealForSelection(index: number, count: number, total: number, step = DEFAULT_STEP): number {
   const clamped = clampCount(count, total);

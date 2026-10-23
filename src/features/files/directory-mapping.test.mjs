@@ -131,13 +131,14 @@ test('runtime waits for hydration, observes new mappings, polls and releases tim
   // 前台门控本身由 src/lib/visibility.test.mjs 覆盖；这里只验「运行时装了轮询、并能拆干净」，
   // 所以把 startForegroundInterval 换成一个能手动打拍子的替身。
   const runtime = load('./directory-mapping-runtime.tsx', { '@/stores/files': { useFiles }, '@/lib/tauri': { inTauri: true },
-    '@/lib/visibility': { startForegroundInterval: (run, ms, options) => { polls.push({ ms, options }); interval = run; return () => { cleared = true; }; } },
+    '@/lib/visibility': { startForegroundInterval: (run, ms, options = {}) => { polls.push({ ms, options }); interval = run; return () => { cleared = true; }; } },
     './directory-mapping': { refreshMappedCategory: async id => { calls.push(id); } } });
   assert.equal(typeof runtime.startDirectoryMappingRuntime, 'function');
   const stop = runtime.startDirectoryMappingRuntime();
   assert.equal(polls.length, 1, '启动时应注册一次轮询');
   assert.equal(polls[0].ms, runtime.DIRECTORY_MAPPING_INTERVAL_MS);
-  assert.equal(polls[0].options.catchUp, false, '运行时自己挂了 focus 监听，不该再让轮询补拍');
+  // 唤醒（focus / 变可见）由轮询自己的 catchUp 负责，运行时不再各挂一份监听
+  assert.notEqual(polls[0].options.catchUp, false);
   assert.deepEqual(calls, []);
   hydrated = true; hydrate();
   assert.deepEqual(calls, ['a']);

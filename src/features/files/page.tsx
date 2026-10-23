@@ -177,7 +177,7 @@ export function FilesPage() {
    * DOM 数量有上界，布局仍然交给浏览器（不需要按行高算位置，卡片换行也不会错位）。
    * 换分类 / 改标签 / 改搜索词都回到第一批。
    */
-  const { count: visibleCount, hasMore, sentinelRef } = useIncrementalCount(filtered.length, {
+  const { count: visibleCount, hasMore, sentinelRef, ensureVisible } = useIncrementalCount(filtered.length, {
     resetKey: `${selected ?? ""}|${activeTags.join(",")}|${search}`,
   });
 
@@ -190,16 +190,41 @@ export function FilesPage() {
   };
 
   const gridRef = useRef<HTMLDivElement>(null);
+  /** 深链要定位的条目 id：先记下来，等它在网格里被渲染出来再滚（网格是分片的） */
+  const pendingScroll = useRef<string | null>(null);
   useEffect(() => {
     const request = `${location.key}:${requestedItem}`;
     if (!requestedItem || consumedSearch.current === request || !items.some(item => item.id === requestedItem)) return;
     consumedSearch.current = request;
     const item = items.find(item => item.id === requestedItem)!;
     setSelected(item.categoryId); setSearch(""); setActiveTags([]); setSelectedItemId(item.id);
-    let inner = 0;
-    const frame = requestAnimationFrame(() => { inner = requestAnimationFrame(() => Array.from(gridRef.current?.querySelectorAll<HTMLElement>(`[${ITEM_ATTR}]`) ?? []).find(card => card.getAttribute(ITEM_ATTR) === item.id)?.scrollIntoView({ block: "center", behavior: "instant" })); });
-    return () => { cancelAnimationFrame(frame); cancelAnimationFrame(inner); };
+    pendingScroll.current = item.id;
   }, [location.key, requestedItem, items]);
+
+  /**
+   * 把深链目标滚进视野。
+   *
+   * 网格是分片渲染的：目标条目可能在 `filtered` 里排到第 200 位，而首批只铺 120 张卡片 ——
+   * 那时 DOM 里根本没有它，直接 `scrollIntoView` 会静默失败（用户从搜索/侧栏跳过来，
+   * 看到的还是网格顶部）。所以先算出它在 `filtered` 里的下标，交给 `ensureVisible`
+   * 把那一批补出来；补完会重渲染，本 effect 因为依赖里带了 `visibleCount` 再跑一次，
+   * 这次才真的滚过去。
+   */
+  useEffect(() => {
+    const target = pendingScroll.current;
+    if (!target) return;
+    const card = Array.from(gridRef.current?.querySelectorAll<HTMLElement>(`[${ITEM_ATTR}]`) ?? [])
+      .find(node => node.getAttribute(ITEM_ATTR) === target);
+    if (card) {
+      card.scrollIntoView({ block: "center", behavior: "instant" });
+      pendingScroll.current = null;
+      return;
+    }
+    const index = filtered.findIndex(item => item.id === target);
+    // 过滤条件把它筛掉了（比如分类刚变、还没算进来）：不再等，避免永远挂着一个待滚目标
+    if (index < 0) { pendingScroll.current = null; return; }
+    if (index >= visibleCount) ensureVisible(index);
+  }, [filtered, visibleCount, ensureVisible]);
   useGSAP(
     () => {
       const cards = gridRef.current?.querySelectorAll<HTMLElement>("[data-card]");
