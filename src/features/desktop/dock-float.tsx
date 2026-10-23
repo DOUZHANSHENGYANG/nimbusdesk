@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useTranslation } from "react-i18next";
-import { CalendarDays, ChevronDown, Inbox, ListTodo, Newspaper, Search, Settings2 } from "lucide-react";
-import { CaptureForm } from "@/features/knowledge/capture";
+import { CalendarCheck, ChevronDown, FolderKanban, Inbox, LayoutGrid, Newspaper, Search, Settings2 } from "lucide-react";
 import { usePlans } from "@/features/plans/store";
 import { todayStr } from "@/features/plans/types";
 import { openSearchResult, searchQuery } from "@/features/search/api";
@@ -10,16 +9,23 @@ import type { SearchHit } from "@/features/search/types";
 import { mergedSources } from "@/sources/custom";
 import { useFeeds } from "@/stores/feeds";
 import { openUrl } from "@/lib/tauri";
-import { ageBucket, childProgress, dateKey, monthGrid, summarizeDay } from "./dock-float-core";
+import { ageBucket, summarizeDay } from "./dock-float-core";
 import "./dock-float.css";
 
-type DockTab = "search" | "plan" | "collect" | "cal" | "news";
+/**
+ * 六个页：搜索、收纳盒、计划、项目、收集、资讯。
+ *
+ * 收纳盒 / 计划 / 项目 是侧栏形态里那三个飞出面板**本体**，由 dock.tsx 注入 ——
+ * 卡片不重写它们，否则同一功能会出现两套实现、两套密度、两套交互。
+ */
+type DockTab = "search" | "fences" | "plans" | "projects" | "collect" | "news";
 
 const TABS: { key: DockTab; icon: typeof Search }[] = [
   { key: "search", icon: Search },
-  { key: "plan", icon: ListTodo },
+  { key: "fences", icon: LayoutGrid },
+  { key: "plans", icon: CalendarCheck },
+  { key: "projects", icon: FolderKanban },
   { key: "collect", icon: Inbox },
-  { key: "cal", icon: CalendarDays },
   { key: "news", icon: Newspaper },
 ];
 
@@ -32,14 +38,25 @@ const report = (error: unknown) => console.error("[dock-float]", error);
  * 五个页都在卡片内完成，只有齿轮跳主窗口 —— 这是「3 秒内能完成」这条规则的边界：
  * 超过 3 秒的事（树形编辑、批量整理、订阅管理）一律跳主窗口。
  */
-export function DockFloat({ onExpand, onHide }: { onExpand: (open: boolean) => Promise<void>; onHide: () => void }) {
+export interface DockFloatPanels {
+  fences: React.ReactNode;
+  plans: React.ReactNode;
+  projects: React.ReactNode;
+  capture: React.ReactNode;
+}
+
+export function DockFloat({ onExpand, onHide, panels }: {
+  onExpand: (open: boolean) => Promise<void>;
+  onHide: () => void;
+  panels: DockFloatPanels;
+}) {
   const { t } = useTranslation();
   const today = todayStr();
   const tasks = usePlans((state) => state.days[today]) ?? [];
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<DockTab>("search");
   const summary = useMemo(() => summarizeDay(tasks), [tasks]);
-  const [clock, setClock] = useState(() => dateKey(new Date()).slice(0, 0) + new Date().toTimeString().slice(0, 5));
+  const [clock, setClock] = useState(() => new Date().toTimeString().slice(0, 5));
 
   useEffect(() => {
     const timer = setInterval(() => setClock(new Date().toTimeString().slice(0, 5)), 30_000);
@@ -113,11 +130,12 @@ export function DockFloat({ onExpand, onHide }: { onExpand: (open: boolean) => P
 
           <div className="df-body">
             {tab === "search" && <SearchPanel />}
-            {tab === "plan" && <PlanPanel />}
+            {tab === "fences" && <div className="df-host">{panels.fences}</div>}
+            {tab === "plans" && <div className="df-host">{panels.plans}</div>}
+            {tab === "projects" && <div className="df-host">{panels.projects}</div>}
             {tab === "collect" && (
-              <div className="df-collect"><CaptureForm onHide={() => setExpanded(false)} /></div>
+              <div className="df-collect">{panels.capture}</div>
             )}
-            {tab === "cal" && <CalPanel />}
             {tab === "news" && <NewsPanel />}
           </div>
 
@@ -182,116 +200,6 @@ function SearchPanel() {
           ))}
         </div>
       ))}
-    </div>
-  );
-}
-
-/** 计划待办：今天的顶层任务，勾选就地完成；子任务只出角标，编辑跳主窗口。 */
-function PlanPanel() {
-  const { t } = useTranslation();
-  const date = todayStr();
-  const tasks = usePlans((state) => state.days[date]) ?? [];
-  const toggleDone = usePlans((state) => state.toggleDone);
-  const addTask = usePlans((state) => state.addTask);
-  const [draft, setDraft] = useState("");
-  const summary = useMemo(() => summarizeDay(tasks), [tasks]);
-  const tops = useMemo(
-    () => tasks.filter((task) => !task.parentId).sort((a, b) => Number(a.done) - Number(b.done)),
-    [tasks],
-  );
-
-  return (
-    <div className="df-panel">
-      <div className="df-stats">
-        <span className="df-stat-box"><b>{summary.total}</b>{t("dockFloat.statTotal")}</span>
-        <span className="df-stat-box"><b>{summary.todo}</b>{t("dockFloat.statTodo")}</span>
-        <span className="df-stat-box is-warn"><b>{summary.late}</b>{t("dockFloat.statLate")}</span>
-        <span className="df-stat-box is-good"><b>{summary.done}</b>{t("dockFloat.statDone")}</span>
-      </div>
-      <form className="df-add" onSubmit={(event) => {
-        event.preventDefault();
-        const title = draft.trim();
-        if (!title) return;
-        addTask(date, null, title);
-        setDraft("");
-      }}>
-        <input value={draft} maxLength={200} onChange={(event) => setDraft(event.target.value)}
-          placeholder={t("dockFloat.addPlaceholder")} aria-label={t("dockFloat.addPlaceholder")} />
-      </form>
-      {tops.length === 0
-        ? <p className="df-hint">{t("dockFloat.planEmpty")}</p>
-        : <div className="df-rows">
-            {tops.map((task) => {
-              const kids = childProgress(tasks, task.id);
-              return (
-                <button key={task.id} type="button" className={`df-row is-task${task.done ? " is-done" : ""}`}
-                  onClick={() => toggleDone(date, task.id)} aria-pressed={task.done}>
-                  <span className={`df-cb${task.done ? " is-on" : ""}`} aria-hidden="true" />
-                  <span className="df-row-body">
-                    <span className="df-row-title">{task.title}</span>
-                    <span className="df-row-meta">
-                      {task.start && <span>{task.start}</span>}
-                      {kids && <span>{t("dockFloat.subtasks", { done: kids.done, total: kids.total })}</span>}
-                    </span>
-                  </span>
-                </button>
-              );
-            })}
-          </div>}
-    </div>
-  );
-}
-
-/** 日历：固定 6 行 42 格，点一天看那天的安排；新建与改期跳主窗口。 */
-function CalPanel() {
-  const { t } = useTranslation();
-  const days = usePlans((state) => state.days);
-  const [cursor, setCursor] = useState(() => new Date());
-  const [selected, setSelected] = useState(() => todayStr());
-  const cells = useMemo(() => monthGrid(cursor.getFullYear(), cursor.getMonth()), [cursor]);
-  const agenda = (days[selected] ?? []).filter((task) => !task.parentId).slice(0, 6);
-  const planned = useMemo(() => new Set(Object.keys(days).filter((key) => (days[key] ?? []).length > 0)), [days]);
-
-  return (
-    <div className="df-panel df-cal">
-      <div className="df-cal-head">
-        <button type="button" className="df-icon-btn" aria-label={t("dockFloat.prevMonth")}
-          onClick={() => setCursor(new Date(cursor.getFullYear(), cursor.getMonth() - 1, 1))}>
-          <ChevronDown className="df-icon is-left" aria-hidden="true" />
-        </button>
-        <span className="df-cal-title">{t("dockFloat.monthTitle", { month: cursor.getMonth() + 1 })}</span>
-        <button type="button" className="df-icon-btn" aria-label={t("dockFloat.nextMonth")}
-          onClick={() => setCursor(new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1))}>
-          <ChevronDown className="df-icon is-right" aria-hidden="true" />
-        </button>
-        <span className="df-sp" />
-        <button type="button" className="df-chip" onClick={() => { setCursor(new Date()); setSelected(todayStr()); }}>
-          {t("dockFloat.today")}
-        </button>
-      </div>
-      <div className="df-cal-grid">
-        {["mo", "tu", "we", "th", "fr", "sa", "su"].map((day) => (
-          <span key={day} className="df-cal-week">{t(`dockFloat.week.${day}`)}</span>
-        ))}
-        {cells.map((cell) => (
-          <button key={cell.date} type="button"
-            className={`df-day${cell.inMonth ? "" : " is-out"}${cell.date === selected ? " is-selected" : ""}${planned.has(cell.date) ? " has" : ""}`}
-            aria-pressed={cell.date === selected} onClick={() => setSelected(cell.date)}>
-            {cell.day}
-          </button>
-        ))}
-      </div>
-      <div className="df-agenda">
-        <span className="df-group-label">{selected}</span>
-        {agenda.length === 0
-          ? <p className="df-hint">{t("dockFloat.dayEmpty")}</p>
-          : agenda.map((task) => (
-              <span key={task.id} className={`df-agenda-row${task.done ? " is-done" : ""}`}>
-                <span className="df-row-meta">{task.start ?? ""}</span>
-                <span className="df-row-title">{task.title}</span>
-              </span>
-            ))}
-      </div>
     </div>
   );
 }

@@ -338,6 +338,12 @@ export function DockWindow() {
       <DockFloat
         onExpand={applyFloat}
         onHide={() => { useSettings.getState().setDockOpen(false); invoke("dock_close").catch(report); }}
+        panels={{
+          fences: <FencesFlyout />,
+          plans: <PlansFlyout />,
+          projects: <ProjectsFlyout />,
+          capture: <CapturePanel setPanel={() => undefined} />,
+        }}
       />
     );
   }

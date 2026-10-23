@@ -355,6 +355,24 @@
   line-height: var(--pr-leading-snug);
 }
 
+/* 注入进来的真实面板（收纳盒 / 计划 / 项目）：占满内容区、内部自己滚动。
+   它们原本是给 408 宽的侧栏面板写的，这里只给容器，不改它们的内部布局。 */
+.df-host {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.df-host > .dock-panel {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  border-radius: var(--pr-radius-md);
+  background: var(--dock-face);
+  border: 1px solid var(--hairline);
+}
+
 /* 收集：复用主窗口的收集表单，卡片里只做容器 */
 .df-collect { height: 100%; overflow: auto; }
 .df-collect .capture-composer { padding: 10px 12px; border-radius: var(--pr-radius-md); background: var(--dock-face); border: 1px solid var(--hairline); }

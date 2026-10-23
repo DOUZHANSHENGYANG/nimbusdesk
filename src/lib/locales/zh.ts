@@ -46,7 +46,7 @@ export const zh = {
     collapse: "收起卡片",
     settings: "设置（打开主窗口）",
     hide: "隐藏云台",
-    tab: { search: "搜索", plan: "计划待办", collect: "收集", cal: "日历", news: "资讯" },
+    tab: { search: "搜索", fences: "收纳盒", plans: "计划", projects: "项目", collect: "收集", news: "资讯" },
     searchPlaceholder: "搜文件、笔记、计划、网站…",
     searching: "正在搜索…",
     noResult: "没有匹配结果",

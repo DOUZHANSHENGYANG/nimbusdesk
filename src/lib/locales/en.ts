@@ -49,7 +49,7 @@ export const en: AppMessages = {
     collapse: "Collapse",
     settings: "Settings (opens the main window)",
     hide: "Hide Cloud",
-    tab: { search: "Search", plan: "Plans", collect: "Capture", cal: "Calendar", news: "News" },
+    tab: { search: "Search", fences: "Stash", plans: "Plans", projects: "Projects", collect: "Capture", news: "News" },
     searchPlaceholder: "Search files, notes, plans, sites…",
     searching: "Searching…",
     noResult: "No matches",

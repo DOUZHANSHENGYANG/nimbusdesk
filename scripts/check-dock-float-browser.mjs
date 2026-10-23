@@ -31,7 +31,7 @@ try {
   assert.equal(Math.round(capsule.height), 44, "胶囊必须 44 高");
   assert.equal(Math.round(capsule.width), 464, "胶囊铺满 464 宽的窗口");
   assert.ok(Math.abs(capsule.x) <= 1, "胶囊铺满窗口（窗口自己负责居中）");
-  assert.equal(await page.locator(".df-quick-btn").count(), 5, "五个 tab 都要有直达入口");
+  assert.equal(await page.locator(".df-quick-btn").count(), 6, "六个 tab 都要有直达入口");
   const startBounds = await lastBounds();
   assert.equal(startBounds.height, 44, "启动时窗口就该是胶囊高度");
 
@@ -49,7 +49,7 @@ try {
   assert.equal(await page.locator(".df-capsule").count(), 0, "展开后胶囊不在");
 
   // ③ 五个页：都能切，且卡片尺寸不变
-  for (const name of ["搜索", "计划待办", "收集", "日历", "资讯"]) {
+  for (const name of ["搜索", "收纳盒", "计划", "项目", "收集", "资讯"]) {
     await page.getByRole("tab", { name, exact: true }).click();
     await page.waitForTimeout(80);
     assert.equal(await page.getByRole("tab", { name, exact: true }).getAttribute("aria-selected"), "true", `${name} 必须选中`);
@@ -59,18 +59,13 @@ try {
     assert.equal(height.height, 591, `切到 ${name} 后窗口高度不变`);
   }
 
-  // ④ 计划页：只有顶层任务进统计（3 项，其中 1 项已完成），子任务只出角标
-  await page.getByRole("tab", { name: "计划待办", exact: true }).click();
-  const stats = await page.locator(".df-stat-box b").allInnerTexts();
-  assert.deepEqual(stats, ["3", "2", "1", "1"], "今日 3 项 / 待办 2 / 逾期 1 / 完成 1");
-  assert.equal(await page.locator(".df-row.is-task").count(), 3, "只列顶层任务");
-  assert.ok((await page.locator(".df-row.is-task").first().innerText()).includes("子 1/2"), "子任务进度要露出来");
-
-  // ⑤ 日历页：点一天就换那一天
-  await page.getByRole("tab", { name: "日历", exact: true }).click();
-  assert.equal(await page.locator(".df-day").count(), 42, "月格恒 42 格");
-  await page.locator(".df-day:not(.is-selected)").nth(10).click();
-  assert.equal(await page.locator(".df-day.is-selected").count(), 1, "选中的日期只有一个");
+  // ④ 三个真面板：收纳盒 / 计划 / 项目 必须是侧栏那套组件本体，不是卡片里重写的
+  await page.getByRole("tab", { name: "收纳盒", exact: true }).click();
+  assert.equal(await page.locator('.df-host .dock-panel-input[placeholder="搜索条目标题…"]').count(), 1, "收纳盒必须是侧栏那个 FencesFlyout 本体");
+  await page.getByRole("tab", { name: "计划", exact: true }).click();
+  assert.ok(await page.locator(".df-host .dock-todo").count() >= 1, "计划要列出今日待办");
+  await page.getByRole("tab", { name: "项目", exact: true }).click();
+  assert.ok(await page.locator(".df-host .dock-pname").count() >= 1, "项目要列出在办项目");
 
   // ⑥ 资讯页：来源混排
   await page.getByRole("tab", { name: "资讯", exact: true }).click();
@@ -91,7 +86,7 @@ try {
   assert.equal(collapsed.width, 464, "收起后窗口宽 464");
 
   assert.deepEqual(errors, [], "不许有页面异常");
-  console.log("OK   capsule 44 → card 660×591 → five tabs → settings → collapse");
+  console.log("OK   capsule 44 → card 660×591 → six tabs（含收纳盒/计划/项目本体）→ settings → collapse");
 } finally {
   await browser.close();
 }
