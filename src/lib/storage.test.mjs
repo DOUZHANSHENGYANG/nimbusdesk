@@ -21,14 +21,16 @@ async function loadStorage({ initial = state(0), initialArchive = state(10), rea
   const calls = { reads: [], writes: [], pairs: [], emits: [], reports: [], clears: [] };
   const persisted = new Map([["plans", copy(initial)], ["plans-archive", copy(initialArchive)]]);
   const timers = new Map();
+  const delays = new Map();
   let timerId = 0;
   let listener;
+  let visibilityListener;
   const origin = `test-view-${sequence}`;
   const dependencies = {
     inTauri: true,
     crypto: { randomUUID: () => origin },
-    setTimeout: (fn) => { timers.set(++timerId, fn); return timerId; },
-    clearTimeout: (id) => timers.delete(id),
+    setTimeout: (fn, ms) => { timers.set(++timerId, fn); delays.set(timerId, ms); return timerId; },
+    clearTimeout: (id) => { timers.delete(id); delays.delete(id); },
     emit: async (name, payload) => { calls.emits.push({ name, payload: copy(payload) }); },
     listen: async (_name, handler) => { listener = handler; return () => {}; },
     readJson: async (name) => {
@@ -54,13 +56,19 @@ async function loadStorage({ initial = state(0), initialArchive = state(10), rea
       report: (problem, name, error) => calls.reports.push({ problem, name, error }),
       clear: (name) => calls.clears.push(name),
     }) },
+    // 兜底落盘用：捕获 visibilitychange / pagehide 监听，测试里手动触发
+    document: {
+      visibilityState: "visible",
+      addEventListener: (type, fn) => { if (type === "visibilitychange") visibilityListener = fn; },
+    },
+    window: { addEventListener: () => {} },
   };
   globalThis[key] = dependencies;
   const code = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2020 } }).outputText
     .replace(/^import .*;\r?\n/gm, "");
   let api;
   try {
-    api = await import(`data:text/javascript;base64,${Buffer.from(`const { emit, listen, readJson, writeJson, writePlanPair, inTauri, useStorageHealth, crypto, setTimeout, clearTimeout } = globalThis.${key};\n${code}`).toString("base64")}`);
+    api = await import(`data:text/javascript;base64,${Buffer.from(`const { emit, listen, readJson, writeJson, writePlanPair, inTauri, useStorageHealth, crypto, setTimeout, clearTimeout, document, window } = globalThis.${key};\n${code}`).toString("base64")}`);
   } finally { delete globalThis[key]; }
   return {
     ...api,
@@ -68,7 +76,17 @@ async function loadStorage({ initial = state(0), initialArchive = state(10), rea
     calls,
     persisted,
     origin,
+    /** 每次 enqueue 注册的防抖窗口（ms），用来断言「大文档窗口更长」 */
+    delays: () => [...delays.values()],
     fireTimers: async () => { for (const callback of [...timers.values()]) callback(); await turn(); },
+    /** 模拟窗口变成不可见：应把队列里的改动立刻落盘 */
+    hide: async () => {
+      assert.equal(typeof visibilityListener, "function", "visibilitychange 监听应已注册");
+      dependencies.document.visibilityState = "hidden";
+      visibilityListener();
+      await turn();
+      await turn();
+    },
     remote: async (name = "plans", eventSource = "other-view") => {
       assert.equal(typeof listener, "function", "the native storage listener must be installed");
       await listener({ payload: { key: name, source: eventSource } });
@@ -423,8 +441,7 @@ test("timer-only paired edits cannot get stranded behind two independent in-flig
 
 /* ── 内容去重：zustand persist 每次 set() 都会调 setItem，内容没变就不该再写一遍 ── */
 
-test("identical payload is not written twice", async () => {
-  const api = await loadStorage();
+test("identical payload is not written twice", async () => {  const api = await loadStorage();
   await api.storage.getItem("plans");
   await api.storage.setItem("plans", JSON.stringify(state(1)));
   await api.flushAllStorage();
@@ -491,4 +508,30 @@ test("identical plan pair is committed once", async () => {
   assert.equal(api.calls.writes[0].name, "plans");
   assert.deepEqual(api.persisted.get("plans"), state(2));
   assert.deepEqual(api.persisted.get("plans-archive"), state(11));
+});
+
+/* ── 大文档的批处理窗口与兜底落盘 ── */
+
+test("big documents get a longer debounce window than small ones", async () => {
+  const api = await loadStorage();
+  await api.storage.getItem("plans");
+
+  await api.storage.setItem("plans", JSON.stringify(state(1)));
+  assert.deepEqual(api.delays(), [250], "普通文档用 250 ms 窗口");
+
+  // 超过 512 KB 的文档：一次写入是整份序列化 + IPC + SQLite 重写整行，窗口拉长到 1.2 s
+  const big = { state: { blob: "x".repeat(600 * 1024) }, version: 1 };
+  await api.storage.setItem("plans", JSON.stringify(big));
+  assert.deepEqual(api.delays(), [1200], "大文档用 1.2 s 窗口（旧定时器已被替换）");
+});
+
+test("hiding the window flushes queued writes immediately", async () => {
+  const api = await loadStorage();
+  await api.storage.getItem("plans");
+  await api.storage.setItem("plans", JSON.stringify(state(5)));
+  assert.equal(api.calls.writes.length, 0, "防抖窗口内还没写");
+
+  await api.hide();
+  assert.equal(api.calls.writes.length, 1, "窗口不可见时应立刻落盘，不把改动留在内存里");
+  assert.deepEqual(api.persisted.get("plans"), state(5));
 });
