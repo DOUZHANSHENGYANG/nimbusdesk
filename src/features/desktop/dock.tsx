@@ -23,7 +23,8 @@ import { useProjects } from "@/features/projects/store";
 import { CaptureForm } from "@/features/knowledge/capture";
 import { beginMenu, closeMenu, emitMenuRequest, ensurePopupReady, ownerLabel, revealMenu, subscribeMenuSize, useMenuActions, type MenuAction } from "@/features/files/popup";
 import type { MenuIconKey, MenuNode } from "@/features/files/menu-model";import { monitorArea } from "./monitors";
-import { DOCK_CAPTURE_H, dockBounds, type DockArea, type DockMode, type DockPanel } from "./dock-core";
+import { DOCK_CAPTURE_H, dockBounds, dockFloatBounds, type DockArea, type DockMode, type DockPanel } from "./dock-core";
+import { DockFloat } from "./dock-float";
 import { nearestDockEdge } from "./edge-core";
 import { ItemIcon } from "@/features/files/icons";
 import "./dock.css";
@@ -37,6 +38,7 @@ export function DockWindow() {
   const { t, i18n } = useTranslation();
   const modal = useModal();
   const edge = useSettings((s) => s.dockEdge);
+  const dockStyle = useSettings((s) => s.dockStyle);
   const theme = useSettings((s) => s.theme);
   const today = todayStr();
   const todayTasks = usePlans((s) => s.days[today]);
@@ -58,9 +60,9 @@ export function DockWindow() {
     setModeState(next);
   }, []);
 
-  const applyMode = useCallback(async (mode: DockMode) => {
-    if (!inTauri) return;
-    // 跟随鼠标：Dock 落在光标所在的显示器（多屏时在哪个屏工作就出现在哪）
+  /** 光标所在显示器的工作区（逻辑像素）；Dock 出现在你正在工作的那块屏上。 */
+  const resolveArea = useCallback(async (): Promise<{ area: DockArea; scale: number } | null> => {
+    if (!inTauri) return null;
     const [cursor, monitors, current] = await Promise.all([
       cursorPosition().catch(() => null),
       availableMonitors().catch(() => [] as Monitor[]),
@@ -71,11 +73,17 @@ export function DockWindow() {
       const s = m.size;
       return cursor.x >= p.x && cursor.x < p.x + s.width && cursor.y >= p.y && cursor.y < p.y + s.height;
     })) ?? current;
-    if (!monitor) return;
+    if (!monitor) return null;
     const raw = monitorArea(monitor);
     const scale = raw.scale || 1;
     // MonitorArea 是物理像素；dock-core 的口径是逻辑像素。
-    const area: DockArea = { x: raw.x / scale, y: raw.y / scale, w: raw.w / scale, h: raw.h / scale };
+    return { area: { x: raw.x / scale, y: raw.y / scale, w: raw.w / scale, h: raw.h / scale }, scale };
+  }, []);
+
+  const applyMode = useCallback(async (mode: DockMode) => {
+    const resolved = await resolveArea();
+    if (!resolved) return;
+    const { area, scale } = resolved;
     areaRef.current = area;
     const height = panelRef.current === "capture" ? DOCK_CAPTURE_H : undefined;
     const bounds = dockBounds(area, edge, mode, undefined, height);
@@ -84,7 +92,20 @@ export function DockWindow() {
       label: LABEL, x: Math.round(bounds.x * scale), y: Math.round(bounds.y * scale),
       width: Math.round(bounds.w * scale), height: Math.round(bounds.h * scale),
     });
-  }, [edge, setMode]);
+  }, [edge, resolveArea, setMode]);
+
+  /** 胶囊形态：同一个窗口换锚点 —— 水平居中、距顶 12；展开与收起只变宽高。 */
+  const applyFloat = useCallback(async (open: boolean) => {
+    const resolved = await resolveArea();
+    if (!resolved) return;
+    const { area, scale } = resolved;
+    areaRef.current = area;
+    const bounds = dockFloatBounds(area, open ? "flyout" : "strip");
+    await invoke("window_set_bounds", {
+      label: LABEL, x: Math.round(bounds.x * scale), y: Math.round(bounds.y * scale),
+      width: Math.round(bounds.w * scale), height: Math.round(bounds.h * scale),
+    });
+  }, [resolveArea]);
 
   /** 面板开合；窗口位置固定，侧栏绝不因开面板而移动。 */
   const setPanel = useCallback((next: DockPanel | null) => {
@@ -120,7 +141,7 @@ export function DockWindow() {
       if (next !== store.dockEdge) store.setDockEdge(next);
       else void applyMode(modeRef.current).catch(report);
     })().catch((error) => { dragging.current = false; report(error); });
-  }, [applyMode, setPanel]);
+  }, [applyFloat, applyMode, setPanel]);
 
   useEffect(() => {
     if (!inTauri) return;
@@ -297,6 +318,14 @@ export function DockWindow() {
 
   if (!inTauri) {
     return <div className="dock-root" data-edge={edge}><p className="dock-hint">{t("dock.tauriOnly")}</p></div>;
+  }
+  if (dockStyle === "capsule") {
+    return (
+      <DockFloat
+        onExpand={applyFloat}
+        onHide={() => { useSettings.getState().setDockOpen(false); invoke("dock_close").catch(report); }}
+      />
+    );
   }
   return (
     <div className="dock-root" data-edge={edge} data-mode={mode}

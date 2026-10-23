@@ -4,6 +4,36 @@
 
 先在浏览器里看：直接用浏览器打开仓库根目录的 `design-preview-dock.html`（它 <link> 的是 `src/styles/tokens.css`，所以永远与真源同步；右上角按钮切明暗，卡片头部可切五个 tab）。
 
+## 实现状态
+
+侧栏形态保留，设置 → **桌面 Dock → Dock 形态** 可切「屏顶胶囊」。
+
+| 文件 | 负责 |
+|---|---|
+| `src/features/desktop/dock-float.tsx` | 胶囊 + 卡片，五个页 |
+| `src/features/desktop/dock-float-core.ts` | 月格（固定 42 格）、今日进度、子任务进度、相对时间 |
+| `src/features/desktop/dock-float.css` | 悬浮层材质与全部卡片样式 |
+| `src/features/desktop/dock.tsx` | 形态分流 + `applyFloat`（窗口尺寸） |
+| `src/stores/settings.ts` | `dockStyle: "rail" \| "capsule"` |
+
+五页的数据来源全部复用现有 store，没有新增业务逻辑：
+
+| 页 | 数据 | 动作 |
+|---|---|---|
+| 搜索 | `searchQuery(query, "all", true)` | 点结果直接打开 |
+| 计划待办 | `usePlans.days[today]` | 勾选完成、快速添加 |
+| 收集 | `CaptureForm`（知识库收集表单） | 原样复用 |
+| 日历 | `usePlans.days` + `monthGrid` | 选日期看当天安排 |
+| 资讯 | `useFeeds.entriesBySource` + `mergedSources()` | 点标题用默认浏览器打开 |
+
+只有齿轮跳主窗口（`desktop_open_main` → /settings）。
+
+## 验证
+
+- `node --test src/features/desktop/dock-float-core.test.mjs`：月格恒 42 格 / 只数十层任务 / 子任务角标 / 相对时间单位切换。
+- 手测：设置里切「屏顶胶囊」→ 窗口变成 44px 药丸并水平居中；点开变成 660×591 卡片；切五个 tab 窗口高度不变；点齿轮进主窗口设置页。
+- `npm run verify` 必须退出 0。
+
 ## 几何契约
 
 悬浮锚点不写进 `DockEdge`：吸附（`nearestDockEdge` / `settings.dockEdge`）仍然只认 left/right/top 三条边，卡片化的 Dock 只是「换了锚点的同一个窗口」。

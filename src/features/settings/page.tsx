@@ -305,6 +305,8 @@ function DesktopDockCard() {
   const setDockEnabled = useSettings((s) => s.setDockEnabled);
   const setDockOpen = useSettings((s) => s.setDockOpen);
   const setDockEdge = useSettings((s) => s.setDockEdge);
+  const dockStyle = useSettings((s) => s.dockStyle);
+  const setDockStyle = useSettings((s) => s.setDockStyle);
   const setDockShortcut = useSettings((s) => s.setDockShortcut);
   const setDockAutoHide = useSettings((s) => s.setDockAutoHide);
   const [shortcutDraft, setShortcutDraft] = useState<string | null>(null);
@@ -364,6 +366,18 @@ function DesktopDockCard() {
             </div>
           </Field>
           <p className="text-[11px] leading-5 text-muted-foreground">{t("settings.dockEdgeHint")}</p>
+          <Field label={t("settings.dockStyle")}>
+            <div className="flex gap-2">
+              {(["rail", "capsule"] as const).map((style) => (
+                <Button key={style} variant={dockStyle === style ? "primary" : "secondary"} size="sm"
+                  aria-pressed={dockStyle === style}
+                  onClick={() => { setDockStyle(style); if (dockEnabled && dockOpen) invoke("dock_close").then(() => invoke("dock_open")).catch((error) => toast.error(String(error))); }}>
+                  {t(style === "rail" ? "settings.dockStyleRail" : "settings.dockStyleCapsule")}
+                </Button>
+              ))}
+            </div>
+          </Field>
+          <p className="text-[11px] leading-5 text-muted-foreground">{t("settings.dockStyleHint")}</p>
           <Field label={t("settings.dockShortcut")}>
             <ShortcutRecorder placeholder="Ctrl+Alt+D" value={shortcutDraft ?? dockShortcut}
               onChange={(value) => { setShortcutDraft(value); setShortcutError(""); }} en={en}
