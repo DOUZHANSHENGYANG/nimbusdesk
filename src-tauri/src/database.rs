@@ -1911,4 +1911,42 @@ mod tests {
         assert!(snapshot_to(&source.0, &link).is_err());
         fs::remove_dir(link).unwrap();
     }
+
+    /// `files` 已改成行级表：这里验证「真数据目录」这一层是对的 ——
+    /// 写入落在 `file_items`/`file_categories`，**不再往 `module_state` 里塞整份 blob**，
+    /// 而且换一个连接重新打开（模拟重启应用）内容还在。
+    #[test]
+    fn files_rows_persist_across_connections_without_a_blob_row() {
+        let root = Fixture::new();
+        let delta = json!({
+            "categories": { "upsert": [{ "value": { "id": "work", "name": "工作", "createdAt": 1 }, "order": 0 }] },
+            "items": { "upsert": [
+                { "value": { "id": "a", "categoryId": "work", "type": "file", "title": "A", "path": "E:/a.txt", "tags": [], "createdAt": 1 }, "order": 0 },
+                { "value": { "id": "b", "categoryId": "work", "type": "file", "title": "B", "path": "E:/b.txt", "tags": [], "createdAt": 1 }, "order": 1 }
+            ] }
+        });
+        {
+            let mut conn = open_at(&root.0).unwrap();
+            crate::files_table::ensure_schema(&conn).unwrap();
+            crate::files_table::apply(&mut conn, &delta).unwrap();
+        }
+
+        // 换一个连接重新打开：内容必须还在（restart 之后要能读回来）
+        let conn = open_at(&root.0).unwrap();
+        let snapshot = crate::files_table::load(&conn).unwrap();
+        assert_eq!(snapshot["items"].as_array().unwrap().len(), 2);
+        assert_eq!(snapshot["categories"].as_array().unwrap().len(), 1);
+
+        // 关键：整份 blob 的那一行不该存在（写放大已经消失）
+        assert!(read_at(&root.0, "files").unwrap().is_none());
+
+        // 改一条 → 落地一行；删分类 → 条目连带清掉
+        {
+            let mut conn = open_at(&root.0).unwrap();
+            crate::files_table::apply(&mut conn, &json!({ "items": { "remove": ["a"] } })).unwrap();
+        }
+        let snapshot = crate::files_table::load(&open_at(&root.0).unwrap()).unwrap();
+        assert_eq!(snapshot["items"].as_array().unwrap().len(), 1);
+        assert_eq!(snapshot["items"][0]["id"], "b");
+    }
 }
