@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import "@/ahub/i18n";
 import { SkillsPage as AhubSkillsPageView } from "@/ahub/pages/SkillsPage";
 import { useData } from "@/ahub/stores/data";
 import { useSettings } from "@/ahub/stores/settings";

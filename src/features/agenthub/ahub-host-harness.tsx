@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import "@/ahub/i18n";
 import { ToolManagerPage as AhubToolManagerPageView } from "@/ahub/pages/ToolManagerPage";
 import { useData } from "@/ahub/stores/data";
 import { useSettings } from "@/ahub/stores/settings";

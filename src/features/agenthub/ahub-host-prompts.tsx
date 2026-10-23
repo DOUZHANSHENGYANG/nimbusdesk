@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import "@/ahub/i18n";
 import { PromptsPage as AhubPromptsPageView } from "@/ahub/pages/PromptsPage";
 import { useData } from "@/ahub/stores/data";
 import { useSettings } from "@/ahub/stores/settings";

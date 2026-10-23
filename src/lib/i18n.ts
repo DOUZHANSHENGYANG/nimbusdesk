@@ -1,6 +1,5 @@
 import i18next from "i18next";
 import { I18nextProvider, useTranslation } from "react-i18next";
-import { ahubEn, ahubZh } from "@/ahub/i18n";
 
 export type Lang = "zh" | "en";
 
@@ -1985,6 +1984,22 @@ const en: typeof zh = {
   },
 };
 
+/**
+ * 缺键采样。
+ *
+ * react-i18next 缺键**不报错**：它把 key 原样画到界面上。分包、懒加载词表这类改动
+ * 最容易踩的就是这个坑 —— 类型检查、构建、单测全绿，界面上却冒出 `toolbox.xxx.yyy`。
+ * 所以这里把缺键收进一个数组（同时挂到 window 上），由浏览器回归逐页断言它为空：
+ * `scripts/check-split-browser.mjs` 会走一遍所有路由。
+ */
+export const missingI18nKeys: string[] = [];
+
+declare global {
+  interface Window {
+    __i18nMissing?: string[];
+  }
+}
+
 export const i18n = i18next.createInstance();
 void i18n.init({
   lng: "zh",
@@ -1995,6 +2010,13 @@ void i18n.init({
     en: { translation: en },
   },
   interpolation: { escapeValue: false },
+  saveMissing: true,
+  missingKeyHandler: (_lngs, _ns, key) => {
+    if (!missingI18nKeys.includes(key)) {
+      missingI18nKeys.push(key);
+      if (typeof window !== "undefined") window.__i18nMissing = missingI18nKeys;
+    }
+  },
 });
 
 export function changeLang(lang: Lang) {
@@ -2002,18 +2024,14 @@ export function changeLang(lang: Lang) {
 }
 
 /*
- * 桥②（语言）：把 AgentHub（源侧工具箱）的键表合并进**同一个**实例。
+ * 桥②（语言）：AgentHub（源侧工具箱）的键表合并进**同一个**实例 —— 合并动作挪到了
+ * `src/ahub/i18n/index.ts`，那边 import 时才注册（那两张表 100 KB，只有工具箱四页、
+ * 设置里的 AI 部分真正用得到，不该由每个窗口的入口静态背上）。
  *
- * 为什么必须同一个实例：搬过来的组件用的是 useTranslation()，而全应用由
- * <I18nextProvider i18n={i18n}> 提供实例 —— 另起一套的话它们取不到键，
- * 而 react-i18next 缺键不报错，只会把 key 字符串画在界面上。
- *
- * deep=true → 嵌套对象按叶子合并；overwrite=false → **云台已有的键一律不被覆盖**。
- * 两张表有 19 个同名键（app.name、settings.theme…），那些属于云台自己的界面，
- * 以云台为准。语言切换因此天然同时作用于两边，不必再写任何同步代码。
+ * 这里只留一条约定：合并语义是 deep=true、overwrite=false（云台已有的键一律不被覆盖，
+ * 两张表有 19 个同名键，以云台为准）；语言切换因此天然同时作用于两边。
+ * 哪片页面忘了 import 词表，上面的缺键采样会记下来，浏览器回归逐页断言为空。
  */
-i18n.addResourceBundle("zh", "translation", ahubZh, true, false);
-i18n.addResourceBundle("en", "translation", ahubEn, true, false);
 
 export { I18nextProvider, useTranslation };
 

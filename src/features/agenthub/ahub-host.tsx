@@ -1,4 +1,6 @@
 import { useEffect } from "react";
+// 工具箱的键表随这一片一起加载（不再由入口静态带上，见 src/lib/i18n.ts 的说明）
+import "@/ahub/i18n";
 import { McpPage as AhubMcpPageView } from "@/ahub/pages/McpPage";
 import { useData } from "@/ahub/stores/data";
 import { useSettings } from "@/ahub/stores/settings";

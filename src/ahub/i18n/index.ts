@@ -1,3 +1,5 @@
+import { i18n } from "@/lib/i18n";
+
 /*
  * 桥②（语言）：源侧在这个文件末尾自己 `i18n.use(initReactI18next).init(...)`，
  * 也就是起**第二套** i18next 实例，还从 localStorage["agenthub.lang"] 取语言。
@@ -2128,3 +2130,32 @@ const en: typeof zh = {
 };
 
 export { zh as ahubZh, en as ahubEn };
+
+/*
+ * 合并进云台那个**同一个** i18next 实例 —— 但改成「用到才合并」。
+ *
+ * 为什么必须同一个实例：搬过来的组件用的是 useTranslation()，而全应用由
+ * <I18nextProvider i18n={i18n}> 提供实例。另起一套的话它们取不到键，
+ * 而 react-i18next 缺键不报错，只会把 key 字符串画在界面上。
+ *
+ * 为什么在这里而不是 `src/lib/i18n.ts`：这两张表有 100 KB，以前被入口静态 import，
+ * 于是每个窗口（含只显示一张便签的窗口）都要解析它。现在只有真正 import 本模块的
+ * 那片代码（工具箱四页、设置里的 AI 部分…）会带上它。
+ *
+ * 合并语义不变：deep=true 按叶子合并，overwrite=false → **云台已有的键一律不被覆盖**
+ * （两张表有 19 个同名键，以云台为准）。
+ *
+ * 兜底：`src/lib/i18n.ts` 把缺键收进 `missingI18nKeys`，
+ * `scripts/check-split-browser.mjs` 逐页断言它为空 —— 所以「哪片页面忘了 import 词表」
+ * 会当场失败，不会静默地把 key 画到界面上。
+ */
+let registered = false;
+
+export function registerAhubMessages() {
+  if (registered) return;
+  registered = true;
+  i18n.addResourceBundle("zh", "translation", zh, true, false);
+  i18n.addResourceBundle("en", "translation", en, true, false);
+}
+
+registerAhubMessages();
