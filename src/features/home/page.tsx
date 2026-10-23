@@ -12,6 +12,7 @@ import { useFiles, useFences } from "@/stores/files";
 import { deriveHomeRelations } from "./relations";
 import { WorkspaceOrbit, type HomeModule, type WorkspaceNode } from "./workspace-orbit";
 import { HomeInspector, type InboxSummary } from "./inspector";
+import { HomeOverview } from "./overview";
 import { TodayList } from "./today-list";
 
 export function HomePage() {
@@ -29,11 +30,11 @@ export function HomePage() {
   const [selected, setSelected] = useState<HomeModule | null>(null);
   const [paused, setPaused] = useState(true);
   /**
-   * 主页有两种视图：默认「今天」的行式清单，「脉络」是原来的星图。
-   * 星图是一屏计数概览，适合偶尔看一眼；每天真正要动手的是清单，
-   * 所以清单是落点，星图降为可切换的第二视图（不删功能）。
+   * 主页有三种视图：默认「总览」一屏摊开今日计划/待办/笔记/资讯，
+   * 「今天」是按时间的行式清单（要逐条动手时用），「脉络」是原来的星图。
+   * 总览是落点：四张卡各解决一件事，想深入再进对应页面。
    */
-  const [view, setView] = useState<"list" | "orbit">("list");
+  const [view, setView] = useState<"overview" | "list" | "orbit">("overview");
   const [focusedTask, setFocusedTask] = useState<string | null>(null);
   const [captureBusy, setCaptureBusy] = useState(false);
   const workspace = useRef<HTMLDivElement>(null);
@@ -102,9 +103,17 @@ export function HomePage() {
                 {t("home.dayCrumb", { count: roots.length, done: progress.done })}
               </p>
             )}
+            {view === "overview" && (
+              <p className="mt-1.5 text-[13px] text-muted-foreground">
+                {t("home.progressLabel", { done: progress.done, total: progress.total })}
+              </p>
+            )}
           </div>
           <div className="flex items-center gap-2">
             <div className="home-viewswitch" role="group" aria-label={t("home.workspaceTitle")}>
+              <button type="button" aria-pressed={view === "overview"} onClick={() => setView("overview")}>
+                {t("home.viewOverview")}
+              </button>
               <button type="button" aria-pressed={view === "list"} onClick={() => setView("list")}>
                 {t("home.viewList")}
               </button>
@@ -118,7 +127,20 @@ export function HomePage() {
           </div>
         </header>
         <div className="home-layout">
-          {view === "list" ? (
+          {view === "overview" ? (
+            <HomeOverview
+              tasks={tasks}
+              progress={progress}
+              inbox={inbox}
+              root={root}
+              today={today}
+              now={now.getTime()}
+              onToggle={(id) => toggleDone(today, id)}
+              onCapture={() => void capture()}
+              captureBusy={captureBusy}
+              onRetryInbox={refreshInbox}
+            />
+          ) : view === "list" ? (
             <TodayList
               tasks={tasks}
               focusedId={focusedTask}

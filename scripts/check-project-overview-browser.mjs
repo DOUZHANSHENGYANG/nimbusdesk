@@ -6,10 +6,10 @@ const page = await browser.newPage({ viewport: { width: 1420, height: 900 } });
 const errors = [];
 page.on("pageerror", error => errors.push(error.message));
 const selectedTab = () => page.evaluate(() => document.querySelector('[role="tab"][aria-selected="true"]')?.textContent ?? "none");
-const tile = key => page.locator(`[data-overview-tile="${key}"] [data-overview-value]`).innerText().then(text => Number(text.trim()));
+const tile = key => page.locator(`[data-stat="${key}"] [data-stat-value]`).innerText().then(text => Number(text.trim()));
 try {
   await page.goto(`${process.env.ZENTAO_FIXTURE_ORIGIN ?? "http://127.0.0.1:17800"}/src/features/projects/fixtures/page.html`);
-  await page.locator('[data-overview-tile="doing"]').waitFor();
+  await page.locator('[data-stat="doing"]').waitFor();
 
   // 总览是落地页：一进来就是它，不是列表。
   assert.equal(await selectedTab(), "总览", "Overview must be the landing view");
@@ -20,7 +20,7 @@ try {
   // 卡片里的迭代下拉与页头共用一份状态：放到「全部迭代」后未排期的项也要出现。
   await page.getByRole("combobox", { name: "迭代", exact: true }).click();
   await page.getByRole("option", { name: /全部迭代/ }).click();
-  await page.waitForFunction(() => document.querySelector('[data-overview-tile="todo"] [data-overview-value]')?.textContent?.trim() === "1");
+  await page.waitForFunction(() => document.querySelector('[data-stat="todo"] [data-stat-value]')?.textContent?.trim() === "1");
   assert.equal(await tile("doing"), 1);
 
   // 点总览里的一行 = 选中该项并就在这一屏开详情，不用跳去列表。
@@ -47,7 +47,7 @@ try {
   await page.getByRole("option", { name: "已完成", exact: true }).click();
   await page.waitForFunction(() => window.projectsReview.stores.useProjects.getState().items.find(item => item.id === "item-portal").status === "done");
   await page.getByRole("tab", { name: "总览" }).click();
-  await page.waitForFunction(() => document.querySelector('[data-overview-tile="done"] [data-overview-value]')?.textContent?.trim() === "1");
+  await page.waitForFunction(() => document.querySelector('[data-stat="done"] [data-stat-value]')?.textContent?.trim() === "1");
   assert.equal(await tile("doing"), 0, "The finished item must leave the in-progress tile");
 
   assert.deepEqual(errors, []);

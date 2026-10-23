@@ -1,0 +1,66 @@
+<!doctype html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body><div id="root" style="height:100vh"></div><script type="module">
+import React from 'react';
+import {createRoot} from 'react-dom/client';
+import {HashRouter,Routes,Route,useLocation} from 'react-router-dom';
+import {mockIPC,mockWindows} from '@tauri-apps/api/mocks';
+const fixtures={},calls=[];
+const now=Date.now();
+const captures=[
+ {id:'cap-1',title:'Postgres 索引调优笔记',createdAt:now-30*60*1000,project:'',source:'reading',status:'inbox',attachments:[],notePath:'00-Inbox/postgres.md'},
+ {id:'cap-2',title:'Rust 异步取消的三种写法',createdAt:now-5*3600*1000,project:'',source:'code',status:'inbox',attachments:[],notePath:'00-Inbox/rust-cancel.md'},
+];
+window.homeReview={fixtures,calls};
+mockIPC(async(cmd,args)=>{
+ calls.push({cmd,args});
+ if(cmd==='read_json')return structuredClone(fixtures[args.key]??null);
+ if(cmd==='write_json'){fixtures[args.key]=structuredClone(args.value);return args.value;}
+ if(cmd==='knowledge_captures')return structuredClone(captures);
+ if(cmd==='plugin:event|listen')return 1;
+ if(cmd==='get_data_dir')return 'E:/HomeFixture';
+ return null;
+});
+mockWindows('main');
+const {todayStr,addDays}=await import('/src/features/plans/types.ts');
+const {emptyProjectData}=await import('/src/features/projects/types.ts');
+const today=todayStr(),stamp={createdAt:1,updatedAt:1};
+fixtures.plans={version:4,state:{days:{[today]:[
+ {...stamp,id:'plan-1',parentId:null,title:'把结算页的错误提示收成一条',start:'09:30',end:'10:00',done:true},
+ {...stamp,id:'plan-2',parentId:null,title:'对齐导出模板的两处列宽',start:'14:00',done:false},
+ {...stamp,id:'plan-3',parentId:'plan-2',title:'先量一遍现有列宽',done:false},
+ {...stamp,id:'plan-4',parentId:null,title:'过一遍上线清单',done:false},
+]}}};
+const data=emptyProjectData();
+data.areas=[{...stamp,id:'area-work',name:'业务开发'}];
+data.projects=[{...stamp,id:'project-portal',name:'业务门户',areaId:'area-work',note:'',status:'active',folder:null}];
+data.iterations=[{...stamp,id:'iteration-now',name:'本周迭代',start:addDays(today,-3),end:addDays(today,10)}];
+data.items=[
+ {...stamp,id:'item-portal',title:'完善采购页面',projectId:'project-portal',areaId:null,note:'',status:'doing',deadline:null,activeIterationId:'iteration-now'},
+ {...stamp,id:'item-export',title:'导出模板留白对不齐',projectId:'project-portal',areaId:null,note:'',status:'todo',deadline:addDays(today,-1),activeIterationId:'iteration-now'},
+ {...stamp,id:'item-small',title:'临时小需求',projectId:null,areaId:null,note:'',status:'todo',deadline:today,activeIterationId:null},
+ {...stamp,id:'item-done',title:'旧版筛选器下线',projectId:'project-portal',areaId:null,note:'',status:'done',deadline:null,activeIterationId:'iteration-now'},
+];
+data.memberships=[{id:'m1',itemId:'item-portal',iterationId:'iteration-now',joinedAt:1,leftAt:null,carriedFrom:null,updatedAt:1},{id:'m2',itemId:'item-export',iterationId:'iteration-now',joinedAt:1,leftAt:null,carriedFrom:null,updatedAt:1},{id:'m3',itemId:'item-done',iterationId:'iteration-now',joinedAt:1,leftAt:null,carriedFrom:null,updatedAt:1}];
+fixtures.projects={version:1,state:data};
+fixtures['knowledge-settings']={version:1,state:{vaultRoot:'E:/HomeFixture/vault',vaultName:'开发知识库'}};
+fixtures['feed-cache']={version:1,state:{entriesBySource:{
+ 'github-trending':[{id:'gh-1',title:'Show HN: 一个纯 CSS 的看板',url:'https://example.com/1',pubDate:now-40*60*1000}],
+ 'hackernews':[{id:'hn-1',title:'SQLite 的一个新扩展',url:'https://example.com/2',pubDate:now-90*60*1000},{id:'hn-2',title:'Rust 1.95 发布',url:'https://example.com/3',pubDate:now-3*3600*1000}],
+},lastFetchedAt:{'github-trending':now-20*60*1000,'hackernews':now-80*60*1000},lastAttemptDay:{}}};
+await import('/src/index.css');
+const {i18n,I18nextProvider}=await import('/src/lib/i18n.ts');
+const {HomePage}=await import('/src/features/home/page.tsx');
+const {Toaster}=await import('/src/components/ui/sonner.tsx');
+const {usePlans}=await import('/src/features/plans/store.ts');
+const {useProjects}=await import('/src/features/projects/store.ts');
+const {useFeeds}=await import('/src/stores/feeds.ts');
+window.homeReview.stores={usePlans,useProjects,useFeeds};
+document.documentElement.classList.add('dark');
+function Destination(){const loc=useLocation();return React.createElement('div',{'data-destination':true},loc.pathname+loc.search)}
+history.replaceState(null,'','#/');
+createRoot(document.getElementById('root')).render(React.createElement(I18nextProvider,{i18n},React.createElement(HashRouter,null,React.createElement(Routes,null,
+ React.createElement(Route,{path:'/',element:React.createElement(HomePage)}),
+ React.createElement(Route,{path:'/plans',element:React.createElement(Destination)}),
+ React.createElement(Route,{path:'/projects',element:React.createElement(Destination)}),
+ React.createElement(Route,{path:'/feeds',element:React.createElement(Destination)}),
+ React.createElement(Route,{path:'/knowledge',element:React.createElement(Destination)})),React.createElement(Toaster))));
+</script></body></html>
