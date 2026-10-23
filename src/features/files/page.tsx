@@ -415,7 +415,16 @@ export function FilesPage() {
       await alert({ title: t("files.dupCategory") });
       return;
     }
-    addCategory(name.trim());
+    /*
+     * 先问一句「要不要做成存储盒」——存储盒会把拖进来的文件真的搬走，
+     * 这是不可逆的语义差别，不能靠默认值替用户决定。映射盒要选目录，
+     * 等第 3 步把它并进来再问第三种。
+     */
+    const storage = await confirm({
+      title: t("files.kindAsk"),
+      description: t("files.kindAskHint"),
+    });
+    addCategory(name.trim(), undefined, storage ? "storage" : "shortcut");
   };
 
   /** 双击/菜单就地改名：重名返回 false（保持编辑态），成功返回 true */

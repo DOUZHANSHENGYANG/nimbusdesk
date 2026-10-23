@@ -366,6 +366,8 @@ export const en: AppMessages = {
     title: "Files",
     all: "All",
     defaultCategory: "Default",
+    kindAsk: "Make it a storage box?",
+    kindAskHint: "A storage box moves dropped files into the data folder. Cancel keeps it a plain shortcut box (references only).",
     addCategory: "New category",
     addSubCategory: "New subcategory",
     subCategoryOf: "Subcategories of \"{{name}}\"",

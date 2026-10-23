@@ -362,6 +362,8 @@ export const zh = {
     title: "文件管理",
     all: "全部",
     defaultCategory: "默认分类",
+    kindAsk: "做成存储盒？",
+    kindAskHint: "存储盒会把拖进来的文件真的移动进数据目录；选「取消」就是普通的快捷盒（只记引用）。",
     addCategory: "新建分类",
     addSubCategory: "新建子分类",
     subCategoryOf: "「{{name}}」的子分类",
