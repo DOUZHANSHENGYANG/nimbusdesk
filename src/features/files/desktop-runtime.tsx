@@ -69,6 +69,14 @@ export function DesktopRuntime() {
         });
         const offHydration = useSettings.persist.onFinishHydration(applyShortcut);
         const offSettings = useSettings.subscribe((state, previous) => { if (state.fenceShortcut !== previous.fenceShortcut) applyShortcut(); });
+        /*
+         * 首帧补一次。
+         *
+         * onFinishHydration 只在「之后」水合时回调；如果挂载时已经水合完
+         * （启动快、或从托盘再打开主窗口），那一次回调永远不会来 ——
+         * 表现就是「Dock 开关是开的，但第一次打开不出现，得关一次再开」。
+         */
+        void applyDock();
         applyShortcut();
         return () => { stopped = true; offHydration(); offSettings(); void listener.then(off => off()).catch(() => undefined); offDockHydration(); offDockSettings(); };
     }, []);
