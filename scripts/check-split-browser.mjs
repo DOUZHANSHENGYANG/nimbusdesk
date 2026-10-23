@@ -61,6 +61,8 @@ async function newPage(options = {}) {
   await page.addInitScript((settings) => {
     const callbacks = new Map();
     let seq = 0;
+    // 模拟「运行时没有 View Transitions」：主题切换会走到 GSAP 羽化幕布兜底分支
+    if (settings?.disableViewTransition) delete Document.prototype.startViewTransition;
     const respond = (cmd, args) => {
       if (cmd === "plugin:event|listen") return args?.handler ?? null;
       if (cmd.startsWith("plugin:event|")) return null;
@@ -123,7 +125,6 @@ try {
   assert.deepEqual(splitErrors, [], "分包改动不应引入运行时错误");
 
   // ── B. 英文启动：英文词表是分片，真源语言来自 settings（水合后）────────
-  //    断言：真的拉到了 en-* 分片、正文是英文、且没有缺键（缺键就是分片没到/漏键）。
   const english = await newPage({ settings: { version: 8, state: { theme: "dark", lang: "en" } } });
   await english.open("/");
   await english.page.waitForFunction(
@@ -137,6 +138,25 @@ try {
   assert.deepEqual(englishMissing, [], `英文模式不应缺键：${englishMissing.slice(0, 5).join(", ")}`);
   console.log(`✓ 英文：加载 ${englishChunks.join(", ")}，正文为英文且无缺键`);
   await english.page.close();
+
+  // ── C. 主题切换：gsap 是按需加载的，无 View Transitions 时的兜底路径必须照常工作 ──
+  //    断言：主题类翻转、兜底幕布用完被移除、无报错（否则 gsap 分片没加载或 switching 卡住）。
+  const themePage = await newPage({ settings: { version: 8, state: { theme: "dark", lang: "zh" } }, disableViewTransition: true });
+  await themePage.open("/");
+  await themePage.page.getByRole("button", { name: "切换到亮色" }).waitFor({ timeout: 20000 });
+  const startedDark = await themePage.page.evaluate(() => document.documentElement.classList.contains("dark"));
+  assert.equal(startedDark, true, "初始应为暗色");
+  await themePage.page.getByRole("button", { name: "切换到亮色" }).click();
+  await themePage.page.waitForFunction(() => !document.documentElement.classList.contains("dark"), undefined, { timeout: 8000 });
+  // 兜底幕布（z-index 2147483000）应在动画结束后被移除，说明 gsap 分片到位且收尾干净
+  await themePage.page.waitForFunction(
+    () => ![...document.body.querySelectorAll("div")].some((node) => node.style.zIndex === "2147483000"),
+    undefined,
+    { timeout: 8000 },
+  );
+  assert.deepEqual(themePage.realErrors(), [], "主题切换兜底路径不应报错");
+  console.log("✓ 主题：无 View Transitions 时走 gsap 兜底，主题翻转且幕布收尾干净");
+  await themePage.page.close();
 
   // ── B2. 全路由词表完整性（每页强制整页重载）────────────────────────
   const sweep = await newPage();

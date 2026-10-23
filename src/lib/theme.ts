@@ -1,5 +1,3 @@
-import { gsap } from "@/lib/gsap";
-
 export type ThemeMode = "light" | "dark";
 /*
  * 应用主题类到 <html>，并同步 <meta name="theme-color">。
@@ -86,24 +84,41 @@ export function toggleThemeRadial(target: ThemeMode, x?: number, y?: number) {
   const proxy = { r: isExpand ? 0 : RR };
   const setR = () => sheet.style.setProperty("--r", `${proxy.r}px`);
 
-  gsap.to(proxy, {
-    r: isExpand ? RR : 0,
-    duration: isExpand ? 0.56 : 0.48,
-    ease: "power3.inOut",
-    onUpdate: setR,
-    onComplete: () => {
-      const done = () => {
-        sheet.remove();
-        switching = false;
-      };
-      if (isExpand) {
-        applyTheme(target);
-        gsap.delayedCall(0.06, done);
-      } else {
-        done();
-      }
-    },
-  });
+  /*
+   * GSAP 在这里**按需**拉取：主题切换的首选路径是 View Transitions（WebView2 支持），
+   * 这段羽化幕布只是无 VT 运行时的兜底。为了它把 69 KB 的 gsap 常驻进每个窗口不值得 ——
+   * 真走到兜底分支时再加载，代价是动画起点晚十几毫秒（幕布此刻还是 r=0，肉眼看不出来）。
+   */
+  void (async () => {
+    let gsap: typeof import("@/lib/gsap").gsap;
+    try {
+      ({ gsap } = await import("@/lib/gsap"));
+    } catch {
+      sheet.remove();
+      switching = false;
+      applyTheme(target);
+      return;
+    }
+
+    gsap.to(proxy, {
+      r: isExpand ? RR : 0,
+      duration: isExpand ? 0.56 : 0.48,
+      ease: "power3.inOut",
+      onUpdate: setR,
+      onComplete: () => {
+        const done = () => {
+          sheet.remove();
+          switching = false;
+        };
+        if (isExpand) {
+          applyTheme(target);
+          gsap.delayedCall(0.06, done);
+        } else {
+          done();
+        }
+      },
+    });
+  })();
 }
 
 /** 读取目标主题的页面底色（临时切类读计算样式，随即还原，始终与 token 同步） */
