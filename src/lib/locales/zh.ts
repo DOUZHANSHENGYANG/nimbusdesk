@@ -46,6 +46,7 @@ export const zh = {
     collapse: "收起卡片",
     settings: "设置（打开主窗口）",
     hide: "隐藏云台",
+    scope: { all: "全部", app: "应用", file: "文件", folder: "文件夹", plan: "计划", project: "项目", knowledge: "知识", feed: "资讯" },
     tab: { search: "搜索", fences: "收纳盒", plans: "计划", projects: "项目", collect: "收集", news: "资讯" },
     searchPlaceholder: "搜文件、笔记、计划、网站…",
     searching: "正在搜索…",

@@ -1,7 +1,10 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useTranslation } from "react-i18next";
-import { CalendarCheck, ChevronDown, FolderKanban, Inbox, LayoutGrid, Newspaper, Search, Settings2 } from "lucide-react";
+import {
+  AppWindow, BookOpen, Bookmark, CalendarCheck, ChevronDown, FileText, Folder, FolderKanban,
+  Inbox, LayoutGrid, Newspaper, Rss, Search, Settings2,
+} from "lucide-react";
 import { usePlans } from "@/features/plans/store";
 import { todayStr } from "@/features/plans/types";
 import { openSearchResult, searchQuery } from "@/features/search/api";
@@ -152,10 +155,14 @@ export function DockFloat({ onExpand, onHide, panels }: {
   );
 }
 
-/** 搜索：输入即搜，分组给前几条；点一条直接打开（文件用默认程序、网址用浏览器）。 */
+/** 搜索：范围 chips + 类型图标 + 结果行，语义与原搜索窗一致（点一条直接打开）。 */
+const SEARCH_SCOPES = ["all", "file", "plan", "project", "knowledge", "feed"] as const;
+const HIT_ICONS = { app: AppWindow, file: FileText, folder: Folder, plan: CalendarCheck, knowledge: BookOpen, feed: Rss, bookmark: Bookmark, project: FolderKanban } as const;
+
 function SearchPanel() {
   const { t } = useTranslation();
   const [query, setQuery] = useState("");
+  const [scope, setScope] = useState<(typeof SEARCH_SCOPES)[number]>("all");
   const [hits, setHits] = useState<SearchHit[]>([]);
   const [busy, setBusy] = useState(false);
 
@@ -166,18 +173,17 @@ function SearchPanel() {
     const timer = setTimeout(() => {
       setBusy(true);
       searchQuery(needle, "all", true)
-        .then((reply) => { if (!cancelled) setHits(reply.results.slice(0, 8)); })
+        .then((reply) => { if (!cancelled) setHits(reply.results.slice(0, 40)); })
         .catch(() => { if (!cancelled) setHits([]); })
         .finally(() => { if (!cancelled) setBusy(false); });
     }, 220);
     return () => { cancelled = true; clearTimeout(timer); };
   }, [query]);
 
-  const groups = useMemo(() => {
-    const map = new Map<string, SearchHit[]>();
-    for (const hit of hits) map.set(hit.kind, [...(map.get(hit.kind) ?? []), hit]);
-    return [...map.entries()];
-  }, [hits]);
+  const visible = useMemo(
+    () => hits.filter((hit) => scope === "all" || hit.kind === scope).slice(0, 10),
+    [hits, scope],
+  );
 
   return (
     <div className="df-panel">
@@ -185,42 +191,70 @@ function SearchPanel() {
         <Search className="df-icon" aria-hidden="true" />
         <input autoFocus value={query} onChange={(event) => setQuery(event.target.value)}
           placeholder={t("dockFloat.searchPlaceholder")} aria-label={t("dockFloat.tab.search")} />
+        {busy && <span className="df-row-meta">{t("dockFloat.searching")}</span>}
       </label>
-      {busy && <p className="df-hint">{t("dockFloat.searching")}</p>}
-      {!busy && query.trim() && hits.length === 0 && <p className="df-hint">{t("dockFloat.noResult")}</p>}
-      {groups.map(([kind, items]) => (
-        <div key={kind} className="df-group">
-          <span className="df-group-label">{t(`dockFloat.kind.${kind}`, { defaultValue: kind })}</span>
-          {items.map((hit) => (
+      <div className="df-scopes">
+        {SEARCH_SCOPES.map((key) => (
+          <button key={key} type="button" className={`df-scope${scope === key ? " is-on" : ""}`}
+            aria-pressed={scope === key} onClick={() => setScope(key)}>
+            {t(`dockFloat.scope.${key}`)}
+          </button>
+        ))}
+      </div>
+      {query.trim() && !busy && visible.length === 0 && <p className="df-hint">{t("dockFloat.noResult")}</p>}
+      <div className="df-rows">
+        {visible.map((hit) => {
+          const Icon = HIT_ICONS[hit.kind as keyof typeof HIT_ICONS] ?? FileText;
+          return (
             <button key={hit.id} type="button" className="df-row" title={hit.subtitle || hit.path || hit.url || ""}
               onClick={() => openSearchResult(hit).catch(report)}>
+              <Icon className="df-icon" aria-hidden="true" />
               <span className="df-row-title">{hit.title}</span>
               <span className="df-row-meta">{hit.subtitle || hit.path || hit.url || ""}</span>
             </button>
-          ))}
-        </div>
-      ))}
+          );
+        })}
+      </div>
     </div>
   );
 }
 
-/** 资讯：所有来源混排取最新，点标题用默认浏览器打开，卡片不跳走。 */
+/**
+ * 资讯：**按信息源顺序**平铺（不是按时间重排），每 30 秒自动往下滚一行，
+ * 到底回到顶部；点标题用默认浏览器打开原文。
+ *
+ * 为什么按来源而不是按时间：时间排序会把订阅顺序打散，同一个源的内容被切碎；
+ * 这里的用途是「扫一眼今天各渠道都出了什么」，源的分组本身是信息。
+ */
 function NewsPanel() {
   const { t } = useTranslation();
   const entriesBySource = useFeeds((state) => state.entriesBySource);
   const sources = useMemo(() => mergedSources(), []);
+  const viewRef = useRef<HTMLDivElement | null>(null);
+
   const items = useMemo(() => {
     const nameOf = new Map(sources.map((source) => [source.id, source.name]));
-    return Object.entries(entriesBySource)
-      .flatMap(([sourceId, entries]) => entries.map((entry) => ({ entry, source: nameOf.get(sourceId) ?? sourceId })))
-      .sort((a, b) => (b.entry.pubDate ?? 0) - (a.entry.pubDate ?? 0))
-      .slice(0, 10);
+    return Object.entries(entriesBySource).flatMap(([sourceId, entries]) =>
+      entries.map((entry) => ({ entry, source: nameOf.get(sourceId) ?? sourceId })),
+    );
   }, [entriesBySource, sources]);
+
+  useEffect(() => {
+    const node = viewRef.current;
+    if (!node || items.length === 0) return;
+    const timer = setInterval(() => {
+      const row = node.querySelector<HTMLElement>(".df-news-row");
+      const step = row ? row.offsetHeight + 1 : 32;
+      const atEnd = node.scrollTop + node.clientHeight >= node.scrollHeight - 4;
+      node.scrollTo({ top: atEnd ? 0 : node.scrollTop + step, behavior: "smooth" });
+    }, 30_000);
+    return () => clearInterval(timer);
+  }, [items.length]);
 
   if (items.length === 0) return <p className="df-hint">{t("dockFloat.newsEmpty")}</p>;
 
   return (
-    <div className="df-panel df-news">
+    <div className="df-panel df-news" ref={viewRef}>
       {items.map(({ entry, source }) => {
         const age = ageBucket(entry.pubDate);
         return (

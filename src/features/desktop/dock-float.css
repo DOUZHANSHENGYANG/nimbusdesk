@@ -148,7 +148,8 @@
 .df-tab[aria-selected="true"] .df-icon { color: var(--brand); }
 
 .df-body { flex: 1; min-height: 0; padding: 0 12px; overflow: hidden; }
-.df-panel { display: flex; flex-direction: column; gap: 8px; height: 100%; min-height: 0; }
+/* 面板必须自己裁：长路径 / 长标题不裁就会爬出卡片，糊到桌面上 */
+.df-panel { display: flex; flex-direction: column; gap: 8px; height: 100%; min-height: 0; overflow: hidden; }
 
 .df-foot {
   display: flex;
@@ -174,6 +175,22 @@
 
 /* 通用行 */
 .df-hint { margin: 0; font-size: var(--pr-text-xs); color: var(--muted-foreground); padding: 4px 2px; }
+
+.df-scopes { display: flex; gap: 4px; flex-wrap: wrap; }
+.df-scope {
+  height: 22px;
+  padding: 0 9px;
+  border-radius: var(--pr-radius-full);
+  border: 1px solid var(--hairline);
+  background: transparent;
+  color: var(--muted-foreground);
+  font: inherit;
+  font-size: var(--pr-text-2xs);
+  cursor: pointer;
+  transition: background var(--pr-dur-fast) ease, color var(--pr-dur-fast) ease;
+}
+.df-scope:hover { color: var(--foreground); background: var(--surface-hover); }
+.df-scope.is-on { background: var(--brand); border-color: transparent; color: var(--primary-foreground); font-weight: var(--pr-weight-semibold); }
 
 .df-field {
   display: flex;
@@ -211,6 +228,7 @@
 
 .df-row,
 .df-news-row {
+  min-width: 0;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -235,6 +253,10 @@
 }
 .df-row-meta {
   margin-left: auto;
+  min-width: 0;
+  max-width: 58%;
+  overflow: hidden;
+  text-overflow: ellipsis;
   display: flex;
   gap: 8px;
   font-size: var(--pr-text-2xs);
@@ -375,5 +397,20 @@
 
 /* 收集：复用主窗口的收集表单，卡片里只做容器 */
 .df-collect { height: 100%; overflow: auto; }
-.df-collect .capture-composer { padding: 10px 12px; border-radius: var(--pr-radius-md); background: var(--dock-face); border: 1px solid var(--hairline); }
+/* 收集表单自带 workbench-ui 的浅色底，跟悬浮层的深色材质打架 —— 卡片里一律透明化 */
+.df-collect .capture-composer {
+  padding: 0;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  border-radius: 0;
+  color: var(--foreground);
+}
+.df-collect .capture-composer * { background-color: transparent; }
+.df-collect .capture-composer input,
+.df-collect .capture-composer textarea {
+  background: var(--dock-face);
+  border: 1px solid var(--hairline);
+  border-radius: var(--pr-radius-md);
+}
 .df-collect .capture-composer .capture-writing { min-height: 96px; }
