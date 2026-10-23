@@ -150,3 +150,27 @@ button.home-resource-row:hover { color: var(--accent-foreground); border-color: 
 .home-knowledge-vault { display: inline-flex; align-items: center; gap: 8px; min-width: 0; max-width: 100%; min-height: 36px; padding: 4px 0; color: var(--muted-foreground); font-size: 12px; cursor: pointer; }
 .home-knowledge-vault > span { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .home-knowledge-vault:hover { color: var(--foreground); }
+
+/* ── 视图切换（总览 / 脉络）────────────────────────────── */
+
+.home-viewswitch {
+  display: inline-flex;
+  gap: 2px;
+  padding: 3px;
+  border-radius: var(--pr-radius-sm);
+  background: color-mix(in srgb, var(--foreground) 5%, transparent);
+}
+.home-viewswitch button {
+  height: 26px;
+  padding: 0 12px;
+  border-radius: 6px;
+  font-size: 12.5px;
+  color: var(--muted-foreground);
+  transition: background var(--pr-dur-fast) ease, color var(--pr-dur-fast) ease;
+}
+.home-viewswitch button[aria-pressed="true"] {
+  background: var(--surface);
+  color: var(--foreground);
+  box-shadow: var(--pr-shadow-1);
+}
+

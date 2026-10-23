@@ -9,7 +9,7 @@ import { inTauri } from "@/lib/tauri";
 import { useData } from "@/ahub/stores/data";
 import { useSettings as useAhubSettings } from "@/ahub/stores/settings";
 import { api as ahubApi } from "@/ahub/lib/api";
-import { NAV_GROUPS, type NavItem } from "./navigation";
+import { NAV_GROUPS, sectionsOf, type NavItem } from "./navigation";
 
 /** 与源侧侧栏同款的弹簧：滑得干脆、不来回晃。 */
 const PILL_SPRING = { type: "spring", stiffness: 420, damping: 34 } as const;
@@ -63,10 +63,8 @@ export function Sidebar() {
   const setCollapsed = useSettings((s) => s.setSidebarCollapsed);
   const workbenchOpen = useSettings((s) => s.workbenchGroupOpen);
   const libraryOpen = useSettings((s) => s.libraryGroupOpen);
-  const aiOpen = useSettings((s) => s.aiGroupOpen);
   const setWorkbenchOpen = useSettings((s) => s.setWorkbenchGroupOpen);
   const setLibraryOpen = useSettings((s) => s.setLibraryGroupOpen);
-  const setAiOpen = useSettings((s) => s.setAiGroupOpen);
   const navDisabled = useSettings((s) => s.navDisabled);
   const counts = useToolboxCounts();
   const dataRoot = useAhubSettings((s) => s.info?.dataDirs.root);
@@ -79,11 +77,10 @@ export function Sidebar() {
   const reduce = useReducedMotion();
   const listRef = useRef<HTMLDivElement>(null);
 
-  // 折叠态没有文字也没有角标，组头就没有意义了：三组各自摊成图标列
+  // 折叠态没有文字也没有角标，组头就没有意义了：各组各自摊成图标列
   const groupState: Record<string, { open: boolean; toggle: () => void }> = {
     "nav.workbench": { open: workbenchOpen, toggle: () => setWorkbenchOpen(!workbenchOpen) },
     "nav.library": { open: libraryOpen, toggle: () => setLibraryOpen(!libraryOpen) },
-    "nav.ai": { open: aiOpen, toggle: () => setAiOpen(!aiOpen) },
   };
 
   const item = ({ to, key, icon: Icon }: NavItem) => {
@@ -169,7 +166,21 @@ export function Sidebar() {
                 transition={reduce ? { duration: 0 } : PILL_SPRING}
                 className="flex flex-col gap-0.5 overflow-hidden"
               >
-                <div className={cn("flex flex-col gap-0.5", !collapsed && "pl-4")}>{items.map(item)}</div>
+                <div className={cn("flex flex-col gap-0.5", !collapsed && "pl-4")}>
+                  {sectionsOf(group).map((section) => {
+                    const sectionItems = section.items.filter((entry) => !navDisabled.includes(entry.to));
+                    if (!sectionItems.length) return null;
+                    return (
+                      <div key={section.key} className="flex flex-col gap-0.5">
+                        {/* 多小节时给一行小标签（「资料」里的 AI 那一节），只有一节则不重复组标题 */}
+                        {group.sections.length > 1 && !collapsed && (
+                          <p className="px-2.5 pt-2 pb-0.5 text-[10.5px] font-medium text-muted-foreground/60">{t(section.key)}</p>
+                        )}
+                        {sectionItems.map(item)}
+                      </div>
+                    );
+                  })}
+                </div>
               </motion.div>
             </div>
           );

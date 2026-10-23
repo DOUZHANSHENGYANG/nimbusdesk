@@ -60,6 +60,8 @@ interface SettingsState {
   navDisabled: string[];
   /** 项目页保存的筛选视图：一组「迭代 + 状态 + 搜索词」的命名快照 */
   projectViews: { id: string; name: string; iteration: string; status: string; search: string }[];
+  /** 主页「资讯」卡片显示哪个渠道；null = 自动（订阅顺序里的第一个源） */
+  homeFeedSource: string | null;
   /**
    * 对话面板的权限档（写不写本机数据由它决定，所以放在全局设置里而不是会话里：
    * 用户改的是「我这个人的尺度」，不是「这个会话的尺度」）。
@@ -91,6 +93,7 @@ interface SettingsState {
   setAiGroupOpen: (v: boolean) => void;
   setNavEnabled: (id: string, on: boolean) => void;
   setProjectViews: (views: { id: string; name: string; iteration: string; status: string; search: string }[]) => void;
+  setHomeFeedSource: (id: string | null) => void;
   setAgentPermission: (v: PermissionMode) => void;
   setAgentPreset: (v: AgentPreset) => void;
   setAgentThinking: (v: ThinkingLevel) => void;
@@ -132,6 +135,7 @@ export const useSettings = create<SettingsState>()(
       aiGroupOpen: true,
       navDisabled: [],
       projectViews: [],
+      homeFeedSource: null,
       agentPermission: "ask",
       agentPreset: "build",
       agentThinking: "auto",
@@ -159,6 +163,7 @@ export const useSettings = create<SettingsState>()(
         navDisabled: on ? state.navDisabled.filter((x) => x !== id) : [...state.navDisabled, id],
       })),
       setProjectViews: (projectViews) => set({ projectViews }),
+      setHomeFeedSource: (homeFeedSource) => set({ homeFeedSource }),
       setAgentPermission: (agentPermission) => set({ agentPermission }),
       setAgentPreset: (agentPreset) => set({ agentPreset }),
       setAgentThinking: (agentThinking) => set({ agentThinking }),

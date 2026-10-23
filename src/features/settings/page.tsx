@@ -32,6 +32,7 @@ import { KnowledgeSettings } from "@/features/knowledge/settings";
 import { ShortcutRecorder } from "@/features/knowledge/shortcut-recorder";
 import { ProviderSettings } from "@/features/ai/provider-settings";
 import { FeedNetworkSettings } from "@/features/feeds/network-settings";
+import { HomeFeedSection } from "./home-feed-section";
 import { useProviderCopy } from "@/features/ai/provider-copy";
 import { SearchSettings } from "@/features/search";
 
@@ -126,7 +127,7 @@ export function SettingsPage() {
           {tab === "plans" && <PlansSection />}
           {tab === "search" && <SearchSettings />}
           {tab === "knowledge" && <KnowledgeSettings />}
-          {tab === "feeds" && <FeedNetworkSettings />}
+          {tab === "feeds" && <><HomeFeedSection /><FeedNetworkSettings /></>}
           {tab === "ai" && <AiSection onDirtyChange={setAiDirty} />}
           {tab === "features" && <FeaturesSection />}
           {tab === "about" && <AboutSection />}

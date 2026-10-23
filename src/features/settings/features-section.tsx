@@ -1,7 +1,7 @@
 import { useTranslation } from "react-i18next";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/motion/switch";
-import { NAV_GROUPS } from "@/components/shell/navigation";
+import { NAV_GROUPS, sectionsOf } from "@/components/shell/navigation";
 import { useSettings } from "@/stores/settings";
 
 /**
@@ -31,21 +31,28 @@ export function FeaturesSection() {
               <group.icon className="size-4 shrink-0 opacity-70" aria-hidden strokeWidth={1.7} />
               <span>{t(group.key)}</span>
             </div>
-            <ul className="space-y-0.5">
-              {group.items.map((entry) => {
-                const on = !navDisabled.includes(entry.to);
-                return (
-                  <li
-                    key={entry.to}
-                    className="flex h-10 items-center gap-3 rounded-[var(--pr-radius-md)] px-2 transition-colors hover:bg-[color-mix(in_srgb,var(--foreground)_4%,transparent)]"
-                  >
-                    <entry.icon className="size-4 shrink-0 opacity-70" aria-hidden strokeWidth={1.7} />
-                    <span className="min-w-0 flex-1 truncate text-[13.5px]">{t(entry.key)}</span>
-                    <Switch checked={on} onCheckedChange={(next) => setNavEnabled(entry.to, next)} />
-                  </li>
-                );
-              })}
-            </ul>
+            {sectionsOf(group).map((section) => (
+              <div key={section.key} className="space-y-1">
+                {group.sections.length > 1 && (
+                  <p className="px-1 pt-1 text-[11px] text-muted-foreground/60">{t(section.key)}</p>
+                )}
+                <ul className="space-y-0.5">
+                  {section.items.map((entry) => {
+                    const on = !navDisabled.includes(entry.to);
+                    return (
+                      <li
+                        key={entry.to}
+                        className="flex h-10 items-center gap-3 rounded-[var(--pr-radius-md)] px-2 transition-colors hover:bg-[color-mix(in_srgb,var(--foreground)_4%,transparent)]"
+                      >
+                        <entry.icon className="size-4 shrink-0 opacity-70" aria-hidden strokeWidth={1.7} />
+                        <span className="min-w-0 flex-1 truncate text-[13.5px]">{t(entry.key)}</span>
+                        <Switch checked={on} onCheckedChange={(next) => setNavEnabled(entry.to, next)} />
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            ))}
           </div>
         ))}
       </CardContent>

@@ -37,12 +37,21 @@ test('feed timeline merges sources by publish date and drops duplicates',()=>{
  assert.deepEqual(home.latestEntries({'x':[entry('noDate'),entry('dated',1)]}).map(({entry})=>entry.id),['dated','noDate']);
 });
 
-test('relative time stays at minute/hour/day granularity',()=>{
- const now=Date.parse('2026-10-23T12:00:00Z');
+test('relative time stays at minute/hour/day granularity',()=>{ const now=Date.parse('2026-10-23T12:00:00Z');
  assert.deepEqual(home.timeAgo(now-30_000,now),{amount:0,unit:'minute'});
  assert.deepEqual(home.timeAgo(now-5*60_000,now),{amount:5,unit:'minute'});
  assert.deepEqual(home.timeAgo(now-3*3_600_000,now),{amount:3,unit:'hour'});
  assert.deepEqual(home.timeAgo(now-50*3_600_000,now),{amount:2,unit:'day'});
  // 未来时间不出现负数
  assert.deepEqual(home.timeAgo(now+60_000,now),{amount:0,unit:'minute'});
+});
+
+test('the home feed defaults to the first subscription and survives a removed choice',()=>{
+ // 自定义订阅排在静态渠道前面，所以第一个就是「我加的第一个 RSS」
+ const sources=[{id:'ai-daily'},{id:'github-trending'}];
+ assert.equal(home.pickHomeFeed(sources,null).id,'ai-daily');
+ assert.equal(home.pickHomeFeed(sources,'github-trending').id,'github-trending');
+ // 选中的渠道被删了：退回默认，而不是给一张空卡
+ assert.equal(home.pickHomeFeed(sources,'deleted-source').id,'ai-daily');
+ assert.equal(home.pickHomeFeed([],'github-trending'),undefined);
 });

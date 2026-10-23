@@ -13,7 +13,6 @@ import { deriveHomeRelations } from "./relations";
 import { WorkspaceOrbit, type HomeModule, type WorkspaceNode } from "./workspace-orbit";
 import { HomeInspector, type InboxSummary } from "./inspector";
 import { HomeOverview } from "./overview";
-import { TodayList } from "./today-list";
 
 export function HomePage() {
   const { t, i18n } = useTranslation();
@@ -30,12 +29,11 @@ export function HomePage() {
   const [selected, setSelected] = useState<HomeModule | null>(null);
   const [paused, setPaused] = useState(true);
   /**
-   * 主页有三种视图：默认「总览」一屏摊开今日计划/待办/笔记/资讯，
-   * 「今天」是按时间的行式清单（要逐条动手时用），「脉络」是原来的星图。
-   * 总览是落点：四张卡各解决一件事，想深入再进对应页面。
+   * 主页有两种视图：默认「总览」一屏摊开今日计划/待办/笔记/资讯，
+   * 「脉络」是原来的星图。想要逐条动手的清单，去「计划管理」——那里才是它的主场，
+   * 首页再放一份只会是一条孤零零的行加一大片空白。
    */
-  const [view, setView] = useState<"overview" | "list" | "orbit">("overview");
-  const [focusedTask, setFocusedTask] = useState<string | null>(null);
+  const [view, setView] = useState<"overview" | "orbit">("overview");
   const [captureBusy, setCaptureBusy] = useState(false);
   const workspace = useRef<HTMLDivElement>(null);
   const { inbox, refreshInbox } = useInbox(root);
@@ -48,13 +46,11 @@ export function HomePage() {
   useEffect(() => {
     const handleKey = (event: KeyboardEvent) => {
       if (event.key !== "Escape" || event.isComposing) return;
-      // 清单视图下 Esc 先收回选中的那一行，再退回中心
-      if (focusedTask) setFocusedTask(null);
-      else returnCenter();
+      returnCenter();
     };
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, [returnCenter, focusedTask]);
+  }, [returnCenter]);
 
   const progress = dayProgress(tasks);
   const roots = childrenOf(tasks, null);
@@ -95,14 +91,7 @@ export function HomePage() {
         <header className="home-header flex flex-wrap items-center justify-between gap-4">
           <div>
             <p className="text-xs text-muted-foreground">{dateLabel}</p>
-            <h1 className="mt-2 text-[22px] font-semibold tracking-tight">
-              {t(view === "list" ? "home.today" : "home.workspaceTitle")}
-            </h1>
-            {view === "list" && (
-              <p className="mt-1.5 text-[13px] text-muted-foreground">
-                {t("home.dayCrumb", { count: roots.length, done: progress.done })}
-              </p>
-            )}
+            <h1 className="mt-2 text-[22px] font-semibold tracking-tight">{t("home.workspaceTitle")}</h1>
             {view === "overview" && (
               <p className="mt-1.5 text-[13px] text-muted-foreground">
                 {t("home.progressLabel", { done: progress.done, total: progress.total })}
@@ -113,9 +102,6 @@ export function HomePage() {
             <div className="home-viewswitch" role="group" aria-label={t("home.workspaceTitle")}>
               <button type="button" aria-pressed={view === "overview"} onClick={() => setView("overview")}>
                 {t("home.viewOverview")}
-              </button>
-              <button type="button" aria-pressed={view === "list"} onClick={() => setView("list")}>
-                {t("home.viewList")}
               </button>
               <button type="button" aria-pressed={view === "orbit"} onClick={() => setView("orbit")}>
                 {t("home.viewOrbit")}
@@ -139,14 +125,6 @@ export function HomePage() {
               onCapture={() => void capture()}
               captureBusy={captureBusy}
               onRetryInbox={refreshInbox}
-            />
-          ) : view === "list" ? (
-            <TodayList
-              tasks={tasks}
-              focusedId={focusedTask}
-              onFocus={setFocusedTask}
-              onToggle={(id) => toggleDone(today, id)}
-              latest={latest}
             />
           ) : (
             <>

@@ -9,9 +9,10 @@ import { childrenOf, rangeLabel, type PlanTask } from "@/features/plans/types";
 import { itemDeadline } from "@/features/projects/core";
 import { useProjects } from "@/features/projects/store";
 import { useFeeds } from "@/stores/feeds";
+import { useSettings } from "@/stores/settings";
 import { mergedSources } from "@/sources/custom";
 import type { InboxSummary } from "./inspector";
-import { latestEntries, prioritizeWorkItems, timeAgo } from "./overview-core";
+import { latestEntries, pickHomeFeed, prioritizeWorkItems, timeAgo } from "./overview-core";
 
 /**
  * 首页概览：一屏摊开今天要动的四件事——今日计划、待办工作项、笔记、资讯。
@@ -39,6 +40,7 @@ export function HomeOverview(props: {
   const projects = useProjects(state => state.projects);
   const entriesBySource = useFeeds(state => state.entriesBySource);
   const lastFetchedAt = useFeeds(state => state.lastFetchedAt);
+  const homeFeedSource = useSettings(state => state.homeFeedSource);
   const sources = useMemo(() => mergedSources(), []);
   const sourceName = (id: string) => sources.find(source => source.id === id)?.name ?? id;
 
@@ -48,9 +50,11 @@ export function HomeOverview(props: {
   const open = useMemo(() => workItems.map(item => ({ ...item, deadline: itemDeadline(item, iterations) })).filter(item => item.status === "todo" || item.status === "doing"), [workItems, iterations]);
   const overdue = open.filter(item => item.deadline && item.deadline < props.today).length;
   const todo = useMemo(() => prioritizeWorkItems(open, 5), [open]);
-  const feeds = useMemo(() => latestEntries(entriesBySource, 4), [entriesBySource]);
-  const feedCount = useMemo(() => Object.values(entriesBySource).reduce((sum, entries) => sum + entries.length, 0), [entriesBySource]);
-  const fetched = Math.max(0, ...Object.values(lastFetchedAt).map(value => value ?? 0));
+  /** 资讯卡片只显示一个渠道：默认是我订阅顺序里的第一个源，可在设置里改。 */
+  const homeFeed = pickHomeFeed(sources, homeFeedSource);
+  const feedEntries = homeFeed ? entriesBySource[homeFeed.id] ?? [] : [];
+  const feeds = useMemo(() => homeFeed ? latestEntries({ [homeFeed.id]: entriesBySource[homeFeed.id] ?? [] }, 4) : [], [homeFeed, entriesBySource]);
+  const fetched = homeFeed ? lastFetchedAt[homeFeed.id] ?? 0 : 0;
   const ago = (value: number | undefined) => {
     if (!value) return "";
     const { amount, unit } = timeAgo(value, props.now);
@@ -63,7 +67,7 @@ export function HomeOverview(props: {
       <StatTile id="plans" label={t("home.todayPlans")} value={`${planProgress.done}/${planProgress.total}`} hint={`${planRate}%`} />
       <StatTile id="work" label={t("home.workItems")} value={open.length} hint={t("home.overviewOverdue", { count: overdue })} tone={overdue ? "text-amber-700 dark:text-amber-400" : undefined} />
       <StatTile id="notes" label={t("home.notes")} value={props.inbox.status === "ready" ? props.inbox.records.length : "—"} hint={t("home.inboxPending")} />
-      <StatTile id="feeds" label={t("home.feeds")} value={feedCount} hint={fetched ? ago(fetched) : t("home.feedsEmptyShort")} />
+      <StatTile id="feeds" label={t("home.feeds")} value={feedEntries.length} hint={fetched ? ago(fetched) : t("home.feedsEmptyShort")} />
     </div>
 
     <div className="grid gap-2 lg:grid-cols-2">
@@ -124,7 +128,7 @@ export function HomeOverview(props: {
         <CardLink label={t("home.goKnowledge")} onClick={() => navigate("/knowledge")} />
       </DashboardCard>
 
-      <DashboardCard title={t("home.feeds")} action={<span className="pr-0.5 text-[11px] tabular-nums text-muted-foreground">{t("home.feedSources", { count: sources.length })}</span>}>
+      <DashboardCard title={t("home.feeds")} action={<span className="max-w-[120px] truncate pr-0.5 text-[11px] text-muted-foreground">{homeFeed ? homeFeed.name : t("home.feedSources", { count: sources.length })}</span>}>
         <div className="min-h-0 flex-1 space-y-0.5">
           {feeds.map(({ sourceId, entry }) => <button key={entry.id} type="button" onClick={() => navigate("/feeds")}
             className="flex w-full min-w-0 items-center gap-2 rounded-md px-1.5 py-1 text-left outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring">

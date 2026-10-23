@@ -33,3 +33,17 @@ export function timeAgo(ms: number, now: number): { amount: number; unit: "minut
   if (hours < 24) return { amount: hours, unit: "hour" };
   return { amount: Math.floor(hours / 24), unit: "day" };
 }
+
+/**
+ * 主页「资讯」卡片显示哪一个渠道。
+ *
+ * 默认取**列表里的第一个**——自定义订阅排在静态渠道前面，所以就是「我添加的第一个 RSS 源」。
+ * 设置里选了具体渠道就用它；选的那个被删掉了就退回默认，而不是给一张空卡。
+ */
+export function pickHomeFeed<T extends { id: string }>(sources: readonly T[], preferred: string | null): T | undefined {
+  if (preferred) {
+    const found = sources.find(source => source.id === preferred);
+    if (found) return found;
+  }
+  return sources[0];
+}
