@@ -2,15 +2,18 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { useTranslation } from "react-i18next";
 import {
-  AppWindow, BookOpen, Bookmark, CalendarCheck, ChevronDown, FileText, Folder, FolderKanban,
-  Inbox, LayoutGrid, Newspaper, Rss, Search, Settings2,
+  AppWindow, ArrowLeft, BookOpen, Bookmark, CalendarCheck, ChevronDown, ExternalLink, FileText, Folder,
+  FolderKanban, Inbox, LayoutGrid, Newspaper, Rss, Search, Settings2, Star,
 } from "lucide-react";
 import { usePlans } from "@/features/plans/store";
 import { todayStr } from "@/features/plans/types";
 import { openSearchResult, searchQuery } from "@/features/search/api";
 import type { SearchHit } from "@/features/search/types";
 import { mergedSources } from "@/sources/custom";
+import type { SourceEntry } from "@/sources/types";
 import { useFeeds } from "@/stores/feeds";
+import { useFavorites } from "@/stores/favorites";
+import { ArticleReader } from "@/features/feeds/article-reader";
 import { openUrl } from "@/lib/tauri";
 import { ageBucket, summarizeDay } from "./dock-float-core";
 import "./dock-float.css";
@@ -220,17 +223,20 @@ function SearchPanel() {
 }
 
 /**
- * 资讯：**按信息源顺序**平铺（不是按时间重排），每 30 秒自动往下滚一行，
- * 到底回到顶部；点标题用默认浏览器打开原文。
+ * 资讯：按信息源顺序平铺，每 30 秒自动往下滚一行；**点标题在卡片内展开正文**，
+ * 星标收藏（存 favorites），右上角外链才是「去原网页」。
  *
- * 为什么按来源而不是按时间：时间排序会把订阅顺序打散，同一个源的内容被切碎；
- * 这里的用途是「扫一眼今天各渠道都出了什么」，源的分组本身是信息。
+ * 为什么正文在卡片里读：资讯是「扫一眼 → 决定要不要读」的两段行为，跳浏览器
+ * 会把第二段打断；只有需要原排版/评论时才出卡片。
  */
 function NewsPanel() {
   const { t } = useTranslation();
   const entriesBySource = useFeeds((state) => state.entriesBySource);
   const sources = useMemo(() => mergedSources(), []);
+  const favorites = useFavorites((state) => state.items);
+  const toggleFavorite = useFavorites((state) => state.toggle);
   const viewRef = useRef<HTMLDivElement | null>(null);
+  const [reading, setReading] = useState<{ entry: SourceEntry; source: string } | null>(null);
 
   const items = useMemo(() => {
     const nameOf = new Map(sources.map((source) => [source.id, source.name]));
@@ -241,7 +247,7 @@ function NewsPanel() {
 
   useEffect(() => {
     const node = viewRef.current;
-    if (!node || items.length === 0) return;
+    if (!node || items.length === 0 || reading) return;
     const timer = setInterval(() => {
       const row = node.querySelector<HTMLElement>(".df-news-row");
       const step = row ? row.offsetHeight + 1 : 32;
@@ -249,7 +255,30 @@ function NewsPanel() {
       node.scrollTo({ top: atEnd ? 0 : node.scrollTop + step, behavior: "smooth" });
     }, 30_000);
     return () => clearInterval(timer);
-  }, [items.length]);
+  }, [items.length, reading]);
+
+  if (reading) {
+    return (
+      <div className="df-panel df-reader">
+        <div className="df-reader-bar">
+          <button type="button" className="df-icon-btn" aria-label={t("dockFloat.back")}
+            onClick={() => setReading(null)}>
+            <ArrowLeft className="df-icon" aria-hidden="true" />
+          </button>
+          <span className="df-reader-src">{reading.source}</span>
+          <span className="df-sp" />
+          <button type="button" className="df-icon-btn" aria-label={t("dockFloat.openOriginal")}
+            title={t("dockFloat.openOriginal")} onClick={() => openUrl(reading.entry.url).catch(report)}>
+            <ExternalLink className="df-icon" aria-hidden="true" />
+          </button>
+        </div>
+        <div className="df-reader-body">
+          <ArticleReader entry={reading.entry} sourceName={reading.source}
+            onOpen={(url) => openUrl(url).catch(report)} />
+        </div>
+      </div>
+    );
+  }
 
   if (items.length === 0) return <p className="df-hint">{t("dockFloat.newsEmpty")}</p>;
 
@@ -257,15 +286,27 @@ function NewsPanel() {
     <div className="df-panel df-news" ref={viewRef}>
       {items.map(({ entry, source }) => {
         const age = ageBucket(entry.pubDate);
+        const saved = favorites.some((item) => item.url === entry.url);
         return (
-          <button key={`${source}-${entry.id}`} type="button" className="df-news-row" title={entry.url}
-            onClick={() => openUrl(entry.url).catch(report)}>
-            <span className="df-row-title">{entry.title}</span>
-            <span className="df-row-meta">
-              {source}
-              {age && <span>{t(`dockFloat.age.${age.unit}`, { count: age.value })}</span>}
-            </span>
-          </button>
+          <div key={`${source}-${entry.id}`} className="df-news-row">
+            <button type="button" className="df-news-open" title={entry.title}
+              onClick={() => setReading({ entry, source })}>
+              <span className="df-row-title">{entry.title}</span>
+              <span className="df-row-meta">
+                {source}
+                {age && <span>{t(`dockFloat.age.${age.unit}`, { count: age.value })}</span>}
+              </span>
+            </button>
+            <button type="button" className={`df-news-act${saved ? " is-on" : ""}`}
+              aria-pressed={saved} aria-label={t("dockFloat.favorite")} title={t("dockFloat.favorite")}
+              onClick={() => toggleFavorite(entry, source)}>
+              <Star className="df-icon" aria-hidden="true" />
+            </button>
+            <button type="button" className="df-news-act" aria-label={t("dockFloat.openOriginal")}
+              title={t("dockFloat.openOriginal")} onClick={() => openUrl(entry.url).catch(report)}>
+              <ExternalLink className="df-icon" aria-hidden="true" />
+            </button>
+          </div>
         );
       })}
     </div>

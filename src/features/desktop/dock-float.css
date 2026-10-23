@@ -368,14 +368,80 @@
 
 /* 资讯 */
 .df-news { overflow: auto; }
-.df-news-row { align-items: flex-start; }
-.df-news-row .df-row-title {
+
+/* 一行 = 打开正文的主按钮 + 收藏 + 外链；行本身不再是 button（不能嵌套按钮） */
+.df-news-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 3px 4px 3px 6px;
+  border-radius: var(--pr-radius-sm);
+  transition: background var(--pr-dur-fast) ease;
+}
+.df-news-row:hover { background: var(--surface-hover); }
+.df-news-open {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 2px 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.df-news-open .df-row-title {
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
   white-space: normal;
   line-height: var(--pr-leading-snug);
 }
+.df-news-act {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  flex: none;
+  border: 0;
+  border-radius: var(--pr-radius-sm);
+  background: transparent;
+  color: var(--muted-foreground);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity var(--pr-dur-fast) ease, color var(--pr-dur-fast) ease, background var(--pr-dur-fast) ease;
+}
+.df-news-row:hover .df-news-act,
+.df-news-act.is-on { opacity: 1; }
+.df-news-act:hover { background: var(--dock-face); color: var(--foreground); }
+.df-news-act.is-on { color: var(--warning); }
+.df-news-act.is-on .df-icon { fill: currentColor; }
+
+/* 卡片内读正文 */
+.df-reader { gap: 0; }
+.df-reader-bar {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 0 6px;
+  border-bottom: 1px solid var(--hairline);
+  flex: none;
+}
+.df-reader-src { font-size: var(--pr-text-2xs); color: var(--muted-foreground); }
+.df-reader-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 10px 2px 4px;
+  font-size: var(--pr-text-sm);
+  line-height: var(--pr-leading-normal);
+  color: var(--foreground);
+}
+.df-reader-body img { max-width: 100%; height: auto; border-radius: var(--pr-radius-sm); }
+.df-reader-body a { color: var(--brand); }
 
 /* 注入进来的真实面板（收纳盒 / 计划 / 项目）：占满内容区、内部自己滚动。
    它们原本是给 408 宽的侧栏面板写的，这里只给容器，不改它们的内部布局。 */
