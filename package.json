@@ -31,7 +31,7 @@
     "check:incremental": "node --test src/lib/incremental.test.mjs src/lib/visibility.test.mjs",
     "check:files-list": "node scripts/check-files-list-browser.mjs",
     "check:visibility": "node scripts/check-visibility-browser.mjs",
-    "verify:dist": "npm run build && npm run check:bundle",
+    "verify:dist": "node scripts/verify-dist.mjs",
     "check:search-window": "node scripts/check-search-window-browser.mjs"
   },
   "dependencies": {

@@ -6,6 +6,7 @@
 
 1. **一次改动一次 commit**，提交信息说清「为什么」而不只是「改了什么」。
 2. **结束前 `npm run verify` 必须退出 0**，工作区干净（`git status --short` 为空）。它串起：i18n 对齐 → 对比度 → 预览同步 → `tsc --noEmit` → 各功能单测 → `cargo test`。
+   **提交前/发版前再跑 `npm run verify:dist`**：构建 + 入口闭包体积 + 四个浏览器回归（分包边界、轮询门控、长列表分片与深链、搜索窗批加载与跨批滚动）。这些只有把真产物/真夹具跑起来才验得到，`verify` 那道快闸不覆盖。
 3. **i18n 双语同时加**：应用词表在 `src/lib/i18n.ts`，ahub 的单独在 `src/ahub/i18n/index.ts`；项目页文案在 `src/features/projects/copy.ts`（缺 en key 直接编译报错）。`npm run check:i18n` 会拦住 key 对不齐或占位符不一致。
 4. **改了行为就改文档**：`docs/` 下按功能分篇，写清用法 + 怎么验证，并附 `docs/screenshots/` 里的截图名。
 5. **视觉只消费 token**：组件里不许写死颜色，新颜色先进 `src/styles/tokens.css` 的 primitive 层；对比度由 `npm run check:contrast` 兜底。
@@ -21,6 +22,9 @@ node scripts/check-home-overview-browser.mjs
 ```
 
 断言要落在「用户能看见的东西」上（文本、`aria-pressed`、跳转落点），不要断言内部 state。
+
+`npm run verify:dist` 会自己起服务跑那四条（产物：`check:split` / `check:visibility`；
+夹具：`check:files-list` / `check:search-window`），手边有 dev server 时也可以单跑。
 
 ## 上下文卫生（省内存，也省钱）
 

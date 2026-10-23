@@ -146,20 +146,29 @@ react-i18next 缺键**不报错**，只把 key 原样画在界面上 —— 词�
 
 ## 怎么验
 
+**一条命令的闸门**（CI / 发版前跑它）：
+
 ```powershell
-npm run verify:dist           # build + 入口闭包体检（CI/发版前跑这个）
-npm run check:bundle          # 只体检已有 dist：闭包体积 + AI SDK 是否漏进首屏
-npx vite preview --port 4179 --strictPort
-npm run check:split           # 在产物上验：首页不背对话页、/agent 与 /plans 各自按需到达、全路由无缺键
-npm run check:visibility      # 在产物上验：不可见时轮询停手、回前台补一拍
+npm run verify:dist
 ```
 
-`check:bundle` 没进 `npm run verify`：`verify` 是本地快闸（不构建），每次往里塞一次生产构建
-会让它慢一倍。体积闸门用 `verify:dist`，CI 与发版前跑它。
+它依次做：构建 → `check:bundle`（闭包体积 + AI SDK 是否漏进首屏）→ 起 `vite preview`（4179）
+跑 `check:split` / `check:visibility` → 起 `vite`（17800）跑 `check:files-list` /
+`check:search-window`。已经开着的服务会**复用而不是杀掉**，只清理自己起的；任一环节失败即
+非零退出并打印该环节输出。`VERIFY_SKIP_DEV=1` 可只验产物阶段。
 
-另外几个要 dev server 的：`npm run check:files-list`（800 条分片 + 深链）、
-`npm run check:search-window`（搜索窗批加载与跨批跳转）、以及既有的
-`scripts/check-*-browser.mjs`（业务夹具）。
+单跑某一条（手边已有服务时最方便）：
+
+```powershell
+npm run check:bundle          # 只体检已有 dist
+npx vite preview --port 4179 --strictPort && npm run check:split
+npm run dev                   # 17800，夹具检查需要它
+npm run check:files-list      # 800 条分片 + 深链（含过滤态）
+npm run check:search-window   # 搜索窗批加载与跨批跳转
+```
+
+为什么这些不在 `npm run verify` 里：`verify` 是本地快闸（单测 + 类型 + i18n，不构建、不起服务），
+塞进生产构建和两个服务会让它慢好几倍。分工是「`verify` 每次改动都跑；`verify:dist` 提交前/发版前跑」。
 
 `check:split` / `check:visibility` 在普通浏览器里跑，桩了一个最小 `__TAURI_INTERNALS__`
 （IPC 一律返回空），所以它们只回答「chunk 该不该来、页面该不该渲染、轮询该不该跑」；
