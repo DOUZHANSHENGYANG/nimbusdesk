@@ -58,16 +58,7 @@ function StorageSync() {
       // 用 setState 合并而不是 persist.rehydrate()：
       // rehydrate 是整体替换，会覆盖本窗口尚未落盘的本地改动（写入有 250ms 防抖）。
       // 这里只回灌「数据字段」，不覆盖本窗口的 action 函数。
-      if (key === "files") {
-        const { categories, items } = data as {
-          categories?: unknown;
-          items?: unknown;
-        };
-        useFiles.setState({
-          ...(Array.isArray(categories) ? { categories } : {}),
-          ...(Array.isArray(items) ? { items } : {}),
-        } as never);
-      } else if (key === "fences") {
+      if (key === "fences") {
         const { fences } = data as { fences?: unknown };
         if (fences && typeof fences === "object") {
           useFences.setState({ fences } as never);

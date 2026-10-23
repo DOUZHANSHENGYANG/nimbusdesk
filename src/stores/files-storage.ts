@@ -18,6 +18,12 @@ import type { FileCategory, FileItem } from "./files";
  *   期间 `applyingRemote` 让回灌引起的 `set()` 只更新快照、**不回写**（否则会来回弹）。
  */
 const EVENT = "files://changed";
+/**
+ * 旧版把整份 `{categories, items}` 放在这个 key 里。表刚上线时表还是空的 —— 直接删掉这条
+ * 回退，真机上第一次启动就会看到**空的文件库**（数据还在旧键里，没被搬过来）。
+ * 所以保留一次读取：读到空表就回退读旧键，随后第一次写入会把它们按增量搬进表。
+ * 等表里确认有数据之后再删（`docs/plan-storage-sharding.md` 阶段 4）。
+ */
 const LEGACY_KEY = "files";
 const VERSION = 2;
 const source = typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `${Date.now()}`;
@@ -60,6 +66,7 @@ export const filesTableStorage: PersistStorage<FilesPersisted> = {
         items: Array.isArray(loaded?.items) ? loaded.items : [],
       };
       if (state.categories.length === 0 && state.items.length === 0) {
+        // 表是空的：可能是全新安装，也可能是「数据还在旧键里、还没搬过」——回退读一次
         const legacy = await readJson<{ state?: Partial<FilesPersisted> }>(LEGACY_KEY).catch(() => null);
         if (legacy?.state) {
           state = {

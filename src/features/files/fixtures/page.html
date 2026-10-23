@@ -5,6 +5,8 @@ const params=new URLSearchParams(location.search);
 const fixtures={settings:{version:3,state:{theme:params.get('theme')||'dark',lang:'zh',sidebarCollapsed:true}},files:{version:2,state:{categories:[{id:'work',name:'工作项目',createdAt:1},{id:'child',name:'子分类',parentId:'work',createdAt:1}],items:[{id:'existing',title:'既有文件',path:'E:/Downloads/already.txt',type:'file',categoryId:'work',tags:['保留'],createdAt:1}]}},fences:{version:1,state:{fences:{}}},'todo-papers':{version:1,state:{papers:{'2099-10-18':{open:true,form:'paper',x:100,y:100,w:300,h:400}},order:['2099-10-18']}},'search-settings':{version:1,state:{shortcut:'',documentIndexEnabled:false,pinyinEnabled:false,nameRoots:[],documentRoots:[]}},'knowledge-settings':{version:1,state:{vaultRoot:null,shortcut:''}},'quick-tools-settings':{version:1,state:{shortcut:''}}};
 const listeners=new Map(),windows=new Set(['main','todo-2099-10-18']);
 const fileTables={categories:[],items:new Map()};
+// 夹具就是「假后端」：把种子数据放进表里（读取只走 files_load，没有旧键回退了）
+if(fixtures.files?.state){fileTables.categories=structuredClone(fixtures.files.state.categories??[]);for(const item of fixtures.files.state.items??[])fileTables.items.set(item.id,structuredClone(item));}
 window.filesReview={fixtures,fileTables,windows,calls:[],applied:[],failOpen:null,probeDelay:0,openDelay:0,pickFolder:null,snapshots:{},snapshotError:null,fire:(event,payload,label='main')=>emitTo(label,event,payload)};
 mockIPC(async(cmd,args)=>{
  const r=window.filesReview;r.calls.push({cmd,args});

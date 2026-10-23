@@ -257,14 +257,19 @@ pub async fn files_load() -> Result<Value, String> {
 /// 应用一份增量：只有真正变了的实体进来，写一条就是一条 UPDATE。
 #[command]
 pub async fn files_apply(delta: Value) -> Result<(), String> {
-    blocking(move || {
+    let result = blocking(move || {
         with_data_dir(|root| {
             let mut conn = database::open_at(root)?;
             crate::files_table::ensure_schema(&conn)?;
             crate::files_table::apply(&mut conn, &delta)
         })
     })
-    .await?
+    .await?;
+    // 文件条目是搜索的一个来源：改完要让索引重建（以前这个触发挂在 write_json 的 sources_key 上）
+    if result.is_ok() {
+        crate::search::runtime::request_refresh();
+    }
+    result
 }
 
 #[command]

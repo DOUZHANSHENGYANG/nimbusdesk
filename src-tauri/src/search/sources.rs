@@ -9,7 +9,6 @@ use std::{
 pub const KEYS: &[&str] = &[
     "plans",
     "plans-archive",
-    "files",
     "projects",
     "feed-cache",
     "favorites",
@@ -238,20 +237,8 @@ pub fn from_states(states: &BTreeMap<String, Value>, files_items: &[Value]) -> V
         );
     }
     docs.extend(articles.into_values());
-    // 条目已经搬进行级表：优先用调用方查出来的行；表还空着（老数据尚未搬）时回退读整份 blob
-    let legacy_items: Vec<Value> = if files_items.is_empty() {
-        states
-            .get("files")
-            .map(state)
-            .and_then(|s| s.get("items"))
-            .and_then(Value::as_array)
-            .cloned()
-            .unwrap_or_default()
-    } else {
-        Vec::new()
-    };
-    let legacy_items = legacy_items.as_slice();
-    for item in if files_items.is_empty() { legacy_items } else { files_items } {
+    // 文件条目在行级表里（`file_items`），由调用方查好后传进来
+    for item in files_items {
         let id = text(item, "id");
         let path = text(item, "path");
         let mut row = hit(

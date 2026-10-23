@@ -43,7 +43,6 @@ fn namespace(key: &str) -> (&str, &str) {
         "zentao" => ("projects", "zentao"),
         "todo-papers" => ("plans", "papers"),
         "reminders" => ("plans", "reminders"),
-        "files" => ("files", "catalog"),
         "fences" => ("files", "fences"),
         "favorites" => ("favorites", "items"),
         "custom-feeds" => ("news", "feeds"),

@@ -119,8 +119,15 @@
    - `src/features/settings/backup.ts`：导出时用 `files_load`（放在附件导出之后，保持「先校验
      材料再动元数据」的既有次序），备份文件形状不变，导入侧零改动。
 
-4. **阶段 4（下一版）**：删掉旧 `files` 键的回退读取、`database.rs` 里 `"files"` 的命名空间映射、
-   以及 `sources.rs` 里那段 blob 回退。
+4. **阶段 4（部分完成）**：删掉 blob 时代的残件。
+   - ✅ `search/sources.rs` 里那段 `states["files"]` 回退，并从 `KEYS` 移除 `"files"`；
+   - ✅ `database.rs` 的 `"files" => ("files","catalog")` 命名空间映射；
+   - ✅ `providers.tsx` 里 `storage://changed` 的旧 `files` 分支（整份文档回灌）；
+   - ✅ **补上搜索刷新**：以前 `write_json("files")` 会经 `sources_key()` 触发索引重建，现在写路径换了，
+     所以 `files_apply` 成功后显式 `request_refresh()` —— 漏了这条就是「改了文件但搜索里还是旧的」；
+   - ⏳ **保留**：`files-storage.ts` 里「表为空时回退读一次旧 `files` 键」。删它的那天我试过，
+     夹具立刻挂了 —— 那正是真机上的症状：**表刚上线时表还是空的，数据还在旧键里**，
+     直接删回退 = 用户第一次启动看到空的文件库。等表里确认有数据、并跑过一次真实升级后再删。
 
 ## 关于 `plans`
 
