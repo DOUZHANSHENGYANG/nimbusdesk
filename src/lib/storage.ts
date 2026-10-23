@@ -9,6 +9,18 @@ const pending = new Map<string, Write>();
 const active = new Map<string, Promise<void>>();
 const writing = new Map<string, Write>();
 const known = new Map<string, unknown>();
+/**
+ * 每个 key 最后一次「确认已在磁盘上」的序列化文本，用来跳过一模一样的重写。
+ *
+ * zustand persist 每次 `set()` 都会调 `setItem`，不看内容有没有变；而这个应用里
+ * 不少 `set` 只动了不持久化的字段（或原样回写），于是整份文档被重新序列化、
+ * 走一趟 IPC、再让 SQLite 写一遍。命中这里就什么都不做。
+ *
+ * 只记录**确定和磁盘一致**的文本，且只在两种时机更新：刚读到（`getItem`）、
+ * 刚写完（原生没返回不同版本时）。写入失败、或原生合并返回了不同内容，
+ * 就把它删掉 —— 宁可多写一次，也不能因为「以为是同一份」而漏写。
+ */
+const sent = new Map<string, string>();
 const blocked = new Set<string>();
 const applying = new Set<string>();
 const timers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -70,10 +82,14 @@ function flush(key: string): Promise<void> {
         const saved = await writeJson(key, entry.value, { value: entry.base });
         const canonical = saved === undefined ? entry.value : saved;
         known.set(key, canonical);
+        // 原生合并没改动内容 → 磁盘上就是我们发出去的那份，留着去重记录；
+        // 内容被合并改过（别的窗口动过）→ 我们不知道磁盘实际长什么样，删掉记录。
+        if (saved !== undefined && JSON.stringify(canonical) !== JSON.stringify(entry.value)) sent.delete(key);
         useStorageHealth.getState().clear(key);
         if (!pending.has(key)) applyRemote(key, canonical);
         if (inTauri) await emit(EV_STORAGE, { key, source }).catch(() => undefined);
       } catch (error) {
+        sent.delete(key);
         const next = pending.get(key);
         pending.set(key, next ? { value: next.value, base: entry.base } : entry);
         reportFailure("write", key, error);
@@ -109,9 +125,15 @@ function flushPlanPair(): Promise<void> {
       try {
         const saved = await writePlanPair(entries[0].value, entries[1].value, entries[0].base, entries[1].base);
         const canonical = [saved.plans, saved.archive];
-        keys.forEach((key, i) => { known.set(key, canonical[i]); useStorageHealth.getState().clear(key); if (!pending.has(key)) applyRemote(key, canonical[i]); });
+        keys.forEach((key, i) => {
+          known.set(key, canonical[i]);
+          if (JSON.stringify(canonical[i]) !== JSON.stringify(entries[i].value)) sent.delete(key);
+          useStorageHealth.getState().clear(key);
+          if (!pending.has(key)) applyRemote(key, canonical[i]);
+        });
         if (inTauri) for (const key of keys) await emit(EV_STORAGE, { key, source }).catch(() => undefined);
       } catch (error) {
+        keys.forEach(key => sent.delete(key));
         keys.forEach((key, i) => { const next = pending.get(key); pending.set(key, next ? { value: next.value, base: entries[i].base } : entries[i]); reportFailure("write", key, error); });
         throw error;
       } finally { keys.forEach(key => writing.delete(key)); }
@@ -122,8 +144,13 @@ function flushPlanPair(): Promise<void> {
   return run;
 }
 
-function enqueue(key: string, value: unknown) {
+function enqueue(key: string, value: unknown, raw?: string) {
   if (applying.has(key)) return;
+  if (raw !== undefined) {
+    // 内容与磁盘上的那份一致：不排队、不重写（见 `sent` 的说明）
+    if (sent.get(key) === raw) return;
+    sent.set(key, raw);
+  }
   reads.set(key, (reads.get(key) ?? 0) + 1);
   const previous = pending.get(key);
   pending.set(key, { value, base: previous ? previous.base : writing.has(key) ? writing.get(key)!.value : known.get(key) ?? null });
@@ -151,15 +178,20 @@ export const tauriJsonStorage: StateStorage = {
       const value = await readJson<unknown>(name);
       known.set(name, value);
       blocked.delete(name);
-      return value == null ? null : JSON.stringify(value);
+      if (value == null) { sent.delete(name); return null; }
+      const text = JSON.stringify(value);
+      sent.set(name, text);
+      return text;
     } catch (error) {
       blocked.add(name);
+      // 读失败时不知道磁盘内容，去重记录必须清掉，否则下一次写可能被误判为「没变」
+      sent.delete(name);
       reportFailure("unavailable", name, error);
       return null;
     }
   },
-  async setItem(name, value) { enqueue(name, JSON.parse(value)); },
-  async removeItem(name) { enqueue(name, null); await flush(name); },
+  async setItem(name, value) { enqueue(name, JSON.parse(value), value); },
+  async removeItem(name) { sent.delete(name); enqueue(name, null); await flush(name); },
 };
 
 /** Wait for queued/in-flight writes before closing, backup or moving data. */

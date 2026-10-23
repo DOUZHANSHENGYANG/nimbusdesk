@@ -238,8 +238,10 @@ test("a canonical null returned by native merge is preserved as a tombstone", as
   const applied = [];
   api.onStorageSynced((_key, value) => applied.push(value));
   await api.storage.getItem("plans");
-  // A stale window performs a no-op write after another window deleted the key.
-  await api.storage.setItem("plans", JSON.stringify(state(0)));
+  // A stale window writes its local value after another window deleted the key;
+  // the native merge answers with a tombstone, which must win over the local value.
+  // （内容必须与读到的不同，否则会被「内容没变就不写」挡掉 —— 那条路径见下面的去重测试。）
+  await api.storage.setItem("plans", JSON.stringify(state(1)));
   await api.flushAllStorage();
   assert.equal(api.persisted.get("plans"), null);
   assert.deepEqual(applied, [null], "the native tombstone must not be replaced by the stale local value");
@@ -417,4 +419,76 @@ test("timer-only paired edits cannot get stranded behind two independent in-flig
   assert.deepEqual(api.calls.pairs, [{ plans: state(2), archive: state(12), basePlans: state(1), baseArchive: state(11) }]);
   assert.deepEqual(api.persisted.get("plans"), state(2));
   assert.deepEqual(api.persisted.get("plans-archive"), state(12));
+});
+
+/* ── 内容去重：zustand persist 每次 set() 都会调 setItem，内容没变就不该再写一遍 ── */
+
+test("identical payload is not written twice", async () => {
+  const api = await loadStorage();
+  await api.storage.getItem("plans");
+  await api.storage.setItem("plans", JSON.stringify(state(1)));
+  await api.flushAllStorage();
+  assert.equal(api.calls.writes.length, 1);
+
+  // 同一份内容再来一次：不排队、不写、也不广播
+  await api.storage.setItem("plans", JSON.stringify(state(1)));
+  await api.flushAllStorage();
+  assert.equal(api.calls.writes.length, 1, "内容没变不应重写");
+  assert.equal(api.calls.emits.length, 1, "没写就没有变化事件");
+
+  // 内容变了照常写
+  await api.storage.setItem("plans", JSON.stringify(state(2)));
+  await api.flushAllStorage();
+  assert.equal(api.calls.writes.length, 2);
+  assert.deepEqual(api.persisted.get("plans"), state(2));
+});
+
+test("a failed write forgets the dedupe record so the retry really happens", async () => {
+  const api = await loadStorage({
+    write: (_key, value, _base, index) => { if (index === 1) throw new Error("disk full"); return value; },
+  });
+  await api.storage.getItem("plans");
+  await api.storage.setItem("plans", JSON.stringify(state(1)));
+  await assert.rejects(api.flushAllStorage(), /disk full/);
+  assert.equal(api.calls.writes.length, 1);
+
+  await api.storage.setItem("plans", JSON.stringify(state(1)));
+  await api.flushAllStorage();
+  assert.equal(api.calls.writes.length, 2, "上一次没写成功，同一份内容必须重试");
+  assert.deepEqual(api.persisted.get("plans"), state(1));
+});
+
+test("a native merge that changes the content voids the dedupe record", async () => {
+  // 原生侧可能合并了别的窗口的改动（返回的版本和发出去的不同）
+  const api = await loadStorage({ write: () => state(99) });
+  await api.storage.getItem("plans");
+  await api.storage.setItem("plans", JSON.stringify(state(1)));
+  await api.flushAllStorage();
+  assert.equal(api.calls.writes.length, 1);
+
+  await api.storage.setItem("plans", JSON.stringify(state(1)));
+  await api.flushAllStorage();
+  assert.equal(api.calls.writes.length, 2, "磁盘上已经不是这份内容了，同样的提交必须真的写");
+});
+
+test("identical plan pair is committed once", async () => {
+  const api = await loadStorage();
+  await hydratePlanPair(api);
+  await enqueuePlanPair(api, state(1), state(11));
+  await api.flushAllStorage();
+  assert.equal(api.calls.pairs.length, 1);
+
+  await enqueuePlanPair(api, state(1), state(11));
+  await api.flushAllStorage();
+  assert.equal(api.calls.pairs.length, 1, "同一份计划与归档不应重复提交");
+  assert.deepEqual(api.calls.writes, []);
+
+  // 只有计划变了：归档内容没动，就不必再开一次成对事务，单键写一次即可
+  await enqueuePlanPair(api, state(2), state(11));
+  await api.flushAllStorage();
+  assert.equal(api.calls.pairs.length, 1);
+  assert.equal(api.calls.writes.length, 1);
+  assert.equal(api.calls.writes[0].name, "plans");
+  assert.deepEqual(api.persisted.get("plans"), state(2));
+  assert.deepEqual(api.persisted.get("plans-archive"), state(11));
 });
