@@ -9,7 +9,7 @@
   justify-content: flex-end;
   height: 100%;
   width: 100%;
-  padding: 0 0 6px;
+  padding: 0;
   user-select: none;
   color: var(--foreground);
   font-size: var(--pr-text-sm);
@@ -19,13 +19,17 @@
 .df-capsule {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 8px;
+  /* 窗口固定 464 宽：胶囊铺满窗口，内容居中 —— 宽度不能让内容撑，否则窗口和胶囊对不齐 */
+  width: 100%;
   height: 44px;
   padding: 0 8px 0 9px;
   border-radius: var(--pr-radius-full);
   background: var(--dock-fill);
   border: 1px solid var(--dock-edge);
-  box-shadow: 0 0 0 1px oklch(0 0 0 / 0.18), 0 18px 40px oklch(0 0 0 / 0.28), inset 0 1px 0 oklch(1 0 0 / 0.5);
+  /* 窗口矩形 = 胶囊矩形，外阴影会被窗口裁掉；用 1px 描边 + 内高光代替 */
+  box-shadow: 0 0 0 1px oklch(0 0 0 / 0.22), inset 0 1px 0 oklch(1 0 0 / 0.5);
   -webkit-backdrop-filter: blur(28px) saturate(170%);
   backdrop-filter: blur(28px) saturate(170%);
   white-space: nowrap;
@@ -91,7 +95,7 @@
   border-radius: var(--pr-radius-xl);
   background: var(--dock-fill);
   border: 1px solid var(--dock-edge);
-  box-shadow: 0 0 0 1px oklch(0 0 0 / 0.16), 0 26px 60px oklch(0 0 0 / 0.32), inset 0 1px 0 oklch(1 0 0 / 0.55);
+  box-shadow: 0 0 0 1px oklch(0 0 0 / 0.22), inset 0 1px 0 oklch(1 0 0 / 0.55);
   -webkit-backdrop-filter: blur(44px) saturate(190%);
   backdrop-filter: blur(44px) saturate(190%);
   overflow: hidden;
@@ -353,4 +357,5 @@
 
 /* 收集：复用主窗口的收集表单，卡片里只做容器 */
 .df-collect { height: 100%; overflow: auto; }
-.df-collect .knowledge-capture { padding: 0; }
+.df-collect .capture-composer { padding: 10px 12px; border-radius: var(--pr-radius-md); background: var(--dock-face); border: 1px solid var(--hairline); }
+.df-collect .capture-composer .capture-writing { min-height: 96px; }

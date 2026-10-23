@@ -32,6 +32,7 @@
 
 - `node --test src/features/desktop/dock-float-core.test.mjs`：月格恒 42 格 / 只数十层任务 / 子任务角标 / 相对时间单位切换。
 - 手测：设置里切「屏顶胶囊」→ 窗口变成 44px 药丸并水平居中；点开变成 660×591 卡片；切五个 tab 窗口高度不变；点齿轮进主窗口设置页。
+- `node scripts/check-dock-float-browser.mjs`（夹具 `src/features/desktop/fixtures/dock-float.html`，接进 `verify:dist`）：胶囊 44 高 → 展开窗口 660×591 → 五个页切换尺寸不变 → 齿轮跳 `/settings` → 收起回 44。尺寸断言读 mock 到的 `window_set_bounds` 参数，不是 CSS —— 只量 DOM 会把「CSS 长得对、窗口没变」放过去。
 - `npm run verify` 必须退出 0。
 
 ## 几何契约
@@ -94,6 +95,11 @@
 | 边界 | `0 0 0 1px` 暗环 + 24–26px 大投影 + 顶部 1px 高光 + 一道品牌色薄光（`--pr-brand-500` 10%） |
 | 选中 tab | `--primary` 实心 + `--primary-foreground`（不用下划线：玻璃上的细线会被壁纸吃掉） |
 | 行高 | 32–34，统一密度 |
+
+## 两条实现约束（踩过）
+
+1. **窗口矩形 = 内容矩形**：Tauri 的窗口会裁掉矩形外的所有绘制，所以外发光/大投影在真机上根本不出现（视觉稿里能看到，是因为画在同一个网页里）。真机用 1px 描边 + 顶部内高光代替，别指望 `box-shadow` 的外扩部分。
+2. **等设置水合再定尺寸**：`dockStyle` 存在 settings.json，首帧拿到的是默认 `rail`；直接按它摆会把胶囊窗口先做成 64 高再纠正，肉眼就是一下抽搐。启动时 `await waitSettings()` 再选形态。
 
 ## 材质 token
 

@@ -146,7 +146,10 @@ export function DockWindow() {
   useEffect(() => {
     if (!inTauri) return;
     void (async () => {
-      await applyMode("strip");
+      // 等设置水合再定尺寸：首帧的 dockStyle 还是默认 rail，先按它摆会闪一下 64 高。
+      await waitSettings();
+      if (useSettings.getState().dockStyle === "capsule") await applyFloat(false);
+      else await applyMode("strip");
       await invoke("window_show_no_activate", { label: LABEL });
     })().catch(report);
     // 失焦即收起面板：点击了外部应用或打开了文件后，面板不该留在原地。
@@ -156,7 +159,7 @@ export function DockWindow() {
       if (!focused && panelRef.current && Date.now() - switchAt.current > 400) setPanel(null);
     });
     return () => { void offFocus.then((off) => off()).catch(() => undefined); };
-  }, [applyMode, setPanel]);
+  }, [applyFloat, applyMode, setPanel]);
 
   /** 拖放投递：文件拖到「收纳盒」=收录条目；拖到「计划」=建任务并挂链接。 */
   const [dropTarget, setDropTarget] = useState<string | null>(null);
@@ -222,6 +225,17 @@ export function DockWindow() {
   }, [dockAutoHide]);
 
   const nav = (route: string) => invoke("desktop_open_main", { route }).catch(report);
+
+  /**
+   * 等设置水合。
+   *
+   * dockStyle 存在 settings.json 里，首帧拿到的是默认值（rail）——直接按它摆窗口
+   * 会把胶囊窗口先做成 64 高再纠正，肉眼就是一下抽搐。等一次 IPC 再定尺寸。
+   */
+  const waitSettings = () => new Promise<void>((resolve) => {
+    if (useSettings.persist.hasHydrated()) { resolve(); return; }
+    const off = useSettings.persist.onFinishHydration(() => { off?.(); resolve(); });
+  });
 
   /** 右键菜单：复用 popup-menu 浮窗传输层，动作在 Dock 窗口内解释执行。 */
   const menuRequest = useRef(0);

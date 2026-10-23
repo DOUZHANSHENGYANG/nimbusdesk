@@ -1,0 +1,61 @@
+<!doctype html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>dock-float fixture</title><style>html,body,#root{height:100%;margin:0;background:transparent}</style></head><body><div id="root"></div><script type="module">
+// 胶囊 Dock 夹具：真组件 + mock 原生 IPC。
+// 三个断言锚点：胶囊 44 高、展开后窗口 660×591、切五个页卡片尺寸不变。
+import {mockIPC,mockWindows} from '@tauri-apps/api/mocks';
+const pad=n=>String(n).padStart(2,'0');
+const now=new Date();
+const today=`${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}`;
+const hhmm=`${pad(now.getHours())}:${pad(now.getMinutes())}`;
+const earlier=`${pad(Math.max(0,now.getHours()-2))}:00`;
+
+const tasks=[
+ {id:'t1',parentId:null,title:'对齐 Q4 预算口径',done:false,start:earlier,createdAt:1,updatedAt:1},
+ {id:'t1a',parentId:'t1',title:'拉月度数据',done:true,createdAt:1,updatedAt:1},
+ {id:'t1b',parentId:'t1',title:'和财务确认口径',done:false,createdAt:1,updatedAt:1},
+ {id:'t2',parentId:null,title:'评审：文件库行级表迁移',done:true,start:hhmm,createdAt:1,updatedAt:1},
+ {id:'t3',parentId:null,title:'写 docs/dock-capsule.md',done:false,createdAt:1,updatedAt:1},
+];
+
+const fixtures={
+ settings:{state:{theme:'dark',lang:'zh',dockEnabled:true,dockOpen:true,dockStyle:'capsule',dockEdge:'top',dockTileSize:28,dockShortcut:'',dockAutoHide:false,autoSortDone:false,autoClearDone:false},version:8},
+ plans:{state:{days:{[today]:tasks}},version:4},
+ 'feed-cache':{state:{activeId:'fixture',entriesBySource:{fixture:[
+   {id:'f1',title:'DeepSeek Harness 0.2.1 发布：插件协议与沙箱策略变更',url:'https://example.com/1',pubDate:Date.now()-5*60000},
+   {id:'f2',title:'Tauri 2.5：多窗口透明与 DWM 材质的新接口',url:'https://example.com/2',pubDate:Date.now()-40*60000},
+   {id:'f3',title:'为什么玻璃拟态在 WebView2 里糊不动桌面',url:'https://example.com/3',pubDate:Date.now()-3*3600000},
+ ]},loading:{},error:{},lastFetchedAt:{},lastAttemptDay:{},selected:null},version:1},
+ 'knowledge-settings':{state:{vaultRoot:null,shortcut:''},version:1},
+ 'search-settings':{state:{shortcut:'',documentRoots:[],nameRoots:[],documentIndexEnabled:false,pinyinEnabled:false},version:1},
+ files:{state:{categories:[],items:[]},version:2},
+ fences:{state:{fences:{}},version:1},
+ 'ai-providers':{state:{providers:[],defaultTextId:null},version:1},
+ 'custom-feeds':{state:{sources:[]},version:1},
+};
+
+const monitor={name:'Owned monitor',position:{x:0,y:0},size:{width:1360,height:900},workArea:{position:{x:0,y:0},size:{width:1360,height:860}},scaleFactor:1};
+const calls=[];
+window.__dockFloat={calls,monitor};
+
+mockIPC(async(cmd,args)=>{
+ calls.push({cmd,args});
+ if(cmd==='plugin:event|listen')return args.handler;
+ if(cmd==='plugin:event|unlisten')return null;
+ if(cmd==='read_json')return structuredClone(fixtures[args.key]??null);
+ if(cmd==='write_json'){fixtures[args.key]=structuredClone(args.value);return args.value;}
+ if(cmd==='get_data_dir')return 'E:/OwnedFixture';
+ if(cmd==='window_set_bounds'||cmd==='window_show_no_activate'||cmd==='dock_close'||cmd==='desktop_open_main')return null;
+ if(cmd.endsWith('|cursor_position'))return {x:40,y:40};
+ if(cmd.endsWith('|current_monitor')||cmd.endsWith('|primary_monitor'))return monitor;
+ if(cmd.endsWith('|available_monitors'))return [monitor];
+ if(cmd.endsWith('|outer_position'))return {x:0,y:0};
+ if(cmd.endsWith('|inner_size')||cmd.endsWith('|outer_size'))return {width:660,height:591};
+ if(cmd.endsWith('|scale_factor'))return 1;
+ if(cmd.endsWith('|show')||cmd.endsWith('|hide'))return null;
+ if(cmd==='plugin:window|get_all_windows'||cmd==='plugin:webview|get_all_webviews')return [];
+ return null;
+});
+mockWindows('desktop-dock');
+const {SOURCE_LIST}=await import('/src/sources/registry.ts');
+for(const source of SOURCE_LIST)source.fetch=async()=>[];
+await import('/src/main.tsx');
+</script></body></html>
