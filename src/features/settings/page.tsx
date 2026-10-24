@@ -307,8 +307,6 @@ function DesktopDockCard() {
   const setDockEdge = useSettings((s) => s.setDockEdge);
   const dockStyle = useSettings((s) => s.dockStyle);
   const setDockStyle = useSettings((s) => s.setDockStyle);
-  const dockExpandAnchor = useSettings((s) => s.dockExpandAnchor);
-  const setDockExpandAnchor = useSettings((s) => s.setDockExpandAnchor);
   const setDockShortcut = useSettings((s) => s.setDockShortcut);
   const setDockAutoHide = useSettings((s) => s.setDockAutoHide);
   const [shortcutDraft, setShortcutDraft] = useState<string | null>(null);
@@ -379,19 +377,7 @@ function DesktopDockCard() {
               ))}
             </div>
           </Field>
-        <Field label={t("settings.dockExpandAnchor")}>
-          <div className="flex gap-2">
-            {(["center", "left"] as const).map((anchor) => (
-              <Button key={anchor} variant={dockExpandAnchor === anchor ? "secondary" : "ghost"}
-                className={dockExpandAnchor === anchor ? "ring-1 ring-brand" : undefined}
-                onClick={() => setDockExpandAnchor(anchor)}>
-                {t(`settings.dockExpandAnchor_${anchor}`)}
-              </Button>
-            ))}
-          </div>
-        </Field>
-
-          <p className="text-[11px] leading-5 text-muted-foreground">{t("settings.dockStyleHint")}</p>
+                  <p className="text-[11px] leading-5 text-muted-foreground">{t("settings.dockStyleHint")}</p>
           <Field label={t("settings.dockShortcut")}>
             <ShortcutRecorder placeholder="Ctrl+Alt+D" value={shortcutDraft ?? dockShortcut}
               onChange={(value) => { setShortcutDraft(value); setShortcutError(""); }} en={en}

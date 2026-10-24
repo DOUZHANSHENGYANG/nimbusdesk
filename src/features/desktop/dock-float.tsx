@@ -97,13 +97,28 @@ export function DockFloat({ onExpand, onHide, panels }: {
    */
   useEffect(() => {
     const root = document.documentElement;
-    root.style.setProperty("--df-p", "0");
     let stop: (() => void) | undefined;
     void listen<number>("dock-spring-progress", (event) => {
-      root.style.setProperty("--df-p", String(event.payload));
+      // 弹簧进度是「这一次动画走到哪」，与方向无关：收起时取反才是展开度
+      const p = root.dataset.dfClosing === "1" ? 1 - event.payload : event.payload;
+      root.style.setProperty("--df-p", String(p));
     }).then((unlisten) => { stop = unlisten; }).catch(() => undefined);
     return () => stop?.();
   }, []);
+
+  /**
+   * 静止态必须把 --df-p 明确写回 0/1。
+   * 只靠动画事件的话，展开结束后若最后一帧没到 1（或事件丢失），圆角会卡在
+   * 半路 —— 卡片变成一个大药丸，四角把内容裁掉，看起来像「背景透明」。
+   */
+  useEffect(() => {
+    const root = document.documentElement;
+    root.dataset.dfClosing = open ? "0" : "1";
+    const timer = setTimeout(() => {
+      root.style.setProperty("--df-p", open ? "1" : "0");
+    }, 480);
+    return () => clearTimeout(timer);
+  }, [open]);
 
   const setExpanded = useCallback((next: boolean) => {
     setOpen(next);
