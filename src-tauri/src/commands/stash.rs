@@ -86,3 +86,26 @@ pub async fn stash_import(category_id: String, paths: Vec<String>) -> Result<Vec
     }
     Ok(moved)
 }
+
+
+/// 删除存储盒里的一份副本。
+///
+/// **只允许删 <数据目录>/stash 下的路径**：这个命令会被前端在「删除条目并
+/// 连副本一起删」时调用，参数来自数据文件，不能当成通用的 rm 用 ——
+/// 先把目标规范化，再确认它确实在 stash 根之内，否则直接拒绝。
+#[tauri::command]
+pub async fn stash_delete(path: String) -> Result<(), String> {
+    let root = crate::commands::data::resolve_data_dir()?.join("stash");
+    let canonical_root = root.canonicalize().map_err(|e| e.to_string())?;
+    let target = std::path::PathBuf::from(&path)
+        .canonicalize()
+        .map_err(|e| e.to_string())?;
+    if !target.starts_with(&canonical_root) {
+        return Err("只能删除存储目录里的副本".into());
+    }
+    if target.is_dir() {
+        std::fs::remove_dir_all(&target).map_err(|e| e.to_string())
+    } else {
+        std::fs::remove_file(&target).map_err(|e| e.to_string())
+    }
+}

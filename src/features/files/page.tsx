@@ -23,6 +23,7 @@ import {
   type FileItem,
   type ItemType,
 } from "@/stores/files";
+import { useSettings } from "@/stores/settings";
 import {
   openPath,
   openUrl,
@@ -32,6 +33,7 @@ import {
   fetchSiteMeta,
 } from "@/lib/tauri";
 import { useModal } from "@/components/shell/modal-host";
+import { invoke } from "@tauri-apps/api/core";
 import { ListSentinel, useIncrementalCount } from "@/components/ui/incremental-list";
 import { copyText } from "@/lib/clipboard";
 import { motion } from "motion/react";
@@ -375,7 +377,23 @@ export function FilesPage() {
   };
 
   // 删除统一走 actions（本地文件进回收站，网址仅移出列表）
-  const onDeleteItem = (item: FileItem) => void actions.remove(item);
+  const onDeleteItem = async (item: FileItem) => {
+    /*
+     * 存储盒里的条目有两个东西：列表里的记录、以及 stash 里那份副本。
+     * 删除时把选择权交回用户，默认只移出列表（不动文件）——
+     * 确认框只问「要不要连副本一起删」，不问就什么都不删。
+     */
+    const root = useSettings.getState().dataDir;
+    const normalized = item.path.replace(/\\/g, "/").toLowerCase();
+    const stashed = !!root && normalized.startsWith(root.replace(/\\/g, "/").toLowerCase() + "/stash/");
+    if (stashed) {
+      const dropCopy = await confirm({ title: t("files.stashDeleteAsk"), danger: true });
+      if (dropCopy) {
+        await invoke("stash_delete", { path: item.path }).catch((error) => toast.error(String(error)));
+      }
+    }
+    void actions.remove(item);
+  };
 
   const updateDesktop = async (operation: () => Promise<void>, total = 1) => {
     if (desktopLock.current || !filesHydrated || !fencesHydrated) return;

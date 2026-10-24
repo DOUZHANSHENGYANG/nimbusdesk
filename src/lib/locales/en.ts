@@ -366,6 +366,8 @@ export const en: AppMessages = {
     title: "Files",
     all: "All",
     defaultCategory: "Default",
+    stashDeleteAsk: "Delete the stored copy too?",
+    stashDeleteHint: "Cancel removes it from the list only; the file stays in the stash.",
     kindAsk: "Make it a storage box?",
     kindAskHint: "A storage box moves dropped files into the data folder. Cancel keeps it a plain shortcut box (references only).",
     addCategory: "New category",
