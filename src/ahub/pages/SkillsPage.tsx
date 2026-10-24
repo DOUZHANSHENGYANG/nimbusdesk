@@ -295,6 +295,34 @@ export function SkillsPage() {
     }
   };
 
+  /**
+   * 批量启用/停用。
+   *
+   * 逐个调 setSkillStatus 而不是新开一条批量命令：状态改动要写回每个技能
+   * 自己的元信息，失败也应该只影响那一个 —— 批量命令反而要复制这份逐条
+   * 错误处理，还多一处能出错的地方。
+   */
+  const [batchStatusBusy, setBatchStatusBusy] = useState(false);
+  const setBatchStatus = async (status: "enabled" | "disabled") => {
+    const targets = [...batchSel];
+    if (!targets.length) return;
+    setBatchStatusBusy(true);
+    let ok = 0;
+    let failed = 0;
+    for (const dirName of targets) {
+      try {
+        await api.setSkillStatus(dirName, status, "");
+        ok += 1;
+      } catch {
+        failed += 1;
+      }
+    }
+    await loadSkills();
+    setBatchStatusBusy(false);
+    if (failed) toast.warning(t("skills.batchStatusDone", { ok, failed }));
+    else toast.success(t("skills.batchStatusDone", { ok, failed: 0 }));
+  };
+
   const applyStatus = async (status: string) => {
     if (!detail) return;
     try {
@@ -854,6 +882,27 @@ export function SkillsPage() {
                   >
                     <Layers className="size-3.5" />
                     {t("preset.saveAs")}
+                  </Button>
+
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    className="h-7 w-[84px] justify-center text-[11px]"
+                    disabled={batchSel.size === 0 || batchStatusBusy}
+                    onClick={() => void setBatchStatus("enabled")}
+                  >
+                    {batchStatusBusy ? <Loader2 className="size-3.5 animate-spin" /> : null}
+                    {t("skills.batchEnable")}
+                  </Button>
+
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    className="h-7 w-[84px] justify-center text-[11px]"
+                    disabled={batchSel.size === 0 || batchStatusBusy}
+                    onClick={() => void setBatchStatus("disabled")}
+                  >
+                    {t("skills.batchDisable")}
                   </Button>
 
                   <Button
