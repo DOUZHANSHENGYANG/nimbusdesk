@@ -1,8 +1,10 @@
-# 云台胶囊 Dock（视觉稿）
+# 云台胶囊 Dock
 
-屏顶一颗 44px 胶囊，点开就地长成 660px 卡片；五个入口（搜索 / 计划待办 / 收集 / 日历 / 每日资讯）**全部在卡片内完成**，只有齿轮「设置」跳主窗口。
+屏顶一颗 44px 胶囊，点开就地长成 660×591 的卡片。**所有日常操作都在卡片内完成**，
+只有齿轮「设置」跳主窗口 —— 这是「3 秒内能做完的事不该跳窗口」这条规则的边界。
 
-先在浏览器里看：直接用浏览器打开仓库根目录的 `design-preview-dock.html`（它 <link> 的是 `src/styles/tokens.css`，所以永远与真源同步；右上角按钮切明暗，卡片头部可切五个 tab）。
+先在浏览器里看：打开仓库根目录的 `design-preview-dock.html`（<link> 的是
+`src/styles/tokens.css`，永远与真源同步）。
 
 ## 实现状态
 
@@ -10,127 +12,67 @@
 
 | 文件 | 负责 |
 |---|---|
-| `src/features/desktop/dock-float.tsx` | 胶囊 + 卡片，五个页 |
-| `src/features/desktop/dock-float-core.ts` | 月格（固定 42 格）、今日进度、子任务进度、相对时间 |
+| `src/features/desktop/dock-float.tsx` | 胶囊 + 卡片、六个页、AI 对话副页与截图 |
+| `src/features/desktop/dock-float-core.ts` | 今日进度、相对时间等纯函数 |
 | `src/features/desktop/dock-float.css` | 悬浮层材质与全部卡片样式 |
-| `src/features/desktop/dock.tsx` | 形态分流 + `applyFloat`（窗口尺寸） |
-| `src/stores/settings.ts` | `dockStyle: "rail" \| "capsule"` |
+| `src/features/desktop/dock.tsx` | 形态分流 + `applyFloat`（弹簧展开/收起） |
+| `src-tauri/src/commands/dock.rs` | `dock_spring_box`：x/y/w/h 四元组弹簧 |
+| `src-tauri/src/commands/capture_window.rs` | `window_capture`：前台窗口截图（data URL，不落盘） |
 
-五页的数据来源全部复用现有 store，没有新增业务逻辑：
+## 六个页
 
-| 页 | 数据 | 动作 |
+**收纳盒 / 计划 / 项目 / 收集** 不是卡片里重写的，而是 `dock.tsx` 把侧栏那三个
+Flyout 与 `CapturePanel` **本体**通过 `panels` 属性注入进来 —— 同一个功能只有
+一份实现、一套密度、一套交互。
+
+| 页 | 数据来源 | 动作 |
 |---|---|---|
-| 搜索 | `searchQuery(query, "all", true)` | 点结果直接打开 |
-| 计划待办 | `usePlans.days[today]` | 勾选完成、快速添加 |
-| 收集 | `CaptureForm`（知识库收集表单） | 原样复用 |
-| 日历 | `usePlans.days` + `monthGrid` | 选日期看当天安排 |
-| 资讯 | `useFeeds.entriesBySource` + `mergedSources()` | 点标题用默认浏览器打开 |
+| 搜索 | `searchQuery(query, "all", true)` | 范围 chips（全部/文件/计划/项目/知识/资讯）+ 按类型分图标；点结果直接打开 |
+| 收纳盒 | `FencesFlyout` 本体 | 分类 chips、宫格/列表、拖拽排序、剪贴板快收 |
+| 计划 | `PlansFlyout` 本体 | 勾选、子任务、附件、删除可撤销 |
+| 项目 | `ProjectsFlyout` 本体 | 在办项目 + 未完成工作项 |
+| 收集 | `CapturePanel` 本体 | 收集表单（卡片内改为透明底，不引第二套材质） |
+| 资讯 | `useFeeds.entriesBySource` + `mergedSources()` | 按**来源顺序**平铺，30 秒自动滚一行；点标题**在卡片内读正文**，星标收藏，外链去原网页 |
 
-只有齿轮跳主窗口（`desktop_open_main` → /settings）。
+### AI 对话副页
+
+头部星标把整张卡片切成对话页（不做第七个标签：六个已经挤满）。
+
+- 多轮：历史原样回传给 `chatWithProvider`；收起再打开还在，**关掉应用清空**（刻意不落盘）
+- 相机按钮：`window_capture()` 抓当前前台窗口，预览可单独丢弃，随这一条消息以
+  `image_url` 内容块发出；`chatWithProvider` 检测到图片会自动挑有 vision 的 provider
+
+## 动效
+
+展开/收起不是一次 `set_bounds`，而是 `dock_spring_box` 逐帧插值：
+
+| 参数 | 展开 | 收起 |
+|---|---|---|
+| 曲线 | response 0.38s / damping 0.78（freq 2.63、decay 12.9、460ms） | response 0.24 / damping 1.0（不回弹） |
+| 窗口 | x/y/w/h 四个量同一条曲线 | 同 |
+| 内容 | scale .96→1、opacity、blur 4px→0，头/标签/正文 stagger 20ms | 淡出 |
+| 圆角 | 999px 进场、380ms 收到 20px | 反向 |
+
+代数计数器在 Rust 侧共享：**展开到一半再点收起，会从中断处弹向新目标**，不跳回起点。
+
+胶囊可拖：空白处按住 `startDragging()`，松手把横向位置记进 `dockFloatX`，下次展开
+还在那儿；不悬停时透明度 0.62（置顶但不挡视线）。
 
 ## 验证
 
-- `node --test src/features/desktop/dock-float-core.test.mjs`：月格恒 42 格 / 只数十层任务 / 子任务角标 / 相对时间单位切换。
-- 手测：设置里切「屏顶胶囊」→ 窗口变成 44px 药丸并水平居中；点开变成 660×591 卡片；切五个 tab 窗口高度不变；点齿轮进主窗口设置页。
-- `node scripts/check-dock-float-browser.mjs`（夹具 `src/features/desktop/fixtures/dock-float.html`，接进 `verify:dist`）：胶囊 44 高 → 展开窗口 660×591 → 五个页切换尺寸不变 → 齿轮跳 `/settings` → 收起回 44。尺寸断言读 mock 到的 `window_set_bounds` 参数，不是 CSS —— 只量 DOM 会把「CSS 长得对、窗口没变」放过去。
-- `npm run verify` 必须退出 0。
-
-## 几何契约
-
-悬浮锚点不写进 `DockEdge`：吸附（`nearestDockEdge` / `settings.dockEdge`）仍然只认 left/right/top 三条边，卡片化的 Dock 只是「换了锚点的同一个窗口」。
-
-| 常量 | 值 | 说明 |
-|---|---|---|
-| `DOCK_FLOAT_GAP` | 12 | 距工作区顶边 |
-| `DOCK_CAPSULE_W` / `_H` | 464 / 44 | 胶囊态（窗口不能按内容自适应，给保守宽度） |
-| `DOCK_CARD_W` / `_H` | 660 / 591 | 卡片态，五页共用一个矩形，切页不跳窗 |
-
-`dockFloatBounds(area, mode)`：水平居中、距顶 12；工作区放不下时先裁宽高，再贴顶（不留缝）。两种形态共用一条中心线，切换只变宽高 —— 和侧栏「只变宽度」同一思路。
-
-## 视觉方向（已定）
-
-**浅色磨砂 · 三层材质**（A 骨架 + B 密度），交互稿：`design-demos/dock-glass/D-light-frosted.html`，截图 `docs/screenshots/dock-light-*.png`。
-
-| 层 | 浅色取值 |
-|---|---|
-| 窗（卡片底） | white 84% → 72% 渐变 + blur(44px) saturate(190%) |
-| 面（面板/统计块） | white 56% + 1px 发丝线 + 顶部内高光 |
-| 内嵌（分段槽/输入） | gray 4.5% + 内阴影 |
-
-文字三级：gray-850 / gray-700 / gray-600（10px 小字刻意不用 gray-500，它在 near-white 底上只有 ~4.4:1）。
-
-## 为什么是「换壳」
-
-现在的 Dock 是**贴边常驻玻璃竖条 100px + 飞出面板 408px**（`src/features/desktop/dock-core.ts` 的三形态）。功能不缺，缺的是形态：它是一条「边」，而不是一个「物件」。截图里那类交互的灵活来自三点，云台都能给：
-
-| 要的东西 | 现在的状态 |
-|---|---|
-| 一个窗口承载多个页，切页不跳转 | Dock 的 flyout 已有 `DockPanel`（fences/plans/projects/capture），只差把入口换掉 |
-| 拖入即收纳 | 栅栏已有 `onDragDropEvent` + `probe_paths` + 按分类入库 |
-| 就地展开、不打断当前上下文 | 三个窗口族都在，主窗口不必前置 |
-
-所以**不新增窗口**：胶囊 = strip 的新皮，卡片 = flyout 的新皮，几何仍由 `dock-core.ts` 算、仍用逻辑像素。
-
-## 五个页各自的卡片职责
-
-只放「3 秒内能完成」的事；超过的跳主窗口。
-
-| 页 | 卡片内能做 | 不做（跳主窗口） |
-|---|---|---|
-| 搜索 | 输入即搜、范围 chips、分组结果、回车在卡内展开 | 高级筛选、批量操作 |
-| 计划待办 | 勾选、快速添加、看今日进度环与最近一项 | 树形编辑、五视图切换 |
-| 收集 | 写、切类型、拖入收纳、看最近 3 条 | 批量整理、归档到知识库 |
-| 日历 | 月视图翻页、点日期看当日安排 | 新建计划、改期 |
-| 每日资讯 | 换频道、点标题用默认浏览器打开、看热度 | 订阅管理、已读批量清除 |
-
-齿轮带 ↗ 角标 = **唯一**跳主窗口的入口（设置）。
-
-## 尺寸与 token
-
-| 项 | 值 |
-|---|---|
-| 胶囊 | 高 44 · 圆角 `--pr-radius-full` · 宽度由内容撑开（本稿 463） |
-| 卡片 | 660 宽 · 高随内容（本稿 476–479，五页基本等高，切换不跳） |
-| 材质 | **不能用 `--glass`**（那是应用内内容面上的玻璃，深色只有 8.5% 白，桌面上会糊成一团）。悬浮层要独立三档：`--dock-fill` / `--dock-fill-strong` / `--dock-edge`，深色 ≈ #1f232a，浅色 ≈ #f0f3f6 |
-| 边界 | `0 0 0 1px` 暗环 + 24–26px 大投影 + 顶部 1px 高光 + 一道品牌色薄光（`--pr-brand-500` 10%） |
-| 选中 tab | `--primary` 实心 + `--primary-foreground`（不用下划线：玻璃上的细线会被壁纸吃掉） |
-| 行高 | 32–34，统一密度 |
-
-## 两条实现约束（踩过）
-
-1. **窗口矩形 = 内容矩形**：Tauri 的窗口会裁掉矩形外的所有绘制，所以外发光/大投影在真机上根本不出现（视觉稿里能看到，是因为画在同一个网页里）。真机用 1px 描边 + 顶部内高光代替，别指望 `box-shadow` 的外扩部分。
-2. **等设置水合再定尺寸**：`dockStyle` 存在 settings.json，首帧拿到的是默认 `rail`；直接按它摆会把胶囊窗口先做成 64 高再纠正，肉眼就是一下抽搐。启动时 `await waitSettings()` 再选形态。
-
-## 材质 token
-
-`--dock-fill` / `--dock-face` / `--dock-inset` / `--dock-edge`（语义层）← `--pr-mat-dock-*`（材质层，明暗两套）。**不要拿 `--glass` 当 Dock 底色**：那是应用内玻璃，8.5% 白压不住桌面壁纸。
-
-## 落地前的四个硬约束
-
-1. **窗口尺寸归 Rust**：胶囊 44 / 卡片 660×496 切换时 `set_size` 一次到位（或 2–3 帧插值）；CSS 只过渡圆角、内边距、内容 stagger，**不要**用 transform 假装变宽。
-2. **透明窗口里 `backdrop-filter` 糊不到桌面，所以别靠玻璃**：本稿能糊是因为壁纸和卡片在同一个文档里。真机要么走 DWM 材质（`window-vibrancy` / `DWMWA_SYSTEMBACKDROP_TYPE`），要么就是「实底 + 轻 blur」。硬约束是**卡片底色必须自己够实**（深色实测 ≈ #1f232a，与壁纸亮度差 ≥ 70/255），blur 只是加分项。
-3. **顶部居中 + 置顶会压住最大化窗口的标题栏**：默认距顶 12px，设置里给三档（贴顶 / 跟随焦点窗口下沿 / 只在无最大化窗口时显示）。
-4. **对比度与双语是闸门**：玻璃叠层正文 ≥4.5:1（新的 `--glass` 组合要纳入 `npm run check:contrast`）；五页的名称、占位、空态 zh+en 同时进 `src/lib/i18n.ts`。
-
-## 验证
-
-- 视觉稿本身：用浏览器打开 `design-preview-dock.html`，五个 tab 逐个点，确认卡片高度不变、无横向滚动（本稿实测 660×477~479，五页一致）。
-- 落地后：`npm run check:i18n`、`npm run check:contrast`、再加一条 dock 的浏览器夹具（胶囊⇄卡片切换、切 tab 后 `aria-selected`、拖入高亮、齿轮跳 `/settings`）。
-
-## 实测量（2x 截图取样）
-
-| 项 | 深色 | 浅色 |
-|---|---|---|
-| 卡片底色 | rgb(31,35,42) · L 34.7 | rgb(240,243,246) · L 242.6 |
-| 壁纸（卡片左侧） | L 114.6 | L 119.4 |
-| 五页卡片高度 | 477.5 一致 | 477.5 一致 |
+- `node --test src/features/desktop/dock-float-core.test.mjs`：今日进度、相对时间单位。
+- `node scripts/check-dock-float-browser.mjs`（接进 `verify:dist`）：胶囊 44 → 展开
+  `dock_spring_box` 目标 660×591 → 六页切换尺寸不变（含收纳盒/计划/项目**真面板**在不在）
+  → 详情/对话副页进退 → 齿轮跳 `/settings` → 收起回 44。
+- `node scripts/shots-dock.mjs`：重新生成下面的截图（改了外观就重跑，别拿旧图当文档）。
 
 ## 截图
 
-- `docs/screenshots/dock-card-stage-dark.png` / `dock-card-stage-light.png`（带壁纸全景）
-- `docs/screenshots/dock-capsule-dark.png` / `dock-capsule-light.png`
-- `docs/screenshots/dock-card-search-dark.png` / `dock-card-search-light.png`
-- `docs/screenshots/dock-card-plans-dark.png`
-- `docs/screenshots/dock-card-collect-dark.png`
-- `docs/screenshots/dock-card-cal-dark.png`
-- `docs/screenshots/dock-card-news-dark.png`
+| 文件 | 内容 |
+|---|---|
+| `docs/screenshots/dock-capsule.png` | 胶囊本体 |
+| `docs/screenshots/dock-capsule-search.png` | 搜索页（范围 chips） |
+| `docs/screenshots/dock-capsule-fences.png` | 收纳盒（侧栏本体） |
+| `docs/screenshots/dock-capsule-news.png` | 资讯（按来源平铺） |
+| `docs/screenshots/dock-capsule-news-reader.png` | 卡片内读正文 |
+| `docs/screenshots/dock-capsule-chat.png` | AI 对话 |
