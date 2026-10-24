@@ -69,6 +69,8 @@ export function DockFloat({ onExpand, onHide, panels }: {
   const [chatOpen, setChatOpen] = useState(false);
   const summary = useMemo(() => summarizeDay(tasks), [tasks]);
   const [clock, setClock] = useState(() => new Date().toTimeString().slice(0, 5));
+  /** 收起形态的提醒：出现 5 秒就收（对应灵动岛的配额预警） */
+  const [alertOn, setAlertOn] = useState(false);
 
   useEffect(() => {
     const timer = setInterval(() => setClock(new Date().toTimeString().slice(0, 5)), 30_000);
@@ -120,13 +122,55 @@ export function DockFloat({ onExpand, onHide, panels }: {
     return () => clearTimeout(timer);
   }, [open]);
 
+  useEffect(() => {
+    if (summary.late <= 0) { setAlertOn(false); return; }
+    setAlertOn(true);
+    const timer = setTimeout(() => setAlertOn(false), 5000);
+    return () => clearTimeout(timer);
+  }, [summary.late]);
+
   const setExpanded = useCallback((next: boolean) => {
+    if (!next) suppressHoverUntil.current = Date.now() + 700;
     setOpen(next);
     void onExpand(next).catch(report);
   }, [onExpand]);
 
+  /**
+   * 悬停展开、移开收起、Esc 收起 —— 这是「灵动岛」的手感来源。
+   *
+   * 两个细节：移入有 120ms 迟滞（路过不算），移出有 500ms 缓冲（去点面板
+   * 的路上不会自己关）；焦点还在卡片里（比如正在搜索框打字）时不移出收起。
+   */
+  const hoverTimer = useRef<number | null>(null);
+  /** 刚被显式收起时短暂忽略悬停：否则点「收起」那一刻指针还在卡片上，会立刻又展开 */
+  const suppressHoverUntil = useRef(0);
+  const clearHoverTimer = () => {
+    if (hoverTimer.current !== null) { window.clearTimeout(hoverTimer.current); hoverTimer.current = null; }
+  };
+  const hoverExpand = () => {
+    if (Date.now() < suppressHoverUntil.current) return;
+    clearHoverTimer();
+    hoverTimer.current = window.setTimeout(() => setExpanded(true), 120);
+  };
+  const hoverCollapse = () => {
+    clearHoverTimer();
+    hoverTimer.current = window.setTimeout(() => {
+      const focus = document.activeElement as HTMLElement | null;
+      if (focus && focus.closest(".df-card")) return;
+      setExpanded(false);
+    }, 500);
+  };
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") setExpanded(false); };
+    window.addEventListener("keydown", onKey);
+    return () => { window.removeEventListener("keydown", onKey); clearHoverTimer(); };
+  }, [setExpanded]);
+
+
   return (
-    <div className="df-root" data-open={open}>
+    <div className="df-root" data-open={open}
+      onPointerEnter={hoverExpand} onPointerLeave={hoverCollapse}>
       <div className="df-capsule" data-open={open}
           data-drag
           onPointerDown={(event) => {
@@ -144,11 +188,29 @@ export function DockFloat({ onExpand, onHide, panels }: {
           <span className="df-orb" aria-hidden="true" />
           <span className="df-name">{t("dockFloat.title")}</span>
           <span className="df-sep" aria-hidden="true" />
+          {(() => {
+            const total = summary.todo + summary.done;
+            const pct = total ? summary.done / total : 0;
+            const c = 2 * Math.PI * 6;
+            return (
+              <span className="df-ring" title={t("dockFloat.ringTitle", { done: summary.done, total })}
+                aria-label={t("dockFloat.ringTitle", { done: summary.done, total })}>
+                <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+                  <circle cx="8" cy="8" r="6" className="df-ring-bg" />
+                  <circle cx="8" cy="8" r="6" className="df-ring-fg"
+                    strokeDasharray={`${c * pct} ${c}`} transform="rotate(-90 8 8)" />
+                </svg>
+              </span>
+            );
+          })()}
           <span className="df-stat">
             <b>{summary.todo}</b> {t("dockFloat.todoUnit")}
             {summary.late > 0 && <> · <b className="is-warn">{summary.late}</b> {t("dockFloat.lateUnit")}</>}
           </span>
           <span className="df-clock">{clock}</span>
+          {alertOn && summary.late > 0 && (
+            <span className="df-alert" role="status">{t("dockFloat.lateAlert", { count: summary.late })}</span>
+          )}
           <span className="df-quick">
             {TABS.map(({ key, icon: Icon }) => (
               <button key={key} type="button" className="df-quick-btn" title={t(`dockFloat.tab.${key}`)}

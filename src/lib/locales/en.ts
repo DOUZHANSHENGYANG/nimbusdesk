@@ -51,6 +51,8 @@ export const en: AppMessages = {
     hide: "Hide Cloud",
     scope: { all: "All", app: "Apps", file: "Files", folder: "Folders", plan: "Plans", project: "Projects", knowledge: "Knowledge", feed: "News" },
     back: "Back to list",
+    ringTitle: "Done today {{done}}/{{total}}",
+    lateAlert: "{{count}} overdue",
     chatTitle: "AI chat",
     chatPlaceholder: "Ask something, or ask me to explain what you are looking at…",
     chatEmpty: "This chat is not persisted — closing the app clears it.",

@@ -606,3 +606,30 @@
   width: 660px;
   height: 591px;
 }
+
+/* 收起形态的完成度环：对应灵动岛的配额环，用已完成/总数画弧 */
+.df-ring { display: grid; place-items: center; width: 18px; height: 18px; flex: none; }
+.df-ring svg { display: block; }
+.df-ring-bg { fill: none; stroke: var(--hairline); stroke-width: 2; }
+.df-ring-fg {
+  fill: none;
+  stroke: var(--brand);
+  stroke-width: 2;
+  stroke-linecap: round;
+  transition: stroke-dasharray 320ms var(--pr-ease-out);
+}
+
+/* 逾期提醒：出现 5 秒自动收，颜色走 warning，不抢主视觉 */
+.df-alert {
+  flex: none;
+  height: 20px;
+  padding: 0 8px;
+  border-radius: var(--pr-radius-full);
+  background: color-mix(in oklch, var(--warning) 22%, transparent);
+  color: var(--warning);
+  font-size: var(--pr-text-2xs);
+  font-weight: var(--pr-weight-semibold);
+  display: inline-grid;
+  place-items: center;
+  animation: df-enter 220ms var(--pr-ease-out) both;
+}

@@ -48,6 +48,8 @@ export const zh = {
     hide: "隐藏云台",
     scope: { all: "全部", app: "应用", file: "文件", folder: "文件夹", plan: "计划", project: "项目", knowledge: "知识", feed: "资讯" },
     back: "返回列表",
+    ringTitle: "今日完成 {{done}}/{{total}}",
+    lateAlert: "{{count}} 项已逾期",
     chatTitle: "AI 对话",
     chatPlaceholder: "问点什么，或者让我解释眼前这件事…",
     chatEmpty: "对话不会落盘：关掉应用就没了。",
