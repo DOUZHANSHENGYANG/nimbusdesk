@@ -27,6 +27,9 @@ import type {
 import { cn } from "@/ahub/lib/utils";
 import { useSettings } from "@/ahub/stores/settings";
 
+/** 来源确认步骤开关：云台不用来源机制，默认关；恢复只需改这一行 */
+const SOURCE_STEP_ENABLED = false;
+
 /**
  * 批量导入向导（skills-import）：
  * 探查结果 → 无法修复列表 → AI 修复 → 来源确认 → 执行（进度实时推送）。
@@ -88,31 +91,9 @@ export function ImportWizard({
         setFixed(r);
         const ok = r.candidates.filter((c) => c.hasSkillMd && !c.problem).map((c) => c.originalPath);
         setSelected(new Set(ok));
-        // AI 目标在进入向导时定下：修完后候选的 needsAi 会变 false，列表不能因此消失
-        setAiTargets(r.candidates.filter((c) => c.hasSkillMd && !c.problem && c.needsAi).map((c) => c.originalPath));
-        setSources(
-          Object.fromEntries(
-            r.candidates
-              .filter((c) => c.hasSkillMd && !c.problem)
-              .map((c) => [c.originalPath, c.source]),
-          ),
-        );
-      })
-      .catch((e) => {
-        toast.error(String(e));
-        setFixed(report);
-        setSelected(
-          new Set(report.candidates.filter((c) => c.hasSkillMd && !c.problem).map((c) => c.originalPath)),
-        );
+        // AI 目标按**修复前**的报告定：修完后候选的 needsAi 会变 false，列表不能因此消失
         setAiTargets(
           report.candidates.filter((c) => c.hasSkillMd && !c.problem && c.needsAi).map((c) => c.originalPath),
-        );
-        setSources(
-          Object.fromEntries(
-            report.candidates
-              .filter((c) => c.hasSkillMd && !c.problem)
-              .map((c) => [c.originalPath, c.source]),
-          ),
         );
       })
       .finally(() => setApplying(false));
@@ -138,9 +119,23 @@ export function ImportWizard({
     [importable, aiTargets],
   );
 
-  /** 没有无法修复的目录时跳过第 2 步（该步只用于让用户决定继续/终止） */
-  const nextStep = () => setStep((s) => (s === 0 && !unrepairable.length ? 2 : s + 1));
-  const prevStep = () => setStep((s) => (s === 2 && !unrepairable.length ? 0 : s - 1));
+  /**
+   * 没有无法修复的目录时跳过第 2 步（该步只用于让用户决定继续/终止）。
+   * **来源确认（第 4 步）默认关掉**：来源机制在云台用不上，且导入时不再
+   * 自动打来源标签。保留代码与开关是为了能一键恢复，不是死代码。
+   */
+  const nextStep = () =>
+    setStep((s) => {
+      if (s === 0 && !unrepairable.length) return 2;
+      if (s === 2) return SOURCE_STEP_ENABLED ? 3 : 4;
+      return s + 1;
+    });
+  const prevStep = () =>
+    setStep((s) => {
+      if (s === 2 && !unrepairable.length) return 0;
+      if (s === 4) return SOURCE_STEP_ENABLED ? 3 : 2;
+      return s - 1;
+    });
 
   const close = (open: boolean) => {
     if (!open && running) return;
@@ -248,9 +243,11 @@ export function ImportWizard({
     t("skillImport.stepExplore"),
     t("skillImport.stepUnfixable"),
     t("skillImport.stepAi"),
-    t("skillImport.stepSource"),
+    ...(SOURCE_STEP_ENABLED ? [t("skillImport.stepSource")] : []),
     t("skillImport.stepRun"),
   ];
+  /** 步骤条上显示哪几个 step 值（来源步关掉时是 0/1/2/4） */
+  const stepOrder = SOURCE_STEP_ENABLED ? [0, 1, 2, 3, 4] : [0, 1, 2, 4];
 
   /** 来源类型 → 展示文案（避免动态拼 key，i18n 才能被静态检查） */
   const srcKindLabel = (kind: string) =>
@@ -277,9 +274,9 @@ export function ImportWizard({
                 key={k}
                 className={cn(
                   "rounded-full border px-2.5 py-0.5",
-                  i === step
+                  stepOrder[i] === step
                     ? "border-primary bg-primary-soft text-primary"
-                    : i < step
+                    : stepOrder[i] < step
                       ? "border-border text-ink-2"
                       : "border-border text-ink-3",
                 )}
