@@ -19,7 +19,9 @@ page.on("pageerror", (error) => errors.push(error.message));
 
 // 展开/收起现在走 dock_spring_box（四元组弹簧）；断言它的目标值。
 const lastBounds = () => page.evaluate(() => {
-  const calls = window.__dockFloat.calls.filter((call) => call.cmd === "dock_spring_box");
+  const calls = window.__dockFloat.calls.filter(
+    (call) => call.cmd === "dock_spring_box" || call.cmd === "dock_spring_to",
+  );
   if (!calls.length) return null;
   const a = calls[calls.length - 1].args;
   return { x: a.toX, y: a.toY, width: a.toW, height: a.toH };

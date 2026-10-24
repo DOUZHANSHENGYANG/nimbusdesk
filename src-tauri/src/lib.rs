@@ -47,6 +47,7 @@ pub fn run() {
             commands::capture_window::window_capture,
             commands::stash::stash_delete,
             commands::dock::dock_spring_box,
+            commands::dock::dock_spring_to,
             commands::dock::window_show_no_activate,
             commands::dock::window_set_bounds,
             commands::dock::window_set_no_activate,

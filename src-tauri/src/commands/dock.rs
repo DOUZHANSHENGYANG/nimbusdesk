@@ -246,6 +246,47 @@ pub async fn dock_spring_box(
     Ok(())
 }
 
+/// 从**窗口当前真实矩形**弹到目标矩形（前端不再传 from）。
+///
+/// 之前 from 由前端读 outerPosition/outerSize 再除 DPI 得到 —— 那是一次异步
+/// IPC 往返，读到的可能是过期矩形、也可能单位不对；只要和 Rust 里真正的矩形
+/// 差一点，第一帧就会先跳一下再进入动画（用户看到的「展开前先移一下」）。
+/// 这里让 Rust 自己 GetWindowRect，起点永远是准的。
+#[tauri::command]
+pub async fn dock_spring_to(
+    app: AppHandle,
+    label: String,
+    to_x: f64,
+    to_y: f64,
+    to_w: f64,
+    to_h: f64,
+    style: String,
+) -> Result<(), String> {
+    let hwnd = hwnd_of(&app, &label)?;
+    let mut rect = RECT::default();
+    unsafe {
+        GetWindowRect(hwnd, &mut rect).map_err(|e| e.to_string())?;
+    }
+    let scale = app
+        .get_webview_window(&label)
+        .and_then(|win| win.scale_factor().ok())
+        .unwrap_or(1.0);
+    dock_spring_box(
+        app,
+        label,
+        rect.left as f64 / scale,
+        rect.top as f64 / scale,
+        (rect.right - rect.left) as f64 / scale,
+        (rect.bottom - rect.top) as f64 / scale,
+        to_x,
+        to_y,
+        to_w,
+        to_h,
+        style,
+    )
+    .await
+}
+
 /// 创建（或激活）dock 窗口。位置与显示由前端在算出工作区后
 /// 通过 `window_set_bounds` + `window_show_no_activate` 完成。
 #[tauri::command]

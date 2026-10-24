@@ -104,7 +104,7 @@ export function DockWindow() {
   const applyFloat = useCallback(async (open: boolean) => {
     const resolved = await resolveArea();
     if (!resolved) return;
-    const { area, scale } = resolved;
+    const { area } = resolved;
     areaRef.current = area;
     // 展开方向固定居中：卡片从胶囊中心左右撑开，胶囊本身的位置一点不动。
     // 左缘锚定做成过一版，实测观感是「从左边拉出来」，反而丢了灵动岛那种
@@ -125,12 +125,9 @@ export function DockWindow() {
       ...base,
       x: Math.round(Math.min(Math.max(center - base.w / 2, area.x), area.x + area.w - base.w)),
     };
-    const win = getCurrentWebviewWindow();
-    const [pos, size] = await Promise.all([win.outerPosition(), win.outerSize()]);
-    await invoke("dock_spring_box", {
+    // 起点由 Rust 用 GetWindowRect 自己读：前端那次异步读矩形是竞态来源
+    await invoke("dock_spring_to", {
       label: LABEL,
-      fromX: pos.x / scale, fromY: pos.y / scale,
-      fromW: size.width / scale, fromH: size.height / scale,
       toX: target.x, toY: target.y, toW: target.w, toH: target.h,
       style: open ? "soft" : "stiff",
     });
