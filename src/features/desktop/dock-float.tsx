@@ -74,6 +74,19 @@ export function DockFloat({ onExpand, onHide, panels }: {
     return () => clearInterval(timer);
   }, []);
 
+  /**
+   * 卡片的挂载期比「展开」长 320ms。
+   *
+   * 收起时窗口在缩，如果卡片这一刻直接卸载，用户看到的是「内容先没、窗口
+   * 后缩」—— 两次跳变。多留 320ms 让它在缩的过程中一起淡出，动作就合成一次。
+   */
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    if (open) { setMounted(true); return; }
+    const timer = setTimeout(() => setMounted(false), 320);
+    return () => clearTimeout(timer);
+  }, [open]);
+
   const setExpanded = useCallback((next: boolean) => {
     setOpen(next);
     void onExpand(next).catch(report);
@@ -81,8 +94,7 @@ export function DockFloat({ onExpand, onHide, panels }: {
 
   return (
     <div className="df-root" data-open={open}>
-      {!open && (
-        <div className="df-capsule"
+      <div className="df-capsule" data-open={open}
           data-drag
           onPointerDown={(event) => {
             // 空白处/文字上按住就拖走；图标按钮照常点击
@@ -118,9 +130,8 @@ export function DockFloat({ onExpand, onHide, panels }: {
             <ChevronDown className="df-icon" aria-hidden="true" />
           </button>
         </div>
-      )}
 
-      {open && (
+      {mounted && (
         <div className="df-card">
           <div className="df-head">
             <span className="df-orb" aria-hidden="true" />

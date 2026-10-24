@@ -568,3 +568,13 @@
   transform-origin: top center;
 }
 .df-card .df-body { animation-delay: 60ms; }
+
+/* ── 一个表面：胶囊与卡片不再「二选一」，而是同一块区域的两层状态 ──
+   展开时胶囊淡出但不卸载（窗口在长大的过程中它还在），收起时卡片多留
+   320ms 一起缩，动作才合成一次而不是「内容先没、窗口后缩」。 */
+.df-capsule { transition: opacity 140ms var(--pr-ease-out); }
+/* 从根节点判形态：胶囊自身的属性会被 :hover 规则顶掉 */
+.df-root[data-open="true"] .df-capsule { opacity: 0 !important; pointer-events: none; }
+/* 卡片本身只动圆角，不动 scale —— 量尺寸的地方（含回归）必须拿到 660 的实宽 */
+.df-card { animation: df-open-radius 380ms var(--pr-ease-out) both; }
+.df-root[data-open="false"] .df-card { opacity: 0; transform: scale(0.98); transition: opacity 200ms var(--pr-ease-out), transform 200ms var(--pr-ease-out); }

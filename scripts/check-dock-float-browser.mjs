@@ -49,7 +49,12 @@ try {
   assert.equal(expanded.width, 660, "展开后窗口宽 660");
   assert.equal(expanded.height, 591, "展开后窗口高 591");
   assert.equal(expanded.x, Math.round((1360 - 660) / 2), "展开时水平居中（工作区 1360 宽）");
-  assert.equal(await page.locator(".df-capsule").count(), 0, "展开后胶囊不在");
+  // 胶囊不再卸载，而是淡出让位（保留节点才能让形状连续）
+  assert.equal(
+    await page.locator(".df-capsule").evaluate((node) => getComputedStyle(node).opacity),
+    "0",
+    "展开后胶囊淡出",
+  );
 
   // ③ 五个页：都能切，且卡片尺寸不变
   for (const name of ["搜索", "收纳盒", "计划", "项目", "收集", "资讯"]) {
