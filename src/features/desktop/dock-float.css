@@ -587,3 +587,9 @@
 .df-capsule {
   border-radius: calc(999px - var(--df-p, 0) * 979px);
 }
+
+/* 胶囊必须脱离文档流：它和卡片是兄弟节点，留在流里就会把卡片往下挤 44px
+   （实测卡片顶边因此低了 41px、高度少了 41px —— 这就是「往下挪了一点」）。 */
+.df-root { position: relative; }
+.df-capsule { position: absolute; inset: 0; }
+.df-card { position: relative; }
