@@ -123,7 +123,7 @@ function SettingsSync() {
     if (bootstrapped.current) return;
     bootstrapped.current = true;
 
-    applyTheme(useSettings.getState().theme);
+    applyTheme(useSettings.getState().theme, useSettings.getState().accentPreset);
     changeLang(useSettings.getState().lang);
 
     // 直接通知显示（别用 rAF：窗口 visible:false 时 WebView2 不派发
@@ -144,7 +144,8 @@ function SettingsSync() {
   // 水合后（或用户切换时）应用最新设置。
   // 主题：切换动画进行中冻结 —— 真实切换由 toggleThemeRadial 在幕布盖满/收拢时机执行
   useEffect(() => {
-    if (!isThemeSwitching()) applyTheme(theme);
+    if (!isThemeSwitching()) applyTheme(theme, useSettings.getState().accentPreset);
+      if (!isThemeSwitching()) applyTheme(theme, useSettings.getState().accentPreset);
     changeLang(lang);
   }, [theme, lang]);
 

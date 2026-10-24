@@ -441,3 +441,48 @@
   --close-hover-bg: var(--pr-red-600);
   --close-hover-fg: var(--pr-gray-0);
 }
+
+/* ocean：只替换品牌色相，L/C 与默认一致 —— 对比度关系不变，check:contrast 仍成立 */
+[data-accent="ocean"] {
+  --pr-brand-50: oklch(0.972 0.017 220);
+  --pr-brand-100: oklch(0.941 0.036 220);
+  --pr-brand-200: oklch(0.884 0.069 220);
+  --pr-brand-300: oklch(0.812 0.108 220);
+  --pr-brand-400: oklch(0.722 0.152 220);
+  --pr-brand-500: oklch(0.638 0.190 220);
+  --pr-brand-600: oklch(0.552 0.194 220);
+  --pr-brand-700: oklch(0.472 0.168 220);
+  --pr-brand-800: oklch(0.398 0.132 220);
+  --pr-brand-900: oklch(0.332 0.100 220);
+  --pr-brand-950: oklch(0.242 0.068 220);
+}
+
+/* graphite：只替换品牌色相，L/C 与默认一致 —— 对比度关系不变，check:contrast 仍成立 */
+[data-accent="graphite"] {
+  --pr-brand-50: oklch(0.972 0.004 250);
+  --pr-brand-100: oklch(0.941 0.009 250);
+  --pr-brand-200: oklch(0.884 0.017 250);
+  --pr-brand-300: oklch(0.812 0.027 250);
+  --pr-brand-400: oklch(0.722 0.038 250);
+  --pr-brand-500: oklch(0.638 0.048 250);
+  --pr-brand-600: oklch(0.552 0.049 250);
+  --pr-brand-700: oklch(0.472 0.042 250);
+  --pr-brand-800: oklch(0.398 0.033 250);
+  --pr-brand-900: oklch(0.332 0.025 250);
+  --pr-brand-950: oklch(0.242 0.017 250);
+}
+
+/* warm：只替换品牌色相，L/C 与默认一致 —— 对比度关系不变，check:contrast 仍成立 */
+[data-accent="warm"] {
+  --pr-brand-50: oklch(0.972 0.015 45);
+  --pr-brand-100: oklch(0.941 0.032 45);
+  --pr-brand-200: oklch(0.884 0.062 45);
+  --pr-brand-300: oklch(0.812 0.097 45);
+  --pr-brand-400: oklch(0.722 0.137 45);
+  --pr-brand-500: oklch(0.638 0.171 45);
+  --pr-brand-600: oklch(0.552 0.175 45);
+  --pr-brand-700: oklch(0.472 0.151 45);
+  --pr-brand-800: oklch(0.398 0.119 45);
+  --pr-brand-900: oklch(0.332 0.090 45);
+  --pr-brand-950: oklch(0.242 0.061 45);
+}

@@ -7,8 +7,13 @@ export type ThemeMode = "light" | "dark";
  * 注意 html 背景由 index.css 的 `html { background: var(--color-background) }`
  * 提供 —— index.html 里那层 #0c0c0c 只是首帧防闪，随后被 token 覆盖。
  */
-export function applyTheme(mode: ThemeMode) {
+export type AccentPreset = "sky" | "ocean" | "graphite" | "warm";
+
+/** 主题模式：跟随系统 / 浅色 / 深色 */
+export function applyTheme(mode: ThemeMode, accent?: AccentPreset) {
   document.documentElement.classList.toggle("dark", mode === "dark");
+  // 配色预设：只改品牌色相（见 tokens.css 的 [data-accent]），黑白灰与对比度不动
+  if (accent) document.documentElement.dataset.accent = accent;
   const bg = getComputedStyle(document.documentElement).backgroundColor;
   if (bg && bg !== "rgba(0, 0, 0, 0)") {
     document.querySelector('meta[name="theme-color"]')?.setAttribute("content", bg);

@@ -56,6 +56,8 @@ interface SettingsState {
   dockExpandAnchor: "center" | "left";
   /** 收起形态：胶囊 / 指示条（对齐 BrimDeck 的两种紧凑形态） */
   dockCompactStyle: "capsule" | "line";
+  /** 配色预设：只换品牌色相，见 tokens.css 的 [data-accent] */
+  accentPreset: "sky" | "ocean" | "graphite" | "warm";
   /** 收纳盒飞出面板的磁贴图标边长（Ctrl+滚轮调节，32–72） */
   dockTileSize: number;
   /** Dock 显隐全局快捷键（空 = 无）；按下在托盘外切换 Dock 显示 */
@@ -97,6 +99,7 @@ interface SettingsState {
   setDockFloatX: (x: number | null) => void;
   setDockExpandAnchor: (anchor: "center" | "left") => void;
   setDockCompactStyle: (style: "capsule" | "line") => void;
+  setAccentPreset: (preset: "sky" | "ocean" | "graphite" | "warm") => void;
   setDockEnabled: (v: boolean) => void;
   setDockOpen: (v: boolean) => void;
   setAlwaysOnTop: (v: boolean) => void;
@@ -143,6 +146,7 @@ export const useSettings = create<SettingsState>()(
       dockFloatX: null,
       dockExpandAnchor: "center",
       dockCompactStyle: "capsule",
+      accentPreset: "sky",
       dockEnabled: false,
       dockOpen: true,
       alwaysOnTop: false,
@@ -173,6 +177,7 @@ export const useSettings = create<SettingsState>()(
       setDockFloatX: (dockFloatX) => set({ dockFloatX }),
       setDockExpandAnchor: (dockExpandAnchor) => set({ dockExpandAnchor }),
       setDockCompactStyle: (dockCompactStyle) => set({ dockCompactStyle }),
+      setAccentPreset: (accentPreset) => set({ accentPreset }),
       setDockEnabled: (dockEnabled) => set({ dockEnabled }),
       setDockOpen: (dockOpen) => set({ dockOpen }),
       setAlwaysOnTop: (alwaysOnTop) => set({ alwaysOnTop }),

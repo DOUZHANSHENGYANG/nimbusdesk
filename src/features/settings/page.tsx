@@ -308,6 +308,8 @@ function DesktopDockCard() {
   const dockStyle = useSettings((s) => s.dockStyle);
   const setDockStyle = useSettings((s) => s.setDockStyle);
   const dockCompactStyle = useSettings((s) => s.dockCompactStyle);
+  const accentPreset = useSettings((s) => s.accentPreset);
+  const setAccentPreset = useSettings((s) => s.setAccentPreset);
   const setDockCompactStyle = useSettings((s) => s.setDockCompactStyle);
   const setDockShortcut = useSettings((s) => s.setDockShortcut);
   const setDockAutoHide = useSettings((s) => s.setDockAutoHide);
@@ -386,6 +388,17 @@ function DesktopDockCard() {
                 className={dockCompactStyle === style ? "ring-1 ring-brand" : undefined}
                 onClick={() => setDockCompactStyle(style)}>
                 {t(`settings.compactStyle_${style}`)}
+              </Button>
+            ))}
+          </div>
+        </Field>
+        <Field label={t("settings.accentPreset")}>
+          <div className="flex flex-wrap gap-2">
+            {(["sky", "ocean", "graphite", "warm"] as const).map((preset) => (
+              <Button key={preset} variant={accentPreset === preset ? "secondary" : "ghost"}
+                className={accentPreset === preset ? "ring-1 ring-brand" : undefined}
+                onClick={() => setAccentPreset(preset)}>
+                {t(`settings.accent_${preset}`)}
               </Button>
             ))}
           </div>
