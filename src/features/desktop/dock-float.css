@@ -513,3 +513,33 @@
    只降不透明度和阴影，位置与尺寸不变 —— 悬停立刻还原。 */
 .df-capsule { opacity: 0.62; transition: opacity 180ms var(--pr-ease-out); }
 .df-capsule:hover, .df-capsule:focus-within { opacity: 1; }
+
+/* AI 对话：气泡列表自己滚动，输入条固定在底部 */
+.df-chat { gap: 8px; }
+.df-chat-list {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 2px;
+}
+.df-msg {
+  max-width: 86%;
+  padding: 7px 10px;
+  border-radius: var(--pr-radius-md);
+  background: var(--dock-face);
+  border: 1px solid var(--hairline);
+  font-size: var(--pr-text-sm);
+  line-height: var(--pr-leading-normal);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.df-msg.is-user {
+  align-self: flex-end;
+  background: color-mix(in oklch, var(--brand) 18%, var(--dock-face));
+  border-color: color-mix(in oklch, var(--brand) 35%, transparent);
+}
+.df-chat-form { flex: none; }
+.df-chat-form input { flex: 1; min-width: 0; }

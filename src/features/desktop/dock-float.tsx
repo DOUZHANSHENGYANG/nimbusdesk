@@ -4,7 +4,7 @@ import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { useTranslation } from "react-i18next";
 import {
   AppWindow, ArrowLeft, BookOpen, Bookmark, CalendarCheck, ChevronDown, ExternalLink, FileText, Folder,
-  FolderKanban, Inbox, LayoutGrid, Newspaper, Rss, Search, Settings2, Star,
+  FolderKanban, Inbox, LayoutGrid, Newspaper, Rss, Search, Send, Settings2, Sparkles, Star, Trash2,
 } from "lucide-react";
 import { usePlans } from "@/features/plans/store";
 import { todayStr } from "@/features/plans/types";
@@ -17,6 +17,7 @@ import { useFavorites } from "@/stores/favorites";
 import { ArticleReader } from "@/features/feeds/article-reader";
 import { openUrl } from "@/lib/tauri";
 import { useSettings } from "@/stores/settings";
+import { chatWithProvider } from "@/features/ai/client";
 import { ageBucket, summarizeDay } from "./dock-float-core";
 import "./dock-float.css";
 
@@ -63,6 +64,8 @@ export function DockFloat({ onExpand, onHide, panels }: {
   const tasks = usePlans((state) => state.days[today]) ?? [];
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<DockTab>("search");
+  /** 对话是「副页」而不是第七个 tab：标签已经六个，再多就挤成图标了 */
+  const [chatOpen, setChatOpen] = useState(false);
   const summary = useMemo(() => summarizeDay(tasks), [tasks]);
   const [clock, setClock] = useState(() => new Date().toTimeString().slice(0, 5));
 
@@ -127,6 +130,11 @@ export function DockFloat({ onExpand, onHide, panels }: {
               <b>{summary.todo}</b> {t("dockFloat.todoUnit")} · <b>{summary.done}</b> {t("dockFloat.doneUnit")}
             </span>
             <span className="df-head-actions">
+              <button type="button" className="df-icon-btn" title={t("dockFloat.chatTitle")}
+                aria-label={t("dockFloat.chatTitle")} aria-pressed={chatOpen}
+                onClick={() => setChatOpen((value) => !value)}>
+                <Sparkles className="df-icon" aria-hidden="true" />
+              </button>
               <button type="button" className="df-icon-btn" title={t("dockFloat.settings")}
                 aria-label={t("dockFloat.settings")}
                 onClick={() => invoke("desktop_open_main", { route: "/settings" }).catch(report)}>
@@ -139,6 +147,10 @@ export function DockFloat({ onExpand, onHide, panels }: {
             </span>
           </div>
 
+          {chatOpen ? (
+            <div className="df-body"><ChatPanel onClose={() => setChatOpen(false)} /></div>
+          ) : (
+          <>
           <div className="df-tabs" role="tablist" aria-label={t("dockFloat.title")}>
             {TABS.map(({ key, icon: Icon }) => (
               <button key={key} type="button" role="tab" aria-selected={tab === key}
@@ -159,6 +171,8 @@ export function DockFloat({ onExpand, onHide, panels }: {
             )}
             {tab === "news" && <NewsPanel />}
           </div>
+          </>
+          )}
 
           <div className="df-foot">
             <span>{t("dockFloat.footSummary", { todo: summary.todo, late: summary.late })}</span>
@@ -324,6 +338,82 @@ function NewsPanel() {
           </div>
         );
       })}
+    </div>
+  );
+}
+
+/**
+ * AI 对话：卡片内的多轮会话。
+ *
+ * 上屏的只有 user/assistant 两种消息，历史留在组件里（收起卡片再打开还在，
+ * 关掉应用就没了）—— 会话不进持久化是刻意的：它可能包含临时贴进去的私密
+ * 内容，落盘要用户明确要求。
+ */
+function ChatPanel({ onClose }: { onClose: () => void }) {
+  const { t } = useTranslation();
+  const [messages, setMessages] = useState<{ role: "user" | "assistant"; content: string }[]>([]);
+  const [draft, setDraft] = useState("");
+  const [busy, setBusy] = useState(false);
+  const listRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const node = listRef.current;
+    if (node) node.scrollTo({ top: node.scrollHeight, behavior: "smooth" });
+  }, [messages, busy]);
+
+  const send = async () => {
+    const text = draft.trim();
+    if (!text || busy) return;
+    const next = [...messages, { role: "user" as const, content: text }];
+    setMessages(next);
+    setDraft("");
+    setBusy(true);
+    try {
+      const answer = await chatWithProvider(next);
+      setMessages([...next, { role: "assistant", content: answer }]);
+    } catch (cause) {
+      setMessages([...next, { role: "assistant", content: String(cause) }]);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="df-panel df-chat">
+      <div className="df-reader-bar">
+        <Sparkles className="df-icon" aria-hidden="true" />
+        <span className="df-reader-src">{t("dockFloat.chatTitle")}</span>
+        <span className="df-sp" />
+        {messages.length > 0 && (
+          <button type="button" className="df-icon-btn" aria-label={t("dockFloat.chatClear")}
+            title={t("dockFloat.chatClear")} onClick={() => setMessages([])}>
+            <Trash2 className="df-icon" aria-hidden="true" />
+          </button>
+        )}
+        <button type="button" className="df-icon-btn" aria-label={t("dockFloat.back")} onClick={onClose}>
+          <ArrowLeft className="df-icon" aria-hidden="true" />
+        </button>
+      </div>
+
+      <div className="df-chat-list" ref={listRef}>
+        {messages.length === 0 && <p className="df-hint">{t("dockFloat.chatEmpty")}</p>}
+        {messages.map((message, index) => (
+          <div key={index} className={`df-msg${message.role === "user" ? " is-user" : ""}`}>
+            {message.content}
+          </div>
+        ))}
+        {busy && <p className="df-hint">{t("dockFloat.chatBusy")}</p>}
+      </div>
+
+      <form className="df-field df-chat-form" onSubmit={(event) => { event.preventDefault(); void send(); }}>
+        <input value={draft} onChange={(event) => setDraft(event.target.value)}
+          placeholder={t("dockFloat.chatPlaceholder")} maxLength={4000}
+          aria-label={t("dockFloat.chatPlaceholder")} />
+        <button type="submit" className="df-icon-btn" disabled={busy || !draft.trim()}
+          aria-label={t("dockFloat.chatSend")}>
+          <Send className="df-icon" aria-hidden="true" />
+        </button>
+      </form>
     </div>
   );
 }

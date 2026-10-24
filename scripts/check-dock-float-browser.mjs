@@ -79,6 +79,12 @@ try {
   const opened = await page.evaluate(() => window.__dockFloat.calls.filter((call) => call.cmd === "desktop_open_main").at(-1));
   assert.equal(opened.args.route, "/settings", "齿轮必须跳设置页");
 
+  // ⑦b AI 对话是副页：点星标进、返回键出
+  await page.getByRole("button", { name: "AI 对话" }).click();
+  await page.locator(".df-chat-list").waitFor({ state: "visible" });
+  await page.getByRole("button", { name: "返回列表" }).click();
+  await page.locator(".df-tabs").waitFor({ state: "visible" });
+
   // ⑧ 收起：窗口回到 44 高
   await page.getByRole("button", { name: "收起卡片" }).click();
   await page.locator(".df-capsule").waitFor();
