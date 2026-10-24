@@ -24,6 +24,8 @@ import {
   type ItemType,
 } from "@/stores/files";
 import { useSettings } from "@/stores/settings";
+import { open as openDialog } from "@tauri-apps/plugin-dialog";
+import type { CategoryKind } from "@/stores/files";
 import {
   openPath,
   openUrl,
@@ -425,6 +427,24 @@ export function FilesPage() {
     } else toast.success(t(visible ? "files.desktopShown" : "files.desktopHidden", { count: result.done }));
   }, categories.length);
 
+  /** 新建分类的第二步：先选盒子种类，再创建（映射盒还要挑目录）。 */
+  const [kindFor, setKindFor] = useState<string | null>(null);
+  const setCategoryMapping = useFiles((s) => s.setCategoryMapping);
+
+  const chooseKind = async (kind: CategoryKind) => {
+    const name = kindFor;
+    if (!name) return;
+    if (kind === "mapped") {
+      const picked = await openDialog({ directory: true, multiple: false });
+      if (typeof picked !== "string") return;
+      const id = addCategory(name, undefined, "mapped");
+      setCategoryMapping(id, picked);
+    } else {
+      addCategory(name, undefined, kind);
+    }
+    setKindFor(null);
+  };
+
   const onAddCategory = async () => {
     const name = await prompt({ title: t("files.addCategory") });
     if (!name?.trim()) return;
@@ -433,16 +453,8 @@ export function FilesPage() {
       await alert({ title: t("files.dupCategory") });
       return;
     }
-    /*
-     * 先问一句「要不要做成存储盒」——存储盒会把拖进来的文件真的搬走，
-     * 这是不可逆的语义差别，不能靠默认值替用户决定。映射盒要选目录，
-     * 等第 3 步把它并进来再问第三种。
-     */
-    const storage = await confirm({
-      title: t("files.kindAsk"),
-      description: t("files.kindAskHint"),
-    });
-    addCategory(name.trim(), undefined, storage ? "storage" : "shortcut");
+    // 第二步：选三种盒子之一（快捷 / 存储 / 映射），不再用「是/否」两段式
+    setKindFor(name.trim());
   };
 
   /** 双击/菜单就地改名：重名返回 false（保持编辑态），成功返回 true */
@@ -855,6 +867,28 @@ export function FilesPage() {
         defaultCategory={selected}
         onClose={() => setModal({ open: false, editing: null })}
       />
+
+      {/* ── 新建分类第二步：三种盒子选一个 ── */}
+      <Dialog open={!!kindFor} onOpenChange={(next) => { if (!next) setKindFor(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t("files.kindTitle")}</DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col gap-2">
+            {(["shortcut", "storage", "mapped"] as const).map((kind) => (
+              <button
+                key={kind}
+                type="button"
+                onClick={() => void chooseKind(kind)}
+                className="flex flex-col items-start gap-0.5 rounded-xl border border-border bg-card px-3 py-2.5 text-left transition-colors hover:border-brand/60"
+              >
+                <span className="text-[13px] font-medium text-foreground">{t(`files.kind.${kind}`)}</span>
+                <span className="text-[11px] leading-snug text-muted-foreground">{t(`files.kindHint.${kind}`)}</span>
+              </button>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
