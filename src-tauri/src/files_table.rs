@@ -188,9 +188,39 @@ pub fn apply(conn: &mut Connection, delta: &Value) -> Result<(), String> {
     transaction.commit().map_err(sqlite_error)
 }
 
+/// 表里现在有多少条目（迁移判断用：0 表示还没搬过）。
+pub fn item_count(conn: &Connection) -> Result<i64, String> {
+    conn.query_row("SELECT count(*) FROM file_items", [], |row| row.get(0))
+        .map_err(sqlite_error)
+}
+
+/// 把旧版「整份 `files` JSON」翻成一份增量。
+///
+/// 旧形状：`{ "state": { "categories": [...], "items": [...] }, "version": 2 }`。
+/// 只在**表还是空**的时候调用一次（见 `commands::data::files_load`）；
+/// 之后旧键不再被读取，也不再被写。
+pub fn legacy_delta(legacy: &Value) -> Option<Value> {
+    let state = legacy.get("state").unwrap_or(legacy);
+    let categories = state.get("categories").and_then(Value::as_array).cloned().unwrap_or_default();
+    let items = state.get("items").and_then(Value::as_array).cloned().unwrap_or_default();
+    if categories.is_empty() && items.is_empty() {
+        return None;
+    }
+    let upsert = |list: Vec<Value>| {
+        list.into_iter()
+            .enumerate()
+            .filter(|(_, value)| id_of(value).is_some())
+            .map(|(order, value)| json!({ "value": value, "order": order }))
+            .collect::<Vec<_>>()
+    };
+    Some(json!({
+        "categories": { "upsert": upsert(categories), "remove": [] },
+        "items": { "upsert": upsert(items), "remove": [] }
+    }))
+}
+
 /// 读条目时给搜索索引用：`(id, payload)`，避免为了建索引再反序列化整个文档。
-pub fn search_entries(conn: &Connection) -> Result<Vec<Value>, String> {
-    let rows = conn
+pub fn search_entries(conn: &Connection) -> Result<Vec<Value>, String> {    let rows = conn
         .prepare("SELECT payload FROM file_items ORDER BY ord ASC, rowid ASC")
         .map_err(sqlite_error)?
         .query_map([], |row| row.get::<_, String>(0))
@@ -303,6 +333,32 @@ mod tests {
         let snapshot = load(&conn).unwrap();
         assert!(snapshot["categories"].as_array().unwrap().is_empty());
         assert!(snapshot["items"].as_array().unwrap().is_empty());
+    }
+
+    #[test]
+    fn legacy_blob_imports_once_and_keeps_categories_and_items_in_order() {
+        let legacy = json!({
+            "state": {
+                "categories": [{ "id": "c1", "name": "游戏" }],
+                "items": [
+                    { "id": "i1", "categoryId": "c1", "type": "folder", "title": "Game", "path": "F:/Game", "tags": [] },
+                    { "id": "i2", "categoryId": "c1", "type": "file", "title": "Lnk", "path": "E:/x.lnk", "tags": [] }
+                ]
+            },
+            "version": 2
+        });
+        let delta = legacy_delta(&legacy).expect("应生成增量");
+        let mut conn = memory();
+        apply(&mut conn, &delta).unwrap();
+        let snapshot = load(&conn).unwrap();
+        assert_eq!(snapshot["items"].as_array().unwrap().len(), 2);
+        assert_eq!(snapshot["items"][0]["id"], "i1");
+        assert_eq!(item_count(&conn).unwrap(), 2);
+
+        // 再导一次也不会重复（迁移只在表空时发生）
+        assert_eq!(item_count(&conn).unwrap(), 2);
+        // 空 blob 不产生增量
+        assert!(legacy_delta(&json!({ "state": { "categories": [], "items": [] } })).is_none());
     }
 
     #[test]

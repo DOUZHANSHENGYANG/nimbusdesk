@@ -242,12 +242,23 @@ pub async fn read_json(key: String) -> Result<Option<Value>, String> {
 }
 
 /// `files` 行级表的读取入口（见 `crate::files_table`）。
+///
+/// 顺带做**一次性迁移**：表里一条都没有时，把 `module_state['files']` 里那份旧的整份 JSON
+/// 导进表（只在这次读时发生）。否则删掉前端回退之后，老机器上的文件库会直接变成空的 ——
+/// 这个坑真机上一跑就踩到了：旧 blob 里有 2 条条目，新表 0 行。
 #[command]
 pub async fn files_load() -> Result<Value, String> {
     blocking(|| {
         with_data_dir(|root| {
-            let conn = database::open_at(root)?;
+            let mut conn = database::open_at(root)?;
             crate::files_table::ensure_schema(&conn)?;
+            if crate::files_table::item_count(&conn)? == 0 {
+                if let Some(legacy) = database::read_at(root, "files")? {
+                    if let Some(delta) = crate::files_table::legacy_delta(&legacy) {
+                        crate::files_table::apply(&mut conn, &delta)?;
+                    }
+                }
+            }
             crate::files_table::load(&conn)
         })
     })
