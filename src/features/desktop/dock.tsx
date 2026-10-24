@@ -101,7 +101,7 @@ export function DockWindow() {
    * 灵动岛的「灵」全在这条曲线上，硬切就是一块会跳的方板。
    * 代数计数器在 Rust 侧共享，所以展开到一半再点收起会从中断处弹回去。
    */
-  const applyFloat = useCallback(async (open: boolean) => {
+  const applyFloat = useCallback(async (open: boolean, heightOverride?: number) => {
     const resolved = await resolveArea();
     if (!resolved) return;
     const { area } = resolved;
@@ -109,7 +109,8 @@ export function DockWindow() {
     // 展开方向固定居中：卡片从胶囊中心左右撑开，胶囊本身的位置一点不动。
     // 左缘锚定做成过一版，实测观感是「从左边拉出来」，反而丢了灵动岛那种
     // 居中呼吸的感觉，所以不再作为选项暴露。
-    const base = dockFloatBounds(area, open ? "flyout" : "strip", "center");
+    const cardHeight = heightOverride ?? useSettings.getState().dockCardHeight;
+    const base = dockFloatBounds(area, open ? "flyout" : "strip", "center", cardHeight);
     /*
      * 横向一律以**胶囊的中心**为轴展开。
      *

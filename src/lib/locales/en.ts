@@ -52,6 +52,7 @@ export const en: AppMessages = {
     scope: { all: "All", app: "Apps", file: "Files", folder: "Folders", plan: "Plans", project: "Projects", knowledge: "Knowledge", feed: "News" },
     back: "Back to list",
     ringTitle: "Done today {{done}}/{{total}}",
+    resize: "Drag to resize the card",
     lateAlert: "{{count}} overdue",
     chatTitle: "AI chat",
     chatPlaceholder: "Ask something, or ask me to explain what you are looking at…",

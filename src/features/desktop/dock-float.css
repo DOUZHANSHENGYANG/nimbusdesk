@@ -604,7 +604,7 @@
   left: 50%;
   transform: translateX(-50%);
   width: 660px;
-  height: 591px;
+  height: var(--df-card-h, 591px);
 }
 
 /* 收起形态的完成度环：对应灵动岛的配额环，用已完成/总数画弧 */
@@ -647,3 +647,27 @@
 }
 .df-line:hover .df-line-bar { height: 8px; background: var(--brand); }
 .df-line-bar.is-warn { background: var(--warning); }
+
+/* 底部把手：卡片高度可拖。平时隐形，悬停卡片才浮现，避免像多余的分隔线。 */
+.df-resize {
+  position: absolute;
+  left: 50%;
+  bottom: 0;
+  width: 96px;
+  height: 10px;
+  transform: translateX(-50%);
+  cursor: ns-resize;
+  display: grid;
+  place-items: center;
+}
+.df-resize::after {
+  content: "";
+  width: 40px;
+  height: 3px;
+  border-radius: var(--pr-radius-full);
+  background: color-mix(in oklch, var(--foreground) 28%, transparent);
+  opacity: 0;
+  transition: opacity 140ms var(--pr-ease-out), background 140ms var(--pr-ease-out);
+}
+.df-card:hover .df-resize::after { opacity: 1; }
+.df-resize:hover::after { background: var(--brand); }

@@ -73,6 +73,9 @@ export const DOCK_CAPSULE_H = 44;
 /** 卡片态：五页共用一个矩形，切页不跳窗（视觉稿实测 660 × 591）。 */
 export const DOCK_CARD_W = 660;
 export const DOCK_CARD_H = 591;
+/** 卡片高度可拖范围：太矮放不下六页，太高会盖住整屏 */
+export const DOCK_CARD_MIN_H = 420;
+export const DOCK_CARD_MAX_H = 900;
 
 /** 展开方向：居中向两边撑开，还是钉住左缘向右拉出来。 */
 export type DockExpandAnchor = "center" | "left";
@@ -88,9 +91,13 @@ export function dockFloatBounds(
   area: DockArea,
   mode: DockMode,
   anchor: DockExpandAnchor = "center",
+  cardHeight: number = DOCK_CARD_H,
 ): DockBounds {
   const w = Math.min(area.w, mode === "flyout" ? DOCK_CARD_W : DOCK_CAPSULE_W);
-  const h = Math.min(area.h, mode === "flyout" ? DOCK_CARD_H : DOCK_CAPSULE_H);
+  const wanted = mode === "flyout"
+    ? Math.min(DOCK_CARD_MAX_H, Math.max(DOCK_CARD_MIN_H, cardHeight))
+    : DOCK_CAPSULE_H;
+  const h = Math.min(area.h, wanted);
   const centered = area.x + Math.round((area.w - w) / 2);
   // 左缘锚定 = 钉住**胶囊**的左缘（不是当前形态居中后的左缘），否则展开时
   // 起点会漂到卡片自己的居中位置，看上去仍是从中间撑开。

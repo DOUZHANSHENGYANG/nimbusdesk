@@ -56,7 +56,7 @@ export interface DockFloatPanels {
 }
 
 export function DockFloat({ onExpand, onHide, panels }: {
-  onExpand: (open: boolean) => Promise<void>;
+  onExpand: (open: boolean, height?: number) => Promise<void>;
   onHide: () => void;
   panels: DockFloatPanels;
 }) {
@@ -130,6 +130,7 @@ export function DockFloat({ onExpand, onHide, panels }: {
    */
   useEffect(() => {
     const root = document.documentElement;
+    root.style.setProperty("--df-card-h", String(useSettings.getState().dockCardHeight) + "px");
     root.dataset.dfClosing = open ? "0" : "1";
     const timer = setTimeout(() => {
       root.style.setProperty("--df-p", open ? "1" : "0");
@@ -309,6 +310,30 @@ export function DockFloat({ onExpand, onHide, panels }: {
             <span>{t("dockFloat.footSearch")}</span>
             <button type="button" className="df-link" onClick={onHide}>{t("dockFloat.hide")}</button>
           </div>
+          <div className="df-resize" role="separator" aria-orientation="horizontal"
+            aria-label={t("dockFloat.resize")}
+            onPointerDown={(event) => {
+              if (event.button !== 0) return;
+              event.preventDefault();
+              const startY = event.clientY;
+              const startH = useSettings.getState().dockCardHeight;
+              let frame = 0;
+              let next = startH;
+              const move = (ev: PointerEvent) => {
+                next = Math.round(Math.min(900, Math.max(420, startH + (ev.clientY - startY))) / 10) * 10;
+                document.documentElement.style.setProperty("--df-card-h", next + "px");
+                // 窗口跟着长：rAF 合并，避免每个 pointermove 都打一次 IPC
+                if (!frame) frame = requestAnimationFrame(() => { frame = 0; void onExpand(true, next).catch(report); });
+              };
+              const up = () => {
+                window.removeEventListener("pointermove", move);
+                window.removeEventListener("pointerup", up);
+                useSettings.getState().setDockCardHeight(next);
+                void onExpand(true, next).catch(report);
+              };
+              window.addEventListener("pointermove", move);
+              window.addEventListener("pointerup", up);
+            }} />
         </div>
       )}
     </div>
