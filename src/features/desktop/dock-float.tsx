@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
+import { listen } from "@tauri-apps/api/event";
 import { useTranslation } from "react-i18next";
 import {
   AppWindow, ArrowLeft, BookOpen, Bookmark, CalendarCheck, Camera, ChevronDown, ExternalLink, FileText, Folder,
@@ -86,6 +87,23 @@ export function DockFloat({ onExpand, onHide, panels }: {
     const timer = setTimeout(() => setMounted(false), 320);
     return () => clearTimeout(timer);
   }, [open]);
+
+  /**
+   * 形状跟窗口共用同一条弹簧曲线。
+   *
+   * Rust 每帧 SetWindowPos 时顺手 emit 一个 0..1 的进度，这里直接写进 CSS
+   * 变量 —— **不走 setState**：8ms 一帧的 setState 会把 React 排进每帧的
+   * 同步渲染，掉帧就是从这来的。变量由合成器读，成本近乎为零。
+   */
+  useEffect(() => {
+    const root = document.documentElement;
+    root.style.setProperty("--df-p", "0");
+    let stop: (() => void) | undefined;
+    void listen<number>("dock-spring-progress", (event) => {
+      root.style.setProperty("--df-p", String(event.payload));
+    }).then((unlisten) => { stop = unlisten; }).catch(() => undefined);
+    return () => stop?.();
+  }, []);
 
   const setExpanded = useCallback((next: boolean) => {
     setOpen(next);

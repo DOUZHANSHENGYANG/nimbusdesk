@@ -4,7 +4,7 @@
 //! 弹簧动画。普通 `.show()` 会抢走当前应用焦点，dock 弹出时不能打断用户。
 
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, Emitter, Manager};
 use windows::Win32::Foundation::{HWND, RECT};
 use windows::Win32::Graphics::Gdi::{
     GetMonitorInfoW, MonitorFromWindow, MONITOR_DEFAULTTONEAREST, MONITORINFO,
@@ -120,6 +120,7 @@ pub async fn dock_spring(
         .unwrap_or(1.0);
     // HWND 内部是裸指针（!Send），跨线程只传整数。
     let hwnd_raw = hwnd_of(&app, &label)?.0 as isize;
+    let progress_app = app.clone();
     let (freq, decay, duration_ms) = if style == "stiff" {
         (3.8, 22.0, 250.0)
     } else {
@@ -190,6 +191,7 @@ pub async fn dock_spring_box(
         .and_then(|win| win.scale_factor().ok())
         .unwrap_or(1.0);
     let hwnd_raw = hwnd_of(&app, &label)?.0 as isize;
+    let progress_app = app.clone();
     /*
      * 曲线参数直接对应 iOS 的叫法：response 0.38s、damping 0.78。
      *   freq  = 1 / response            = 2.63 Hz
@@ -228,6 +230,7 @@ pub async fn dock_spring_box(
             }
             let spring =
                 1.0 - (freq * elapsed * 2.0 * std::f64::consts::PI).cos() * (-decay * elapsed).exp();
+            let _ = progress_app.emit("dock-spring-progress", spring);
             place(
                 from_x + (to_x - from_x) * spring,
                 from_y + (to_y - from_y) * spring,
@@ -237,6 +240,7 @@ pub async fn dock_spring_box(
         }
         if DOCK_SPRING.load(Ordering::SeqCst) == id {
             place(to_x, to_y, to_w, to_h);
+            let _ = progress_app.emit("dock-spring-progress", 1.0_f64);
         }
     });
     Ok(())

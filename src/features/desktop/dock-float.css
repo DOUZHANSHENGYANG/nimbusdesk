@@ -578,3 +578,12 @@
 /* 卡片本身只动圆角，不动 scale —— 量尺寸的地方（含回归）必须拿到 660 的实宽 */
 .df-card { animation: df-open-radius 380ms var(--pr-ease-out) both; }
 .df-root[data-open="false"] .df-card { opacity: 0; transform: scale(0.98); transition: opacity 200ms var(--pr-ease-out), transform 200ms var(--pr-ease-out); }
+
+/* 形状由弹簧进度驱动：--df-p 由 Rust 每帧推送（1 = 完全展开）。
+   calc 里做线性插值，和窗口的 SetWindowPos 同帧，形状就追不上这回事不存在。 */
+.df-card {
+  border-radius: calc(20px + (1 - var(--df-p, 0)) * 979px);
+}
+.df-capsule {
+  border-radius: calc(999px - var(--df-p, 0) * 979px);
+}
