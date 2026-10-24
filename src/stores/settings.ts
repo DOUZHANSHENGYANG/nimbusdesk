@@ -52,6 +52,8 @@ interface SettingsState {
   dockStyle: "rail" | "capsule";
   /** 胶囊被拖到的工作区左边（逻辑像素）；null = 水平居中 */
   dockFloatX: number | null;
+  /** 展开方向：居中向两边 / 钉住左缘向右 */
+  dockExpandAnchor: "center" | "left";
   /** 收纳盒飞出面板的磁贴图标边长（Ctrl+滚轮调节，32–72） */
   dockTileSize: number;
   /** Dock 显隐全局快捷键（空 = 无）；按下在托盘外切换 Dock 显示 */
@@ -91,6 +93,7 @@ interface SettingsState {
   setDockEdge: (edge: "left" | "right" | "top") => void;
   setDockStyle: (style: "rail" | "capsule") => void;
   setDockFloatX: (x: number | null) => void;
+  setDockExpandAnchor: (anchor: "center" | "left") => void;
   setDockEnabled: (v: boolean) => void;
   setDockOpen: (v: boolean) => void;
   setAlwaysOnTop: (v: boolean) => void;
@@ -135,6 +138,7 @@ export const useSettings = create<SettingsState>()(
       dockEdge: "right",
       dockStyle: "rail",
       dockFloatX: null,
+      dockExpandAnchor: "center",
       dockEnabled: false,
       dockOpen: true,
       alwaysOnTop: false,
@@ -163,6 +167,7 @@ export const useSettings = create<SettingsState>()(
       setDockEdge: (dockEdge) => set({ dockEdge }),
       setDockStyle: (dockStyle) => set({ dockStyle }),
       setDockFloatX: (dockFloatX) => set({ dockFloatX }),
+      setDockExpandAnchor: (dockExpandAnchor) => set({ dockExpandAnchor }),
       setDockEnabled: (dockEnabled) => set({ dockEnabled }),
       setDockOpen: (dockOpen) => set({ dockOpen }),
       setAlwaysOnTop: (alwaysOnTop) => set({ alwaysOnTop }),

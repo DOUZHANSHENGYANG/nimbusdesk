@@ -106,7 +106,8 @@ export function DockWindow() {
     if (!resolved) return;
     const { area, scale } = resolved;
     areaRef.current = area;
-    const base = dockFloatBounds(area, open ? "flyout" : "strip");
+    const anchor = useSettings.getState().dockExpandAnchor;
+    const base = dockFloatBounds(area, open ? "flyout" : "strip", anchor);
     // 拖过就待在拖到的位置（只挪 x，纵向仍吸在顶部 12）；没拖过就是居中
     const saved = useSettings.getState().dockFloatX;
     const target = saved === null

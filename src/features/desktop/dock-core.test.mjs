@@ -130,3 +130,14 @@ test("float spring pair keeps the center line while only the size changes", () =
   assert.equal(from.y, to.y, "顶边不动");
   assert.ok(to.w > from.w && to.h > from.h);
 });
+
+test("left 锚定：展开时 x 不动，只向右长", () => {
+  const area = { x: 0, y: 0, w: 1920, h: 1080 };
+  const strip = dockFloatBounds(area, "strip", "left");
+  const flyout = dockFloatBounds(area, "flyout", "left");
+  assert.equal(flyout.x, strip.x, "左缘钉住，x 不变");
+  assert.ok(flyout.w > strip.w, "宽度仍然变大");
+  assert.ok(flyout.x + flyout.w <= area.w, "不越过工作区右边");
+  const centered = dockFloatBounds(area, "flyout", "center");
+  assert.notEqual(centered.x, flyout.x, "两种锚点位置不同");
+});

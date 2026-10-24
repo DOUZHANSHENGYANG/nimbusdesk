@@ -74,11 +74,31 @@ export const DOCK_CAPSULE_H = 44;
 export const DOCK_CARD_W = 660;
 export const DOCK_CARD_H = 591;
 
-/** 悬浮锚点的窗口矩形：水平居中、距顶固定间距；工作区不够高时贴底，绝不越过。 */
-export function dockFloatBounds(area: DockArea, mode: DockMode): DockBounds {
+/** 展开方向：居中向两边撑开，还是钉住左缘向右拉出来。 */
+export type DockExpandAnchor = "center" | "left";
+
+/**
+ * 悬浮锚点的窗口矩形：水平居中、距顶固定间距；工作区不够高时贴底，绝不越过。
+ *
+ * anchor = "left" 时**钉住胶囊的左缘**，卡片向右长出去。观感差别很明显：
+ * 居中是「两边同时推开」，左缘锚定是「从胶囊里拉出来」—— 单侧运动更容易
+ * 被眼睛跟住，这也是灵动岛那种「长出来」的感觉来源。
+ */
+export function dockFloatBounds(
+  area: DockArea,
+  mode: DockMode,
+  anchor: DockExpandAnchor = "center",
+): DockBounds {
   const w = Math.min(area.w, mode === "flyout" ? DOCK_CARD_W : DOCK_CAPSULE_W);
   const h = Math.min(area.h, mode === "flyout" ? DOCK_CARD_H : DOCK_CAPSULE_H);
-  const x = area.x + Math.round((area.w - w) / 2);
+  const centered = area.x + Math.round((area.w - w) / 2);
+  // 左缘锚定 = 钉住**胶囊**的左缘（不是当前形态居中后的左缘），否则展开时
+  // 起点会漂到卡片自己的居中位置，看上去仍是从中间撑开。
+  const capsuleW = Math.min(area.w, DOCK_CAPSULE_W);
+  const capsuleX = area.x + Math.round((area.w - capsuleW) / 2);
+  const x = anchor === "left"
+    ? Math.max(area.x, Math.min(capsuleX, area.x + area.w - w))
+    : centered;
   const y = Math.min(area.y + DOCK_FLOAT_GAP, area.y + area.h - h);
   return { x, y, w, h };
 }
