@@ -593,3 +593,16 @@
 .df-root { position: relative; }
 .df-capsule { position: absolute; inset: 0; }
 .df-card { position: relative; }
+
+/* ── 卡片固定按 660×591 排版，窗口只负责「裁出中间一块」 ──
+   这是「原本的界面变大」的关键：窗口变宽时内容不重排，只是被露出更多。
+   否则窗口每帧变宽、内容跟着 reflow，看起来就是先往左跳一下再展开。 */
+.df-root { overflow: hidden; }
+.df-card {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 660px;
+  height: 591px;
+}
