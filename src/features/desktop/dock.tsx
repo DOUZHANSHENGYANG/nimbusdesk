@@ -110,11 +110,21 @@ export function DockWindow() {
     // 左缘锚定做成过一版，实测观感是「从左边拉出来」，反而丢了灵动岛那种
     // 居中呼吸的感觉，所以不再作为选项暴露。
     const base = dockFloatBounds(area, open ? "flyout" : "strip", "center");
-    // 拖过就待在拖到的位置（只挪 x，纵向仍吸在顶部 12）；没拖过就是居中
+    /*
+     * 横向一律以**胶囊的中心**为轴展开。
+     *
+     * 之前是展开时直接取「居中位置」，胶囊被拖过的话两个原点不一致 ——
+     * 窗口一边长大一边平移，看着就是「从右边往左边长、位置还跟着动」。
+     * 现在先算出胶囊现在的中心，卡片围绕它左右对称撑开，胶囊本身一动不动。
+     */
     const saved = useSettings.getState().dockFloatX;
-    const target = saved === null
-      ? base
-      : { ...base, x: Math.min(Math.max(saved, area.x), area.x + area.w - base.w) };
+    const capsule = dockFloatBounds(area, "strip", "center");
+    const capsuleX = saved === null ? capsule.x : Math.min(Math.max(saved, area.x), area.x + area.w - capsule.w);
+    const center = capsuleX + capsule.w / 2;
+    const target = {
+      ...base,
+      x: Math.round(Math.min(Math.max(center - base.w / 2, area.x), area.x + area.w - base.w)),
+    };
     const win = getCurrentWebviewWindow();
     const [pos, size] = await Promise.all([win.outerPosition(), win.outerSize()]);
     await invoke("dock_spring_box", {
