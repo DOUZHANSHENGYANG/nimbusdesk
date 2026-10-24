@@ -72,7 +72,20 @@ export function DockFloat({ onExpand, onHide, panels }: {
   /** 收起形态的提醒：出现 5 秒就收（对应灵动岛的配额预警） */
   const [alertOn, setAlertOn] = useState(false);
   /** 收起形态：胶囊（信息全）/ 指示条（只剩一条线，最大化窗口时最不碍事） */
-  const compactStyle = useSettings((state) => state.dockCompactStyle);
+  const compactStyleSetting = useSettings((state) => state.dockCompactStyle);
+  /**
+   * 前台窗口最大化时自动切成指示条（对应 BrimDeck 的「最大化切指示条」）。
+   * 手动设置仍然优先：用户选了指示条就一直是指示条；选了胶囊则只在最大化
+   * 期间临时变成指示条，退出最大化自动变回来。
+   */
+  const [foregroundMax, setForegroundMax] = useState(false);
+  useEffect(() => {
+    let stop: (() => void) | undefined;
+    void listen<number>("dock-foreground", (event) => setForegroundMax(event.payload === 1))
+      .then((unlisten) => { stop = unlisten; }).catch(() => undefined);
+    return () => stop?.();
+  }, []);
+  const compactStyle = foregroundMax ? "line" : compactStyleSetting;
 
   useEffect(() => {
     const timer = setInterval(() => setClock(new Date().toTimeString().slice(0, 5)), 30_000);

@@ -10,7 +10,7 @@ use windows::Win32::Graphics::Gdi::{
     GetMonitorInfoW, MonitorFromWindow, MONITOR_DEFAULTTONEAREST, MONITORINFO,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
-    GetForegroundWindow, GetWindowLongPtrW, GetWindowRect, SetWindowLongPtrW, SetWindowPos,
+    GetForegroundWindow, GetWindowLongPtrW, IsZoomed, GetWindowRect, SetWindowLongPtrW, SetWindowPos,
     ShowWindow, GWL_EXSTYLE, HWND_TOPMOST, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER,
     SW_SHOWNOACTIVATE, WS_EX_NOACTIVATE,
 };
@@ -28,6 +28,17 @@ static DOCK_EDGE: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new
 /// 自动隐藏监视线程只起一次；DOCK_HIDDEN 标记「当前是被自动隐藏收起的」。
 static AUTOHIDE_SPAWNED: AtomicBool = AtomicBool::new(false);
 static DOCK_HIDDEN: AtomicBool = AtomicBool::new(false);
+
+/// 上级窗口是否最大化（用于自动切成「指示条」形态）。
+fn foreground_maximized() -> bool {
+    unsafe {
+        let hwnd = GetForegroundWindow();
+        !hwnd.is_invalid() && IsZoomed(hwnd).as_bool()
+    }
+}
+
+/// 上一次推给前端的形态，只在变化时发事件（200ms 一次轮询，不发就得每帧 setState）。
+static LAST_FG: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
 
 fn hwnd_of(app: &AppHandle, label: &str) -> Result<HWND, String> {
     let win = app.get_webview_window(label).ok_or("窗口不存在")?;
@@ -474,13 +485,28 @@ pub async fn dock_set_autohide(app: AppHandle, on: bool, edge: Option<String>) -
         _ => DOCK_EDGE.store(1, Ordering::Relaxed),
     }
     DOCK_AUTOHIDE.store(on, Ordering::Relaxed);
-    if on && !AUTOHIDE_SPAWNED.swap(true, Ordering::Relaxed) {
+    if !AUTOHIDE_SPAWNED.swap(true, Ordering::Relaxed) {
         let handle = app.clone();
         tauri::async_runtime::spawn_blocking(move || loop {
             std::thread::sleep(std::time::Duration::from_millis(200));
             // 线程只起一次、常驻；真正的开关在循环里读，否则「关掉自动隐藏」
             // 与「关掉 Dock」之后这个线程还会继续把窗口藏起来/叫回来。
-            if !DOCK_ENABLED.load(Ordering::SeqCst) || !DOCK_AUTOHIDE.load(Ordering::Relaxed) {
+            if !DOCK_ENABLED.load(Ordering::SeqCst) {
+                continue;
+            }
+            /*
+             * 前台形态：0 普通 / 1 最大化 / 2 全屏。
+             * 只在变化时 emit —— 200ms 一次的轮询要是每拍都发，前端就得每拍
+             * 处理一次事件，纯属浪费。
+             */
+            #[cfg(windows)]
+            {
+                let next = if foreground_covers_monitor() { 2u8 } else if foreground_maximized() { 1 } else { 0 };
+                if LAST_FG.swap(next, Ordering::Relaxed) != next {
+                    let _ = handle.emit("dock-foreground", next);
+                }
+            }
+            if !DOCK_AUTOHIDE.load(Ordering::Relaxed) {
                 continue;
             }
             #[cfg(windows)]
