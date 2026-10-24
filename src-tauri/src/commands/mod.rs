@@ -15,6 +15,7 @@ pub mod newfile;
 pub mod shellicon;
 pub mod site;
 pub mod stash;
+pub mod capture_window;
 pub mod sys;
 pub mod fence_drop;
 pub mod desktop_shortcut;

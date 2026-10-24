@@ -543,3 +543,16 @@
 }
 .df-chat-form { flex: none; }
 .df-chat-form input { flex: 1; min-width: 0; }
+
+/* 待发送的截图预览：小图 + 丢弃按钮，别让它把输入区顶走 */
+.df-shot {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--pr-radius-md);
+  background: var(--dock-face);
+}
+.df-shot img { height: 44px; width: auto; max-width: 200px; object-fit: cover; border-radius: var(--pr-radius-sm); }

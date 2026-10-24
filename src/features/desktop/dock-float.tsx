@@ -3,7 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { useTranslation } from "react-i18next";
 import {
-  AppWindow, ArrowLeft, BookOpen, Bookmark, CalendarCheck, ChevronDown, ExternalLink, FileText, Folder,
+  AppWindow, ArrowLeft, BookOpen, Bookmark, CalendarCheck, Camera, ChevronDown, ExternalLink, FileText, Folder,
   FolderKanban, Inbox, LayoutGrid, Newspaper, Rss, Search, Send, Settings2, Sparkles, Star, Trash2,
 } from "lucide-react";
 import { usePlans } from "@/features/plans/store";
@@ -17,7 +17,7 @@ import { useFavorites } from "@/stores/favorites";
 import { ArticleReader } from "@/features/feeds/article-reader";
 import { openUrl } from "@/lib/tauri";
 import { useSettings } from "@/stores/settings";
-import { chatWithProvider } from "@/features/ai/client";
+import { chatWithProvider, type ChatMessage } from "@/features/ai/client";
 import { ageBucket, summarizeDay } from "./dock-float-core";
 import "./dock-float.css";
 
@@ -351,9 +351,11 @@ function NewsPanel() {
  */
 function ChatPanel({ onClose }: { onClose: () => void }) {
   const { t } = useTranslation();
-  const [messages, setMessages] = useState<{ role: "user" | "assistant"; content: string }[]>([]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
+  /** 待发送的前台窗口截图（data URL）；只活在这一条消息里，发完就清 */
+  const [shot, setShot] = useState<string | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -361,10 +363,22 @@ function ChatPanel({ onClose }: { onClose: () => void }) {
     if (node) node.scrollTo({ top: node.scrollHeight, behavior: "smooth" });
   }, [messages, busy]);
 
+  const capture = async () => {
+    try { setShot(await invoke<string>("window_capture")); }
+    catch (cause) { console.error("[dock-float] capture", cause); }
+  };
+
   const send = async () => {
     const text = draft.trim();
-    if (!text || busy) return;
-    const next = [...messages, { role: "user" as const, content: text }];
+    if ((!text && !shot) || busy) return;
+    const content: ChatMessage["content"] = shot
+      ? [
+          ...(text ? [{ type: "text" as const, text }] : []),
+          { type: "image_url" as const, image_url: { url: shot } },
+        ]
+      : text;
+    const next = [...messages, { role: "user" as const, content }];
+    setShot(null);
     setMessages(next);
     setDraft("");
     setBusy(true);
@@ -384,6 +398,10 @@ function ChatPanel({ onClose }: { onClose: () => void }) {
         <Sparkles className="df-icon" aria-hidden="true" />
         <span className="df-reader-src">{t("dockFloat.chatTitle")}</span>
         <span className="df-sp" />
+        <button type="button" className="df-icon-btn" aria-label={t("dockFloat.chatShot")}
+          title={t("dockFloat.chatShot")} onClick={() => void capture()}>
+          <Camera className="df-icon" aria-hidden="true" />
+        </button>
         {messages.length > 0 && (
           <button type="button" className="df-icon-btn" aria-label={t("dockFloat.chatClear")}
             title={t("dockFloat.chatClear")} onClick={() => setMessages([])}>
@@ -399,11 +417,23 @@ function ChatPanel({ onClose }: { onClose: () => void }) {
         {messages.length === 0 && <p className="df-hint">{t("dockFloat.chatEmpty")}</p>}
         {messages.map((message, index) => (
           <div key={index} className={`df-msg${message.role === "user" ? " is-user" : ""}`}>
-            {message.content}
+            {typeof message.content === "string"
+              ? message.content
+              : message.content.map((part) => (part.type === "text" ? part.text : "🖼")).join("\n")}
           </div>
         ))}
         {busy && <p className="df-hint">{t("dockFloat.chatBusy")}</p>}
       </div>
+
+      {shot && (
+        <div className="df-shot">
+          <img src={shot} alt={t("dockFloat.chatShotAlt")} />
+          <button type="button" className="df-icon-btn" aria-label={t("dockFloat.chatShotClear")}
+            onClick={() => setShot(null)}>
+            <Trash2 className="df-icon" aria-hidden="true" />
+          </button>
+        </div>
+      )}
 
       <form className="df-field df-chat-form" onSubmit={(event) => { event.preventDefault(); void send(); }}>
         <input value={draft} onChange={(event) => setDraft(event.target.value)}
