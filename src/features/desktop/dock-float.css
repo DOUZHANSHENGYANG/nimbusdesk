@@ -556,3 +556,15 @@
   background: var(--dock-face);
 }
 .df-shot img { height: 44px; width: auto; max-width: 200px; object-fit: cover; border-radius: var(--pr-radius-sm); }
+
+/* ── 形状连续性（对齐灵动岛的第 3、4 条） ──
+   1) squircle：iOS 的圆角是连续曲率，不是正圆弧。WebView2（Chromium 139+）
+      支持 corner-shape，老版本自动忽略，退回普通圆角，不影响布局。
+   2) 内容比形状晚一步：卡片从 top center 长出来，正文再等 60ms ——
+      形状先到位、文字后落座，才像「撑开」而不是「贴上去」。 */
+.df-card,
+.df-capsule {
+  corner-shape: squircle;
+  transform-origin: top center;
+}
+.df-card .df-body { animation-delay: 60ms; }
