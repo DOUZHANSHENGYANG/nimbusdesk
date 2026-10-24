@@ -633,3 +633,17 @@
   place-items: center;
   animation: df-enter 220ms var(--pr-ease-out) both;
 }
+
+/* 指示条：BrimDeck 的第三种紧凑形态。窗口尺寸不变（464×44），
+   只把内容换成顶部中央的一条细线 —— 最大化窗口时最不碍事。 */
+.df-line { position: absolute; inset: 0; display: grid; place-items: center; cursor: pointer; }
+.df-line[data-open="true"] { opacity: 0; pointer-events: none; }
+.df-line-bar {
+  width: 96px;
+  height: 6px;
+  border-radius: var(--pr-radius-full);
+  background: color-mix(in oklch, var(--foreground) 55%, transparent);
+  transition: background var(--pr-dur-fast) ease, height var(--pr-dur-fast) ease;
+}
+.df-line:hover .df-line-bar { height: 8px; background: var(--brand); }
+.df-line-bar.is-warn { background: var(--warning); }

@@ -307,6 +307,8 @@ function DesktopDockCard() {
   const setDockEdge = useSettings((s) => s.setDockEdge);
   const dockStyle = useSettings((s) => s.dockStyle);
   const setDockStyle = useSettings((s) => s.setDockStyle);
+  const dockCompactStyle = useSettings((s) => s.dockCompactStyle);
+  const setDockCompactStyle = useSettings((s) => s.setDockCompactStyle);
   const setDockShortcut = useSettings((s) => s.setDockShortcut);
   const setDockAutoHide = useSettings((s) => s.setDockAutoHide);
   const [shortcutDraft, setShortcutDraft] = useState<string | null>(null);
@@ -377,6 +379,17 @@ function DesktopDockCard() {
               ))}
             </div>
           </Field>
+        <Field label={t("settings.compactStyle")}>
+          <div className="flex gap-2">
+            {(["capsule", "line"] as const).map((style) => (
+              <Button key={style} variant={dockCompactStyle === style ? "secondary" : "ghost"}
+                className={dockCompactStyle === style ? "ring-1 ring-brand" : undefined}
+                onClick={() => setDockCompactStyle(style)}>
+                {t(`settings.compactStyle_${style}`)}
+              </Button>
+            ))}
+          </div>
+        </Field>
                   <p className="text-[11px] leading-5 text-muted-foreground">{t("settings.dockStyleHint")}</p>
           <Field label={t("settings.dockShortcut")}>
             <ShortcutRecorder placeholder="Ctrl+Alt+D" value={shortcutDraft ?? dockShortcut}

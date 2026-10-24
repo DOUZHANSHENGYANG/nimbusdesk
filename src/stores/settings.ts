@@ -54,6 +54,8 @@ interface SettingsState {
   dockFloatX: number | null;
   /** 展开方向：居中向两边 / 钉住左缘向右 */
   dockExpandAnchor: "center" | "left";
+  /** 收起形态：胶囊 / 指示条（对齐 BrimDeck 的两种紧凑形态） */
+  dockCompactStyle: "capsule" | "line";
   /** 收纳盒飞出面板的磁贴图标边长（Ctrl+滚轮调节，32–72） */
   dockTileSize: number;
   /** Dock 显隐全局快捷键（空 = 无）；按下在托盘外切换 Dock 显示 */
@@ -94,6 +96,7 @@ interface SettingsState {
   setDockStyle: (style: "rail" | "capsule") => void;
   setDockFloatX: (x: number | null) => void;
   setDockExpandAnchor: (anchor: "center" | "left") => void;
+  setDockCompactStyle: (style: "capsule" | "line") => void;
   setDockEnabled: (v: boolean) => void;
   setDockOpen: (v: boolean) => void;
   setAlwaysOnTop: (v: boolean) => void;
@@ -139,6 +142,7 @@ export const useSettings = create<SettingsState>()(
       dockStyle: "rail",
       dockFloatX: null,
       dockExpandAnchor: "center",
+      dockCompactStyle: "capsule",
       dockEnabled: false,
       dockOpen: true,
       alwaysOnTop: false,
@@ -168,6 +172,7 @@ export const useSettings = create<SettingsState>()(
       setDockStyle: (dockStyle) => set({ dockStyle }),
       setDockFloatX: (dockFloatX) => set({ dockFloatX }),
       setDockExpandAnchor: (dockExpandAnchor) => set({ dockExpandAnchor }),
+      setDockCompactStyle: (dockCompactStyle) => set({ dockCompactStyle }),
       setDockEnabled: (dockEnabled) => set({ dockEnabled }),
       setDockOpen: (dockOpen) => set({ dockOpen }),
       setAlwaysOnTop: (alwaysOnTop) => set({ alwaysOnTop }),

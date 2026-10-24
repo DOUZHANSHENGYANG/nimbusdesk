@@ -71,6 +71,8 @@ export function DockFloat({ onExpand, onHide, panels }: {
   const [clock, setClock] = useState(() => new Date().toTimeString().slice(0, 5));
   /** 收起形态的提醒：出现 5 秒就收（对应灵动岛的配额预警） */
   const [alertOn, setAlertOn] = useState(false);
+  /** 收起形态：胶囊（信息全）/ 指示条（只剩一条线，最大化窗口时最不碍事） */
+  const compactStyle = useSettings((state) => state.dockCompactStyle);
 
   useEffect(() => {
     const timer = setInterval(() => setClock(new Date().toTimeString().slice(0, 5)), 30_000);
@@ -171,6 +173,12 @@ export function DockFloat({ onExpand, onHide, panels }: {
   return (
     <div className="df-root" data-open={open}
       onPointerEnter={hoverExpand} onPointerLeave={hoverCollapse}>
+      {compactStyle === "line" ? (
+        <div className="df-line" data-open={open}
+          onPointerDown={(event) => { if (event.button === 0) setExpanded(true); }}>
+          <span className={summary.late > 0 ? "df-line-bar is-warn" : "df-line-bar"} />
+        </div>
+      ) : (
       <div className="df-capsule" data-open={open}
           data-drag
           onPointerDown={(event) => {
@@ -225,6 +233,7 @@ export function DockFloat({ onExpand, onHide, panels }: {
             <ChevronDown className="df-icon" aria-hidden="true" />
           </button>
         </div>
+      )}
 
       {mounted && (
         <div className="df-card">
