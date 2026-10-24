@@ -251,7 +251,18 @@ export function DockFloat({ onExpand, onHide, panels }: {
 
       {mounted && (
         <div className="df-card">
-          <div className="df-head">
+          <div className="df-head" data-card-drag
+            onPointerDown={(event) => {
+              // 头部空白处按住就能拖动整张卡片；按钮照常点击
+              if (event.button !== 0 || (event.target as HTMLElement).closest("button")) return;
+              const win = getCurrentWebviewWindow();
+              void (async () => {
+                await win.startDragging();
+                const pos = await win.outerPosition();
+                const monitor = await import("@tauri-apps/api/window").then((m) => m.currentMonitor());
+                useSettings.getState().setDockFloatX(pos.x / (monitor?.scaleFactor ?? 1));
+              })().catch(() => undefined);
+            }}>
             <span className="df-orb" aria-hidden="true" />
             <span className="df-name">{t("dockFloat.title")}</span>
             <span className="df-sep" aria-hidden="true" />

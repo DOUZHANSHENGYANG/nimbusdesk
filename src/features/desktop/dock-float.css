@@ -671,3 +671,20 @@
 }
 .df-card:hover .df-resize::after { opacity: 1; }
 .df-resize:hover::after { background: var(--brand); }
+
+/* 胶囊自己的 464 宽、水平居中 —— **不跟着窗口宽度拉伸**。
+   之前它 inset:0，窗口变宽时胶囊被拉长，里面的元素跟着往左滑，看起来
+   就是「先移到左侧再展开」。固定宽度后，窗口以中心线对称长大，胶囊原地
+   不动、淡出，卡片在同一中心线上被露出更多 —— 这才是「同一个表面撑开」。 */
+.df-capsule {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  /* 用 auto 外边距居中，不用 transform —— 胶囊有进场动画会写 transform，
+     两者打架会把居中吃掉（实测 x 从 0 变成 232）。 */
+  margin-inline: auto;
+  width: 464px;
+  max-width: 100%;
+  height: 44px;
+}
