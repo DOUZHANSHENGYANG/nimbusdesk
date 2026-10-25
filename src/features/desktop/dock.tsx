@@ -530,13 +530,8 @@ function FencesFlyout() {
     return map;
   }, [categories]);
   const [chip, setChip] = useState<string | null>(null);
-  /**
-   * 打开某个文件夹时的动画原点（相对面板左上角）。
-   * 点哪就从哪里长出来 —— 这就是 iOS 文件夹那一下，不需要动画库：
-   * 记下磁贴的矩形，把它设成 grid 的 transform-origin，再让 grid 重挂载跑一次
-   * scale(0.4) → 1 的动画即可。
-   */
-  const [gridOrigin, setGridOrigin] = useState("50% 0%");
+  /** 手机那套：点收纳盒图标 → 弹出这盒子的图标网格；null 表示没开 */
+  const [openFolder, setOpenFolder] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [view, setView] = useState<"grid" | "list">("grid");
   const draggingId = useRef<string | null>(null);
@@ -633,11 +628,9 @@ function FencesFlyout() {
           return (
             <button key={category.id} type="button" role="tab" aria-selected={chip === category.id}
               className={`dock-folder${chip === category.id ? " is-on" : ""}`}
-              onClick={(event) => {
-                const tile = event.currentTarget.getBoundingClientRect();
-                const panel = panelRef.current?.getBoundingClientRect() ?? tile;
-                setGridOrigin(`${Math.round(tile.left + tile.width / 2 - panel.left)}px ${Math.round(tile.top + tile.height / 2 - panel.top)}px`);
-                setChip(chip === category.id ? null : category.id);
+              onClick={() => {
+                setChip(category.id);
+                setOpenFolder(category.id);
               }}
               onContextMenu={(event) => { event.preventDefault(); moveCategory(category.id, event.shiftKey ? -1 : 1); }}>
               {/* 盒子里露 3×3 的图标预览 —— 一眼能看出这盒子装了什么东西 */}
@@ -654,29 +647,44 @@ function FencesFlyout() {
             </button>
           );
         })}
-      </div>      {visible.length === 0
-        ? <p className="dock-panel-empty">{t("dock.fencesEmpty")}</p>
-        : view === "grid"
-          ? <div key={chip ?? "all"} className={`dock-grid is-enter${tileSize <= 24 ? " is-compact" : ""}`}
-              style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${tileSize + 12}px, 1fr))`, transformOrigin: gridOrigin }}>
-              {visible.map((item) => (
-                <button type="button" key={item.id} className="dock-tile" title={item.path}
-                  onClick={() => void open(item)} {...dragProps(item.id)}>
-                  {itemBody(item)}
-                </button>
-              ))}
+      </div>
+
+      {openFolder ? (
+        <div className="dock-folder-pop" role="dialog" aria-modal="true"
+          aria-label={tops.find((c) => c.id === openFolder)?.name ?? ""}>
+          <button type="button" className="dock-folder-pop-backdrop"
+            aria-label={t("dockFloat.collapse")} onClick={() => setOpenFolder(null)} />
+          <div className="dock-folder-pop-panel">
+            <div className="dock-folder-pop-head">
+              <span className="dock-folder-pop-title">{tops.find((c) => c.id === openFolder)?.name}</span>
+              <button type="button" className="df-icon-btn" aria-label={t("dockFloat.collapse")}
+                onClick={() => setOpenFolder(null)}>
+                <X className="size-3.5" aria-hidden="true" />
+              </button>
             </div>
-          : <ul className="dock-lrows">
-              {visible.map((item) => (
-                <li key={item.id}>
-                  <button type="button" className="dock-lrow" title={item.path}
-                    onClick={() => void open(item)} {...dragProps(item.id)}>
-                    {itemBody(item)}
-                  </button>
-                </li>
-              ))}
-            </ul>}
-    </div>
+            {visible.length === 0
+              ? <p className="dock-panel-empty">{t("dock.fencesEmpty")}</p>
+              : <div className="dock-grid is-enter" style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${tileSize + 12}px, 1fr))` }}>
+                  {visible.map((item) => (
+                    <button type="button" key={item.id} className="dock-tile" title={item.path}
+                      onClick={() => void open(item)} {...dragProps(item.id)}>
+                      {itemBody(item)}
+                    </button>
+                  ))}
+                </div>}
+          </div>
+        </div>
+      ) : query.trim() ? (
+        <div className="dock-grid">
+          {visible.map((item) => (
+            <button type="button" key={item.id} className="dock-tile" title={item.path}
+              onClick={() => void open(item)} {...dragProps(item.id)}>
+              {itemBody(item)}
+            </button>
+          ))}
+        </div>
+      ) : null}
+</div>
   );
 }
 

@@ -833,3 +833,12 @@
 .dock-folder-preview > * { width: 16px; height: 16px; }
 .dock-folder-name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-xs); }
 .dock-folder-count { font-size: 10px; color: var(--muted-fg); font-variant-numeric: tabular-nums; }
+
+/* 收纳盒弹层：点盒子图标就地弹出它的图标网格（手机那套），背景压暗一层 */
+.dock-folder-pop { position: absolute; inset: 0; display: grid; place-items: center; z-index: 5; }
+.dock-folder-pop-backdrop { position: absolute; inset: 0; border: 0; padding: 0; background: color-mix(in oklab, #000 45%, transparent); backdrop-filter: blur(3px); cursor: default; }
+.dock-folder-pop-panel { position: relative; width: min(78%, 460px); max-height: 82%; overflow: auto; padding: 12px; border-radius: var(--radius-lg); border: 1px solid var(--hairline); background: var(--dock-face); box-shadow: 0 18px 48px oklch(0 0 0 / 0.42); animation: dock-pop-in 180ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+@keyframes dock-pop-in { from { transform: scale(0.86); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+.dock-folder-pop-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.dock-folder-pop-title { font-size: var(--text-sm); font-weight: 600; }
+.dock-panel { position: relative; }
