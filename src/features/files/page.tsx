@@ -6,7 +6,6 @@ import {
   Trash2,
   ExternalLink,
   Monitor,
-  MonitorOff,
   FolderInput,
   Loader2,
   X,
@@ -45,7 +44,7 @@ import { usePopupMenu } from "@/features/files/use-popup-menu";
 import { ITEM_ATTR } from "@/features/files/menu-model";
 import { importDroppedFiles } from "./import-files";
 import { useFileDrop } from "./use-file-drop";
-import { restoreFenceOnDesktop, setAllFencesOnDesktop, setFenceOnDesktop } from "./desktop-actions";
+import { restoreFenceOnDesktop, setFenceOnDesktop } from "./desktop-actions";
 import { MapFolderButton, CategoryMappingBar } from "./directory-mapping-controls";
 
 /** 分类 chip 上的标记：右键时据此判断命中了哪个分类 */
@@ -415,17 +414,8 @@ export function FilesPage() {
     await setFenceOnDesktop(catId, !useFences.getState().fences[catId]?.open);
   });
 
-  const toggleAllFences = (visible: boolean) => updateDesktop(async () => {
-    for (const category of useFiles.getState().categories) restored.current.add(category.id);
-    const result = await setAllFencesOnDesktop(visible, (done, total) => {
-      if (mounted.current) setDesktopProgress({ done, total });
-    });
-    if (result.failed.length) {
-      toast.error(t("files.desktopPartial", { count: result.done, failed: result.failed.length }), {
-        description: result.failed.map(item => `${item.name}: ${String(item.error)}`).join("\n"),
-      });
-    } else toast.success(t(visible ? "files.desktopShown" : "files.desktopHidden", { count: result.done }));
-  }, categories.length);
+  // 按钮已从界面移除（东西本来就在桌面上，「显示到桌面」不该是个操作）；
+  // 快捷入口以后从别的入口调，先保留实现。
 
   /** 新建分类的第二步：先选盒子种类，再创建（映射盒还要挑目录）。 */
   const [kindFor, setKindFor] = useState<string | null>(null);
@@ -650,17 +640,7 @@ export function FilesPage() {
               ? t("files.desktopUpdating", desktopProgress)
               : t("files.desktopCount", { count: categories.filter(cat => fences[cat.id]?.open).length, total: categories.length })}
           </span>
-          <button type="button" disabled={desktopBusy || !filesHydrated || !fencesHydrated || !categories.length}
-            onClick={() => void toggleAllFences(true)}
-            className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-border px-3 text-xs transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-brand disabled:pointer-events-none disabled:opacity-45">
-            <Monitor className="size-3.5" />{t("files.showAllDesktop")}
-          </button>
-          <button type="button" disabled={desktopBusy || !filesHydrated || !fencesHydrated || !categories.length}
-            onClick={() => void toggleAllFences(false)}
-            className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-border px-3 text-xs transition-colors hover:bg-muted focus-visible:outline-2 focus-visible:outline-brand disabled:pointer-events-none disabled:opacity-45">
-            <MonitorOff className="size-3.5" />{t("files.hideAllDesktop")}
-          </button>
-        </div>
+                  </div>
 
         {/* ── 搜索 + 添加 ── */}
         <div className="flex flex-wrap items-center gap-2">
