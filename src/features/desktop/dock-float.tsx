@@ -28,7 +28,7 @@ import "./dock-float.css";
  * 收纳盒 / 计划 / 项目 是侧栏形态里那三个飞出面板**本体**，由 dock.tsx 注入 ——
  * 卡片不重写它们，否则同一功能会出现两套实现、两套密度、两套交互。
  */
-type DockTab = "search" | "fences" | "plans" | "projects" | "collect" | "news" | "cal";
+type DockTab = "search" | "fences" | "plans" | "projects" | "collect" | "news" | "cal" | "chat";
 
 /** 胶囊里的快捷图标：六个入口全在（和标签栏是两份职责，分开命名免得改错） */
 const QUICK_TABS: { key: DockTab; icon: typeof Search }[] = [
@@ -39,11 +39,12 @@ const QUICK_TABS: { key: DockTab; icon: typeof Search }[] = [
   { key: "collect", icon: Inbox },
   { key: "news", icon: Newspaper },
   { key: "cal", icon: CalendarDays },
+  { key: "chat", icon: Sparkles },
 ];
 /** 主标签：日均用得多，图标 + 文字 */
 const PRIMARY_TABS: DockTab[] = ["search", "fences", "plans", "projects", "news"];
 /** 次标签：只放图标 —— 日历 / 天气 / 通知 / 终端以后都挂这一行 */
-const SECONDARY_TABS: DockTab[] = ["collect", "cal"];
+const SECONDARY_TABS: DockTab[] = ["collect", "cal", "chat"];
 
 const report = (error: unknown) => console.error("[dock-float]", error);
 
@@ -341,6 +342,7 @@ export function DockFloat({ onExpand, onHide, panels }: {
             )}
             {tab === "news" && <NewsPanel />}
             {tab === "cal" && <CalendarPanel />}
+            {tab === "chat" && <div className="df-body-inner"><ChatPanel onClose={() => setTab("search")} /></div>}
           </div>
           </>
           )}

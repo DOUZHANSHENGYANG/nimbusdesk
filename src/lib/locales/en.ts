@@ -65,7 +65,7 @@ export const en: AppMessages = {
     chatShotClear: "Discard this screenshot",
     openOriginal: "Open original",
     favorite: "Save",
-    tab: { search: "Search", fences: "Stash", plans: "Plans", projects: "Projects", collect: "Capture", news: "News" },
+    tab: { search: "Search", fences: "Stash", plans: "Plans", projects: "Projects", collect: "Capture", news: "News", cal: "Calendar", chat: "AI", },
     searchPlaceholder: "Search files, notes, plans, sites…",
     searching: "Searching…",
     noResult: "No matches",

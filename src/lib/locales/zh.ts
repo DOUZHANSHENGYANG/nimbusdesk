@@ -62,7 +62,7 @@ export const zh = {
     chatShotClear: "丢弃这张截图",
     openOriginal: "打开原文",
     favorite: "收藏",
-    tab: { search: "搜索", fences: "收纳盒", plans: "计划", projects: "项目", collect: "收集", news: "资讯" },
+    tab: { search: "搜索", fences: "收纳盒", plans: "计划", projects: "项目", collect: "收集", news: "资讯", cal: "日历", chat: "AI 助手", },
     searchPlaceholder: "搜文件、笔记、计划、网站…",
     searching: "正在搜索…",
     noResult: "没有匹配结果",
