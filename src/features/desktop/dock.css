@@ -849,3 +849,7 @@
 .dock-panel { position: relative; }
 
 .dock-folder-pop-actions { display: flex; gap: 2px; }
+
+/* 多选：选中条目描边高亮；弹层头出现「新建收纳盒 · N」 */
+.dock-tile.is-selected { outline: 2px solid var(--brand); outline-offset: -2px; border-radius: var(--radius-sm); background: color-mix(in oklab, var(--brand) 16%, transparent); }
+.dock-pop-create { height: 24px; padding: 0 10px; border: 0; border-radius: 999px; background: var(--brand); color: var(--primary-foreground); font-size: var(--text-xs); cursor: pointer; }

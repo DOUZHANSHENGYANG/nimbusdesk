@@ -536,6 +536,21 @@ function FencesFlyout() {
   const [chip, setChip] = useState<string | null>(null);
   /** 手机那套：点收纳盒图标 → 弹出这盒子的图标网格；null 表示没开 */
   const [openFolder, setOpenFolder] = useState<string | null>(null);
+  /** 多选：Ctrl/⌘ 点图标加入选择，选中后可从工具栏新建一个收纳盒把它们的装进去 */
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const toggleSelect = (id: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+  const createBoxFromSelection = () => {
+    if (!selected.size) return;
+    const id = addCategory(t("dock.newFolderName"));
+    for (const itemId of selected) updateItem(itemId, { categoryId: id });
+    setSelected(new Set());
+  };
   /**
    * 解散收纳盒：先把里面的条目挪到默认分类，再删空盒子。
    *
@@ -654,6 +669,11 @@ function FencesFlyout() {
                 setChip(category.id);
                 setOpenFolder(category.id);
               }}
+              onDragOver={(event) => event.preventDefault()}
+              onDrop={(event) => {
+                const dragged = event.dataTransfer.getData("text/plain");
+                if (dragged) updateItem(dragged, { categoryId: category.id });
+              }}
               onContextMenu={(event) => { event.preventDefault(); moveCategory(category.id, event.shiftKey ? -1 : 1); }}>
               {/* 盒子里露 3×3 的图标预览 —— 一眼能看出这盒子装了什么东西 */}
               <span className="dock-folder-preview" aria-hidden="true">
@@ -680,6 +700,11 @@ function FencesFlyout() {
             <div className="dock-folder-pop-head">
               <span className="dock-folder-pop-title">{tops.find((c) => c.id === openFolder)?.name}</span>
               <span className="dock-folder-pop-actions">
+                {selected.size > 0 && (
+                  <button type="button" className="dock-pop-create" onClick={createBoxFromSelection}>
+                    {t("dock.newFolder")} · {selected.size}
+                  </button>
+                )}
                 <button type="button" className="df-icon-btn" aria-label={t("dock.dissolve")} title={t("dock.dissolve")}
                   onClick={() => dissolveFolder(openFolder)}>
                   <Trash2 className="size-3.5" aria-hidden="true" />
@@ -694,8 +719,19 @@ function FencesFlyout() {
               ? <p className="dock-panel-empty">{t("dock.fencesEmpty")}</p>
               : <div className="dock-grid is-enter" style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${tileSize + 12}px, 1fr))` }}>
                   {visible.map((item) => (
-                    <button type="button" key={item.id} className="dock-tile" title={item.path}
-                      onClick={() => void open(item)} {...dragProps(item.id)}>
+                    <button type="button" key={item.id}
+                      className={`dock-tile${selected.has(item.id) ? " is-selected" : ""}`} title={item.path}
+                      draggable
+                      onDragStart={(event) => event.dataTransfer.setData("text/plain", item.id)}
+                      onDragOver={(event) => event.preventDefault()}
+                      onDrop={(event) => {
+                        const dragged = event.dataTransfer.getData("text/plain");
+                        if (dragged && dragged !== item.id) moveItemBefore(dragged, item.id);
+                      }}
+                      onClick={(event) => {
+                        if (event.ctrlKey || event.metaKey) { toggleSelect(item.id); return; }
+                        void open(item);
+                      }}>
                       {itemBody(item)}
                     </button>
                   ))}
