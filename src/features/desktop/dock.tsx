@@ -684,8 +684,8 @@ function FencesFlyout() {
                     <ItemIcon key={item.id} type={item.type} path={item.path} iconUrl={item.iconUrl} size={16} />
                   ))}
               </span>
+              {count > 0 && <span className="dock-folder-badge">{count}</span>}
               <span className="dock-folder-name">{category.name}</span>
-              <span className="dock-folder-count">{count}</span>
             </button>
           );
         })}

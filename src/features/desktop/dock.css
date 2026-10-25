@@ -803,6 +803,7 @@
 }
 /* iOS 那种玻璃方块：半透明底 + 背景模糊 + 内高光 + 细描边 */
 .dock-folder {
+  position: relative;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -831,13 +832,27 @@
   width: 72px;
   height: 56px;
   padding: 6px;
-  border-radius: 12px;
-  background: color-mix(in oklab, #fff 8%, transparent);
-  box-shadow: inset 0 1px 0 color-mix(in oklab, #fff 18%, transparent);
+  border-radius: 10px;
+  background: transparent;
 }
 .dock-folder-preview > * { width: 16px; height: 16px; }
 .dock-folder-name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-xs); }
-.dock-folder-count { font-size: 10px; color: var(--muted-fg); font-variant-numeric: tabular-nums; }
+/* 数量改成右上角徽标，不再单独占一行 */
+.dock-folder-badge {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: color-mix(in oklab, #fff 22%, transparent);
+  color: var(--foreground);
+  font-size: 10px;
+  line-height: 16px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
 
 /* 收纳盒弹层：点盒子图标就地弹出它的图标网格（手机那套），背景压暗一层 */
 .dock-folder-pop { position: absolute; inset: 0; display: grid; place-items: center; z-index: 5; }
