@@ -5,6 +5,8 @@ import { toast } from "sonner";
 import { ConfirmDialog } from "@/ahub/components/ConfirmDialog";
 import { matchTags, type TagMode } from "@/ahub/components/TagFilter";
 import { TagShelf } from "@/ahub/components/TagShelf";
+import { TagManagerDialog } from "@/ahub/components/TagManagerDialog";
+import { TagCommand } from "@/ahub/components/TagCommand";
 import { SearchBar } from "@/ahub/components/SearchBar";
 import { HarnessConfigDialog } from "@/ahub/components/HarnessConfigDialog";
 import { KeyValueEditor, recordFromRows, rowsFromRecord, type KvRow } from "@/ahub/components/KeyValueEditor";
@@ -81,6 +83,8 @@ export function McpPage() {
   const [cfgOpen, setCfgOpen] = useState(false);
   const [batchDeleteOpen, setBatchDeleteOpen] = useState(false);
   const [activeTags, setActiveTags] = useState<Set<string>>(new Set());
+  const [tagManagerOpen, setTagManagerOpen] = useState(false);
+  const [tagCommandOpen, setTagCommandOpen] = useState(false);
   const [tagMode, setTagMode] = useState<TagMode>("or");
   // 连通性测试：进行中的服务 id + 每个服务最近一次的结果
   const [testing, setTesting] = useState<string | null>(null);
@@ -430,6 +434,16 @@ export function McpPage() {
     return { mcpServers: map };
   }
 
+  /** 治理台里改名/删标签：逐个写回 MCP 条目 */
+  const rewriteMcpTags = async (map: (tags: string[]) => string[]) => {
+    for (const server of mcp) {
+      const current = server.tags ?? [];
+      const next = map(current);
+      if (next.join("\u0001") === current.join("\u0001")) continue;
+      await saveMcp({ ...server, tags: next });
+    }
+  };
+
   return (
     <PageShell
       title={t("nav.mcp")}
@@ -478,6 +492,8 @@ export function McpPage() {
         onModeChange={setTagMode}
         counts={tagCounts}
         hideWhenEmpty={false}
+        onManage={() => setTagManagerOpen(true)}
+        onCommand={() => setTagCommandOpen(true)}
       />
 
       {filtered.length > 0 ? (
@@ -940,6 +956,28 @@ export function McpPage() {
         onConfirm={() => {
           if (deleting) void deleteMcp(deleting.id).then(() => toast.success(t("mcp.deleted")));
         }}
+      />
+      <TagManagerDialog
+        open={tagManagerOpen}
+        onOpenChange={setTagManagerOpen}
+        allTags={allTags}
+        counts={tagCounts}
+        onRenameTag={(from, to) => rewriteMcpTags((tags) => tags.map((tag) => (tag === from ? to : tag)))}
+        onDeleteTag={(tag) => rewriteMcpTags((tags) => tags.filter((item) => item !== tag))}
+      />
+      <TagCommand
+        open={tagCommandOpen}
+        onOpenChange={setTagCommandOpen}
+        allTags={allTags}
+        counts={tagCounts}
+        selected={activeTags}
+        onToggle={(tag) => {
+          const next = new Set(activeTags);
+          if (next.has(tag)) next.delete(tag);
+          else next.add(tag);
+          setActiveTags(next);
+        }}
+        resultCount={filtered.length}
       />
     </PageShell>
   );

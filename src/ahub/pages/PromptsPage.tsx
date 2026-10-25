@@ -20,6 +20,8 @@ import { ConfirmDialog } from "@/ahub/components/ConfirmDialog";
 import { EmptyState } from "@/ahub/components/EmptyState";
 import { matchTags, type TagMode } from "@/ahub/components/TagFilter";
 import { TagShelf } from "@/ahub/components/TagShelf";
+import { TagManagerDialog } from "@/ahub/components/TagManagerDialog";
+import { TagCommand } from "@/ahub/components/TagCommand";
 import { SearchBar } from "@/ahub/components/SearchBar";
 import { PageShell } from "@/ahub/components/PageShell";
 import { PromptFillDialog, PromptVarsPanel } from "@/ahub/components/PromptVars";
@@ -79,6 +81,8 @@ export function PromptsPage() {
 
   const [query, setQuery] = useState("");
   const [activeTags, setActiveTags] = useState<Set<string>>(new Set());
+  const [tagManagerOpen, setTagManagerOpen] = useState(false);
+  const [tagCommandOpen, setTagCommandOpen] = useState(false);
   const [tagMode, setTagMode] = useState<TagMode>("or");
   const [editorOpen, setEditorOpen] = useState(false);
   const [editing, setEditing] = useState<Prompt | null>(null);
@@ -239,6 +243,16 @@ export function PromptsPage() {
     }
   };
 
+  /** 治理台里改名/删标签：逐个写回提示词 */
+  const rewritePromptTags = async (map: (tags: string[]) => string[]) => {
+    for (const prompt of prompts) {
+      const current = prompt.tags ?? [];
+      const next = map(current);
+      if (next.join("\u0001") === current.join("\u0001")) continue;
+      await savePrompt({ ...prompt, tags: next });
+    }
+  };
+
   return (
     <PageShell
       title={t("nav.prompts")}
@@ -284,6 +298,8 @@ export function PromptsPage() {
         onModeChange={setTagMode}
         counts={tagCounts}
         hideWhenEmpty={false}
+        onManage={() => setTagManagerOpen(true)}
+        onCommand={() => setTagCommandOpen(true)}
       />
 
       {filtered.length === 0 ? (
@@ -693,6 +709,28 @@ export function PromptsPage() {
         onConfirm={() => {
           if (deleting) void deletePrompt(deleting.id).then(() => toast.success(t("prompts.deleted")));
         }}
+      />
+      <TagManagerDialog
+        open={tagManagerOpen}
+        onOpenChange={setTagManagerOpen}
+        allTags={allTags}
+        counts={tagCounts}
+        onRenameTag={(from, to) => rewritePromptTags((tags) => tags.map((tag) => (tag === from ? to : tag)))}
+        onDeleteTag={(tag) => rewritePromptTags((tags) => tags.filter((item) => item !== tag))}
+      />
+      <TagCommand
+        open={tagCommandOpen}
+        onOpenChange={setTagCommandOpen}
+        allTags={allTags}
+        counts={tagCounts}
+        selected={activeTags}
+        onToggle={(tag) => {
+          const next = new Set(activeTags);
+          if (next.has(tag)) next.delete(tag);
+          else next.add(tag);
+          setActiveTags(next);
+        }}
+        resultCount={filtered.length}
       />
     </PageShell>
   );

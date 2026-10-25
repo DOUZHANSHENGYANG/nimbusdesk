@@ -27,6 +27,8 @@ export function TagShelf({
   counts,
   className,
   hideWhenEmpty = true,
+  onManage,
+  onCommand,
 }: {
   allTags: string[];
   selected: Set<string>;
@@ -36,6 +38,10 @@ export function TagShelf({
   counts?: Record<string, number>;
   className?: string;
   hideWhenEmpty?: boolean;
+  /** 打开治理台（C）；没传就退回行内整理模式 */
+  onManage?: () => void;
+  /** 打开检索面板（B） */
+  onCommand?: () => void;
 }) {
   const { t } = useTranslation();
   const groups = useTagGroups((s) => s.groups);
@@ -235,12 +241,24 @@ export function TagShelf({
               className="h-6 w-28 rounded border border-border bg-surface px-1.5 text-[10.5px] outline-none placeholder:text-ink-3 focus:border-primary"
             />
           ) : null}
+          {onCommand ? (
+            <button
+              type="button"
+              data-testid="tag-shelf-command"
+              onClick={onCommand}
+              title={t("tagCommand.openHint")}
+              className="flex h-6 items-center gap-1 rounded border border-border px-1.5 text-[10px] text-ink-3 hover:text-foreground"
+            >
+              ⌘K
+            </button>
+          ) : null}
           <button
             type="button"
-            onClick={() => setManaging((value) => !value)}
-            className={cn("rounded px-1.5 py-0.5 text-[10.5px]", managing ? "bg-primary-soft text-primary" : "text-ink-3 hover:text-foreground")}
+            data-testid="tag-shelf-manage"
+            onClick={() => (onManage ? onManage() : setManaging((value) => !value))}
+            className={cn("rounded px-1.5 py-0.5 text-[10.5px]", managing && !onManage ? "bg-primary-soft text-primary" : "text-ink-3 hover:text-foreground")}
           >
-            {managing ? t("tagShelf.done") : t("tagShelf.manage")}
+            {managing && !onManage ? t("tagShelf.done") : t("tagShelf.manage")}
           </button>
         </div>
       </div>

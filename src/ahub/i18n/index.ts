@@ -11,6 +11,28 @@ import { i18n } from "@/lib/i18n";
  * 语言也就只剩云台一处开关。
  */
 const zh = {
+  tagManager: {
+    title: "标签管理",
+    subtitle: "{{tags}} 个标签 · {{groups}} 组 · 被引用 {{uses}} 次",
+    all: "全部标签",
+    search: "搜标签…",
+    columnTag: "标签",
+    columnGroup: "分组",
+    columnUses: "使用",
+    columnActions: "操作",
+    groups: "分组",
+    sideTitle: "当前命中",
+    sideHint: "改动分组会立刻反映到技能页的卡片仓，不需要保存。",
+    sideStats: "{{tags}} 个标签 · {{groups}} 组 · 被引用 {{uses}} 次",
+    deleteTag: "删除标签",
+    empty: "没有标签",
+  },
+  tagCommand: {
+    placeholder: "输入标签名，↑↓ 选择，回车应用",
+    hits: "当前命中 {{n}} 个",
+    hint: "回车切换 · esc 关闭",
+    openHint: "⌘K 打开标签检索",
+  },
   // ── 标签卡片仓（技能 / MCP / 提示词共用）──
   tagShelf: {
     title: "标签",
@@ -1091,6 +1113,28 @@ const zh = {
 };
 
 const en: typeof zh = {
+  tagManager: {
+    title: "Tag manager",
+    subtitle: "{{tags}} tags · {{groups}} groups · used {{uses}} times",
+    all: "All tags",
+    search: "Search tags…",
+    columnTag: "Tag",
+    columnGroup: "Group",
+    columnUses: "Uses",
+    columnActions: "Actions",
+    groups: "Groups",
+    sideTitle: "Matching",
+    sideHint: "Group changes apply to the shelf on the skills page immediately.",
+    sideStats: "{{tags}} tags · {{groups}} groups · used {{uses}} times",
+    deleteTag: "Delete tag",
+    empty: "No tags",
+  },
+  tagCommand: {
+    placeholder: "Type a tag, ↑↓ to move, Enter to apply",
+    hits: "{{n}} matching",
+    hint: "Enter toggles · esc closes",
+    openHint: "⌘K opens tag search",
+  },
   // ── tag shelf (shared by skills / MCP / prompts) ──
   tagShelf: {
     title: "Tags",

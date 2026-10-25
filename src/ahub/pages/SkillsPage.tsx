@@ -6,6 +6,8 @@ import { ConfirmDialog } from "@/ahub/components/ConfirmDialog";
 import { EmptyState } from "@/ahub/components/EmptyState";
 import { matchTags, type TagMode } from "@/ahub/components/TagFilter";
 import { TagShelf } from "@/ahub/components/TagShelf";
+import { TagManagerView } from "@/ahub/components/TagManagerView";
+import { TagCommand } from "@/ahub/components/TagCommand";
 import { SearchBar } from "@/ahub/components/SearchBar";
 import { HarnessDialog } from "@/ahub/components/HarnessDialog";
 import { HarnessIcon } from "@/ahub/components/HarnessIcon";
@@ -156,6 +158,8 @@ export function SkillsPage() {
   const [query, setQuery] = useState("");
   const [activeTags, setActiveTags] = useState<Set<string>>(new Set());
   const [tagMode, setTagMode] = useState<TagMode>("or");
+  const [pageTab, setPageTab] = useState<"skills" | "tags">("skills");
+  const [tagCommandOpen, setTagCommandOpen] = useState(false);
   const [scanOpen, setScanOpen] = useState(false);
   const [batchMode, setBatchMode] = useState(false);
   const [batchSel, setBatchSel] = useState<Set<string>>(new Set());
@@ -495,6 +499,41 @@ export function SkillsPage() {
     setSelectedPresetId(null);
   };
 
+  /** ⌘K / Ctrl+K：打开标签检索面板 */
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setTagCommandOpen((open) => !open);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  /**
+   * 改写标签：治理台里的改名 / 删除要落到条目上，逐个读全文再保存，
+   * 这样不会把正文或 frontmatter 冲掉（saveSkill 需要完整 payload）。
+   */
+  const rewriteSkillTags = async (map: (tags: string[]) => string[]) => {
+    const affected = skills.filter((meta) => map(meta.tags).join("\u0001") !== meta.tags.join("\u0001"));
+    for (const meta of affected) {
+      const doc = await api.readSkill(meta.dirName);
+      await saveSkill({
+        dirName: meta.dirName,
+        name: doc.meta.name,
+        description: doc.meta.description,
+        tags: map(doc.meta.tags),
+        body: doc.body,
+        frontmatter: doc.frontmatter,
+        level: "L1",
+        publish: false,
+        note: "",
+      });
+    }
+    await loadSkills();
+  };
+
   /** 点击卡片上的标签：下钻筛选 */
   const drillTag = (tg: string) =>
     setActiveTags((prev) => {
@@ -677,6 +716,37 @@ export function SkillsPage() {
         </>
       }
     >
+      <div className="mb-3 flex w-fit items-center gap-1 rounded-lg border border-border bg-surface p-0.5">
+        {([
+          { id: "skills" as const, label: t("nav.skills"), count: skills.length },
+          { id: "tags" as const, label: t("tagShelf.title"), count: allTags.length },
+        ]).map((item) => (
+          <button
+            key={item.id}
+            type="button"
+            aria-pressed={pageTab === item.id}
+            onClick={() => setPageTab(item.id)}
+            className={cn(
+              "flex h-7 items-center gap-1.5 rounded-md px-2.5 text-[11.5px] font-medium",
+              pageTab === item.id ? "bg-primary-soft text-primary" : "text-ink-3 hover:text-foreground",
+            )}
+          >
+            {item.label}
+            <span className="font-mono text-[10px] opacity-60">{item.count}</span>
+          </button>
+        ))}
+      </div>
+
+      {pageTab === "tags" ? (
+        <TagManagerView
+          allTags={allTags}
+          counts={tagCounts}
+          onRenameTag={(from, to) => rewriteSkillTags((tags) => tags.map((tag) => (tag === from ? to : tag)))}
+          onDeleteTag={(tag) => rewriteSkillTags((tags) => tags.filter((item) => item !== tag))}
+          resultCount={filtered.length}
+        />
+      ) : (
+        <>
       {/* ── 预设栏（skill-presets）：页面内容最顶部，筛选与列表之上 ── */}
       <PresetBar
         presets={presets}
@@ -749,6 +819,8 @@ export function SkillsPage() {
                   onChange={setActiveTags}
                   mode={tagMode}
                   onModeChange={setTagMode}
+                  onManage={() => setTab("tags")}
+                  onCommand={() => setTagCommandOpen(true)}
                   className=""
                 />
               </div>
@@ -1687,6 +1759,21 @@ export function SkillsPage() {
 
       <HarnessDialog open={scanOpen} onOpenChange={setScanOpen} kind="skills" />
 
+      <TagCommand
+        open={tagCommandOpen}
+        onOpenChange={setTagCommandOpen}
+        allTags={allTags}
+        counts={tagCounts}
+        selected={activeTags}
+        onToggle={(tag) => {
+          const next = new Set(activeTags);
+          if (next.has(tag)) next.delete(tag);
+          else next.add(tag);
+          setActiveTags(next);
+        }}
+        resultCount={filtered.length}
+      />
+
       {/* ── 保存为预设（skill-presets） ── */}
       <PresetDialog
         open={presetSaveOpen}
@@ -1830,6 +1917,8 @@ export function SkillsPage() {
         }}
       />
 
+        </>
+      )}
    </PageShell>
   );
 }
