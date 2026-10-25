@@ -12,6 +12,9 @@ import {
   MoreHorizontal,
   FolderOpen,
   Copy,
+  ArrowLeft,
+  LayoutGrid,
+  List,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useLocation, useSearchParams } from "react-router-dom";
@@ -86,6 +89,10 @@ export function FilesPage() {
   const removeCategory = useFiles((s) => s.removeCategory);
   const moveItemBefore = useFiles((s) => s.moveItemBefore);
   const fences = useFences((s) => s.fences);
+  const filesViewMode = useSettings((s) => s.filesViewMode);
+  const setFilesViewMode = useSettings((s) => s.setFilesViewMode);
+  /** boxes 视图里点开的分类；null = 展示全部分类盒子 */
+  const [openBoxId, setOpenBoxId] = useState<string | null>(null);
   const [filesHydrated, setFilesHydrated] = useState(useFiles.persist.hasHydrated);
   const [fencesHydrated, setFencesHydrated] = useState(useFences.persist.hasHydrated);
 
@@ -501,6 +508,28 @@ export function FilesPage() {
     (id: string) => items.filter((i) => i.categoryId === id).length,
     [items],
   );
+
+  /**
+   * 收纳盒视图按「顶级分类 + 它的子分类」铺开。子分类跟在父盒子后面，
+   * 名字用 categoryLabelOf 带上父名前缀，避免两个同名子分类分不清。
+   */
+  const boxCategories = useMemo(
+    () => topCategories.flatMap((cat) => [cat, ...childrenOf(cat.id)]),
+    [topCategories, childrenOf],
+  );
+  const openBox = openBoxId ? categories.find((category) => category.id === openBoxId) ?? null : null;
+
+  /** 三种视图切换：boxes 视图进入分类详情时清掉展开态，回来总是先看盒子墙。 */
+  const chooseViewMode = (mode: "icons" | "list" | "boxes") => {
+    setOpenBoxId(null);
+    setFilesViewMode(mode);
+  };
+  const openCategoryBox = (categoryId: string) => {
+    setSelected(categoryId);
+    setOpenBoxId(categoryId);
+    setSearch("");
+    setActiveTags([]);
+  };
   const copyCategoryPaths = async (catId: string) => {
     const paths = items.filter((i) => i.categoryId === catId).map((i) => i.path);
     if (!paths.length) return;
@@ -658,6 +687,34 @@ export function FilesPage() {
               </button>
             )}
           </div>
+          <div
+            className="flex shrink-0 items-center rounded-lg border border-border bg-card p-0.5"
+            role="group"
+            aria-label={t("files.viewMode")}
+          >
+            {([
+              { mode: "icons", icon: LayoutGrid, label: t("files.viewIcons") },
+              { mode: "list", icon: List, label: t("files.viewList") },
+              { mode: "boxes", icon: FolderOpen, label: t("files.viewBoxes") },
+            ] as const).map(({ mode, icon: Icon, label }) => (
+              <button
+                key={mode}
+                type="button"
+                aria-label={label}
+                title={label}
+                aria-pressed={filesViewMode === mode}
+                onClick={() => chooseViewMode(mode)}
+                className={cn(
+                  "grid size-8 place-items-center rounded-md transition-colors",
+                  filesViewMode === mode
+                    ? "bg-brand/10 text-brand"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                )}
+              >
+                <Icon className="size-4" />
+              </button>
+            ))}
+          </div>
           <MapFolderButton onMapped={id => { setSelected(id); setSearch(""); setActiveTags([]); }} />
           <button
             type="button"
@@ -703,6 +760,142 @@ export function FilesPage() {
           </div>
         )}
 
+        {/* ── 收纳盒视图：分类 = 玻璃方块，点开再进这个分类的条目网格 ── */}
+        {filesViewMode === "boxes" && !openBox && (
+          <div className="grid min-h-24 grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-2.5" data-files-boxes>
+            {boxCategories.map((category) => {
+              const count = countIn(category.id);
+              const preview = items.filter((item) => item.categoryId === category.id).slice(0, 6);
+              return (
+                <button
+                  key={category.id}
+                  type="button"
+                  data-box-card
+                  onClick={() => openCategoryBox(category.id)}
+                  className="group relative flex min-h-[150px] flex-col items-center gap-2 rounded-2xl border p-3 text-left transition-transform duration-150 hover:-translate-y-0.5"
+                  style={{
+                    borderColor: "var(--glass-edge)",
+                    background: "var(--glass)",
+                    boxShadow: "var(--pr-shadow-2), inset 0 1px 0 var(--glass-edge)",
+                    backdropFilter: "blur(var(--pr-glass-blur)) saturate(var(--pr-glass-saturate))",
+                  }}
+                >
+                  {/* 3×3 预览格只放前 6 个图标：留白比塞满更像 iOS 文件夹 */}
+                  <span
+                    data-box-preview
+                    className="grid aspect-[4/3] w-full grid-cols-3 grid-rows-3 place-items-center gap-1 rounded-xl p-2"
+                    style={{ background: "var(--surface)" }}
+                    aria-hidden="true"
+                  >
+                    {Array.from({ length: 9 }, (_, index) => {
+                      const item = preview[index];
+                      return (
+                        <span key={item?.id ?? `empty-${index}`} className="grid size-6 place-items-center">
+                          {item && (
+                            <ItemIcon
+                              type={item.type}
+                              path={item.path}
+                              iconUrl={item.iconUrl}
+                              size={22}
+                            />
+                          )}
+                        </span>
+                      );
+                    })}
+                  </span>
+                  {/* 数量徽标：0 不显示，避免空盒子也挂个 0 */}
+                  {count > 0 && (
+                    <span data-box-badge className="absolute right-2 top-2 min-w-5 rounded-full bg-brand px-1.5 text-center text-[10px] leading-5 text-primary-foreground tabular-nums">
+                      {count}
+                    </span>
+                  )}
+                  <span className="mt-auto w-full truncate text-center text-[13px] font-medium">
+                    {categoryLabelOf(category.id)}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {filesViewMode === "boxes" && openBox && (
+          <div className="flex flex-wrap items-center gap-2 border-b border-border/60 pb-2">
+            <button
+              type="button"
+              onClick={() => { setOpenBoxId(null); setSelected(null); }}
+              className="flex items-center gap-1.5 rounded-lg px-2 py-1 text-[13px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            >
+              <ArrowLeft className="size-4" />
+              {t("files.boxBack")}
+            </button>
+            <span className="text-[13px] font-medium">{categoryLabelOf(openBox.id)}</span>
+            <span className="rounded-full bg-muted px-2 text-[11px] text-muted-foreground">
+              {t("files.boxCount", { count: countIn(openBox.id) })}
+            </span>
+          </div>
+        )}
+
+        {/* ── 列表视图：一行一个条目，信息密度比卡片高 ── */}
+        {filesViewMode === "list" && (
+          <div
+            data-files-list
+            className="overflow-hidden rounded-xl border border-border bg-card"
+            onContextMenu={onContextMenu}
+            onMouseDown={(e) => {
+              if (!(e.target as HTMLElement).closest("[data-card]")) setSelectedItemId(null);
+            }}
+          >
+            {filtered.slice(0, visibleCount).map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                {...{ [ITEM_ATTR]: item.id }}
+                data-card
+                data-cat={item.categoryId}
+                onClick={() => setSelectedItemId(item.id)}
+                onDoubleClick={() => openItem(item)}
+                title={t("files.dblclickHint")}
+                className={cn(
+                  "flex w-full items-center gap-3 border-b border-border/60 px-3 py-2 text-left transition-colors last:border-b-0 hover:bg-muted/40",
+                  selectedItemId === item.id && "bg-brand/5",
+                )}
+              >
+                <ItemIcon type={item.type} path={item.path} iconUrl={item.iconUrl} size={18} className="size-[18px] shrink-0" />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[13px] font-medium">
+                    {item.type === "url" ? item.path : item.title}
+                  </span>
+                  <span className="block truncate text-[11px] text-muted-foreground">
+                    {item.note || item.path}
+                  </span>
+                </span>
+                <span className="hidden shrink-0 rounded-full border border-border px-1.5 text-[10px] text-muted-foreground sm:inline">
+                  {t(`files.type.${item.type}`)}
+                </span>
+                {!selected && (
+                  <span className="hidden max-w-28 shrink-0 truncate rounded-full bg-muted px-1.5 text-[10px] text-muted-foreground/80 md:inline">
+                    {categoryLabelOf(item.categoryId)}
+                  </span>
+                )}
+                {item.tags.slice(0, 2).map((tag) => (
+                  <span key={tag} className="hidden shrink-0 rounded-full bg-brand/10 px-1.5 text-[10px] text-brand lg:inline">
+                    #{tag}
+                  </span>
+                ))}
+              </button>
+            ))}
+            {hasMore && (
+              <button
+                type="button"
+                onClick={() => ensureVisible(visibleCount)}
+                className="w-full border-t border-border/60 px-3 py-2 text-center text-[12px] text-muted-foreground transition-colors hover:bg-muted/40 hover:text-foreground"
+              >
+                {t("files.loadMore")}
+              </button>
+            )}
+          </div>
+        )}
+
         {/* ── 条目网格（右键菜单在独立浮窗渲染，可溢出窗口边界） ── */}
         <div
           ref={gridRef}
@@ -711,7 +904,10 @@ export function FilesPage() {
             // 点空白处取消选中（卡片带 data-card 标记）
             if (!(e.target as HTMLElement).closest("[data-card]")) setSelectedItemId(null);
           }}
-          className="relative grid min-h-24 grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-2.5"
+          className={cn(
+            "relative grid min-h-24 grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-2.5",
+            filesViewMode !== "icons" && !(filesViewMode === "boxes" && openBox) && "hidden",
+          )}
         >
             {filtered.slice(0, visibleCount).map((item) => (
               <div
@@ -834,7 +1030,7 @@ export function FilesPage() {
           )}
         </div>
 
-        {filtered.length === 0 && (
+        {filtered.length === 0 && !(filesViewMode === "boxes" && !openBox) && (
           <p className="py-10 text-center text-[13px] text-muted-foreground">{t("files.empty")}</p>
         )}
       </div>

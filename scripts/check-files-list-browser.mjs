@@ -64,6 +64,34 @@ try {
   assert.equal(applied.items.reorder.length, 0, "内容变了但位置没变，不该产生 reorder");
   console.log("✓ 行级写入：改一条只推一条");
 
+  /* ── 三种视图切换：图标 / 列表 / 收纳盒 ──
+     收纳盒视图必须按分类出盒子（数量徽标不显示 0），点盒子进该分类网格；
+     切到收纳盒时内容顶边不能跳（布局抖动的回归点）。 */
+  const gridBox = await page.locator("[data-card]").first().boundingBox();
+  await page.getByRole("button", { name: "收纳盒视图" }).click();
+  await page.locator("[data-files-boxes]").waitFor({ timeout: 5000 });
+  const boxCards = page.locator("[data-files-boxes] [data-box-card]");
+  assert.equal(await boxCards.count(), 2, "两个分类应渲染两个收纳盒方块");
+  assert.equal(await boxCards.first().locator("[data-box-badge]").textContent(), String(TOTAL), "数量徽标应显示分类条目数");
+  assert.equal(await boxCards.first().locator("[data-box-preview] > span > *").count(), 6, "3×3 预览只放前 6 个图标");
+  const boxesBox = await page.locator("[data-files-boxes]").boundingBox();
+  assert.ok(gridBox && boxesBox && Math.abs(gridBox.y - boxesBox.y) <= 1, "切到收纳盒视图时内容顶边不应跳动");
+  console.log("✓ 收纳盒视图：分类方块 / 数量徽标 / 6 个预览图标，切换无纵向抖动");
+
+  await boxCards.first().click();
+  await page.locator("[data-files-boxes]").waitFor({ state: "detached", timeout: 5000 });
+  await page.getByRole("button", { name: "返回收纳盒" }).waitFor({ timeout: 5000 });
+  assert.ok((await page.locator("[data-card]:visible").count()) > 0, "点开收纳盒后应显示该分类的条目网格");
+  await page.getByRole("button", { name: "返回收纳盒" }).click();
+  await page.locator("[data-files-boxes]").waitFor({ timeout: 5000 });
+
+  await page.getByRole("button", { name: "列表视图" }).click();
+  await page.locator("[data-files-list]").waitFor({ timeout: 5000 });
+  assert.equal(await page.locator("[data-files-list] [data-card]").count(), STEP, "列表视图也应按分片只铺第一批");
+  await page.getByRole("button", { name: "图标视图" }).click();
+  await page.locator("[data-files-boxes]").waitFor({ state: "detached", timeout: 5000 });
+  console.log("✓ 列表视图按分片渲染；三种视图可来回切换");
+
   /* ── 深链定位：目标条目排在第 200 位（远超首批），也必须被滚进视野 ──
      这一步必须在「滚满全量」之前做，否则目标早就在 DOM 里，测不出分片下的定位逻辑。 */
   await page.evaluate(() => { window.location.hash = "#/files?item=bulk-200"; });

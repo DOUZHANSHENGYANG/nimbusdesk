@@ -432,6 +432,13 @@ export const en: AppMessages = {
     categoryLabel: "Category",
     categoryHint: "(can be moved)",
     searchPlaceholder: "Search name or path…",
+    viewMode: "View mode",
+    viewIcons: "Icon view",
+    viewList: "List view",
+    viewBoxes: "Box view",
+    boxBack: "Back to boxes",
+    boxCount: "{{count}} items",
+    loadMore: "Load more",
     fence: "Desktop fence",
     fenceOpened:
       "Fence is on — it always stays at the desktop bottom layer; minimize other windows to see it",
