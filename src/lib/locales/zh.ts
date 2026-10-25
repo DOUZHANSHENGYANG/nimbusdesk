@@ -93,6 +93,8 @@ export const zh = {
     footSearch: "搜索",
   },
   dock: {
+    dissolve: "解散收纳盒",
+    defaultCategory: "默认分类",
     title: "桌面 Dock",
     search: "搜索",
     fences: "收纳盒",

@@ -801,34 +801,39 @@
   gap: 10px;
   flex: none;
 }
+/* iOS 那种玻璃方块：半透明底 + 背景模糊 + 内高光 + 细描边 */
 .dock-folder {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 6px;
   padding: 10px 8px 8px;
-  border: 1px solid var(--hairline);
-  border-radius: var(--radius-md);
-  background: var(--dock-face);
+  border: 1px solid color-mix(in oklab, #fff 16%, transparent);
+  border-radius: 18px;
+  background: color-mix(in oklab, #fff 10%, transparent);
+  -webkit-backdrop-filter: blur(18px) saturate(160%);
+  backdrop-filter: blur(18px) saturate(160%);
+  box-shadow: inset 0 1px 0 color-mix(in oklab, #fff 26%, transparent), 0 6px 18px oklch(0 0 0 / 0.18);
   color: var(--foreground);
   font: inherit;
   cursor: pointer;
-  text-align: left;
-  transition: background var(--dur-fast) ease, border-color var(--dur-fast) ease;
+  text-align: center;
+  transition: background var(--dur-fast) ease, border-color var(--dur-fast) ease, transform var(--dur-fast) ease;
 }
-.dock-folder:hover { background: var(--surface-hover); }
-.dock-folder.is-on { border-color: var(--brand); background: var(--brand-soft); }
+.dock-folder:hover { background: color-mix(in oklab, #fff 16%, transparent); transform: translateY(-1px); }
+.dock-folder.is-on { border-color: color-mix(in oklab, var(--brand) 55%, transparent); background: color-mix(in oklab, var(--brand) 22%, transparent); }
 /* 盒子内部：3 列小图标，像 iOS 文件夹的预览 */
 .dock-folder-preview {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   place-items: center;
-  gap: 3px;
-  width: 66px;
-  height: 52px;
-  padding: 5px;
-  border-radius: var(--radius-md);
-  background: color-mix(in oklab, var(--foreground) 8%, transparent);
+  gap: 4px;
+  width: 72px;
+  height: 56px;
+  padding: 6px;
+  border-radius: 12px;
+  background: color-mix(in oklab, #fff 8%, transparent);
+  box-shadow: inset 0 1px 0 color-mix(in oklab, #fff 18%, transparent);
 }
 .dock-folder-preview > * { width: 16px; height: 16px; }
 .dock-folder-name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-xs); }
@@ -842,3 +847,5 @@
 .dock-folder-pop-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
 .dock-folder-pop-title { font-size: var(--text-sm); font-weight: 600; }
 .dock-panel { position: relative; }
+
+.dock-folder-pop-actions { display: flex; gap: 2px; }

@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { availableMonitors, currentMonitor, cursorPosition, type Monitor } from "@tauri-apps/api/window";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { BookOpen, CalendarCheck, FolderKanban, GripHorizontal, GripVertical, LayoutGrid, List, Search, Settings2, X } from "lucide-react";
+import { Trash2 } from "lucide-react";
 import { RiAddLine, RiAttachment2, RiClipboardLine, RiCloseLine, RiDeleteBinLine, RiPushpinLine, RiSparklingLine } from "@remixicon/react";
 import { chatWithProvider, testProvider } from "@/features/ai/client";
 import { selectProvider } from "@/features/ai/core";
@@ -518,6 +519,9 @@ function FencesFlyout() {
   const categories = useFiles((s) => s.categories);
   const items = useFiles((s) => s.items);
   const moveCategory = useFiles((s) => s.moveCategory);
+  const addCategory = useFiles((s) => s.addCategory);
+  const removeCategory = useFiles((s) => s.removeCategory);
+  const updateItem = useFiles((s) => s.updateItem);
   const moveItemBefore = useFiles((s) => s.moveItemBefore);
   const tileSize = useSettings((s) => s.dockTileSize);
   const tops = useMemo(() => sortedTopCategories(categories), [categories]);
@@ -532,6 +536,24 @@ function FencesFlyout() {
   const [chip, setChip] = useState<string | null>(null);
   /** 手机那套：点收纳盒图标 → 弹出这盒子的图标网格；null 表示没开 */
   const [openFolder, setOpenFolder] = useState<string | null>(null);
+  /**
+   * 解散收纳盒：先把里面的条目挪到默认分类，再删空盒子。
+   *
+   * 只对**非映射**盒子开放 —— 映射盒子的内容属于磁盘上那个真实目录，
+   * 「解散」在语义上没法表达（删了盒子文件还在，用户会以为文件没了）。
+   */
+  const dissolveFolder = (categoryId: string) => {
+    const category = categories.find((c) => c.id === categoryId);
+    if (!category || categoryKind(category) === "mapped") return;
+    const target = categories.find((c) => c.id !== categoryId && !c.parentId);
+    const fallbackId = target?.id ?? addCategory(t("dock.defaultCategory"));
+    for (const item of items.filter((i) => i.categoryId === categoryId)) {
+      updateItem(item.id, { categoryId: fallbackId });
+    }
+    removeCategory(categoryId);
+    setOpenFolder(null);
+    setChip(null);
+  };
   const [query, setQuery] = useState("");
   const [view, setView] = useState<"grid" | "list">("grid");
   const draggingId = useRef<string | null>(null);
@@ -657,10 +679,16 @@ function FencesFlyout() {
           <div className="dock-folder-pop-panel">
             <div className="dock-folder-pop-head">
               <span className="dock-folder-pop-title">{tops.find((c) => c.id === openFolder)?.name}</span>
-              <button type="button" className="df-icon-btn" aria-label={t("dockFloat.collapse")}
-                onClick={() => setOpenFolder(null)}>
-                <X className="size-3.5" aria-hidden="true" />
-              </button>
+              <span className="dock-folder-pop-actions">
+                <button type="button" className="df-icon-btn" aria-label={t("dock.dissolve")} title={t("dock.dissolve")}
+                  onClick={() => dissolveFolder(openFolder)}>
+                  <Trash2 className="size-3.5" aria-hidden="true" />
+                </button>
+                <button type="button" className="df-icon-btn" aria-label={t("dockFloat.collapse")}
+                  onClick={() => setOpenFolder(null)}>
+                  <X className="size-3.5" aria-hidden="true" />
+                </button>
+              </span>
             </div>
             {visible.length === 0
               ? <p className="dock-panel-empty">{t("dock.fencesEmpty")}</p>

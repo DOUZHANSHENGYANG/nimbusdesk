@@ -96,6 +96,8 @@ export const en: AppMessages = {
     footSearch: "Search",
   },
   dock: {
+    dissolve: "Dissolve box",
+    defaultCategory: "Default",
     title: "Desktop Dock",
     search: "Search",
     fences: "Stash",
