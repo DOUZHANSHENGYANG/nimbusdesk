@@ -696,6 +696,15 @@
 }
 .df-card {
   transform-origin: top center;
+}
+/*
+ * 展开动画必须挂在「属性」上，不能挂在元素上。
+ *
+ * 挂在 .df-card 自身时，animation 只在**首次挂载**跑一次 —— 而卡片现在是常驻的
+ * （避免每次重挂面板），于是第二次以后展开根本没有动画，内容直接蹦出来，看着就是
+ * 卡顿。挂到 [data-open="true"] 上，每次属性翻转都会重新触发这段 240ms。
+ */
+.df-root[data-open="true"] .df-card {
   animation: df-morph 240ms cubic-bezier(0.4, 0, 0.2, 1) both;
 }
 .df-root[data-open="false"] .df-card {
