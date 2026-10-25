@@ -785,3 +785,11 @@
   .dock-item, .dock-close, .dock-grip { transition: none; }
   .dock-item.is-active::before { animation: none; }
 }
+
+/* 点文件夹：从磁贴位置长成整片网格（iOS 文件夹那一下）。
+   原点由组件按点击位置写进 transform-origin，这里只管缩放曲线。 */
+.dock-grid.is-enter { animation: dock-fence-open 220ms cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+@keyframes dock-fence-open {
+  from { transform: scale(0.42); opacity: 0.35; }
+  to   { transform: scale(1); opacity: 1; }
+}

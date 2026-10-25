@@ -533,6 +533,13 @@ function FencesFlyout() {
     return map;
   }, [categories]);
   const [chip, setChip] = useState<string | null>(null);
+  /**
+   * 打开某个文件夹时的动画原点（相对面板左上角）。
+   * 点哪就从哪里长出来 —— 这就是 iOS 文件夹那一下，不需要动画库：
+   * 记下磁贴的矩形，把它设成 grid 的 transform-origin，再让 grid 重挂载跑一次
+   * scale(0.4) → 1 的动画即可。
+   */
+  const [gridOrigin, setGridOrigin] = useState("50% 0%");
   const [query, setQuery] = useState("");
   const [view, setView] = useState<"grid" | "list">("grid");
   const draggingId = useRef<string | null>(null);
@@ -629,7 +636,12 @@ function FencesFlyout() {
           <span key={category.id} className="dock-chip-box">
             <button type="button" role="tab" aria-selected={chip === category.id}
               className={`dock-chip${chip === category.id ? " is-active" : ""}`}
-              onClick={() => setChip(category.id)}>{category.name}</button>
+              onClick={(event) => {
+                const tile = event.currentTarget.getBoundingClientRect();
+                const panel = panelRef.current?.getBoundingClientRect() ?? tile;
+                setGridOrigin(`${Math.round(tile.left + tile.width / 2 - panel.left)}px ${Math.round(tile.bottom - panel.top)}px`);
+                setChip(category.id);
+              }}>{category.name}</button>
             <span className="dock-chip-sort">
               <button type="button" aria-label={t("dock.sortEarlier")} onClick={() => moveCategory(category.id, -1)}>
                 <ChevronLeft className="size-3" aria-hidden="true" />
@@ -644,8 +656,8 @@ function FencesFlyout() {
       {visible.length === 0
         ? <p className="dock-panel-empty">{t("dock.fencesEmpty")}</p>
         : view === "grid"
-          ? <div className={`dock-grid${tileSize <= 24 ? " is-compact" : ""}`}
-              style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${tileSize + 12}px, 1fr))` }}>
+          ? <div key={chip ?? "all"} className={`dock-grid is-enter${tileSize <= 24 ? " is-compact" : ""}`}
+              style={{ gridTemplateColumns: `repeat(auto-fill, minmax(${tileSize + 12}px, 1fr))`, transformOrigin: gridOrigin }}>
               {visible.map((item) => (
                 <button type="button" key={item.id} className="dock-tile" title={item.path}
                   onClick={() => void open(item)} {...dragProps(item.id)}>

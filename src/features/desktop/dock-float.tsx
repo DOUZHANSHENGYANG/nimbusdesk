@@ -729,18 +729,21 @@ function NoticePanel({ onOpenPlans }: { onOpenPlans: () => void }) {
   const { t } = useTranslation();
   const days = usePlans((state) => state.days);
   const today = dateKey(new Date());
+  const soonKey = dateKey(new Date(Date.now() + 2 * 86_400_000));
   const rows = useMemo(() => {
     const output: { id: string; title: string; meta: string; late: boolean }[] = [];
     for (const [day, tasks] of Object.entries(days)) {
       for (const task of tasks) {
         if (task.done || task.parentId) continue;
         const late = day < today;
-        if (!late && day !== today) continue;
+        // 未来两天内要到期的也算「需要注意」，否则通知页大部分时候是空的
+        const soon = day > today && day <= soonKey;
+        if (!late && !soon && day !== today) continue;
         output.push({ id: task.id, title: task.title, meta: day, late });
       }
     }
     return output.sort((a, b) => (a.late === b.late ? a.meta.localeCompare(b.meta) : a.late ? -1 : 1)).slice(0, 20);
-  }, [days, today]);
+  }, [days, today, soonKey]);
 
   if (!rows.length) return <p className="df-hint">{t("dockFloat.noticeEmpty")}</p>;
 
