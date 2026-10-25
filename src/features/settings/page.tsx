@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useRef, useState, useEffect } from "react";
 import { DesktopFenceSettings } from "@/features/files/desktop-settings";
 import { useReminderSettings } from "@/stores/reminders";
 import { advanceLabel } from "@/features/plans/reminder";
@@ -308,6 +308,14 @@ function DesktopDockCard() {
   const dockStyle = useSettings((s) => s.dockStyle);
   const setDockStyle = useSettings((s) => s.setDockStyle);
   const dockCompactStyle = useSettings((s) => s.dockCompactStyle);
+  const dockMonitorId = useSettings((s) => s.dockMonitorId);
+  const setDockMonitorId = useSettings((s) => s.setDockMonitorId);
+  const [monitors, setMonitors] = useState<{ name: string; primary: boolean }[]>([]);
+  useEffect(() => {
+    void import("@tauri-apps/api/window").then(({ availableMonitors }) => availableMonitors())
+      .then((list) => setMonitors(list.map((m) => ({ name: m.name ?? "?", primary: m.position.x === 0 && m.position.y === 0 }))))
+      .catch(() => setMonitors([]));
+  }, []);
   const accentPreset = useSettings((s) => s.accentPreset);
   const setAccentPreset = useSettings((s) => s.setAccentPreset);
   const setDockCompactStyle = useSettings((s) => s.setDockCompactStyle);
@@ -388,6 +396,22 @@ function DesktopDockCard() {
                 className={dockCompactStyle === style ? "ring-1 ring-brand" : undefined}
                 onClick={() => setDockCompactStyle(style)}>
                 {t(`settings.compactStyle_${style}`)}
+              </Button>
+            ))}
+          </div>
+        </Field>
+        <Field label={t("settings.dockMonitor")}>
+          <div className="flex flex-wrap gap-2">
+            <Button variant={dockMonitorId === null ? "secondary" : "ghost"}
+              className={dockMonitorId === null ? "ring-1 ring-brand" : undefined}
+              onClick={() => setDockMonitorId(null)}>
+              {t("settings.dockMonitor_follow")}
+            </Button>
+            {monitors.map((m) => (
+              <Button key={m.name} variant={dockMonitorId === m.name ? "secondary" : "ghost"}
+                className={dockMonitorId === m.name ? "ring-1 ring-brand" : undefined}
+                onClick={() => setDockMonitorId(m.name)}>
+                {m.name}{m.primary ? " (主屏)" : ""}
               </Button>
             ))}
           </div>

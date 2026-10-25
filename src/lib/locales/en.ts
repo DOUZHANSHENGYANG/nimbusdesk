@@ -719,6 +719,8 @@ export const en: AppMessages = {
     accent_ocean: "Ocean",
     accent_graphite: "Graphite",
     accent_warm: "Warm",
+    dockMonitor: "Monitor",
+    dockMonitor_follow: "Follow cursor",
     compactStyle: "Compact form",
     compactStyle_capsule: "Capsule",
     compactStyle_line: "Line",

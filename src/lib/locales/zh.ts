@@ -710,6 +710,8 @@ export const zh = {
     accent_ocean: "海洋",
     accent_graphite: "石墨",
     accent_warm: "暖色",
+    dockMonitor: "岛所在显示器",
+    dockMonitor_follow: "跟随鼠标",
     compactStyle: "收起形态",
     compactStyle_capsule: "胶囊",
     compactStyle_line: "指示条",

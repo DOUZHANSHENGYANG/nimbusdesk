@@ -61,6 +61,9 @@ export function DockWindow() {
   }, []);
 
   /** 光标所在显示器的工作区（逻辑像素）；Dock 出现在你正在工作的那块屏上。 */
+  /** 当前是否展开：显示器插拔后要按这个状态重新摆窗口 */
+  const openRef = useRef(false);
+
   const resolveArea = useCallback(async (): Promise<{ area: DockArea; scale: number } | null> => {
     if (!inTauri) return null;
     const [cursor, monitors, current] = await Promise.all([
@@ -68,11 +71,22 @@ export function DockWindow() {
       availableMonitors().catch(() => [] as Monitor[]),
       currentMonitor().catch(() => null),
     ]);
-    const monitor = (cursor && monitors.find((m) => {
-      const p = m.position;
-      const s = m.size;
-      return cursor.x >= p.x && cursor.x < p.x + s.width && cursor.y >= p.y && cursor.y < p.y + s.height;
-    })) ?? current;
+    /*
+     * 选屏优先级：设置里指定的那块 → 主屏 → 鼠标所在屏。
+     *
+     * **找不到指定屏时不覆盖设置**：副屏拔掉只是「这次不生效」，插回来以后
+     * 同一个 id 又能命中，于是自动移回原副屏 —— 这正是要的行为。
+     */
+    const preferred = useSettings.getState().dockMonitorId;
+    const monitor =
+      (preferred ? monitors.find((m) => m.name === preferred) : null) ??
+      monitors.find((m) => m.position.x === 0 && m.position.y === 0) ??
+      (cursor && monitors.find((m) => {
+        const p = m.position;
+        const s = m.size;
+        return cursor.x >= p.x && cursor.x < p.x + s.width && cursor.y >= p.y && cursor.y < p.y + s.height;
+      })) ??
+      current;
     if (!monitor) return null;
     const raw = monitorArea(monitor);
     const scale = raw.scale || 1;
@@ -102,6 +116,7 @@ export function DockWindow() {
    * 代数计数器在 Rust 侧共享，所以展开到一半再点收起会从中断处弹回去。
    */
   const applyFloat = useCallback(async (open: boolean, heightOverride?: number) => {
+    openRef.current = open;
     const resolved = await resolveArea();
     if (!resolved) return;
     const { area } = resolved;
@@ -133,6 +148,26 @@ export function DockWindow() {
       style: open ? "soft" : "stiff",
     });
   }, [resolveArea]);
+  // 显示器插拔没有可靠的 Tauri 事件，4 秒一轮比对「现在会在哪块屏」即可：
+  // 副屏拔掉 → 自动回主屏；插回来 → 同一个 id 命中，自动移回原副屏。
+  useEffect(() => {
+    if (dockStyle !== "capsule" || !inTauri) return;
+    let stopped = false;
+    let lastKey = "";
+    const timer = window.setInterval(() => {
+      void (async () => {
+        const resolved = await resolveArea();
+        if (stopped || !resolved) return;
+        const key = `${resolved.area.x},${resolved.area.y},${resolved.area.w}`;
+        if (key === lastKey) return;
+        lastKey = key;
+        void applyFloat(openRef.current).catch(report);
+      })();
+    }, 4000);
+    return () => { stopped = true; window.clearInterval(timer); };
+  }, [dockStyle, resolveArea, applyFloat]);
+
+
 
   /** 面板开合；窗口位置固定，侧栏绝不因开面板而移动。 */
   const setPanel = useCallback((next: DockPanel | null) => {
