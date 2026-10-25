@@ -1,6 +1,7 @@
-import { Archive, ArrowRight, Boxes, Check, ChevronDown, ChevronRight, CircleAlert, CircleSlash, Clock, CloudUpload, Columns2, Eye, FolderOpen, GitCompare, History, LayoutGrid, Layers, ListChecks, Loader2, Package, Paperclip, Pencil, Play, Plus, RefreshCw, RotateCw, Save, ScanSearch, Settings2, ShieldAlert, ShieldCheck, Sparkles, Tag, Trash2, X, Zap } from "lucide-react";
+import { Archive, ArrowRight, Boxes, Check, ChevronDown, CircleAlert, Clock, CloudUpload, Columns2, Eye, FolderOpen, GitCompare, History, Layers, ListChecks, Loader2, Package, Paperclip, Pencil, Plus, RefreshCw, RotateCw, Save, ScanSearch, Settings2, ShieldAlert, ShieldCheck, Sparkles, Tag, Trash2, Wrench, X, Zap } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { i18n } from "@/lib/i18n";
 import { toast } from "sonner";
 import { ConfirmDialog } from "@/ahub/components/ConfirmDialog";
 import { DeleteSkillsDialog, type DeleteSkillTarget } from "@/ahub/components/DeleteSkillsDialog";
@@ -9,14 +10,10 @@ import { matchTags, type TagMode } from "@/ahub/components/TagFilter";
 import { TagShelf } from "@/ahub/components/TagShelf";
 import { BatchTagDialog, TagPicker } from "@/ahub/components/TagPicker";
 import { UpstreamCheckDialog, UpstreamCheckIcon, type UpstreamRow } from "@/ahub/components/UpstreamCheckDialog";
-import { SkillPipelineDialog, type PipelineStepId } from "@/ahub/components/SkillPipelineDialog";
 import { TagManagerView } from "@/ahub/components/TagManagerView";
-import { TagCommand } from "@/ahub/components/TagCommand";
 import { SearchBar } from "@/ahub/components/SearchBar";
 import { HarnessDialog } from "@/ahub/components/HarnessDialog";
-import { HarnessIcon } from "@/ahub/components/HarnessIcon";
-import { HarnessFilterRail } from "@/ahub/components/HarnessFilterRail";
-import { HarnessBatchDialog } from "@/ahub/components/HarnessBatchDialog";
+import { SkillsConfigDialog } from "@/ahub/components/SkillsConfigDialog";
 import { Markdown } from "@/ahub/components/Markdown";
 import { PageShell } from "@/ahub/components/PageShell";
 import { SkillPicker } from "@/ahub/components/SkillPicker";
@@ -42,12 +39,12 @@ import { Switch } from "@/ahub/components/motion/switch";
 import { api } from "@/ahub/lib/api";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { AddSkillDialog } from "@/ahub/components/AddSkillDialog";
-import { PresetBar } from "@/ahub/components/PresetBar";
 import { PresetDialog } from "@/ahub/components/PresetDialog";
 import { PresetManager } from "@/ahub/components/PresetManager";
+import { PresetRail } from "@/ahub/components/PresetRail";
 import { presetErrorText } from "@/ahub/lib/presetErrors";
 import type { HarnessReport, Preset, SkillDoc, SkillMeta } from "@/ahub/lib/types";
-import { appliedHarnesses, lastAppliedAt, shortHarnessName } from "@/ahub/lib/skillHarness";
+import { appliedHarnesses } from "@/ahub/lib/skillHarness";
 import { cn } from "@/ahub/lib/utils";
 import { useData } from "@/ahub/stores/data";
 import { useSettings } from "@/ahub/stores/settings";
@@ -91,17 +88,21 @@ function bodyOfDoc(content: string): string {
   return content.replace(/^---\n[\s\S]*?\n---\n\n?/, "");
 }
 
-/** 格式化 ISO 时间为本地可读（失败则原样返回） */
 /**
  * 时间显示。空值表示「时间不可知」——后端会剔除 DOS 纪元哨兵值
  * （ZIP 无日期时的时间戳、1980-01-01），此时显示破折号而不是假日期。
+ * 中文语境显示「2026年9月1日 13点21分」，其余语言用 YYYY-MM-DD HH:mm。
  */
 function fmtTime(iso?: string): string {
   if (!iso) return "—";
   try {
     const d = new Date(iso);
     if (Number.isNaN(d.getTime())) return iso;
-    return d.toLocaleString();
+    const p = (n: number) => String(n).padStart(2, "0");
+    if (i18n.language?.startsWith("zh")) {
+      return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日 ${d.getHours()}点${p(d.getMinutes())}分`;
+    }
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
   } catch {
     return iso;
   }
@@ -149,7 +150,6 @@ export function SkillsPage() {
   const [activeTags, setActiveTags] = useState<Set<string>>(new Set());
   const [tagMode, setTagMode] = useState<TagMode>("or");
   const [pageTab, setPageTab] = useState<"skills" | "tags">("skills");
-  const [tagCommandOpen, setTagCommandOpen] = useState(false);
   const [batchTagOpen, setBatchTagOpen] = useState(false);
   /** 刚导入的目录名：批量打标签优先作用在这批上，而不是当前勾选 */
   const [tagTargetDirs, setTagTargetDirs] = useState<string[] | null>(null);
@@ -157,19 +157,13 @@ export function SkillsPage() {
   const [upstreamRows, setUpstreamRows] = useState<UpstreamRow[]>([]);
   const [upstreamBusy, setUpstreamBusy] = useState(false);
   const [upstreamUpdating, setUpstreamUpdating] = useState<Set<string>>(new Set());
-  const [pipelineOpen, setPipelineOpen] = useState(false);
-  const [pipelineOutDir, setPipelineOutDir] = useState("");
   const [scanOpen, setScanOpen] = useState(false);
+  const [cfgOpen, setCfgOpen] = useState(false);
   const [harnessReports, setHarnessReports] = useState<HarnessReport[] | null>(null);
-  const [harnessFilter, setHarnessFilter] = useState<string | null>(null);
-  const [harnessBatchOpen, setHarnessBatchOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [addMode, setAddMode] = useState<"create" | "file" | "git">("file");
   const [batchMode, setBatchMode] = useState(false);
   const [batchSel, setBatchSel] = useState<Set<string>>(new Set());
-  const [viewMode, setViewMode] = useState<"grid" | "tag" | "tool">("grid");
-  const [collapsedTools, setCollapsedTools] = useState<Set<string>>(new Set());
-  const [collapsedTags, setCollapsedTags] = useState<Set<string>>(new Set());
   const [batchDeleteOpen, setBatchDeleteOpen] = useState(false);
   const [onboardBusy, setOnboardBusy] = useState(false);
   const [packExport, setPackExport] = useState(false);
@@ -210,6 +204,20 @@ export function SkillsPage() {
     } catch (e) {
       toast.error(presetErrorText(e, t));
     }
+  };
+
+  // 选中预设后批量勾选的调整，直接写回这个预设，不用进管理面板重新勾一遍
+  const saveChangesToPreset = async () => {
+    if (!selectedPreset) return;
+    const dirNames = skills.filter((s) => batchSel.has(s.dirName)).map((s) => s.dirName);
+    try {
+      await api.presetUpdate(selectedPreset.id, { skillDirNames: dirNames });
+    } catch (e) {
+      toast.error(presetErrorText(e, t));
+      return;
+    }
+    toast.success(t("preset.savedChanges", { name: selectedPreset.name }));
+    await loadPresets();
   };
 
   useEffect(() => {
@@ -304,33 +312,6 @@ export function SkillsPage() {
     }
   };
 
-  /**
-   * 批量启用/停用。
-   *
-   * 逐个调 setSkillStatus 而不是新开一条批量命令：状态改动要写回每个技能
-   * 自己的元信息，失败也应该只影响那一个 —— 批量命令反而要复制这份逐条
-   * 错误处理，还多一处能出错的地方。
-   */
-  const [batchStatusBusy, setBatchStatusBusy] = useState(false);
-  const setBatchStatus = async (status: "enabled" | "disabled") => {
-    const targets = [...batchSel];
-    if (!targets.length) return;
-    setBatchStatusBusy(true);
-    let ok = 0;
-    let failed = 0;
-    for (const dirName of targets) {
-      try {
-        await api.setSkillStatus(dirName, status, "");
-        ok += 1;
-      } catch {
-        failed += 1;
-      }
-    }
-    await loadSkills();
-    setBatchStatusBusy(false);
-    if (failed) toast.warning(t("skills.batchStatusDone", { ok, failed }));
-    else toast.success(t("skills.batchStatusDone", { ok, failed: 0 }));
-  };
 
   const applyStatus = async (status: string) => {
     if (!detail) return;
@@ -407,6 +388,22 @@ export function SkillsPage() {
   /** 技能池里仍存在的目录名（预设栏与成员面板据此标出失效成员） */
   const liveDirs = useMemo(() => new Set(skills.map((s) => s.dirName)), [skills]);
 
+  /** 左栏预设：count 只算仍存在的成员，stale 单独标出 */
+  const presetRailItems = useMemo(
+    () =>
+      presets.map((p) => {
+        const present = p.skillDirNames.filter((d) => liveDirs.has(d)).length;
+        return {
+          id: p.id,
+          name: p.name,
+          description: p.description,
+          count: present,
+          stale: p.skillDirNames.length - present,
+        };
+      }),
+    [presets, liveDirs],
+  );
+
   /**
    * 各 harness 的技能目录扫描结果。
    * 失败只让「工具」区块显示为空，页面其余部分照常可用 —— 不能因为工具没装就挡住技能管理。
@@ -431,25 +428,12 @@ export function SkillsPage() {
     [harnessReports],
   );
 
-  /** dirName → 已接入的工具列表（一次算完，卡片与筛选共用） */
+  /** dirName → 已接入的工具列表（只用于删除时判断是否有工具副本） */
   const appliedMap = useMemo(() => {
     const map = new Map<string, HarnessReport[]>();
     for (const s of skills) map.set(s.dirName, appliedHarnesses(skillHarnesses, s));
     return map;
   }, [skills, skillHarnesses]);
-
-  const harnessCounts = useMemo(() => {
-    const counts: Record<string, number> = {};
-    for (const list of appliedMap.values()) {
-      for (const r of list) counts[r.id] = (counts[r.id] ?? 0) + 1;
-    }
-    return counts;
-  }, [appliedMap]);
-
-  const unassignedCount = useMemo(
-    () => [...appliedMap.values()].filter((list) => list.length === 0).length,
-    [appliedMap],
-  );
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -458,56 +442,10 @@ export function SkillsPage() {
     return skills.filter((s) => {
       if (presetDirs && !presetDirs.has(s.dirName)) return false;
       if (!matchTags(s.tags, activeTags, tagMode)) return false;
-      // 工具收窄：左栏「未接入工具」把从未同步到任何工具的技能挑出来
-      if (harnessFilter) {
-        const attached = appliedMap.get(s.dirName) ?? [];
-        if (harnessFilter === "__none" ? attached.length > 0 : !attached.some((r) => r.id === harnessFilter)) return false;
-      }
       if (!q) return true;
       return s.name.toLowerCase().includes(q) || s.description.toLowerCase().includes(q) || s.tags.some((tg) => tg.toLowerCase().includes(q));
     });
-  }, [skills, query, activeTags, tagMode, selectedPreset, harnessFilter, appliedMap]);
-
-  /** 按标签分组（未打标签归入「未分类」） */
-  const grouped = useMemo(() => {
-    if (viewMode !== "tag") return null;
-    const map = new Map<string, SkillMeta[]>();
-    for (const s of filtered) {
-      const keys = s.tags.length ? s.tags : [t("skills.untagged")];
-      for (const k of keys) {
-        const arr = map.get(k) ?? [];
-        arr.push(s);
-        map.set(k, arr);
-      }
-    }
-    return [...map.entries()].sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]));
-  }, [filtered, viewMode, t]);
-
-  /** 按工具分组：同一份技能接了多个工具就会出现在多个组里；都没接的进「未接入工具」 */
-  const groupedByTool = useMemo(() => {
-    if (viewMode !== "tool") return null;
-    const map = new Map<string, SkillMeta[]>();
-    for (const s of filtered) {
-      const attached = appliedMap.get(s.dirName) ?? [];
-      if (attached.length === 0) {
-        const arr = map.get("__none") ?? [];
-        arr.push(s);
-        map.set("__none", arr);
-        continue;
-      }
-      for (const r of attached) {
-        const arr = map.get(r.id) ?? [];
-        arr.push(s);
-        map.set(r.id, arr);
-      }
-    }
-    const order = skillHarnesses.map((r) => r.id);
-    return [...map.entries()].sort((a, b) => {
-      if (a[0] === "__none") return 1;
-      if (b[0] === "__none") return -1;
-      return order.indexOf(a[0]) - order.indexOf(b[0]);
-    });
-  }, [viewMode, filtered, appliedMap, skillHarnesses]);
+  }, [skills, query, activeTags, tagMode, selectedPreset]);
 
   /**
    * 批量打包导出：选一个输出目录，逐个生成规范 .skillpack，
@@ -571,26 +509,13 @@ export function SkillsPage() {
   };
 
   /** 当前是否有任何筛选条件（用于「清空筛选」）；预设筛选也算一种条件 */
-  const hasFilter = query.trim().length > 0 || activeTags.size > 0 || selectedPresetId !== null || harnessFilter !== null;
+  const hasFilter = query.trim().length > 0 || activeTags.size > 0 || selectedPresetId !== null;
 
   const clearFilters = () => {
     setQuery("");
     setActiveTags(new Set());
     setSelectedPresetId(null);
-    setHarnessFilter(null);
   };
-
-  /** ⌘K / Ctrl+K：打开标签检索面板 */
-  useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
-        event.preventDefault();
-        setTagCommandOpen((open) => !open);
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
 
 
   /** 批量改标签：追加 / 移除 / 清空，作用于当前勾选的技能 */
@@ -794,33 +719,6 @@ export function SkillsPage() {
   };
 
   /** 流水线单步：审查 = 体检（vet），摘要 = AI 批量，打包 = 导出 zip + index.json */
-  const runPipelineStep = async (id: PipelineStepId) => {
-    const targets = [...batchSel];
-    if (id === "vet") {
-      const report = await api.onboardSkillsBatch(targets, false, true);
-      const rejected = report.outcomes.filter((o) => !o.ok).length;
-      return {
-        ok: report.succeeded,
-        failed: report.failed,
-        note: rejected > 0 ? t("skills.pipeVetRejected", { n: rejected }) : undefined,
-      };
-    }
-    if (id === "summary") {
-      const outcomes = await api.skillGenerateSummaryBatch(targets);
-      const ok = outcomes.filter((o) => o.ok).length;
-      await loadSkills();
-      return { ok, failed: outcomes.length - ok };
-    }
-    const report = await api.packSkillsBatch(targets, pipelineOutDir);
-    await loadSkills();
-    return { ok: report.succeeded, failed: report.failed + report.warned, note: report.outDir };
-  };
-
-  const pickPipelineOutDir = async () => {
-    const picked = await openDialog({ directory: true, multiple: false, title: t("skills.packPickOut") });
-    if (typeof picked === "string" && picked) setPipelineOutDir(picked);
-  };
-
   /** 点击卡片上的标签：下钻筛选 */
   const drillTag = (tg: string) =>
     setActiveTags((prev) => {
@@ -830,21 +728,6 @@ export function SkillsPage() {
       return n;
     });
 
-  const toggleGroup = (tag: string) =>
-    setCollapsedTags((prev) => {
-      const n = new Set(prev);
-      if (n.has(tag)) n.delete(tag);
-      else n.add(tag);
-      return n;
-    });
-
-  const toggleToolGroup = (id: string) =>
-    setCollapsedTools((prev) => {
-      const n = new Set(prev);
-      if (n.has(id)) n.delete(id);
-      else n.add(id);
-      return n;
-    });
 
   const toggleBatch = (dirName: string) =>
     setBatchSel((prev) => {
@@ -854,7 +737,8 @@ export function SkillsPage() {
       return n;
     });
 
-  const openDetail = async (meta: SkillMeta) => {
+  /** targetTab：点卡片上的版本号 / 待审核徽标时，直接落到对应页签（版本在 proto，审核在 review） */
+  const openDetail = async (meta: SkillMeta, targetTab?: "proto" | "review") => {
     setDetailLoading(true);
     setDetail({
       meta,
@@ -862,7 +746,8 @@ export function SkillsPage() {
       body: "",
       versions: [],
     });
-    setTab("content");
+    setTab(targetTab ?? "content");
+    if (targetTab === "proto") void loadProto(meta.dirName);
     setContentMode("preview");
     setProto(null);
     try {
@@ -1004,6 +889,16 @@ export function SkillsPage() {
         <>
           <SearchBar value={query} onChange={setQuery} placeholder={t("skills.searchPlaceholder")} className="w-56" />
           <AddSkillDialog onDone={() => void loadSkills()} onImported={openTagForImported} />
+          <Button
+            variant="secondary"
+            onClick={() => {
+              void loadHarnesses();
+              setCfgOpen(true);
+            }}
+          >
+            <Wrench />
+            {t("skills.harnessCfg")}
+          </Button>
           <Button variant="secondary" onClick={() => setScanOpen(true)}>
             <ScanSearch />
             {t("common.scan")}
@@ -1051,6 +946,16 @@ export function SkillsPage() {
         <>
           <div className="flex min-h-0 flex-1 items-start gap-3">
             <aside className="w-[196px] shrink-0">
+              <PresetRail
+                items={presetRailItems}
+                selectedId={selectedPresetId}
+                onSelect={setSelectedPresetId}
+                onManage={() => {
+                  void loadPresets();
+                  setPresetManagerOpen(true);
+                }}
+                total={skills.length}
+              />
               <TagShelf
                 variant="rail"
                 allTags={allTags}
@@ -1061,41 +966,16 @@ export function SkillsPage() {
                 mode={tagMode}
                 onModeChange={setTagMode}
                 onManage={() => setPageTab("tags")}
-                onCommand={() => setTagCommandOpen(true)}
               />
-              {skills.length > 0 ? (
-                <HarnessFilterRail
-                  reports={harnessReports}
-                  counts={harnessCounts}
-                  total={skills.length}
-                  unassigned={unassignedCount}
-                  value={harnessFilter}
-                  onChange={setHarnessFilter}
-                />
-              ) : null}
             </aside>
             <div className="min-w-0 flex-1">
-      {/* ── 预设栏（skill-presets）：页面内容最顶部，筛选与列表之上 ── */}
-      <PresetBar
-        presets={presets}
-        selectedId={selectedPresetId}
-        liveDirs={liveDirs}
-        onSelect={setSelectedPresetId}
-        onManage={() => {
-          // 打开管理面板时重读一次：用户修好损坏的 presets.json 后无需重启即可恢复
-          void loadPresets();
-          setPresetManagerOpen(true);
-        }}
-      />
-
-
       {/* ── 吸顶筛选台：来源工具 · 标签 · 视图 · 批量 ── */}
       {skills.length > 0 ? (
         <div
           data-anim
           className="ah-material sticky top-0 z-20 mb-4 rounded-xl border border-border px-3 py-2.5"
         >
-          {/* 第一行：结果计数 + 视图切换（来源筛选已删：一页里只服务一种来源，纯占地方） */}
+          {/* 第一行：结果计数（视图只留网格，与 MCP 页一致，不再切换） */}
           <div className="flex flex-wrap items-center gap-1.5">
 
             <span className="ml-auto flex shrink-0 items-center gap-2">
@@ -1110,29 +990,6 @@ export function SkillsPage() {
                   {t("skills.clearFilters")}
                 </button>
               ) : null}
-              <div className="flex items-center gap-0.5 rounded-lg border border-border bg-surface p-0.5">
-                {(
-                  [
-                    { v: "grid", icon: LayoutGrid, key: "skills.viewGrid" },
-                    { v: "tag", icon: Layers, key: "skills.viewGroup" },
-                    { v: "tool", icon: Boxes, key: "skills.viewTool" },
-                  ] as const
-                ).map(({ v, icon: Icon, key }) => (
-                  <button
-                    key={key}
-                    type="button"
-                    onClick={() => setViewMode(v)}
-                    title={t(key)}
-                    className={cn(
-                      "flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[11px] font-medium outline-none transition-colors",
-                      viewMode === v ? "bg-primary-soft text-primary" : "text-ink-3 hover:text-foreground",
-                    )}
-                  >
-                    <Icon className="size-3.5" />
-                    {t(key)}
-                  </button>
-                ))}
-              </div>
             </span>
           </div>
 
@@ -1144,9 +1001,9 @@ export function SkillsPage() {
               因此「批量选择」按钮的位置在任何模式下都完全不变 ——
               快速连点不会被位移后的其它按钮（尤其是删除）命中。
             */}
-            <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <div className="flex min-w-0 flex-1 items-center">
               {batchMode ? (
-                <>
+                <div className="flex min-w-0 flex-wrap items-center gap-2">
                   {/* 全选 / 取消全选：作用于当前筛选结果 */}
                   <Button
                     size="sm"
@@ -1166,51 +1023,13 @@ export function SkillsPage() {
                       : t("skills.batchSelectAll")}
                   </Button>
 
-                  {/* 一步到位：生成 SKILL.toml（已接入自动跳过）+ 安全审查 */}
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    className="h-7 w-[136px] justify-center text-[11px]"
-                    disabled={batchSel.size === 0 || onboardBusy}
-                    onClick={() => void runOnboard()}
-                  >
-                    {onboardBusy ? <Loader2 className="size-3.5 animate-spin" /> : <Zap className="size-3.5" />}
-                    {t("skills.onboardBtn")}
-                  </Button>
-
-                  {/* AI 摘要：选中的技能逐个生成（未选中时禁用） */}
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    className="h-7 w-[104px] justify-center text-[11px]"
-                    disabled={batchSel.size === 0 || batchSummaryBusy}
-                    onClick={() => void runBatchSummary()}
-                  >
-                    {batchSummaryBusy ? <Loader2 className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />}
-                    {t("skills.batchSummaryBtn")}
-                  </Button>
-
-                  {/* 发版流水线：审查 → 摘要 → 打包，一条链跑完，每步可单独重跑 */}
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    className="h-7 w-[104px] justify-center text-[11px]"
-                    disabled={batchSel.size === 0}
-                    onClick={() => setPipelineOpen(true)}
-                  >
-                    <Play className="size-3.5" />
-                    {t("skills.pipeBtn")}
-                  </Button>
-
-                  <span className="w-[76px] shrink-0 text-right tabular-nums text-[11px] text-ink-3">
-                    {t("skills.batchSelectedShort", { n: batchSel.size })}
-                  </span>
+                  <span className="h-5 w-px shrink-0 bg-border" aria-hidden />
 
                   {/* 打包导出：按 SSEP §7.1 生成规范 .skillpack，并写 index.json */}
                   <Button
                     size="sm"
                     variant="secondary"
-                    className="h-7 w-[104px] justify-center text-[11px]"
+                    className="h-7 justify-center text-[11px]"
                     disabled={batchSel.size === 0 || packExport}
                     onClick={() => void runPack()}
                   >
@@ -1218,23 +1037,73 @@ export function SkillsPage() {
                     {t("skills.packExportBtn")}
                   </Button>
 
-                  {/* 批量接入工具：选工具 → 一次复制 / 移除，按工具报成败 */}
+                  {/* 保存为预设：把当前选中的技能写成一个命名集合 */}
+                  {selectedPreset ? (
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      className="h-7 justify-center text-[11px]"
+                      disabled={batchSel.size === 0}
+                      onClick={() => void saveChangesToPreset()}
+                    >
+                      <Save className="size-3.5" />
+                      {t("preset.saveChanges")}
+                    </Button>
+                  ) : null}
                   <Button
                     size="sm"
                     variant="secondary"
-                    className="h-7 w-[96px] justify-center text-[11px]"
+                    className="h-7 justify-center text-[11px]"
                     disabled={batchSel.size === 0}
-                    onClick={() => setHarnessBatchOpen(true)}
+                    onClick={() => setPresetSaveOpen(true)}
                   >
-                    <Boxes className="size-3.5" />
-                    {t("skills.harnessApplyBtn")}
+                    <Layers className="size-3.5" />
+                    {t("preset.saveAs")}
                   </Button>
 
-                  {/* 批量打标签：追加 / 移除 / 清空 */}
+                  {/* 批量删除：二次确认后逐个删除 */}
                   <Button
                     size="sm"
                     variant="secondary"
-                    className="h-7 w-[96px] justify-center text-[11px]"
+                    className="h-7 justify-center text-[11px] text-danger hover:bg-danger/10 hover:text-danger"
+                    disabled={batchSel.size === 0}
+                    onClick={() => setBatchDeleteOpen(true)}
+                  >
+                    <Trash2 className="size-3.5" />
+                    {t("skills.batchDelete")}
+                  </Button>
+
+                  <span className="h-5 w-px shrink-0 bg-border" aria-hidden />
+
+                  {/* 纳入技能管理：生成 SKILL.toml（已纳入自动跳过）+ 安全审查 */}
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    className="h-7 justify-center text-[11px]"
+                    disabled={batchSel.size === 0 || onboardBusy}
+                    onClick={() => void runOnboard()}
+                  >
+                    {onboardBusy ? <Loader2 className="size-3.5 animate-spin" /> : <Zap className="size-3.5" />}
+                    {t("skills.onboardBtn")}
+                  </Button>
+
+                  {/* 智能摘要：选中的技能逐个生成（未选中时禁用） */}
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    className="h-7 justify-center text-[11px]"
+                    disabled={batchSel.size === 0 || batchSummaryBusy}
+                    onClick={() => void runBatchSummary()}
+                  >
+                    {batchSummaryBusy ? <Loader2 className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />}
+                    {t("skills.batchSummaryBtn")}
+                  </Button>
+
+                  {/* 智能标签：批量追加 / 移除 / 清空 */}
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    className="h-7 justify-center text-[11px]"
                     disabled={batchSel.size === 0}
                     onClick={() => {
                       setTagTargetDirs(null);
@@ -1245,65 +1114,39 @@ export function SkillsPage() {
                     {t("skills.batchTagBtn")}
                   </Button>
 
-                  {/* 保存为预设：把当前选中的技能写成一个命名集合 */}
+                  {/* ← 位置锚点：这个按钮必须始终是批量区的最后一个元素 */}
                   <Button
                     size="sm"
-                    variant="secondary"
-                    className="h-7 w-[116px] justify-center text-[11px]"
-                    disabled={batchSel.size === 0}
-                    onClick={() => setPresetSaveOpen(true)}
+                    variant="default"
+                    className="h-7 justify-center text-[11px]"
+                    onClick={() => {
+                      setBatchMode(false);
+                      setBatchSel(new Set());
+                    }}
                   >
-                    <Layers className="size-3.5" />
-                    {t("preset.saveAs")}
+                    <ListChecks className="size-3.5" />
+                    {t("skills.batchExit")}
                   </Button>
 
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    className="h-7 w-[84px] justify-center text-[11px]"
-                    disabled={batchSel.size === 0 || batchStatusBusy}
-                    onClick={() => void setBatchStatus("enabled")}
-                  >
-                    {batchStatusBusy ? <Loader2 className="size-3.5 animate-spin" /> : null}
-                    {t("skills.batchEnable")}
-                  </Button>
-
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    className="h-7 w-[84px] justify-center text-[11px]"
-                    disabled={batchSel.size === 0 || batchStatusBusy}
-                    onClick={() => void setBatchStatus("disabled")}
-                  >
-                    {t("skills.batchDisable")}
-                  </Button>
-
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    className="h-7 w-[72px] justify-center text-[11px] text-danger hover:bg-danger/10 hover:text-danger"
-                    disabled={batchSel.size === 0}
-                    onClick={() => setBatchDeleteOpen(true)}
-                  >
-                    <Trash2 className="size-3.5" />
-                    {t("skills.batchDelete")}
-                  </Button>
-                </>
-              ) : null}
-
-              {/* ← 位置锚点：这个按钮必须始终是这一行的最后一个元素 */}
-              <Button
-                size="sm"
-                variant={batchMode ? "default" : "secondary"}
-                className="h-7 w-[104px] justify-center text-[11px]"
-                onClick={() => {
-                  setBatchMode((v) => !v);
-                  setBatchSel(new Set());
-                }}
-              >
-                <ListChecks className="size-3.5" />
-                {batchMode ? t("skills.batchExit") : t("skills.batchEnter")}
-              </Button>
+                  {/* 已选数量：固定钉在最右 */}
+                  <span className="ml-auto shrink-0 tabular-nums text-[11px] text-ink-3">
+                    {t("skills.batchSelectedShort", { n: batchSel.size })}
+                  </span>
+                </div>
+              ) : (
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  className="h-7 w-[104px] justify-center text-[11px]"
+                  onClick={() => {
+                    setBatchMode(true);
+                    setBatchSel(new Set());
+                  }}
+                >
+                  <ListChecks className="size-3.5" />
+                  {t("skills.batchEnter")}
+                </Button>
+              )}
             </div>
           </div>
         </div>
@@ -1364,9 +1207,15 @@ export function SkillsPage() {
         </div>
       ) : filtered.length === 0 ? null : (
         (() => {
+          // 生命周期状态的本地化显示（draft / active / deprecated / archived）
+          const STATUS_LABEL: Record<string, string> = {
+            draft: t("skills.statusDraft"),
+            active: t("skills.statusActive"),
+            deprecated: t("skills.statusDeprecated"),
+            archived: t("skills.statusArchived"),
+          };
           const card = (s: SkillMeta) => {
             const picked = batchSel.has(s.dirName);
-            const attached = appliedMap.get(s.dirName) ?? [];
             return (
               <div
                 key={s.dirName}
@@ -1390,51 +1239,21 @@ export function SkillsPage() {
                   ) : null}
                   <h3 className="min-w-0 flex-1 truncate font-mono text-[12.5px] font-semibold text-foreground">{s.name}</h3>
                 </div>
-                {s.description ? (
-                  <p className="mt-1 line-clamp-2 text-[11.5px] leading-snug text-ink-2">{s.description}</p>
-                ) : null}
-                {/* AI 摘要：有摘要时给一行速览，没有则不占位（详情页有生成入口） */}
-                {s.summary ? (
-                  <p
-                    className="mt-1.5 line-clamp-2 text-[11px] leading-relaxed text-ink-3"
-                    title={`${s.summary.domain} · ${s.summary.oneLiner}`}
-                  >
-                    <span className="font-medium text-primary">{s.summary.domain}</span>
-                    <span> · </span>
-                    {s.summary.oneLiner}
-                  </p>
-                ) : null}
-                <div className="mt-2 flex flex-wrap items-center gap-1">
-                  {s.tags.map((tg) => {
-                    const on = activeTags.has(tg);
-                    return (
-                      <button
-                        key={tg}
-                        type="button"
-                        disabled={batchMode}
-                        title={batchMode ? undefined : t("skills.tagDrillHint")}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          drillTag(tg);
-                        }}
-                        className={cn("rounded-full outline-none transition-colors", !batchMode && "hover:-translate-y-px")}
-                      >
-                        <Badge variant={on ? "default" : "muted"} className={cn(on && "ring-1 ring-primary/40")}>
-                          {tg}
-                        </Badge>
-                      </button>
-                    );
-                  })}
-                  {s.hasAssets ? (
-                    <Badge variant="outline" title={t("skills.hasAssets")}>
-                      <Paperclip />
-                      {t("skills.assetBadge")}
-                    </Badge>
-                  ) : null}
-                  {/* 协议状态：未接入时显式标出，方便批量挑出来处理 */}
+                {/* 状态行：版本号 · 审核状态 · 生命周期 */}
+                <div className="mt-1.5 flex flex-wrap items-center gap-1">
+                  {/* 协议状态：未纳入管理时显式标出，方便批量挑出来处理；点版本号直达版本时间轴 */}
                   {s.hasToml ? (
                     s.version !== "0.0.0" ? (
-                      <Badge variant="info" title={t("skills.protoVersionHint")}>
+                      <Badge
+                        variant="info"
+                        title={batchMode ? t("skills.protoVersionHint") : t("skills.gotoVersionsHint")}
+                        onClick={(e) => {
+                          if (batchMode) return;
+                          e.stopPropagation();
+                          void openDetail(s, "proto");
+                        }}
+                        className={batchMode ? undefined : "cursor-pointer hover:ring-1 hover:ring-info/40"}
+                      >
                         v{s.version}
                       </Badge>
                     ) : null
@@ -1444,11 +1263,24 @@ export function SkillsPage() {
                       {t("skills.noProto")}
                     </Badge>
                   )}
-                  {s.hasToml && s.status !== "active" ? <Badge variant="warning">{s.status}</Badge> : null}
+                  {s.hasToml && s.status !== "active" ? (
+                    <Badge variant="warning" title={t("skills.statusHint")}>
+                      {STATUS_LABEL[s.status] ?? s.status}
+                    </Badge>
+                  ) : null}
                   {s.stale ? <Badge variant="danger">STALE</Badge> : null}
-                  {/* 安全审查：待复核条数醒目提示；已批准则显示绿标 */}
+                  {/* 安全审查：待复核条数醒目提示；已批准则显示绿标；点待审核直达审查页签 */}
                   {s.vetPending > 0 ? (
-                    <Badge variant="warning" title={t("skills.reviewPendingHint")}>
+                    <Badge
+                      variant="warning"
+                      title={batchMode ? t("skills.reviewPendingHint") : t("skills.gotoReviewHint")}
+                      onClick={(e) => {
+                        if (batchMode) return;
+                        e.stopPropagation();
+                        void openDetail(s, "review");
+                      }}
+                      className={batchMode ? undefined : "cursor-pointer hover:ring-1 hover:ring-warning/40"}
+                    >
                       <ShieldAlert />
                       {t("skills.reviewPending", { n: s.vetPending })}
                     </Badge>
@@ -1463,6 +1295,12 @@ export function SkillsPage() {
                       {t("skills.vetReject")}
                     </Badge>
                   ) : null}
+                  {s.hasAssets ? (
+                    <Badge variant="outline" title={t("skills.hasAssets")}>
+                      <Paperclip />
+                      {t("skills.assetBadge")}
+                    </Badge>
+                  ) : null}
                   {/* 版本快照数量：0 条时弱化，但仍可见（便于发现「没纳入版本管理」） */}
                   <Badge variant={s.versions > 0 ? "muted" : "outline"} title={t("skills.histCountHint")}>
                     <History />
@@ -1470,47 +1308,43 @@ export function SkillsPage() {
                   </Badge>
                 </div>
 
-                {/* 工具维度：接了哪些 harness —— 这是「删不删」最直接的依据 */}
-                {harnessReports ? (
-                  <div className="mt-1.5 flex flex-wrap items-center gap-1 text-[10px] text-ink-3">
-                    {attached.length === 0 ? (
-                      <span className="inline-flex items-center gap-1">
-                        <CircleAlert className="size-2.5" />
-                        {t("skills.harnessNone")}
-                      </span>
-                    ) : (
-                      <>
-                        <span>{t("skills.harnessConnected")}</span>
-                        {attached.slice(0, 3).map((r) => {
-                          const at = lastAppliedAt([r], s);
-                          return (
-                            <span
-                              key={r.id}
-                              title={at > 0 ? `${r.name} · ${fmtTime(new Date(at).toISOString())}` : r.name}
-                              className="inline-flex items-center gap-0.5 rounded-full border border-border bg-surface/60 px-1.5 py-px text-ink-2"
-                            >
-                              <HarnessIcon id={r.id} className="size-2.5" />
-                              {shortHarnessName(r.name)}
-                            </span>
-                          );
-                        })}
-                        {attached.length > 3 ? <span className="font-mono">+{attached.length - 3}</span> : null}
-                      </>
-                    )}
+                {/* 标签行 */}
+                {s.tags.length ? (
+                  <div className="mt-1 flex flex-wrap items-center gap-1">
+                    {s.tags.map((tg) => {
+                      const on = activeTags.has(tg);
+                      return (
+                        <button
+                          key={tg}
+                          type="button"
+                          disabled={batchMode}
+                          title={batchMode ? undefined : t("skills.tagDrillHint")}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            drillTag(tg);
+                          }}
+                          className={cn("rounded-full outline-none transition-colors", !batchMode && "hover:-translate-y-px")}
+                        >
+                          <Badge variant={on ? "default" : "muted"} className={cn(on && "ring-1 ring-primary/40")}>
+                            {tg}
+                          </Badge>
+                        </button>
+                      );
+                    })}
                   </div>
                 ) : null}
 
-                {/* 底部行：更新时间为常态信息，动作按钮固定在右下角（整列对齐） */}
+                {/* 底部行：四列卡片放不下完整时间+按钮，动作按钮悬停才出现（占位固定，不跳动） */}
                 <div className="mt-auto flex items-center gap-1 border-t border-border/60 pt-2.5">
                   <span className="min-w-0 flex-1 truncate text-[11px] text-ink-3" title={fmtTime(s.updatedAt)}>
-                    {t("skills.updatedAt")} {fmtTime(s.updatedAt)}
+                    {fmtTime(s.updatedAt)}
                   </span>
                   {batchMode ? null : (
-                    <>
+                    <span className="flex shrink-0 items-center gap-0.5">
                       <Button
                         size="iconSm"
                         variant="ghost"
-                        className="text-ink-3/70 hover:text-foreground"
+                        className="text-ink-3/70 opacity-0 transition-opacity hover:text-foreground group-hover:opacity-100"
                         title={t("common.reveal")}
                         onClick={(e) => {
                           e.stopPropagation();
@@ -1522,7 +1356,7 @@ export function SkillsPage() {
                       <Button
                         size="iconSm"
                         variant="ghost"
-                        className="text-ink-3/70 hover:bg-danger/10 hover:text-danger"
+                        className="text-ink-3/70 opacity-0 transition-opacity hover:bg-danger/10 hover:text-danger group-hover:opacity-100"
                         title={t("common.delete")}
                         onClick={(e) => {
                           e.stopPropagation();
@@ -1531,73 +1365,14 @@ export function SkillsPage() {
                       >
                         <Trash2 />
                       </Button>
-                    </>
+                    </span>
                   )}
                 </div>
               </div>
             );
           };
 
-          if (viewMode === "tag" && grouped) {
-            return (
-              <div className="flex flex-col gap-4">
-                {grouped.map(([tag, list]) => {
-                  const collapsed = collapsedTags.has(tag);
-                  return (
-                    <section key={tag} className="flex flex-col gap-2.5 rounded-xl border border-border bg-surface/40 p-3">
-                      <h2
-                        onClick={() => toggleGroup(tag)}
-                        className="flex cursor-pointer select-none items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-ink-3 outline-none transition-colors hover:text-foreground"
-                      >
-                        <ChevronRight className={cn("size-3.5 transition-transform", !collapsed && "rotate-90")} />
-                        <Tag className="size-3.5" />
-                        {tag}
-                        <span className="rounded-full bg-surface-2 px-1.5 py-px font-mono tabular-nums">{list.length}</span>
-                        {list[0]?.tags.includes(tag) ? (
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              drillTag(tag);
-                            }}
-                            className="ml-1 text-[10px] font-normal normal-case tracking-normal text-primary outline-none hover:underline"
-                          >
-                            {activeTags.has(tag) ? t("skills.tagOnlyOff") : t("skills.tagOnly")}
-                          </button>
-                        ) : null}
-                      </h2>
-                      {collapsed ? null : <div className="grid grid-cols-[repeat(auto-fill,minmax(230px,1fr))] gap-2">{list.map(card)}</div>}
-                    </section>
-                  );
-                })}
-              </div>
-            );
-          }
-          if (viewMode === "tool" && groupedByTool) {
-            return (
-              <div className="flex flex-col gap-4">
-                {groupedByTool.map(([id, list]) => {
-                  const report = skillHarnesses.find((r) => r.id === id);
-                  const collapsed = collapsedTools.has(id);
-                  return (
-                    <section key={id} className="flex flex-col gap-2.5 rounded-xl border border-border bg-surface/40 p-3">
-                      <h2
-                        onClick={() => toggleToolGroup(id)}
-                        className="flex cursor-pointer select-none items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-ink-3 outline-none transition-colors hover:text-foreground"
-                      >
-                        <ChevronRight className={cn("size-3.5 transition-transform", !collapsed && "rotate-90")} />
-                        {id === "__none" ? <CircleSlash className="size-3.5" /> : <HarnessIcon id={id} className="size-3.5" />}
-                        {id === "__none" ? t("skills.toolsNone") : (report?.name ?? id)}
-                        <span className="rounded-full bg-surface-2 px-1.5 py-px font-mono tabular-nums">{list.length}</span>
-                      </h2>
-                      {collapsed ? null : <div className="grid grid-cols-[repeat(auto-fill,minmax(230px,1fr))] gap-2">{list.map(card)}</div>}
-                    </section>
-                  );
-                })}
-              </div>
-            );
-          }
-          return <div className="grid grid-cols-[repeat(auto-fill,minmax(230px,1fr))] gap-2">{filtered.map(card)}</div>;
+          return <div className="grid grid-cols-4 gap-2">{filtered.map(card)}</div>;
         })()
       )}
 
@@ -1614,36 +1389,6 @@ export function SkillsPage() {
                 <DialogDescription className="font-mono" dir="ltr">
                   {t("skills.dirName")}: {detail.meta.dirName} · {detail.meta.contentLen} chars
                 </DialogDescription>
-                {/* 接入情况与最近同步时间：判断「能不能删」的第一手依据 */}
-                {harnessReports ? (
-                  (() => {
-                    const attached = appliedMap.get(detail.meta.dirName) ?? [];
-                    return (
-                      <div className="mt-1.5 flex flex-wrap items-center gap-1 text-[10.5px] text-ink-3">
-                        {attached.length === 0 ? (
-                          <span>{t("skills.harnessNeverApplied")}</span>
-                        ) : (
-                          <>
-                            <span>{t("skills.harnessConnected")}</span>
-                            {attached.map((r) => {
-                              const at = lastAppliedAt([r], detail.meta);
-                              return (
-                                <span
-                                  key={r.id}
-                                  className="inline-flex items-center gap-1 rounded-full border border-border bg-surface/60 px-1.5 py-0.5 text-ink-2"
-                                >
-                                  <HarnessIcon id={r.id} className="size-3" />
-                                  {r.name}
-                                  {at > 0 ? <span className="text-ink-3">· {fmtTime(new Date(at).toISOString())}</span> : null}
-                                </span>
-                              );
-                            })}
-                          </>
-                        )}
-                      </div>
-                    );
-                  })()
-                ) : null}
               </DialogHeader>
 
               <div className="border-b border-border px-5 pt-3">
@@ -2208,18 +1953,14 @@ export function SkillsPage() {
 
       <HarnessDialog open={scanOpen} onOpenChange={setScanOpen} kind="skills" />
 
-      <HarnessBatchDialog
-        open={harnessBatchOpen}
-        onOpenChange={setHarnessBatchOpen}
-        kind="skills"
-        items={skills
-          .filter((s) => batchSel.has(s.dirName))
-          .map((s) => ({ key: s.dirName, applied: (appliedMap.get(s.dirName) ?? []).map((r) => r.id) }))}
-        reports={skillHarnesses}
-        run={(hid, mode, keys) =>
-          mode === "apply" ? api.applyToHarness(hid, "skills", keys) : api.removeFromHarness(hid, "skills", keys)
-        }
-        onDone={loadHarnesses}
+      <SkillsConfigDialog
+        open={cfgOpen}
+        onOpenChange={setCfgOpen}
+        reports={harnessReports}
+        scanning={false}
+        onRescan={() => void loadHarnesses()}
+        skills={skills}
+        onChanged={() => void loadSkills()}
       />
 
       <AddSkillDialog
@@ -2230,14 +1971,6 @@ export function SkillsPage() {
         initialMode={addMode}
       />
 
-      <SkillPipelineDialog
-        open={pipelineOpen}
-        onOpenChange={setPipelineOpen}
-        count={batchSel.size}
-        outDir={pipelineOutDir}
-        onPickOutDir={pickPipelineOutDir}
-        runStep={runPipelineStep}
-      />
       <UpstreamCheckDialog
         open={upstreamOpen}
         onOpenChange={setUpstreamOpen}
@@ -2260,20 +1993,6 @@ export function SkillsPage() {
         count={tagTargetDirs?.length ?? batchSel.size}
         allTags={allTags}
         onApply={applyTagsToSelection}
-      />
-      <TagCommand
-        open={tagCommandOpen}
-        onOpenChange={setTagCommandOpen}
-        allTags={allTags}
-        counts={tagCounts}
-        selected={activeTags}
-        onToggle={(tag) => {
-          const next = new Set(activeTags);
-          if (next.has(tag)) next.delete(tag);
-          else next.add(tag);
-          setActiveTags(next);
-        }}
-        resultCount={filtered.length}
       />
 
       {/* ── 保存为预设（skill-presets） ── */}
@@ -2301,6 +2020,7 @@ export function SkillsPage() {
         presets={presets}
         skills={skills}
         onChanged={loadPresets}
+        onItemsChanged={() => void loadSkills()}
         onDeleted={(id) => setSelectedPresetId((cur) => (cur === id ? null : cur))}
       />
 

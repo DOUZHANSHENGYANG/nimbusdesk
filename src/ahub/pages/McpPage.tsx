@@ -1,4 +1,4 @@
-import { Braces, Boxes, Check, ClipboardPaste, Copy, FolderOpen, ListChecks, Plus, PlugZap, ScanSearch, Server, Sparkles, Trash2, Wrench } from "lucide-react";
+import { Braces, Boxes, Check, ClipboardPaste, Copy, FolderOpen, Layers, ListChecks, Plus, PlugZap, Save, ScanSearch, Server, Sparkles, Trash2, Wrench } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -6,11 +6,12 @@ import { ConfirmDialog } from "@/ahub/components/ConfirmDialog";
 import { matchTags, type TagMode } from "@/ahub/components/TagFilter";
 import { TagShelf } from "@/ahub/components/TagShelf";
 import { TagManagerView } from "@/ahub/components/TagManagerView";
-import { TagCommand } from "@/ahub/components/TagCommand";
 import { SearchBar } from "@/ahub/components/SearchBar";
 import { HarnessConfigDialog } from "@/ahub/components/HarnessConfigDialog";
-import { HarnessFilterRail } from "@/ahub/components/HarnessFilterRail";
 import { HarnessBatchDialog } from "@/ahub/components/HarnessBatchDialog";
+import { McpPresetManager } from "@/ahub/components/McpPresetManager";
+import { PresetDialog } from "@/ahub/components/PresetDialog";
+import { PresetRail } from "@/ahub/components/PresetRail";
 import { KeyValueEditor, recordFromRows, rowsFromRecord, type KvRow } from "@/ahub/components/KeyValueEditor";
 import { EmptyState } from "@/ahub/components/EmptyState";
 import { HarnessDialog } from "@/ahub/components/HarnessDialog";
@@ -30,8 +31,9 @@ import { Field, Input, Textarea } from "@/ahub/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/ahub/components/ui/select";
 import { api, copyText, pasteText } from "@/ahub/lib/api";
 import { parseMcpConfig } from "@/ahub/lib/mcpParse";
+import { presetErrorText } from "@/ahub/lib/presetErrors";
 import { sortByOrder } from "@/ahub/lib/harnessOrder";
-import type { HarnessReport, McpServer, McpTestResult } from "@/ahub/lib/types";
+import type { HarnessReport, McpPreset, McpServer, McpTestResult } from "@/ahub/lib/types";
 import { cn } from "@/ahub/lib/utils";
 import { useData } from "@/ahub/stores/data";
 import { useSettings } from "@/ahub/stores/settings";
@@ -69,7 +71,6 @@ export function McpPage() {
   const loadMcp = useData((s) => s.loadMcp);
 
   const [query, setQuery] = useState("");
-  const [transportFilter, setTransportFilter] = useState("all");
   const [editorOpen, setEditorOpen] = useState(false);
   const [editing, setEditing] = useState<McpServer | null>(null);
   const [deleting, setDeleting] = useState<McpServer | null>(null);
@@ -81,15 +82,18 @@ export function McpPage() {
   const [batchMode, setBatchMode] = useState(false);
   const [batchSel, setBatchSel] = useState<Set<string>>(new Set());
   const [reports, setReports] = useState<HarnessReport[] | null>(null);
-  const [harnessFilter, setHarnessFilter] = useState<string | null>(null);
   const [harnessBatchOpen, setHarnessBatchOpen] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [cfgOpen, setCfgOpen] = useState(false);
   const [batchDeleteOpen, setBatchDeleteOpen] = useState(false);
   const [activeTags, setActiveTags] = useState<Set<string>>(new Set());
   const [pageTab, setPageTab] = useState<"list" | "tags">("list");
-  const [tagCommandOpen, setTagCommandOpen] = useState(false);
   const [tagMode, setTagMode] = useState<TagMode>("or");
+  // MCP 预设：左侧切换查看，成员是服务名
+  const [presets, setPresets] = useState<McpPreset[]>([]);
+  const [selectedPresetId, setSelectedPresetId] = useState<string | null>(null);
+  const [presetManagerOpen, setPresetManagerOpen] = useState(false);
+  const [presetSaveOpen, setPresetSaveOpen] = useState(false);
   // 连通性测试：进行中的服务 id + 每个服务最近一次的结果
   const [testing, setTesting] = useState<string | null>(null);
   const [testResults, setTestResults] = useState<Record<string, McpTestResult>>({});
@@ -128,39 +132,68 @@ export function McpPage() {
     return [...keys].sort((a, b) => (tagCounts[b] ?? 0) - (tagCounts[a] ?? 0) || a.localeCompare(b));
   }, [tagCounts, activeTags]);
 
-  const harnessCounts = useMemo(() => {
-    const counts: Record<string, number> = {};
-    for (const s of mcp) for (const hid of s.targets ?? []) counts[hid] = (counts[hid] ?? 0) + 1;
-    return counts;
-  }, [mcp]);
+  const selectedPreset = useMemo(
+    () => presets.find((p) => p.id === selectedPresetId) ?? null,
+    [presets, selectedPresetId],
+  );
 
-  const unassignedCount = useMemo(() => mcp.filter((s) => (s.targets ?? []).length === 0).length, [mcp]);
+  const liveNames = useMemo(() => new Set(mcp.map((s) => s.name)), [mcp]);
+
+  const presetRailItems = useMemo(
+    () =>
+      presets.map((p) => {
+        const present = p.serverNames.filter((n) => liveNames.has(n)).length;
+        return {
+          id: p.id,
+          name: p.name,
+          description: p.description,
+          count: present,
+          stale: p.serverNames.length - present,
+        };
+      }),
+    [presets, liveNames],
+  );
+
+  const loadPresets = async () => {
+    try {
+      const list = await api.mcpPresetList();
+      setPresets(list);
+      setSelectedPresetId((cur) => (cur && list.some((p) => p.id === cur) ? cur : null));
+    } catch (e) {
+      toast.error(presetErrorText(e, t));
+    }
+  };
+
+  // 选中预设后批量勾选的调整，可以直接写回这个预设，不用去管理面板里重新勾一遍
+  const saveChangesToPreset = async () => {
+    if (!selectedPreset) return;
+    const names = mcp.filter((s) => batchSel.has(s.id)).map((s) => s.name);
+    try {
+      await api.mcpPresetUpdate(selectedPreset.id, { serverNames: names });
+    } catch (e) {
+      toast.error(presetErrorText(e, t));
+      return;
+    }
+    toast.success(t("preset.savedChanges", { name: selectedPreset.name }));
+    await loadPresets();
+  };
+
+  useEffect(() => {
+    void loadPresets();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    const list = mcp.filter((s) => {
-      if (transportFilter !== "all" && s.transport !== transportFilter) return false;
+    const presetNames = selectedPreset ? new Set(selectedPreset.serverNames) : null;
+    return mcp.filter((s) => {
+      if (presetNames && !presetNames.has(s.name)) return false;
       if (!matchTags(s.tags, activeTags, tagMode)) return false;
-      if (harnessFilter) {
-        const targets = s.targets ?? [];
-        if (harnessFilter === "__none" ? targets.length > 0 : !targets.includes(harnessFilter)) return false;
-      }
+      // 只按名称搜索：和 Skills 那边保持同一套心智，不再夹带命令/描述/传输类型
       if (!q) return true;
-      return (
-        s.name.toLowerCase().includes(q) ||
-        s.command.toLowerCase().includes(q) ||
-        s.description.toLowerCase().includes(q) ||
-        s.tags.some((tg) => tg.toLowerCase().includes(q))
-      );
+      return s.name.toLowerCase().includes(q);
     });
-    if (!harnessOrder.length) return list;
-    const rank = (s: McpServer) => {
-      const hid = (s.targets ?? [])[0] ?? s.origin?.harness ?? "";
-      const i = harnessOrder.indexOf(hid);
-      return i === -1 ? Number.MAX_SAFE_INTEGER : i;
-    };
-    return list.map((x, i) => ({ x, i })).sort((a, b) => rank(a.x) - rank(b.x) || a.i - b.i).map(({ x }) => x);
-  }, [mcp, query, transportFilter, harnessOrder, activeTags, tagMode, harnessFilter]);
+  }, [mcp, query, activeTags, tagMode, selectedPreset]);
 
   const openNew = () => {
     setNewMode("manual");
@@ -398,8 +431,6 @@ export function McpPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editorOpen]);
 
-  const harnessName = (hid: string) => reports?.find((r) => r.id === hid)?.name ?? hid;
-
   const openMcpFile = async () => {
     try {
       const { open } = await import("@tauri-apps/plugin-dialog");
@@ -469,17 +500,6 @@ export function McpPage() {
       actions={
         <>
           <SearchBar value={query} onChange={setQuery} placeholder={t("mcp.searchPlaceholder")} className="w-56" />
-          <Select value={transportFilter} onValueChange={setTransportFilter}>
-            <SelectTrigger className="h-9 w-32">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">{t("common.all")}</SelectItem>
-              <SelectItem value="stdio">stdio</SelectItem>
-              <SelectItem value="http">http</SelectItem>
-              <SelectItem value="sse">sse</SelectItem>
-            </SelectContent>
-          </Select>
           <Button
             variant="secondary"
             onClick={() => {
@@ -522,6 +542,16 @@ export function McpPage() {
           与 Skills 页保持一致（那边是无条件显示的） */}
           <div className="flex min-h-0 flex-1 items-start gap-3">
             <aside className="w-[196px] shrink-0">
+              <PresetRail
+                items={presetRailItems}
+                selectedId={selectedPresetId}
+                onSelect={setSelectedPresetId}
+                onManage={() => {
+                  void loadPresets();
+                  setPresetManagerOpen(true);
+                }}
+                total={mcp.length}
+              />
               <TagShelf
                 variant="rail"
                         allTags={allTags}
@@ -532,18 +562,7 @@ export function McpPage() {
                         counts={tagCounts}
                         hideWhenEmpty={false}
                         onManage={() => setPageTab("tags")}
-                        onCommand={() => setTagCommandOpen(true)}
                       />
-                      {mcp.length > 0 ? (
-                        <HarnessFilterRail
-                          reports={reports}
-                          counts={harnessCounts}
-                          total={mcp.length}
-                          unassigned={unassignedCount}
-                          value={harnessFilter}
-                          onChange={setHarnessFilter}
-                        />
-                      ) : null}
             </aside>
             <div className="min-w-0 flex-1">
 
@@ -590,6 +609,28 @@ export function McpPage() {
                 >
                   <Copy />
                   {t("mcp.batchCopyJson")}
+                </Button>
+                {selectedPreset ? (
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    className="h-8"
+                    disabled={batchSel.size === 0}
+                    onClick={() => void saveChangesToPreset()}
+                  >
+                    <Save className="size-3.5" />
+                    {t("preset.saveChanges")}
+                  </Button>
+                ) : null}
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  className="h-8"
+                  disabled={batchSel.size === 0}
+                  onClick={() => setPresetSaveOpen(true)}
+                >
+                  <Layers className="size-3.5" />
+                  {t("preset.saveAs")}
                 </Button>
                 <Button
                   size="sm"
@@ -725,12 +766,6 @@ export function McpPage() {
                     {tg}
                   </Badge>
                 ))}
-                {(s.targets ?? []).map((hid) => (
-                  <Badge key={hid} variant="info">
-                    {harnessName(hid)}
-                  </Badge>
-                ))}
-                {(s.targets ?? []).length === 0 ? <Badge variant="muted">{t("mcp.harnessNone")}</Badge> : null}
               </div>
               <div className="mt-auto flex flex-wrap items-center justify-end gap-0.5 pt-3">
                 <Button
@@ -1053,19 +1088,35 @@ export function McpPage() {
           if (deleting) void deleteMcp(deleting.id).then(() => toast.success(t("mcp.deleted")));
         }}
       />
-      <TagCommand
-        open={tagCommandOpen}
-        onOpenChange={setTagCommandOpen}
-        allTags={allTags}
-        counts={tagCounts}
-        selected={activeTags}
-        onToggle={(tag) => {
-          const next = new Set(activeTags);
-          if (next.has(tag)) next.delete(tag);
-          else next.add(tag);
-          setActiveTags(next);
+
+      <PresetDialog
+        open={presetSaveOpen}
+        onOpenChange={setPresetSaveOpen}
+        title={t("preset.createTitle")}
+        hint={t("preset.saveAsHint", { n: batchSel.size })}
+        onSubmit={async (name, description) => {
+          try {
+            await api.mcpPresetCreate(
+              name,
+              description,
+              mcp.filter((s) => batchSel.has(s.id)).map((s) => s.name),
+            );
+          } catch (e) {
+            throw presetErrorText(e, t);
+          }
+          toast.success(t("preset.created", { name }));
+          await loadPresets();
         }}
-        resultCount={filtered.length}
+      />
+
+      <McpPresetManager
+        open={presetManagerOpen}
+        onOpenChange={setPresetManagerOpen}
+        presets={presets}
+        servers={mcp}
+        onChanged={loadPresets}
+        onItemsChanged={() => void loadMcp()}
+        onDeleted={(id) => setSelectedPresetId((cur) => (cur === id ? null : cur))}
       />
             </div>
           </div>
