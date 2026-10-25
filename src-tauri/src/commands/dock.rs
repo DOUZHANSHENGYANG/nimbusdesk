@@ -257,12 +257,15 @@ pub async fn dock_spring_box(
     Ok(())
 }
 
-/// 从**窗口当前真实矩形**弹到目标矩形（前端不再传 from）。
+/// 把 dock 窗口一次性摆到目标矩形（**不再逐帧插值**）。
 ///
-/// 之前 from 由前端读 outerPosition/outerSize 再除 DPI 得到 —— 那是一次异步
-/// IPC 往返，读到的可能是过期矩形、也可能单位不对；只要和 Rust 里真正的矩形
-/// 差一点，第一帧就会先跳一下再进入动画（用户看到的「展开前先移一下」）。
-/// 这里让 Rust 自己 GetWindowRect，起点永远是准的。
+/// 之前是 Rust 每 8ms SetWindowPos 一次做弹簧 —— 窗口本身在动，任何 1px
+/// 起点误差都会被放大成「整窗先往左移一下」。读过 LuckyIsland（Tauri 2 +
+/// React 的同栈实现）之后改成它的模型：
+///
+/// - 窗口只在状态切换时 set_size + set_position 各一次，人眼看不到这一帧；
+/// - 位移与缩放动画交给前端 DOM，那才是「内容在撑开」的观感来源；
+/// - 换宽度时以当前顶部中心为锚点重设 x，避免横向跳动。
 #[tauri::command]
 pub async fn dock_spring_to(
     app: AppHandle,
@@ -271,31 +274,26 @@ pub async fn dock_spring_to(
     to_y: f64,
     to_w: f64,
     to_h: f64,
-    style: String,
+    _style: String,
 ) -> Result<(), String> {
-    let hwnd = hwnd_of(&app, &label)?;
-    let mut rect = RECT::default();
-    unsafe {
-        GetWindowRect(hwnd, &mut rect).map_err(|e| e.to_string())?;
+    let _ = to_x;
+    let window = app.get_webview_window(&label).ok_or("窗口不存在")?;
+    let previous = window
+        .outer_size()
+        .and_then(|size| window.outer_position().map(|position| (size, position)))
+        .ok()
+        .and_then(|(size, position)| window.scale_factor().ok().map(|scale| (size, position, scale)));
+    window
+        .set_size(tauri::Size::Logical(tauri::LogicalSize { width: to_w, height: to_h }))
+        .map_err(|e| e.to_string())?;
+    if let Some((old_size, old_position, scale)) = previous {
+        let new_width_px = (to_w * scale).round().max(1.0) as i32;
+        let dx = (old_size.width as i32 - new_width_px) / 2;
+        window
+            .set_position(tauri::PhysicalPosition::new(old_position.x + dx, (to_y * scale).round() as i32))
+            .map_err(|e| e.to_string())?;
     }
-    let scale = app
-        .get_webview_window(&label)
-        .and_then(|win| win.scale_factor().ok())
-        .unwrap_or(1.0);
-    dock_spring_box(
-        app,
-        label,
-        rect.left as f64 / scale,
-        rect.top as f64 / scale,
-        (rect.right - rect.left) as f64 / scale,
-        (rect.bottom - rect.top) as f64 / scale,
-        to_x,
-        to_y,
-        to_w,
-        to_h,
-        style,
-    )
-    .await
+    Ok(())
 }
 
 /// 创建（或激活）dock 窗口。位置与显示由前端在算出工作区后
