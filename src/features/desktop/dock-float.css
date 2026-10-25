@@ -176,10 +176,14 @@
 /* 通用行 */
 .df-hint { margin: 0; font-size: var(--pr-text-xs); color: var(--muted-foreground); padding: 4px 2px; }
 
-.df-scopes { display: flex; gap: 4px; flex-wrap: wrap; }
+/* 范围筛选：六个等分整行，和上面的搜索框、下面的结果区左右边界对齐。
+   之前是「按内容宽度排、靠左」，右边一大截空白，视觉上整行是歪的。 */
+.df-scopes { display: flex; gap: 4px; flex: none; }
 .df-scope {
-  height: 22px;
-  padding: 0 9px;
+  flex: 1 1 0;
+  min-width: 0;
+  height: 24px;
+  padding: 0;
   border-radius: var(--pr-radius-full);
   border: 1px solid var(--hairline);
   background: transparent;
