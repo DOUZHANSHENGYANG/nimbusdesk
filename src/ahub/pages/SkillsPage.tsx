@@ -1,4 +1,4 @@
-import { Archive, ArrowRight, Boxes, Check, ChevronDown, ChevronRight, CircleAlert, Clock, CloudUpload, Columns2, Eye, FolderOpen, GitCompare, History, LayoutGrid, Layers, ListChecks, Loader2, Package, Paperclip, Pencil, Play, Plus, RefreshCw, RotateCw, Save, ScanSearch, Settings2, ShieldAlert, ShieldCheck, Sparkles, Tag, Trash2, X, Zap } from "lucide-react";
+import { Archive, ArrowRight, Boxes, Check, ChevronDown, ChevronRight, CircleAlert, CircleSlash, Clock, CloudUpload, Columns2, Eye, FolderOpen, GitCompare, History, LayoutGrid, Layers, ListChecks, Loader2, Package, Paperclip, Pencil, Play, Plus, RefreshCw, RotateCw, Save, ScanSearch, Settings2, ShieldAlert, ShieldCheck, Sparkles, Tag, Trash2, X, Zap } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -179,7 +179,8 @@ export function SkillsPage() {
   const [addMode, setAddMode] = useState<"create" | "file" | "git">("file");
   const [batchMode, setBatchMode] = useState(false);
   const [batchSel, setBatchSel] = useState<Set<string>>(new Set());
-  const [groupByTag, setGroupByTag] = useState(false);
+  const [viewMode, setViewMode] = useState<"grid" | "tag" | "tool">("grid");
+  const [collapsedTools, setCollapsedTools] = useState<Set<string>>(new Set());
   const [collapsedTags, setCollapsedTags] = useState<Set<string>>(new Set());
   const [batchDeleteOpen, setBatchDeleteOpen] = useState(false);
   const [onboardBusy, setOnboardBusy] = useState(false);
@@ -481,7 +482,7 @@ export function SkillsPage() {
 
   /** 按标签分组（未打标签归入「未分类」） */
   const grouped = useMemo(() => {
-    if (!groupByTag) return null;
+    if (viewMode !== "tag") return null;
     const map = new Map<string, SkillMeta[]>();
     for (const s of filtered) {
       const keys = s.tags.length ? s.tags : [t("skills.untagged")];
@@ -492,7 +493,33 @@ export function SkillsPage() {
       }
     }
     return [...map.entries()].sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0]));
-  }, [filtered, groupByTag, t]);
+  }, [filtered, viewMode, t]);
+
+  /** 按工具分组：同一份技能接了多个工具就会出现在多个组里；都没接的进「未接入工具」 */
+  const groupedByTool = useMemo(() => {
+    if (viewMode !== "tool") return null;
+    const map = new Map<string, SkillMeta[]>();
+    for (const s of filtered) {
+      const attached = appliedMap.get(s.dirName) ?? [];
+      if (attached.length === 0) {
+        const arr = map.get("__none") ?? [];
+        arr.push(s);
+        map.set("__none", arr);
+        continue;
+      }
+      for (const r of attached) {
+        const arr = map.get(r.id) ?? [];
+        arr.push(s);
+        map.set(r.id, arr);
+      }
+    }
+    const order = skillHarnesses.map((r) => r.id);
+    return [...map.entries()].sort((a, b) => {
+      if (a[0] === "__none") return 1;
+      if (b[0] === "__none") return -1;
+      return order.indexOf(a[0]) - order.indexOf(b[0]);
+    });
+  }, [viewMode, filtered, appliedMap, skillHarnesses]);
 
   /**
    * 批量打包导出：选一个输出目录，逐个生成规范 .skillpack，
@@ -680,6 +707,14 @@ export function SkillsPage() {
       const n = new Set(prev);
       if (n.has(tag)) n.delete(tag);
       else n.add(tag);
+      return n;
+    });
+
+  const toggleToolGroup = (id: string) =>
+    setCollapsedTools((prev) => {
+      const n = new Set(prev);
+      if (n.has(id)) n.delete(id);
+      else n.add(id);
       return n;
     });
 
@@ -950,18 +985,19 @@ export function SkillsPage() {
               <div className="flex items-center gap-0.5 rounded-lg border border-border bg-surface p-0.5">
                 {(
                   [
-                    { v: false, icon: LayoutGrid, key: "skills.viewGrid" },
-                    { v: true, icon: Layers, key: "skills.viewGroup" },
+                    { v: "grid", icon: LayoutGrid, key: "skills.viewGrid" },
+                    { v: "tag", icon: Layers, key: "skills.viewGroup" },
+                    { v: "tool", icon: Boxes, key: "skills.viewTool" },
                   ] as const
                 ).map(({ v, icon: Icon, key }) => (
                   <button
                     key={key}
                     type="button"
-                    onClick={() => setGroupByTag(v)}
+                    onClick={() => setViewMode(v)}
                     title={t(key)}
                     className={cn(
                       "flex items-center gap-1.5 rounded-md px-2 py-0.5 text-[11px] font-medium outline-none transition-colors",
-                      groupByTag === v ? "bg-primary-soft text-primary" : "text-ink-3 hover:text-foreground",
+                      viewMode === v ? "bg-primary-soft text-primary" : "text-ink-3 hover:text-foreground",
                     )}
                   >
                     <Icon className="size-3.5" />
@@ -1382,7 +1418,7 @@ export function SkillsPage() {
             );
           };
 
-          if (groupByTag && grouped) {
+          if (viewMode === "tag" && grouped) {
             return (
               <div className="flex flex-col gap-4">
                 {grouped.map(([tag, list]) => {
@@ -1409,6 +1445,30 @@ export function SkillsPage() {
                             {activeTags.has(tag) ? t("skills.tagOnlyOff") : t("skills.tagOnly")}
                           </button>
                         ) : null}
+                      </h2>
+                      {collapsed ? null : <div className="grid grid-cols-[repeat(auto-fill,minmax(230px,1fr))] gap-2">{list.map(card)}</div>}
+                    </section>
+                  );
+                })}
+              </div>
+            );
+          }
+          if (viewMode === "tool" && groupedByTool) {
+            return (
+              <div className="flex flex-col gap-4">
+                {groupedByTool.map(([id, list]) => {
+                  const report = skillHarnesses.find((r) => r.id === id);
+                  const collapsed = collapsedTools.has(id);
+                  return (
+                    <section key={id} className="flex flex-col gap-2.5 rounded-xl border border-border bg-surface/40 p-3">
+                      <h2
+                        onClick={() => toggleToolGroup(id)}
+                        className="flex cursor-pointer select-none items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-ink-3 outline-none transition-colors hover:text-foreground"
+                      >
+                        <ChevronRight className={cn("size-3.5 transition-transform", !collapsed && "rotate-90")} />
+                        {id === "__none" ? <CircleSlash className="size-3.5" /> : <HarnessIcon id={id} className="size-3.5" />}
+                        {id === "__none" ? t("skills.toolsNone") : (report?.name ?? id)}
+                        <span className="rounded-full bg-surface-2 px-1.5 py-px font-mono tabular-nums">{list.length}</span>
                       </h2>
                       {collapsed ? null : <div className="grid grid-cols-[repeat(auto-fill,minmax(230px,1fr))] gap-2">{list.map(card)}</div>}
                     </section>

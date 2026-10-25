@@ -55,6 +55,8 @@ OpenCode / WorkBuddy / CodeBuddy / DeepSeek），并把扫到的条目**默认�
 技能卡片底部会列出这份技能**已经接进了哪些工具**（Claude Code / Codex / Gemini CLI…），
 左栏标签仓下面是「工具」区块：每行是该工具下的技能条数，点一下就把列表收窄；
 「未接入工具」把所有工具目录里都没有副本的技能挑出来 —— 这些是最适合清理的一批。
+列表右上角的视图切换多了一档「按工具」：按接入关系分组（一份技能接了多个工具就会
+出现在多个组里），最后是「未接入工具」组。
 
 批量接入：多选技能 →「接入工具」→ 选工具 → 执行。对话框顶部可切 **接入 / 移出**，
 每行写明「将新增 n 项 / 将移除 n 项」，跑完按工具报 `✓ 成功 / ✕ 失败 / — 跳过`。
@@ -69,6 +71,7 @@ OpenCode / WorkBuddy / CodeBuddy / DeepSeek），并把扫到的条目**默认�
 入口），另有「扫描本机」。
 
 截图：`docs/screenshots/tag-shelf.png`（徽标 + 工具区块）、
+`docs/screenshots/harness-groups.png`（按工具分组）、
 `docs/screenshots/harness-filter.png`（按「未接入工具」收窄）、
 `docs/screenshots/harness-batch.png`、`harness-batch-remove.png`、`tag-empty.png`。
 
