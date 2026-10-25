@@ -34,8 +34,11 @@ function group(key: string, icon: typeof Home, sections: NavSection[]): NavGroup
 }
 
 /**
- * 侧栏的两个分区（顺序即展示顺序）：
- * 工作台 = 本机日常；资料 = 阅读与沉淀（AI 作为其中一节）。
+ * 侧栏的三个分区（顺序即展示顺序）：
+ * 工作台 = 本机日常；AI = 对话与工具链；资料 = 阅读与沉淀。
+ *
+ * AI 曾收进「资料」当第二节，结果一级标题的层级消失、看起来和二级菜单一样；
+ * 现在恢复成独立一级分区，并排在「资料」前面。
  */
 export const NAV_GROUPS: NavGroup[] = [
   group("nav.workbench", LayoutGrid, [
@@ -49,15 +52,7 @@ export const NAV_GROUPS: NavGroup[] = [
       ],
     },
   ]),
-  group("nav.library", Library, [
-    {
-      key: "nav.library",
-      items: [
-        { to: "/files", key: "nav.files", icon: Folders },
-        { to: "/knowledge", key: "nav.knowledge", icon: BookOpen },
-        { to: "/feeds", key: "nav.feeds", icon: Newspaper },
-      ],
-    },
+  group("nav.ai", Sparkles, [
     {
       key: "nav.ai",
       items: [
@@ -67,6 +62,16 @@ export const NAV_GROUPS: NavGroup[] = [
         { to: "/toolbox/skills", key: "nav.skills", icon: Sparkles },
         { to: "/toolbox/mcp", key: "nav.mcp", icon: Plug },
         { to: "/toolbox/harness", key: "nav.harness", icon: Terminal },
+      ],
+    },
+  ]),
+  group("nav.library", Library, [
+    {
+      key: "nav.library",
+      items: [
+        { to: "/files", key: "nav.files", icon: Folders },
+        { to: "/knowledge", key: "nav.knowledge", icon: BookOpen },
+        { to: "/feeds", key: "nav.feeds", icon: Newspaper },
       ],
     },
   ]),

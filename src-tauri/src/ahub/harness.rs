@@ -534,41 +534,50 @@ pub fn validate_config_text(app: &AppH, harness_id: &str, text: &str) -> Result<
     Ok(())
 }
 
+fn report_for(def: &HarnessDef) -> HarnessReport {
+    let (mcp_servers, mcp_found, mut notes) = if def.mcp_sources.is_empty() {
+        (Vec::new(), Vec::new(), Vec::new())
+    } else {
+        parse_mcp_sources(def)
+    };
+    let (skills, skills_dirs) = scan_skills_dirs(&def.skills_dirs);
+    if def.mcp_sources.is_empty() && def.skills_dirs.is_empty() {
+        notes.push("未检测到".into());
+    } else if mcp_found.is_empty() && skills_dirs.is_empty() {
+        notes.push("未找到有效的配置或技能目录".into());
+    }
+    let exists = !mcp_found.is_empty() || !skills_dirs.is_empty();
+    HarnessReport {
+        id: def.id.to_string(),
+        name: def.name.to_string(),
+        supports_mcp: !def.mcp_sources.is_empty(),
+        supports_skills: !def.skills_dirs.is_empty(),
+        config_path: mcp_found.join(" · "),
+        config_paths: def
+            .mcp_sources
+            .iter()
+            .map(|source| source.path.to_string_lossy().into_owned())
+            .collect(),
+        exists,
+        mcp_servers,
+        skills_dirs,
+        skills,
+        notes,
+    }
+}
+
 pub fn scan(app: &AppH) -> Vec<HarnessReport> {
+    defs(app).iter().map(report_for).collect()
+}
+
+/// 只重新扫描一个工具：Harness 页每张卡片的「刷新」按钮用它，
+/// 避免为了一个目录的变动去扫全部工具。
+pub fn scan_one(app: &AppH, harness_id: &str) -> Result<HarnessReport, String> {
     defs(app)
-        .into_iter()
-        .map(|def| {
-            let (mcp_servers, mcp_found, mut notes) = if def.mcp_sources.is_empty() {
-                (Vec::new(), Vec::new(), Vec::new())
-            } else {
-                parse_mcp_sources(&def)
-            };
-            let (skills, skills_dirs) = scan_skills_dirs(&def.skills_dirs);
-            if def.mcp_sources.is_empty() && def.skills_dirs.is_empty() {
-                notes.push("未检测到".into());
-            } else if mcp_found.is_empty() && skills_dirs.is_empty() {
-                notes.push("未找到有效的配置或技能目录".into());
-            }
-            let exists = !mcp_found.is_empty() || !skills_dirs.is_empty();
-            HarnessReport {
-                id: def.id.to_string(),
-                name: def.name.to_string(),
-                supports_mcp: !def.mcp_sources.is_empty(),
-                supports_skills: !def.skills_dirs.is_empty(),
-                config_path: mcp_found.join(" · "),
-                config_paths: def
-                    .mcp_sources
-                    .iter()
-                    .map(|source| source.path.to_string_lossy().into_owned())
-                    .collect(),
-                exists,
-                mcp_servers,
-                skills_dirs,
-                skills,
-                notes,
-            }
-        })
-        .collect()
+        .iter()
+        .find(|def| def.id == harness_id)
+        .map(report_for)
+        .ok_or_else(|| format!("未知工具: {harness_id}"))
 }
 
 // ---------------- Pre-import (归档信息，先收集结果供用户确认) ----------------
@@ -616,13 +625,6 @@ pub fn import(app: &AppH, harness_id: &str, kind: &str, selections: &[ImportSele
         res.errors.push(format!("未知工具: {harness_id}"));
         return res;
     };
-    let config_str = def
-        .mcp_sources
-        .iter()
-        .find(|s| s.path.exists())
-        .or_else(|| def.mcp_sources.first())
-        .map(|s| s.path.to_string_lossy().into_owned())
-        .unwrap_or_default();
 
     match kind {
         "mcp" => {
@@ -646,11 +648,8 @@ pub fn import(app: &AppH, harness_id: &str, kind: &str, selections: &[ImportSele
                     updated.env = d.env.clone();
                     updated.url = d.url.clone();
                     updated.headers = d.headers.clone();
-                    updated.origin = Some(Origin {
-                        harness: harness_id.to_string(),
-                        file: config_str.clone(),
-                        imported_at: now_iso(),
-                    });
+                    // 导入只搬连接配置，不记录「来自哪个工具」——来源会随工具卸载/迁移过期，
+                    // 真正的事实是「这份配置当前接进了哪些工具」（targets）。
                     match items::save_mcp(app, updated) {
                         Ok(_) => res.imported.push(sel.name.clone()),
                         Err(e) => res.errors.push(format!("{}: {e}", sel.name)),
@@ -670,11 +669,7 @@ pub fn import(app: &AppH, harness_id: &str, kind: &str, selections: &[ImportSele
                         enabled: true,
                         targets: vec![harness_id.to_string()],
                         targets_initialized: true,
-                        origin: Some(Origin {
-                            harness: harness_id.to_string(),
-                            file: config_str.clone(),
-                            imported_at: now_iso(),
-                        }),
+                        origin: None,
                         versions: vec![],
                         created_at: now_iso(),
                         updated_at: now_iso(),
@@ -702,21 +697,7 @@ pub fn import(app: &AppH, harness_id: &str, kind: &str, selections: &[ImportSele
                     continue;
                 };
                 match skills::import_skill_dir(app, &src, sel.overwrite) {
-                    Ok(dir_name) => {
-                        // 记录来源：否则界面的「按来源筛选」计数会全部落到本机一档
-                        let origin_file = def
-                            .skills_dirs
-                            .iter()
-                            .map(|d| d.to_string_lossy().into_owned())
-                            .collect::<Vec<_>>()
-                            .join(" · ");
-                        if let Err(e) = skills::set_skill_origin(app, &dir_name, harness_id, &origin_file) {
-                            // ImportResult 没有 warnings 字段；来源记录失败不阻断导入，
-                            // 但要留痕，否则又会出现「计数对不上却查不到原因」
-                            res.errors.push(format!("{}: 已导入但来源记录失败（{e}）", sel.name));
-                        }
-                        res.imported.push(sel.name.clone())
-                    }
+                    Ok(_dir_name) => res.imported.push(sel.name.clone()),
                     Err(_) if !sel.overwrite => res.skipped.push(sel.name.clone()),
                     Err(e) => res.errors.push(format!("{}: {e}", sel.name)),
                 }

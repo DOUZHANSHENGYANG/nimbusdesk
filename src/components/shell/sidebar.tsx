@@ -46,7 +46,8 @@ function useToolboxCounts(): Partial<Record<"prompts" | "skills" | "mcp", number
 }
 
 /**
- * 左侧导航：三个分区（工作台 / 资料 / AI），每区一个可折叠标题。
+ * 左侧导航：三个一级分区（工作台 / AI / 资料），每区一个可折叠标题。
+ * 一级标题用比二级项更大的字号与更重的字重，避免又退化成「像二级菜单」。
  *
  * 活跃指示有两层：一枚 `layoutId` 药丸（motion）在所有**条目**之间只有一份，
  * 换页时自动滑过去；活跃行左缘另有一条品牌色竖条，颜色比药丸更醒目。
@@ -63,8 +64,10 @@ export function Sidebar() {
   const setCollapsed = useSettings((s) => s.setSidebarCollapsed);
   const workbenchOpen = useSettings((s) => s.workbenchGroupOpen);
   const libraryOpen = useSettings((s) => s.libraryGroupOpen);
+  const aiOpen = useSettings((s) => s.aiGroupOpen);
   const setWorkbenchOpen = useSettings((s) => s.setWorkbenchGroupOpen);
   const setLibraryOpen = useSettings((s) => s.setLibraryGroupOpen);
+  const setAiOpen = useSettings((s) => s.setAiGroupOpen);
   const navDisabled = useSettings((s) => s.navDisabled);
   const counts = useToolboxCounts();
   const dataRoot = useAhubSettings((s) => s.info?.dataDirs.root);
@@ -80,6 +83,7 @@ export function Sidebar() {
   // 折叠态没有文字也没有角标，组头就没有意义了：各组各自摊成图标列
   const groupState: Record<string, { open: boolean; toggle: () => void }> = {
     "nav.workbench": { open: workbenchOpen, toggle: () => setWorkbenchOpen(!workbenchOpen) },
+    "nav.ai": { open: aiOpen, toggle: () => setAiOpen(!aiOpen) },
     "nav.library": { open: libraryOpen, toggle: () => setLibraryOpen(!libraryOpen) },
   };
 
@@ -172,7 +176,7 @@ export function Sidebar() {
                     if (!sectionItems.length) return null;
                     return (
                       <div key={section.key} className="flex flex-col gap-0.5">
-                        {/* 多小节时给一行小标签（「资料」里的 AI 那一节），只有一节则不重复组标题 */}
+                        {/* 多小节时给一行小标签；现在三个分区各自只有一节，不会重复组标题 */}
                         {group.sections.length > 1 && !collapsed && section.key !== group.key && (
                           <p className="px-2.5 pt-2 pb-0.5 text-[10.5px] font-medium text-muted-foreground/60">{t(section.key)}</p>
                         )}

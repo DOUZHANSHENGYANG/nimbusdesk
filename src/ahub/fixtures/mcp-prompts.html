@@ -21,6 +21,13 @@ mockIPC(async(cmd,args)=>{
  if(cmd==='list_skills')return [];
  if(cmd==='get_settings')return structuredClone(settingsInfo);
  if(cmd==='preset_list'||cmd==='list_harnesses')return [];
+ if(cmd==='mcp_preset_list')return [
+  {id:'daily',name:'日常开发',description:'文件与仓库操作',serverNames:['filesystem','github'],createdAt:now,updatedAt:now},
+  {id:'data',name:'数据分析',description:'报表库只读查询',serverNames:['postgres'],createdAt:now,updatedAt:now},
+ ];
+ if(cmd==='mcp_preset_create'||cmd==='mcp_preset_update')return {id:'x',name:args?.name??'预设',description:args?.description??'',serverNames:args?.serverNames??[],createdAt:now,updatedAt:now};
+ if(cmd==='mcp_preset_delete')return null;
+ if(cmd==='scan_harness')return null;
  if(cmd==='scan_harnesses')return [
   {id:'claude-code',name:'Claude Code',supportsMcp:true,supportsSkills:true,configPath:'C:/Users/dz/.claude.json',exists:true,mcpServers:[
    {name:'filesystem',transport:'stdio',command:'npx',args:[],env:{},url:'',headers:{}},

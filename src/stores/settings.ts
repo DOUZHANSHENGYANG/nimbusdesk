@@ -79,6 +79,8 @@ interface SettingsState {
   dockShortcut: string;
   /** 检测到全屏应用时自动隐藏 Dock */
   dockAutoHide: boolean;
+  /** 图钉：固定 Dock，鼠标离开/靠近边缘都不自动隐藏 */
+  dockPinned: boolean;
   /** 侧栏三个分区是否展开（折叠侧栏时全部强制摊开，与这些值无关） */
   workbenchGroupOpen: boolean;
   libraryGroupOpen: boolean;
@@ -126,6 +128,7 @@ interface SettingsState {
   setDockTileSize: (v: number) => void;
   setDockShortcut: (v: string) => void;
   setDockAutoHide: (v: boolean) => void;
+  setDockPinned: (v: boolean) => void;
   setWorkbenchGroupOpen: (v: boolean) => void;
   setLibraryGroupOpen: (v: boolean) => void;
   setAiGroupOpen: (v: boolean) => void;
@@ -185,6 +188,7 @@ export const useSettings = create<SettingsState>()(
       dockTileSize: 28,
       dockShortcut: "",
       dockAutoHide: false,
+      dockPinned: false,
       workbenchGroupOpen: true,
       libraryGroupOpen: true,
       aiGroupOpen: true,
@@ -221,6 +225,7 @@ export const useSettings = create<SettingsState>()(
       setDockTileSize: (dockTileSize) => set({ dockTileSize: Math.min(72, Math.max(16, Math.round(dockTileSize))) }),
       setDockShortcut: (dockShortcut) => set({ dockShortcut }),
       setDockAutoHide: (dockAutoHide) => set({ dockAutoHide }),
+      setDockPinned: (dockPinned) => set({ dockPinned }),
       setWorkbenchGroupOpen: (workbenchGroupOpen) => set({ workbenchGroupOpen }),
       setLibraryGroupOpen: (libraryGroupOpen) => set({ libraryGroupOpen }),
       setAiGroupOpen: (aiGroupOpen) => set({ aiGroupOpen }),
@@ -236,7 +241,7 @@ export const useSettings = create<SettingsState>()(
     {
       name: "settings",
       storage: createJSONStorage(() => tauriJsonStorage),
-      version: 9,
+      version: 10,
       /**
        * v1 → v2：新增 `plansView`（旧 settings.json 没这个键，pill 会全不亮）。
        * v2 → v3：新增 `autoSortDone` / `autoClearDone`。
@@ -249,6 +254,7 @@ export const useSettings = create<SettingsState>()(
        *           没有这个字段就等于从没开过，升级不该突然在桌面上多一条横条。
        * v8 → v9：新增 `filesViewMode`（文件管理的三种展示）。老用户默认图标网格，
        *           与升级前一致；手改坏的键退回默认。
+       * v9 → v10：新增 `dockPinned`（图钉）。默认不固定，避免升级后 Dock 突然常驻。
        *
        * 迁移只补缺失字段、不改其它值；视图键与新增的三个值顺手校验，手改坏
        * 的退回默认而不是让整个页面白屏。
@@ -278,6 +284,7 @@ export const useSettings = create<SettingsState>()(
         if (version < 7) s.alwaysOnTop = s.alwaysOnTop ?? false;
         if (version < 8) s.dockEnabled = s.dockEnabled ?? false;
         if (version < 9) s.filesViewMode = isFilesViewMode(s.filesViewMode) ? s.filesViewMode : "icons";
+        if (version < 10) s.dockPinned = s.dockPinned ?? false;
         return s as SettingsState;
       },
     },

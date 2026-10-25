@@ -1,43 +1,63 @@
-import { Boxes, Package, ShieldCheck, Sparkles, Terminal } from "lucide-react";
+import { Package, ShieldCheck, Sparkles, Terminal } from "lucide-react";
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
-import { CollapsibleCard } from "@/ahub/components/CollapsibleCard";
 import { ConfigVaultSection } from "@/ahub/components/ConfigVaultSection";
-import { HarnessOverviewSection } from "@/ahub/components/HarnessOverviewSection";
 import { HarnessSkillsSection } from "@/ahub/components/HarnessSkillsSection";
 import { HarnessToolsSection } from "@/ahub/components/HarnessToolsSection";
 import { ToolManagerSection } from "@/ahub/components/ToolManagerSection";
 import { PageShell } from "@/ahub/components/PageShell";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/ahub/components/motion/tabs";
 
 /**
- * AI 工具管理：同一个对象（AI 工具）的两件事。
- * - 上方「工具与版本」：CLI 工具的版本检查与更新
- * - 下方「配置保险」：各工具配置文件的版本备份与恢复
+ * Harness 页：四个页签，按「日常最常用 → 偶尔维护」排序。
+ *
+ * - Harness 工具：每个工具的配置、技能目录、迁移与单卡刷新
+ * - 本机技能：各工具目录里实际有什么
+ * - CLI 版本：批量检查/更新 npm 全局 CLI
+ * - 配置备份：配置文件版本历史
+ *
+ * 原来的「跨类型总览」已去掉：每张 Harness 卡已经给出同样的信息，
+ * 再放一张表只是重复。
  */
 export function ToolManagerPage() {
   const { t } = useTranslation();
+  const [tab, setTab] = useState("tools");
+
   return (
     <PageShell title={t("nav.harness")}>
-      <div className="flex w-full flex-col gap-4">
-        <CollapsibleCard icon={Terminal} title={t("harnessTools.title")}>
+      <Tabs value={tab} onValueChange={setTab} variant="segment" className="flex w-full flex-col gap-4">
+        <TabsList className="w-fit">
+          <TabsTrigger value="tools">
+            <Terminal className="mr-1.5 size-3.5" />
+            {t("harnessTools.title")}
+          </TabsTrigger>
+          <TabsTrigger value="skills">
+            <Sparkles className="mr-1.5 size-3.5" />
+            {t("harnessSkills.title")}
+          </TabsTrigger>
+          <TabsTrigger value="cli">
+            <Package className="mr-1.5 size-3.5" />
+            {t("tools.sectionTitle")}
+          </TabsTrigger>
+          <TabsTrigger value="vault">
+            <ShieldCheck className="mr-1.5 size-3.5" />
+            {t("settings.vault")}
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="tools">
           <HarnessToolsSection />
-        </CollapsibleCard>
-
-        <CollapsibleCard icon={Boxes} title={t("harnessOverview.title")}>
-          <HarnessOverviewSection />
-        </CollapsibleCard>
-
-        <CollapsibleCard icon={Sparkles} title={t("harnessSkills.title")}>
+        </TabsContent>
+        <TabsContent value="skills">
           <HarnessSkillsSection />
-        </CollapsibleCard>
-
-        <CollapsibleCard icon={Package} title={t("tools.sectionTitle")} defaultOpen={false}>
+        </TabsContent>
+        <TabsContent value="cli">
           <ToolManagerSection />
-        </CollapsibleCard>
-
-        <CollapsibleCard icon={ShieldCheck} title={t("settings.vault")} defaultOpen={false}>
+        </TabsContent>
+        <TabsContent value="vault">
           <ConfigVaultSection />
-        </CollapsibleCard>
-      </div>
+        </TabsContent>
+      </Tabs>
     </PageShell>
   );
 }

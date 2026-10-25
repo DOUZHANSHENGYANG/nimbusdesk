@@ -18,7 +18,11 @@ mockIPC(async(cmd,args)=>{
  window.__ahubCalls.push({cmd,args});
  if(cmd==='list_skills')return empty?[]:structuredClone(skills);
  if(cmd==='get_settings')return structuredClone(settingsInfo);
- if(cmd==='preset_list'||cmd==='list_prompts'||cmd==='list_mcp'||cmd==='list_harnesses')return [];
+ if(cmd==='preset_list')return [
+  {id:'frontend',name:'前端开发',description:'日常前端排障与评审',skillDirNames:['code-review','debug'],createdAt:now,updatedAt:now},
+  {id:'writing',name:'写作',description:'文档与文案',skillDirNames:['copywriting'],createdAt:now,updatedAt:now},
+ ];
+ if(cmd==='list_prompts'||cmd==='list_mcp'||cmd==='list_harnesses')return [];
  if(cmd==='scan_harnesses'){const now=Date.now();return [
   {id:'claude-code',name:'Claude Code',supportsMcp:true,supportsSkills:true,configPath:'C:/Users/dz/.claude.json',exists:true,mcpServers:[],skillsDirs:['C:/Users/dz/.claude/skills'],skills:[
    {name:'代码评审',path:'C:/Users/dz/.claude/skills/code-review',description:'',updatedAt:now-3*86400000},

@@ -32,6 +32,35 @@ function configPaths(report: HarnessReport): string[] {
   return report.configPath ? report.configPath.split(" · ").filter(Boolean) : [];
 }
 
+/** 扫描结果按天缓存：Harness 目录不会每分钟变，没必要每次进页面都全盘扫。 */
+const SCAN_CACHE_KEY = "nimbusdesk.harnessScan.v1";
+
+function dayKey(): string {
+  const d = new Date();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+
+function readScanCache(): HarnessReport[] | null {
+  try {
+    const raw = localStorage.getItem(SCAN_CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { day?: string; reports?: HarnessReport[] };
+    if (parsed.day !== dayKey() || !Array.isArray(parsed.reports)) return null;
+    return parsed.reports;
+  } catch {
+    return null;
+  }
+}
+
+function writeScanCache(reports: HarnessReport[]): void {
+  try {
+    localStorage.setItem(SCAN_CACHE_KEY, JSON.stringify({ day: dayKey(), reports }));
+  } catch {
+    /* 隐私模式/配额满：缓存失败不影响功能 */
+  }
+}
+
 /**
  * 每个 harness 一张小卡：CLI 状态、配置文件、技能目录、备份与迁移入口都在这里。
  *
@@ -43,6 +72,7 @@ export function HarnessToolsSection() {
   const [tools, setTools] = useState<ToolVersion[]>([]);
   const [busy, setBusy] = useState(false);
   const [checking, setChecking] = useState(false);
+  const [refreshing, setRefreshing] = useState<string | null>(null);
   const [acting, setActing] = useState<string | null>(null);
   const [editing, setEditing] = useState<{ id: string; name: string } | null>(null);
   const [migration, setMigration] = useState<HarnessReport | null>(null);
@@ -50,15 +80,42 @@ export function HarnessToolsSection() {
   const load = useCallback(async () => {
     setBusy(true);
     try {
-      const [nextReports, list] = await Promise.all([api.scanHarnesses(), api.toolList()]);
-      setReports(nextReports ?? []);
+      const list = await api.toolList();
       setTools(list?.tools ?? []);
+      // 当天已扫过就直接用缓存；次日首次进入或用户点单卡刷新才重新扫目录。
+      const cached = readScanCache();
+      if (cached) {
+        setReports(cached);
+        return;
+      }
+      const nextReports = await api.scanHarnesses();
+      const next = nextReports ?? [];
+      setReports(next);
+      writeScanCache(next);
     } catch (e) {
       toast.error(String(e));
     } finally {
       setBusy(false);
     }
   }, []);
+
+  /** 只刷新一个工具：改了某个工具的配置/技能目录后不必等第二天或重扫全部。 */
+  const refreshOne = useCallback(async (report: HarnessReport, announce = true) => {
+    setRefreshing(report.id);
+    try {
+      const next = await api.scanHarness(report.id);
+      setReports((prev) => {
+        const list = (prev ?? []).map((item) => (item.id === next.id ? next : item));
+        writeScanCache(list);
+        return list;
+      });
+      if (announce) toast.success(t("harnessTools.refreshOneDone", { name: report.name }));
+    } catch (e) {
+      toast.error(String(e));
+    } finally {
+      setRefreshing(null);
+    }
+  }, [t]);
 
   useEffect(() => {
     void load();
@@ -84,7 +141,7 @@ export function HarnessToolsSection() {
     try {
       const saved = await api.vaultSnapshot([report.id], "manual");
       toast.success(t("harnessTools.backupDone", { n: saved.length }));
-      await load();
+      await refreshOne(report, false);
     } catch (e) {
       toast.error(String(e));
     } finally {
@@ -99,7 +156,7 @@ export function HarnessToolsSection() {
       const failed = outcome.filter((item) => !item.ok);
       if (failed.length) failed.forEach((item) => toast.error(`${item.name}: ${item.message}`));
       else toast.success(t("harnessTools.updateDone", { name: report.name, version: outcome[0]?.to ?? "" }));
-      await load();
+      await refreshOne(report, false);
     } catch (e) {
       toast.error(String(e));
     } finally {
@@ -142,10 +199,6 @@ export function HarnessToolsSection() {
         >
           {checking ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
           {t("harnessTools.checkCli")}
-        </Button>
-        <Button size="sm" variant="secondary" className="h-7 text-[11px]" disabled={busy} onClick={() => void load()}>
-          {busy ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
-          {t("harnessTools.refresh")}
         </Button>
       </div>
 
@@ -222,6 +275,16 @@ export function HarnessToolsSection() {
                     </div>
                   </div>
                   <div className="flex shrink-0 items-center gap-1">
+                    <Button
+                      size="iconSm"
+                      variant="ghost"
+                      title={t("harnessTools.refreshOne")}
+                      aria-label={t("harnessTools.refreshOne")}
+                      disabled={refreshing === report.id}
+                      onClick={() => void refreshOne(report)}
+                    >
+                      <RefreshCw className={refreshing === report.id ? "animate-spin" : undefined} />
+                    </Button>
                     {tool && (!tool.installed || tool.hasUpdate || tool.broken) ? (
                       <Button
                         size="sm"
