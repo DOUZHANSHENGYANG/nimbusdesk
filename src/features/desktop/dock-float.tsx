@@ -48,7 +48,12 @@ const QUICK_TABS: { key: DockTab; icon: typeof Search }[] = [
 /** 主标签：日均用得多，图标 + 文字 */
 const PRIMARY_TABS: DockTab[] = ["search", "fences", "plans", "projects", "news"];
 /** 二级功能：日历 / 天气 / 通知 / 终端 —— 只出现在卡片头部的图标区 */
-const TOOL_TABS: { key: DockTab; icon: typeof Search }[] = [];
+const TOOL_TABS: { key: DockTab; icon: typeof Search }[] = [
+  { key: "cal", icon: CalendarDays },
+  { key: "weather", icon: CloudSun },
+  { key: "notice", icon: Bell },
+  { key: "term", icon: SquareTerminal },
+];
 
 const report = (error: unknown) => console.error("[dock-float]", error);
 
