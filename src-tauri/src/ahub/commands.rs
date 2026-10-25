@@ -178,6 +178,14 @@ pub async fn scan_harnesses(app: AppH) -> Result<Vec<HarnessReport>, String> {
         .await
         .map_err(|e| format!("任务失败: {e}"))?
 }
+
+/// 只扫描一个工具：Harness 页每张卡片的「刷新」用它，不必为了一个目录重扫全部。
+#[tauri::command]
+pub async fn scan_harness(app: AppH, harness: String) -> Result<HarnessReport, String> {
+    tauri::async_runtime::spawn_blocking(move || harness::scan_one(&app, &harness))
+        .await
+        .map_err(|e| format!("任务失败: {e}"))?
+}
 #[tauri::command]
 pub fn import_from_harness(
     app: AppH,
@@ -380,6 +388,39 @@ pub async fn preset_export(
     tauri::async_runtime::spawn_blocking(move || crate::ahub::presets::export(&app, &id, &target_dir))
         .await
         .map_err(|e| format!("任务失败: {e}"))?
+}
+
+// ---------------- MCP 预设（mcp-presets） ----------------
+
+#[tauri::command]
+pub fn mcp_preset_list(app: AppH) -> Result<Vec<crate::ahub::mcp_presets::McpPreset>, String> {
+    crate::ahub::mcp_presets::list(&app)
+}
+
+#[tauri::command]
+pub fn mcp_preset_create(
+    app: AppH,
+    name: String,
+    description: String,
+    server_names: Vec<String>,
+) -> Result<crate::ahub::mcp_presets::McpPreset, String> {
+    crate::ahub::mcp_presets::create(&app, &name, &description, server_names)
+}
+
+#[tauri::command]
+pub fn mcp_preset_update(
+    app: AppH,
+    id: String,
+    name: Option<String>,
+    description: Option<String>,
+    server_names: Option<Vec<String>>,
+) -> Result<crate::ahub::mcp_presets::McpPreset, String> {
+    crate::ahub::mcp_presets::update(&app, &id, name, description, server_names)
+}
+
+#[tauri::command]
+pub fn mcp_preset_delete(app: AppH, id: String) -> Result<(), String> {
+    crate::ahub::mcp_presets::delete(&app, &id)
 }
 
 #[tauri::command]

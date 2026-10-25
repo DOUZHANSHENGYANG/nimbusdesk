@@ -138,8 +138,13 @@ pub fn save_mcp(app: &AppH, mut s: McpServer) -> Result<McpServer, String> {
 
 pub fn delete_mcp(app: &AppH, id: &str) -> Result<(), String> {
     let path = mcp_dir(app).join(format!("{id}.json"));
+    // 删除前记下服务名：预设成员按名字引用，文件删了就没法反查了
+    let name = store::read_json::<McpServer>(&path).ok().map(|s| s.name);
     if path.exists() {
         std::fs::remove_file(&path).map_err(es)?;
+    }
+    if let Some(name) = name.filter(|n| !n.is_empty()) {
+        crate::ahub::mcp_presets::remove_server(app, &name)?;
     }
     Ok(())
 }

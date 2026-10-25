@@ -1,4 +1,4 @@
-import { Check, Download, Loader2, Pencil, Trash2, Users } from "lucide-react";
+import { Check, Download, Loader2, Pencil, Trash2, Users, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -25,8 +25,9 @@ import { open as openDialog } from "@tauri-apps/plugin-dialog";
 /**
  * 预设管理面板：重命名、编辑成员、删除、导出。
  *
- * 成员分两类：技能池里还存在的（可勾选）与已失效的（灰显 + 「已失效」标记，
- * 只能在编辑成员里手动移除 —— 不会自动清理）。
+ * 成员分两类：技能池里还存在的与已失效的（灰显 + 「已失效」标记）。
+ * 成员删除分两档：从预设移除（只动成员表）与彻底删除（删掉中枢技能目录，
+ * 后端会顺手把它从所有预设摘掉），彻底删除走二次确认。
  */
 export function PresetManager({
   open,
@@ -34,6 +35,8 @@ export function PresetManager({
   presets,
   skills,
   onChanged,
+  /** 彻底删除技能后刷新技能池 */
+  onItemsChanged,
   /** 当前正在筛选的预设被删掉时，调用方需要清掉筛选 */
   onDeleted,
 }: {
@@ -43,6 +46,7 @@ export function PresetManager({
   skills: SkillMeta[];
   /** 任一写操作成功后刷新预设列表 */
   onChanged: () => Promise<void> | void;
+  onItemsChanged: () => Promise<void> | void;
   onDeleted: (id: string) => void;
 }) {
   const { t } = useTranslation();
@@ -50,11 +54,23 @@ export function PresetManager({
   const [editing, setEditing] = useState<Preset | null>(null);
   const [deleting, setDeleting] = useState<Preset | null>(null);
   const [exportingId, setExportingId] = useState<string | null>(null);
+  const [purging, setPurging] = useState<{ preset: Preset; skill: SkillMeta } | null>(null);
 
   /** 技能池里真实存在的目录名 —— 用来判定失效成员 */
   const liveDirs = useMemo(() => new Set(skills.map((s) => s.dirName)), [skills]);
 
   const nameOf = (dirName: string) => skills.find((s) => s.dirName === dirName)?.name ?? dirName;
+
+  const removeMember = async (preset: Preset, dirName: string) => {
+    try {
+      await api.presetUpdate(preset.id, { skillDirNames: preset.skillDirNames.filter((d) => d !== dirName) });
+    } catch (e) {
+      toast.error(presetErrorText(e, t));
+      return;
+    }
+    toast.success(t("preset.removedFromPreset"));
+    await onChanged();
+  };
 
   const doExport = async (p: Preset) => {
     const picked = await openDialog({ directory: true, multiple: false, title: t("preset.exportPick") });
@@ -121,17 +137,40 @@ export function PresetManager({
                       ) : (
                         p.skillDirNames.map((d) => {
                           const gone = !liveDirs.has(d);
+                          const skill = skills.find((s) => s.dirName === d);
                           return (
                             <span
                               key={d}
                               title={gone ? t("preset.reasonMissing") : d}
                               className={cn(
-                                "inline-flex max-w-[220px] items-center gap-1 rounded-full px-2 py-0.5 text-[11px]",
+                                "group inline-flex max-w-[240px] items-center gap-0.5 rounded-full py-0.5 pl-2 pr-1 text-[11px]",
                                 gone ? "bg-surface-2 text-ink-3 line-through" : "bg-primary-soft text-primary",
                               )}
                             >
                               <span className="min-w-0 truncate">{gone ? d : nameOf(d)}</span>
                               {gone ? <span className="shrink-0 opacity-80">· {t("preset.stale")}</span> : null}
+                              {!gone ? (
+                                <>
+                                  <button
+                                    type="button"
+                                    title={t("preset.removeFromPreset")}
+                                    onClick={() => void removeMember(p, d)}
+                                    className="shrink-0 rounded-full p-0.5 opacity-0 transition-opacity hover:bg-primary/15 group-hover:opacity-100"
+                                  >
+                                    <X className="size-3" />
+                                  </button>
+                                  {skill ? (
+                                    <button
+                                      type="button"
+                                      title={t("preset.purgeMember")}
+                                      onClick={() => setPurging({ preset: p, skill })}
+                                      className="shrink-0 rounded-full p-0.5 opacity-0 transition-opacity hover:bg-danger/15 group-hover:opacity-100"
+                                    >
+                                      <Trash2 className="size-3" />
+                                    </button>
+                                  ) : null}
+                                </>
+                              ) : null}
                             </span>
                           );
                         })
@@ -240,6 +279,28 @@ export function PresetManager({
             .then(async () => {
               toast.success(t("preset.deleted", { name }));
               onDeleted(id);
+              await onChanged();
+            })
+            .catch((e) => toast.error(presetErrorText(e, t)));
+        }}
+      />
+
+      {/* 彻底删除技能：技能目录没了，后端会把它从所有预设里摘掉；工具里的副本不受影响 */}
+      <ConfirmDialog
+        open={!!purging}
+        onOpenChange={(v) => !v && setPurging(null)}
+        title={t("preset.purgeMemberTitle", { name: purging?.skill.name ?? "" })}
+        message={t("preset.purgeSkillMsg")}
+        danger
+        onConfirm={() => {
+          if (!purging) return;
+          const dirName = purging.skill.dirName;
+          const name = purging.skill.name;
+          void api
+            .deleteSkill(dirName)
+            .then(async () => {
+              toast.success(t("preset.purged", { name }));
+              await onItemsChanged();
               await onChanged();
             })
             .catch((e) => toast.error(presetErrorText(e, t)));

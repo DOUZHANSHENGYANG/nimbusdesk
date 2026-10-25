@@ -1782,6 +1782,7 @@ pub fn delete_skill(app: &AppH, dir_name: &str) -> Result<(), String> {
     if dir.is_dir() {
         std::fs::remove_dir_all(&dir).map_err(es)?;
     }
+    crate::ahub::presets::remove_skill(app, dir_name)?;
     Ok(())
 }
 

@@ -269,6 +269,31 @@ fn delete_at(root: &Path, id: &str) -> Result<(), String> {
     write_at(root, &presets)
 }
 
+/// 技能被删除后，把它从所有预设的成员里摘掉。
+///
+/// 与 MCP 预设同一条约定：成员是用户认得的名字，删掉后留在预设里只会永远标灰。
+/// 返回被改动的预设数，没有命中的预设时不落盘。
+pub fn remove_skill(app: &AppH, dir_name: &str) -> Result<usize, String> {
+    remove_member_at(&store::data_root(app), dir_name)
+}
+
+fn remove_member_at(root: &Path, dir_name: &str) -> Result<usize, String> {
+    let mut presets = read_at(root)?;
+    let mut changed = 0;
+    for p in presets.iter_mut() {
+        let before = p.skill_dir_names.len();
+        p.skill_dir_names.retain(|n| n != dir_name);
+        if p.skill_dir_names.len() != before {
+            p.updated_at = now_iso();
+            changed += 1;
+        }
+    }
+    if changed > 0 {
+        write_at(root, &presets)?;
+    }
+    Ok(changed)
+}
+
 /// 预设名 → 安全的文件名 / zip 内根目录名。
 /// Windows 非法字符（`\ / : * ? " < > |`）替换为 `_`。
 fn sanitize_name(name: &str) -> String {

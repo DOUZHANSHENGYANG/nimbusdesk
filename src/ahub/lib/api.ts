@@ -43,6 +43,7 @@ import type {
   SkillSummaryBatchOutcome,
   Preset,
   PresetExportOutcome,
+  McpPreset,
   AiProvider,
   AiProviderDraft,
   AiProviderPreset,
@@ -218,6 +219,16 @@ export const api = {
   presetExport: (id: string, targetDir: string) =>
     invoke<PresetExportOutcome>("preset_export", { id, targetDir }),
 
+  // ── MCP 预设（mcp-presets） ──
+  mcpPresetList: () => invoke<McpPreset[]>("mcp_preset_list"),
+  mcpPresetCreate: (name: string, description: string, serverNames: string[]) =>
+    invoke<McpPreset>("mcp_preset_create", { name, description, serverNames }),
+  mcpPresetUpdate: (
+    id: string,
+    patch: { name?: string; description?: string; serverNames?: string[] },
+  ) => invoke<McpPreset>("mcp_preset_update", { id, ...patch }),
+  mcpPresetDelete: (id: string) => invoke<void>("mcp_preset_delete", { id }),
+
   readVetReport: (dirName: string) => invoke<import("@/ahub/lib/types").VetReportRow | null>("read_vet_report", { dirName }),
   reviewVetFinding: (dirName: string, rule: string, file: string, line: number, ignored: boolean) =>
     invoke<[number, number]>("review_vet_finding", { dirName, rule, file, line, ignored }),
@@ -276,6 +287,7 @@ export const api = {
     invoke<SkillMeta>("update_skill_ext", { dirName, ...payload }),
 
   scanHarnesses: () => invoke<HarnessReport[]>("scan_harnesses"),
+  scanHarness: (harness: string) => invoke<HarnessReport>("scan_harness", { harness }),
   preImport: (harness: string, kind: string, names: string[]) =>
     invoke<PreImportResult>("pre_import", { harness, kind, names }),
   importFromHarness: (harness: string, kind: string, selections: ImportSelection[]) =>

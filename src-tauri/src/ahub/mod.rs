@@ -12,6 +12,7 @@ pub mod gitsync;
 pub mod harness;
 pub mod install;
 pub mod items;
+pub mod mcp_presets;
 pub mod mcpconnect;
 pub mod mirrorcfg;
 pub mod models;

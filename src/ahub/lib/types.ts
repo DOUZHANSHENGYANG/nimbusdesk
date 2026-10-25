@@ -171,6 +171,16 @@ export interface Preset {
   updatedAt: string;
 }
 
+/** MCP 预设：成员是服务名（不是 id —— 服务删了重建 id 会变） */
+export interface McpPreset {
+  id: string;
+  name: string;
+  description: string;
+  serverNames: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
 /** 导出时被跳过的失效成员 */
 export interface SkippedMember {
   dirName: string;
