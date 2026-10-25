@@ -782,3 +782,7 @@
 .df-home-v { font-size: 26px; font-weight: var(--pr-weight-semibold); line-height: 1.1; letter-spacing: -0.01em; }
 .df-cal-grid.is-compact { gap: 0; }
 .df-cal-grid.is-compact .df-cal-day { height: 26px; }
+
+/* 嵌入主窗口整页：卡片里给它一个可滚动的完整高度，内部布局由页面自己负责 */
+.df-embed { flex: 1; min-height: 0; overflow: auto; }
+.df-embed > * { min-height: 100%; }

@@ -18,6 +18,7 @@ import { useFavorites } from "@/stores/favorites";
 import { ArticleReader } from "@/features/feeds/article-reader";
 import { openUrl } from "@/lib/tauri";
 import { useSettings } from "@/stores/settings";
+import { SchedulePage } from "@/features/schedule/page";
 import { chatWithProvider, type ChatMessage } from "@/features/ai/client";
 import { ageBucket, dateKey, monthGrid, summarizeDay } from "./dock-float-core";
 import "./dock-float.css";
@@ -346,7 +347,7 @@ export function DockFloat({ onExpand, onHide, panels }: {
               <div className="df-collect">{panels.capture}</div>
             )}
             {tab === "news" && <NewsPanel />}
-            {tab === "cal" && <CalendarPanel />}
+            {tab === "cal" && <div className="df-embed"><SchedulePage /></div>}
             {tab === "chat" && <div className="df-body-inner"><ChatPanel onClose={() => setTab("search")} /></div>}
             {tab === "weather" && <WeatherPanel />}
             {tab === "notice" && <NoticePanel onOpenPlans={() => setTab("plans")} />}
@@ -653,64 +654,6 @@ function ChatPanel({ onClose }: { onClose: () => void }) {
   );
 }
 
-/**
- * 日历：月格 + 选中日的待办。
- *
- * 只做「看」和「跳」：卡片里点日期看当天有什么，要改任务就跳主窗口 ——
- * 日历编辑（拖拽改期、重复规则）不属于「3 秒内能完成」的事。
- */
-function CalendarPanel() {
-  const { t } = useTranslation();
-  const today = new Date();
-  const [cursor, setCursor] = useState({ year: today.getFullYear(), month: today.getMonth() });
-  const [picked, setPicked] = useState(dateKey(today));
-  const days = usePlans((state) => state.days);
-  const cells = useMemo(() => monthGrid(cursor.year, cursor.month), [cursor]);
-  const tasks = days[picked] ?? [];
-  const label = new Intl.DateTimeFormat(undefined, { year: "numeric", month: "long" }).format(new Date(cursor.year, cursor.month, 1));
-
-  return (
-    <div className="df-panel df-cal">
-      <div className="df-cal-bar">
-        <button type="button" className="df-icon-btn" aria-label={t("dockFloat.prevMonth")}
-          onClick={() => setCursor((c) => { const d = new Date(c.year, c.month - 1, 1); return { year: d.getFullYear(), month: d.getMonth() }; })}>
-          <ChevronDown className="df-icon is-left" aria-hidden="true" />
-        </button>
-        <span className="df-cal-label">{label}</span>
-        <button type="button" className="df-icon-btn" aria-label={t("dockFloat.nextMonth")}
-          onClick={() => setCursor((c) => { const d = new Date(c.year, c.month + 1, 1); return { year: d.getFullYear(), month: d.getMonth() }; })}>
-          <ChevronDown className="df-icon is-right" aria-hidden="true" />
-        </button>
-      </div>
-      <div className="df-cal-week">
-        {["mo","tu","we","th","fr","sa","su"].map((d) => (
-          <span key={d}>{t(`dockFloat.week.${d}`)}</span>
-        ))}
-      </div>
-      <div className="df-cal-grid">
-        {cells.map((cell) => {
-          const count = (days[cell.date] ?? []).filter((task) => !task.done).length;
-          return (
-            <button key={cell.date} type="button"
-              className={`df-cal-day${cell.inMonth ? "" : " is-out"}${cell.date === picked ? " is-on" : ""}${cell.date === dateKey(today) ? " is-today" : ""}`}
-              onClick={() => setPicked(cell.date)}>
-              <span>{cell.day}</span>
-              {count > 0 && <i className="df-cal-dot" aria-label={String(count)} />}
-            </button>
-          );
-        })}
-      </div>
-      <div className="df-cal-list">
-        {tasks.length === 0 && <p className="df-hint">{t("dockFloat.dayEmpty")}</p>}
-        {tasks.filter((task) => !task.parentId).map((task) => (
-          <div key={task.id} className={`df-news-row${task.done ? " is-done" : ""}`}>
-            <span className="df-row-title">{task.title}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-}
 
 /**
  * 天气：Open-Meteo（免 key、免注册）。
