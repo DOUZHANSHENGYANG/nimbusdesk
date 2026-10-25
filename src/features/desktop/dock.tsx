@@ -175,8 +175,22 @@ export function DockWindow() {
     void (async () => {
       // 等设置水合再定尺寸：首帧的 dockStyle 还是默认 rail，先按它摆会闪一下 64 高。
       await waitSettings();
-      if (useSettings.getState().dockStyle === "capsule") await applyFloat(false);
-      else await applyMode("strip");
+      if (useSettings.getState().dockStyle === "capsule") {
+        /*
+         * 先把胶囊摆到位，再把「它现在的位置」写进 dockFloatX。
+         *
+         * 不写的话第一次展开走的是「居中推算」分支，而之后每次走的是
+         * 「以 dockFloatX 为轴」分支 —— 两个分支在边界上会差几个像素，
+         * 用户看到的就是「第一次展开整个窗口往左挪一下，之后都正常」。
+         * 落成同一个值，第一次和后面第 N 次走的是同一条路径。
+         */
+        await applyFloat(false);
+        const area = areaRef.current;
+        if (area && useSettings.getState().dockFloatX === null) {
+          const strip = dockFloatBounds(area, "strip", "center");
+          useSettings.getState().setDockFloatX(strip.x);
+        }
+      } else await applyMode("strip");
       await invoke("window_show_no_activate", { label: LABEL });
     })().catch(report);
     // 失焦即收起面板：点击了外部应用或打开了文件后，面板不该留在原地。
