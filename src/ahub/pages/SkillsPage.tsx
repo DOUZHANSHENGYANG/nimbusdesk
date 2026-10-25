@@ -1,4 +1,4 @@
-import { Archive, ArrowRight, Boxes, Check, ChevronDown, ChevronRight, CircleAlert, Clock, CloudUpload, Columns2, Eye, FolderOpen, GitCompare, History, LayoutGrid, Layers, ListChecks, Loader2, Package, Paperclip, Pencil, Plus, RefreshCw, RotateCw, Save, ScanSearch, Settings2, ShieldAlert, ShieldCheck, Sparkles, Tag, Trash2, X, Zap } from "lucide-react";
+import { Archive, ArrowRight, Boxes, Check, ChevronDown, ChevronRight, CircleAlert, Clock, CloudUpload, Columns2, Eye, FolderOpen, GitCompare, History, LayoutGrid, Layers, ListChecks, Loader2, Package, Paperclip, Pencil, Play, Plus, RefreshCw, RotateCw, Save, ScanSearch, Settings2, ShieldAlert, ShieldCheck, Sparkles, Tag, Trash2, X, Zap } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -8,6 +8,7 @@ import { matchTags, type TagMode } from "@/ahub/components/TagFilter";
 import { TagShelf } from "@/ahub/components/TagShelf";
 import { BatchTagDialog, TagPicker } from "@/ahub/components/TagPicker";
 import { UpstreamCheckDialog, UpstreamCheckIcon, type UpstreamRow } from "@/ahub/components/UpstreamCheckDialog";
+import { SkillPipelineDialog, type PipelineStepId } from "@/ahub/components/SkillPipelineDialog";
 import { TagManagerView } from "@/ahub/components/TagManagerView";
 import { TagCommand } from "@/ahub/components/TagCommand";
 import { SearchBar } from "@/ahub/components/SearchBar";
@@ -165,6 +166,8 @@ export function SkillsPage() {
   const [upstreamOpen, setUpstreamOpen] = useState(false);
   const [upstreamRows, setUpstreamRows] = useState<UpstreamRow[]>([]);
   const [upstreamBusy, setUpstreamBusy] = useState(false);
+  const [pipelineOpen, setPipelineOpen] = useState(false);
+  const [pipelineOutDir, setPipelineOutDir] = useState("");
   const [scanOpen, setScanOpen] = useState(false);
   const [batchMode, setBatchMode] = useState(false);
   const [batchSel, setBatchSel] = useState<Set<string>>(new Set());
@@ -577,6 +580,34 @@ export function SkillsPage() {
     }
   };
 
+  /** 流水线单步：审查 = 体检（vet），摘要 = AI 批量，打包 = 导出 zip + index.json */
+  const runPipelineStep = async (id: PipelineStepId) => {
+    const targets = [...batchSel];
+    if (id === "vet") {
+      const report = await api.onboardSkillsBatch(targets, false, true);
+      const rejected = report.outcomes.filter((o) => !o.ok).length;
+      return {
+        ok: report.succeeded,
+        failed: report.failed,
+        note: rejected > 0 ? t("skills.pipeVetRejected", { n: rejected }) : undefined,
+      };
+    }
+    if (id === "summary") {
+      const outcomes = await api.skillGenerateSummaryBatch(targets);
+      const ok = outcomes.filter((o) => o.ok).length;
+      await loadSkills();
+      return { ok, failed: outcomes.length - ok };
+    }
+    const report = await api.packSkillsBatch(targets, pipelineOutDir);
+    await loadSkills();
+    return { ok: report.succeeded, failed: report.failed + report.warned, note: report.outDir };
+  };
+
+  const pickPipelineOutDir = async () => {
+    const picked = await openDialog({ directory: true, multiple: false, title: t("skills.packPickOut") });
+    if (typeof picked === "string" && picked) setPipelineOutDir(picked);
+  };
+
   /** 点击卡片上的标签：下钻筛选 */
   const drillTag = (tg: string) =>
     setActiveTags((prev) => {
@@ -881,7 +912,7 @@ export function SkillsPage() {
               因此「批量选择」按钮的位置在任何模式下都完全不变 ——
               快速连点不会被位移后的其它按钮（尤其是删除）命中。
             */}
-            <div className="flex shrink-0 items-center gap-2">
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
               {batchMode ? (
                 <>
                   {/* 全选 / 取消全选：作用于当前筛选结果 */}
@@ -925,6 +956,18 @@ export function SkillsPage() {
                   >
                     {batchSummaryBusy ? <Loader2 className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />}
                     {t("skills.batchSummaryBtn")}
+                  </Button>
+
+                  {/* 发版流水线：审查 → 摘要 → 打包，一条链跑完，每步可单独重跑 */}
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    className="h-7 w-[104px] justify-center text-[11px]"
+                    disabled={batchSel.size === 0}
+                    onClick={() => setPipelineOpen(true)}
+                  >
+                    <Play className="size-3.5" />
+                    {t("skills.pipeBtn")}
                   </Button>
 
                   <span className="w-[76px] shrink-0 text-right tabular-nums text-[11px] text-ink-3">
@@ -1819,6 +1862,14 @@ export function SkillsPage() {
 
       <HarnessDialog open={scanOpen} onOpenChange={setScanOpen} kind="skills" />
 
+      <SkillPipelineDialog
+        open={pipelineOpen}
+        onOpenChange={setPipelineOpen}
+        count={batchSel.size}
+        outDir={pipelineOutDir}
+        onPickOutDir={pickPipelineOutDir}
+        runStep={runPipelineStep}
+      />
       <UpstreamCheckDialog
         open={upstreamOpen}
         onOpenChange={setUpstreamOpen}

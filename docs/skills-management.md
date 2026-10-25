@@ -35,6 +35,19 @@ OpenCode / WorkBuddy / CodeBuddy / DeepSeek），并把扫到的条目**默认�
 
 逐个调而不是新开批量命令：状态要写回每个技能自己的元信息，失败也只该影响那一个。
 
+## 发版流水线
+
+批量工具条里选好技能 → 「流水线」：**审查（体检）→ AI 摘要 → 打包导出** 依次执行，
+每步有自己的状态与「重跑」，某步失败不用从头再来。
+
+| 步骤 | 调用的命令 | 说明 |
+|---|---|---|
+| 审查（体检） | `onboard_skills_batch(targets, false, true)` | 补 `SKILL.toml` + 规则体检，返回建议级别；未通过的数量写在结果里 |
+| AI 摘要 | `skill_generate_summary_batch` | 生成一句话描述，写回 `.hub.json` |
+| 打包导出 | `pack_skills_batch(targets, outDir)` | 导出 zip 与 `index.json`；没选目录时这步显示「已跳过」 |
+
+截图：`docs/screenshots/skill-pipeline.png`。
+
 ## 批量检查上游更新
 
 页头「检查更新」：勾了技能就只查勾选的，没勾就查全部，逐个跑 `check_upstream`

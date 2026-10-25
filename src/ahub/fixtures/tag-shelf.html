@@ -17,6 +17,8 @@ mockIPC(async(cmd,args)=>{
  if(cmd==='get_settings')return structuredClone(settingsInfo);
  if(cmd==='preset_list'||cmd==='list_prompts'||cmd==='list_mcp'||cmd==='list_harnesses')return [];
  if(cmd==='check_upstream'){ const m={'code-review':{watched:true,changed:true,remote:'https://github.com/team/skills',remoteHead:'a1b2c3',lastHead:'0f0e0d',note:''},'debug':{watched:true,changed:false,remote:'https://github.com/team/skills',remoteHead:'a1b2c3',lastHead:'a1b2c3',note:''},'frontend-design':{watched:false,changed:false,remote:'',remoteHead:'',lastHead:'',note:'未开启上游追踪'},'docs':{watched:true,changed:false,remote:'https://github.com/x/y',remoteHead:'',lastHead:'',note:'git ls-remote 失败: not found'}}; const r=m[args?.dirName] ?? {}; return {watched:false,changed:false,remote:'',remoteHead:'',lastHead:'',note:'',checkedAt:new Date().toISOString(),...r}; }
+ if(cmd==='onboard_skills_batch')return {total:1,succeeded:1,failed:0,created:1,rejected:0,review:0,install:0,outcomes:[{dirName:'code-review',ok:true,createdToml:true,version:'1.0.0',verdict:'pass',level:'L1',critical:0,high:0,medium:0,error:''}]};
+ if(cmd==='skill_generate_summary_batch')return [{dirName:'code-review',ok:true,summary:'按团队规范评审 diff，指出风险与可读性问题。'}];
  if(cmd==='plugin:event|listen')return 1;
  if(cmd==='get_data_dir')return 'E:/SkillsFixture';
  return null;
