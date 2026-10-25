@@ -423,23 +423,27 @@ function SearchPanel() {
   );
 
   return (
-    <div className="df-panel">
-      <label className="df-field">
-        <Search className="df-icon" aria-hidden="true" />
-        <input autoFocus value={query} onChange={(event) => setQuery(event.target.value)}
-          placeholder={t("dockFloat.searchPlaceholder")} aria-label={t("dockFloat.tab.search")} />
-        {busy && <span className="df-row-meta">{t("dockFloat.searching")}</span>}
-      </label>
-      <div className="df-scopes">
+    <div className="df-panel df-search">
+      {/* 左栏：范围做竖排导航，比横着一排小胶囊好扫，也给结果区腾出整块宽 */}
+      <nav className="df-search-rail" role="tablist" aria-label={t("dockFloat.tab.search")}>
         {SEARCH_SCOPES.map((key) => (
-          <button key={key} type="button" className={`df-scope${scope === key ? " is-on" : ""}`}
-            aria-pressed={scope === key} onClick={() => setScope(key)}>
+          <button key={key} type="button" role="tab" aria-selected={scope === key}
+            className={`df-rail-item${scope === key ? " is-on" : ""}`}
+            onClick={() => setScope(key)}>
             {t(`dockFloat.scope.${key}`)}
           </button>
         ))}
-      </div>
-      {query.trim() && !busy && visible.length === 0 && <p className="df-hint">{t("dockFloat.noResult")}</p>}
-      <div className="df-rows">
+      </nav>
+
+      <div className="df-search-main">
+        <label className="df-field">
+          <Search className="df-icon" aria-hidden="true" />
+          <input autoFocus value={query} onChange={(event) => setQuery(event.target.value)}
+            placeholder={t("dockFloat.searchPlaceholder")} aria-label={t("dockFloat.tab.search")} />
+          {busy && <span className="df-row-meta">{t("dockFloat.searching")}</span>}
+        </label>
+        {query.trim() && !busy && visible.length === 0 && <p className="df-hint">{t("dockFloat.noResult")}</p>}
+        <div className="df-rows">
         {visible.map((hit) => {
           const Icon = HIT_ICONS[hit.kind as keyof typeof HIT_ICONS] ?? FileText;
           return (
@@ -451,6 +455,7 @@ function SearchPanel() {
             </button>
           );
         })}
+        </div>
       </div>
     </div>
   );

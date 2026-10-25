@@ -788,3 +788,23 @@
 /* 嵌入主窗口整页：卡片里给它一个可滚动的完整高度，内部布局由页面自己负责 */
 .df-embed { flex: 1; min-height: 0; overflow: auto; }
 .df-embed > * { min-height: 100%; }
+
+/* 搜索：左栏范围 + 右栏结果。竖排比一排小胶囊好扫，结果区也拿到整块宽度 */
+.df-search { display: grid; grid-template-columns: 96px 1fr; gap: 10px; flex: 1; min-height: 0; }
+.df-search-rail { display: flex; flex-direction: column; gap: 2px; min-height: 0; overflow: auto; }
+.df-rail-item {
+  height: 30px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: var(--pr-radius-sm);
+  background: transparent;
+  color: var(--muted-foreground);
+  font: inherit;
+  font-size: var(--pr-text-xs);
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--dur-fast) ease, color var(--dur-fast) ease;
+}
+.df-rail-item:hover { background: var(--surface-hover); color: var(--foreground); }
+.df-rail-item.is-on { background: var(--dock-face); color: var(--foreground); font-weight: var(--pr-weight-semibold); }
+.df-search-main { display: flex; flex-direction: column; gap: 8px; min-height: 0; min-width: 0; }
