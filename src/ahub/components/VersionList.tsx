@@ -1,6 +1,10 @@
 import { ChevronDown, Clock, FileText, GitCompare, RotateCcw, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import ReactDiffViewer from "react-diff-viewer-continued";
+import { VerticalTimeline, VerticalTimelineElement } from "react-vertical-timeline-component";
+import "react-vertical-timeline-component/style.min.css";
+import "@/ahub/styles/version-timeline.css";
 import { Badge } from "@/ahub/components/ui/badge";
 import { Button } from "@/ahub/components/ui/button";
 import type { VersionEntry } from "@/ahub/lib/types";
@@ -10,7 +14,14 @@ function fmt(iso: string): string {
   try {
     const d = new Date(iso);
     if (Number.isNaN(d.getTime())) return iso;
-    return d.toLocaleString();
+    // 竖栏里空间紧：到分钟即可，秒和年份以外的长格式都省掉
+    return d.toLocaleString(undefined, {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
   } catch {
     return iso;
   }
@@ -26,154 +37,74 @@ function bodyOf(content: string): string {
   return content.replace(/^---\n[\s\S]*?\n---\n\n?/, "");
 }
 
-/**
- * 行级 diff（LCS 动态规划）。
- * 技能正文通常几百行，O(n·m) 完全够用；超长内容退化为整体替换以免卡顿。
- */
-type DiffRow = { type: "same" | "add" | "del"; text: string };
+/** diff 配色全部走 token：库只接受颜色字符串，用 var() 传进去，主题切换自动跟随 */
+const DIFF_STYLES = {
+  variables: {
+    dark: {
+      diffViewerBackground: "var(--surface)",
+      diffViewerColor: "var(--ink-2, var(--muted-foreground))",
+      diffViewerTitleBackground: "var(--surface-2, var(--surface))",
+      diffViewerTitleColor: "var(--ink-3, var(--muted-foreground))",
+      diffViewerTitleBorderColor: "var(--border)",
+      addedBackground: "color-mix(in oklab, var(--success) 12%, transparent)",
+      addedColor: "var(--success)",
+      removedBackground: "color-mix(in oklab, var(--danger) 12%, transparent)",
+      removedColor: "var(--danger)",
+      changedBackground: "color-mix(in oklab, var(--warning) 12%, transparent)",
+      wordAddedBackground: "color-mix(in oklab, var(--success) 26%, transparent)",
+      wordRemovedBackground: "color-mix(in oklab, var(--danger) 26%, transparent)",
+      addedGutterBackground: "color-mix(in oklab, var(--success) 18%, transparent)",
+      removedGutterBackground: "color-mix(in oklab, var(--danger) 18%, transparent)",
+      gutterBackground: "var(--surface)",
+      gutterBackgroundDark: "var(--surface)",
+      gutterColor: "var(--ink-3, var(--muted-foreground))",
+      addedGutterColor: "var(--success)",
+      removedGutterColor: "var(--danger)",
+      codeFoldGutterBackground: "var(--surface)",
+      codeFoldBackground: "var(--surface)",
+      emptyLineBackground: "var(--surface)",
+      codeFoldContentColor: "var(--ink-3, var(--muted-foreground))",
+      highlightBackground: "color-mix(in oklab, var(--primary) 10%, transparent)",
+      highlightGutterBackground: "color-mix(in oklab, var(--primary) 16%, transparent)",
+    },
+  },
+  diffContainer: { fontSize: "11px", fontFamily: "var(--font-mono, ui-monospace, monospace)" },
+  contentText: { lineHeight: "1.45" },
+  // 库里那条「变更块缩略条」在窄栏里只显得吵，关掉
+  block: { display: "none" },
+  blockAddition: { display: "none" },
+  blockDeletion: { display: "none" },
+  allExpandButton: { display: "none" },
+  codeFoldGutter: { display: "none" },
+} as const;
 
-const MAX_LINES = 2000;
-
-function diffLines(a: string, b: string): DiffRow[] {
-  // 空字符串代表「没有内容」，按 0 行处理，避免凭空多出一行差异
-  const la = a === "" ? [] : a.split("\n");
-  const lb = b === "" ? [] : b.split("\n");
-  if (la.length > MAX_LINES || lb.length > MAX_LINES) {
-    return [
-      ...la.map((text) => ({ type: "del" as const, text })),
-      ...lb.map((text) => ({ type: "add" as const, text })),
-    ];
-  }
-  // LCS 表（滚动两行即可，但回溯需要全表 → 用 Int32Array 扁平存储）
-  const n = la.length;
-  const m = lb.length;
-  const w = m + 1;
-  const dp = new Int32Array((n + 1) * w);
-  for (let i = n - 1; i >= 0; i--) {
-    for (let j = m - 1; j >= 0; j--) {
-      dp[i * w + j] =
-        la[i] === lb[j] ? dp[(i + 1) * w + (j + 1)] + 1 : Math.max(dp[(i + 1) * w + j], dp[i * w + (j + 1)]);
-    }
-  }
-  const out: DiffRow[] = [];
-  let i = 0;
-  let j = 0;
-  while (i < n && j < m) {
-    if (la[i] === lb[j]) {
-      out.push({ type: "same", text: la[i] });
-      i++;
-      j++;
-    } else if (dp[(i + 1) * w + j] >= dp[i * w + (j + 1)]) {
-      out.push({ type: "del", text: la[i] });
-      i++;
-    } else {
-      out.push({ type: "add", text: lb[j] });
-      j++;
-    }
-  }
-  while (i < n) out.push({ type: "del", text: la[i++] });
-  while (j < m) out.push({ type: "add", text: lb[j++] });
-  return out;
-}
-
-function diffStat(rows: DiffRow[]) {
-  let added = 0;
-  let removed = 0;
-  for (const r of rows) {
-    if (r.type === "add") added++;
-    else if (r.type === "del") removed++;
-  }
-  return { added, removed };
-}
-
-/** 只显示变更附近的行，省空间 */
-function collapseContext(rows: DiffRow[], padding = 2): (DiffRow | { type: "gap"; text: string })[] {
-  const keep = new Set<number>();
-  rows.forEach((r, i) => {
-    if (r.type === "same") return;
-    for (let k = i - padding; k <= i + padding; k++) if (k >= 0 && k < rows.length) keep.add(k);
-  });
-  const out: (DiffRow | { type: "gap"; text: string })[] = [];
-  let skipping = false;
-  rows.forEach((r, i) => {
-    if (keep.has(i)) {
-      out.push(r);
-      skipping = false;
-    } else if (!skipping) {
-      out.push({ type: "gap", text: "…" });
-      skipping = true;
-    }
-  });
-  return out;
-}
-
-function DiffView({ rows, baseLabel }: { rows: DiffRow[]; baseLabel: string }) {
-  const { t } = useTranslation();
-  const shown = useMemo(() => collapseContext(rows), [rows]);
-  const stat = diffStat(rows);
-
+/** 竖栏里塞不下左右两栏，用统一视图；行号保留，方便对「第几行变了」 */
+function DiffView({ from, to, title }: { from: string; to: string; title: string }) {
+  const dark = typeof document !== "undefined" && document.documentElement.classList.contains("dark");
   return (
-    <div className="mt-2 overflow-hidden rounded-lg border border-border bg-bg-subtle">
-      <div className="flex items-center gap-2 border-b border-border px-3 py-1.5">
-        <GitCompare className="size-3.5 shrink-0 text-ink-3" />
-        <span className="min-w-0 flex-1 truncate text-[11px] text-ink-3">
-          {t("skills.verDiffTitle")} · {baseLabel}
-        </span>
-        {stat.added || stat.removed ? (
-          <span className="shrink-0 font-mono text-[11px] tabular-nums">
-            <span className="text-success">{t("skills.verAdded", { n: stat.added })}</span>{" "}
-            <span className="text-danger">{t("skills.verRemoved", { n: stat.removed })}</span>
-          </span>
-        ) : (
-          <span className="shrink-0 text-[11px] text-ink-3">{t("skills.verDiffEmpty")}</span>
-        )}
+    <div className="mt-2 w-full min-w-0 overflow-hidden rounded-lg border border-border bg-surface">
+      <div className="flex items-center gap-2 border-b border-border px-2.5 py-1.5">
+        <GitCompare className="size-3 shrink-0 text-ink-3" />
+        <span className="min-w-0 flex-1 truncate text-[10.5px] text-ink-3">{title}</span>
       </div>
-      <div className="max-h-72 overflow-auto">
-        <table className="w-full border-collapse font-mono text-[11px] leading-5" dir="ltr">
-          <tbody>
-            {shown.map((r, i) =>
-              r.type === "gap" ? (
-                <tr key={i} className="text-ink-3">
-                  <td className="w-8 select-none border-r border-border px-1 text-right opacity-40">·</td>
-                  <td className="px-2 py-0.5 opacity-40">⋯</td>
-                </tr>
-              ) : (
-                <tr
-                  key={i}
-                  className={cn(
-                    r.type === "add" && "bg-success/10",
-                    r.type === "del" && "bg-danger/10",
-                  )}
-                >
-                  <td
-                    className={cn(
-                      "w-8 select-none border-r border-border px-1 text-right",
-                      r.type === "add" ? "text-success" : r.type === "del" ? "text-danger" : "text-ink-3 opacity-40",
-                    )}
-                  >
-                    {r.type === "add" ? "+" : r.type === "del" ? "−" : ""}
-                  </td>
-                  <td
-                    className={cn(
-                      "whitespace-pre-wrap break-all px-2 py-0.5",
-                      r.type === "same" ? "text-ink-2" : "text-foreground",
-                    )}
-                  >
-                    {r.text || " "}
-                  </td>
-                </tr>
-              ),
-            )}
-          </tbody>
-        </table>
+      <div className="ahub-diff max-h-64 w-full min-w-0 overflow-auto">
+        <ReactDiffViewer
+          oldValue={from}
+          newValue={to}
+          splitView={false}
+          useDarkTheme={dark}
+          showDiffOnly={false}
+          styles={DIFF_STYLES as never}
+        />
       </div>
     </div>
   );
 }
 
 /**
- * 版本时间轴：纵向轴 + 节点，含「当前内容」顶点。
- * 每条快照可展开与当前/上一版的逐行差异，并一键恢复。
+ * 版本时间轴：库（react-vertical-timeline-component）负责竖线/节点/卡片与展开动画，
+ * 逐行差异交给 react-diff-viewer-continued（语法高亮、词级高亮、可折叠上下文）。
+ * 这里只剩「我们的业务」：版本号、备注、当前内容是否未发布、恢复与清空。
  */
 export function VersionList({
   versions,
@@ -210,6 +141,32 @@ export function VersionList({
   // 注意用 bodyOf：技能的版本快照存的是整份 SKILL.md（含 frontmatter），
   // 而传进来的 current 只是正文。直接比会永远判为"有改动"。
   const dirty = list.length > 0 && bodyOf(cur) !== bodyOf(list[0].content);
+
+  const icon = (tone: "success" | "primary" | "muted") => (
+    <span
+      className={cn(
+        "block size-2.5 rounded-full",
+        tone === "success" ? "bg-success" : tone === "primary" ? "bg-primary" : "bg-border-strong",
+      )}
+    />
+  );
+
+  const elementProps = (tone: "success" | "primary" | "muted") => ({
+    iconStyle: {
+      background: "var(--surface)",
+      color: "var(--primary)",
+      boxShadow: "none",
+      width: 16,
+      height: 16,
+      marginLeft: -8,
+      display: "grid",
+      placeItems: "center",
+      border: "1px solid var(--border)",
+    } as const,
+    contentStyle: { background: "var(--surface)" },
+    contentArrowStyle: { borderRight: "6px solid var(--border)" },
+    icon: icon(tone),
+  });
 
   return (
     <div
@@ -257,16 +214,10 @@ export function VersionList({
           </div>
         </div>
       ) : (
-        <div className={cn("relative px-4 pb-4 pt-3", fill && "min-h-0 flex-1 overflow-y-auto")}>
-          {/* 时间轴竖线 */}
-          <span className="absolute bottom-4 left-[15px] top-3 w-px bg-border" aria-hidden />
-
-          {/* 顶点：当前内容 */}
-          <div className="relative mb-1 flex items-start gap-3">
-            <span className="relative z-10 mt-1 grid size-4 shrink-0 place-items-center rounded-full border-2 border-success bg-card">
-              <span className="size-1.5 rounded-full bg-success" />
-            </span>
-            <div className="min-w-0 flex-1">
+        <div className={cn("ahub-vt px-3 pb-3 pt-2", fill && "min-h-0 flex-1 overflow-y-auto")}>
+          <VerticalTimeline layout="1-column-left" animate={false} className="vertical-timeline--one-column">
+            {/* 顶点：当前内容 */}
+            <VerticalTimelineElement {...elementProps(dirty ? "muted" : "success")}>
               <div className="flex flex-wrap items-center gap-2">
                 <span
                   className={cn(
@@ -280,52 +231,39 @@ export function VersionList({
                 <span className="text-[11px] text-ink-3">{t("skills.body")}</span>
                 <span className="ml-auto shrink-0 text-[11px] text-ink-3">{fmtSize(cur.length)}</span>
               </div>
-            </div>
-          </div>
+            </VerticalTimelineElement>
 
-          {list.map((v, idx) => {
-            const expanded = open === v.v;
-            // 上一版 = 时间轴上更早的一条（列表里 idx+1）
-            const prev = list[idx + 1];
-            const baseContent = base === "current" ? cur : (prev?.content ?? "");
-            const baseLabel =
-              base === "current" ? t("skills.verDiffVsCurrent") : `${t("skills.verDiffVsPrev")} v${prev?.v ?? "-"}`;
-            const rows = expanded ? diffLines(bodyOf(v.content), bodyOf(baseContent)) : [];
+            {list.map((v, idx) => {
+              const expanded = open === v.v;
+              // 上一版 = 时间轴上更早的一条（列表里 idx+1）
+              const prev = list[idx + 1];
+              const baseContent = base === "current" ? cur : (prev?.content ?? "");
+              const baseLabel =
+                base === "current" ? t("skills.verDiffVsCurrent") : `${t("skills.verDiffVsPrev")} v${prev?.v ?? "-"}`;
 
-            return (
-              <div key={v.v} className="relative flex items-start gap-3 pb-1 pt-2">
-                <span
-                  className={cn(
-                    "relative z-10 mt-1 size-4 shrink-0 rounded-full border-2 bg-card transition-colors",
-                    idx === 0 ? "border-primary" : "border-border-strong",
-                  )}
-                >
-                  {idx === 0 ? <span className="absolute inset-[3px] rounded-full bg-primary" /> : null}
-                </span>
-
-                <div className="min-w-0 flex-1">
+              return (
+                <VerticalTimelineElement key={v.v} {...elementProps(idx === 0 ? "primary" : "muted")}>
                   <button
                     type="button"
                     onClick={() => setOpen(expanded ? null : v.v)}
-                    className="flex w-full items-center gap-2 rounded-lg px-2 py-1 text-left outline-none transition-colors hover:bg-surface-2"
+                    className="flex w-full items-center gap-2 rounded-md px-1 py-0.5 text-left outline-none transition-colors hover:bg-surface-2"
                   >
-                    <span className="shrink-0 rounded-md bg-primary-soft px-2 py-0.5 font-mono text-[11px] font-medium text-primary">
+                    <span className="shrink-0 rounded bg-primary-soft px-1.5 py-0.5 font-mono text-[11px] font-medium text-primary">
                       v{v.v}
                     </span>
-                    <span className="min-w-0 flex-1 truncate text-xs text-foreground">
+                    <span className="min-w-0 flex-1 truncate text-[11.5px] text-foreground">
                       {v.note || <span className="text-ink-3">{t("skills.versionNoNote")}</span>}
                     </span>
-                    <span className="shrink-0 tabular-nums text-[11px] text-ink-3">{fmt(v.savedAt)}</span>
-                    <span className="hidden shrink-0 text-[11px] text-ink-3 sm:inline">{fmtSize(v.content.length)}</span>
+                    <span className="shrink-0 tabular-nums text-[10.5px] text-ink-3">{fmt(v.savedAt)}</span>
+                    <span className="shrink-0 text-[10.5px] text-ink-3">{fmtSize(v.content.length)}</span>
                     <ChevronDown className={cn("size-3.5 shrink-0 text-ink-3 transition-transform", expanded && "rotate-180")} />
                   </button>
 
                   {expanded ? (
-                    <div className="px-2 pb-2">
+                    <div className="mt-1.5">
                       {/* 对比基准切换 */}
-                      <div className="mt-1 flex items-center gap-2">
-                        <span className="text-[11px] text-ink-3">{t("skills.verDiffBase")}</span>
-                        <div className="flex items-center gap-0.5 rounded-lg border border-border bg-surface p-0.5">
+                      <div className="flex items-center gap-1.5">
+                        <div className="flex items-center gap-0.5 rounded-md border border-border bg-surface p-0.5">
                           {(
                             [
                               { v: "current", key: "skills.verDiffVsCurrent" },
@@ -338,7 +276,7 @@ export function VersionList({
                               disabled={bv === "prev" && !prev}
                               onClick={() => setBase(bv)}
                               className={cn(
-                                "rounded-md px-2 py-0.5 text-[11px] font-medium outline-none transition-colors disabled:opacity-40",
+                                "rounded px-1.5 py-0.5 text-[10.5px] font-medium outline-none transition-colors disabled:opacity-40",
                                 base === bv ? "bg-primary-soft text-primary" : "text-ink-3 hover:text-foreground",
                               )}
                             >
@@ -349,7 +287,7 @@ export function VersionList({
                         <Button
                           size="sm"
                           variant="secondary"
-                          className="ml-auto h-7 shrink-0 px-2.5 text-[11px]"
+                          className="ml-auto h-6 shrink-0 px-2 text-[10.5px]"
                           onClick={() => onRestore(v.content)}
                         >
                           <RotateCcw className="size-3" />
@@ -357,13 +295,13 @@ export function VersionList({
                         </Button>
                       </div>
 
-                      <DiffView rows={rows} baseLabel={baseLabel} />
+                      <DiffView from={bodyOf(baseContent)} to={bodyOf(v.content)} title={`${t("skills.verDiffTitle")} · ${baseLabel}`} />
                     </div>
                   ) : null}
-                </div>
-              </div>
-            );
-          })}
+                </VerticalTimelineElement>
+              );
+            })}
+          </VerticalTimeline>
         </div>
       )}
     </div>

@@ -1,0 +1,13 @@
+﻿import { loadPlaywright, resolveBrowser } from "./browser-harness.mjs";
+const { chromium } = await loadPlaywright();
+const b = await chromium.launch({ executablePath: resolveBrowser(), headless: true });
+const p = await b.newPage({ viewport: { width: 760, height: 620 }, deviceScaleFactor: 2 });
+const errs=[]; p.on("pageerror",e=>errs.push(e.message));
+await p.goto("http://127.0.0.1:17800/src/ahub/fixtures/version-list.html");
+await p.waitForTimeout(2500);
+const btns = p.getByRole('button', {name:/v3/});
+await btns.first().click();
+await p.waitForTimeout(900);
+await p.screenshot({ path: "E:/01-Desktop/仙台/工作台软件/tmp/version-list.png" });
+console.log("errors", errs);
+await b.close();

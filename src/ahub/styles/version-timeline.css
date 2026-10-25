@@ -1,0 +1,72 @@
+/* 版本时间轴：把 react-vertical-timeline-component 的默认外观收进应用 token。
+   库本身负责「竖线 + 节点 + 卡片 + 展开动画」，我们只调尺寸与配色，
+   不再自己摆竖线和节点（以前那套是手写的，改起来比配库还慢）。 */
+
+.ahub-vt {
+  --line-color: var(--border);
+}
+
+.ahub-vt .vertical-timeline {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 0;
+}
+
+.ahub-vt .vertical-timeline::before {
+  left: 7px;
+  width: 2px;
+  border-radius: 1px;
+}
+
+.ahub-vt .vertical-timeline-element {
+  margin: 0 0 6px;
+}
+
+.ahub-vt .vertical-timeline-element:last-child {
+  margin-bottom: 0;
+}
+
+.ahub-vt .vertical-timeline-element-content {
+  margin-left: 22px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  box-shadow: none;
+}
+
+.ahub-vt .vertical-timeline-element-content p {
+  margin: 0;
+}
+
+/* 日期改由卡片内自己排（要按语言/时区格式化），库里那列隐藏 */
+.ahub-vt .vertical-timeline-element-date {
+  display: none;
+}
+
+.ahub-vt .vertical-timeline-element-icon {
+  box-shadow: none;
+}
+
+/* 竖栏里 diff 只求读得清：字号压到 10.5，横向溢出交给自身滚动，不撑破卡片 */
+.ahub-diff {
+  font-size: 10.5px;
+}
+
+.ahub-diff table {
+  font-size: 10.5px;
+}
+
+.ahub-diff pre {
+  margin: 0;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* 库自带的「全部展开」吸顶条在窄栏里只挤掉一行高度（差异已全量展开，没有折叠可放） */
+.ahub-diff [class*="sticky-header"],
+.ahub-diff [class*="all-expand-button"] {
+  display: none;
+}

@@ -35,6 +35,20 @@ OpenCode / WorkBuddy / CodeBuddy / DeepSeek），并把扫到的条目**默认�
 
 逐个调而不是新开批量命令：状态要写回每个技能自己的元信息，失败也只该影响那一个。
 
+## 版本时间轴与差异
+
+技能详情右栏、提示词编辑器右栏的「版本时间轴」由两个开源组件拼起来，不再自己写：
+
+| 部分 | 组件 | 为什么 |
+|---|---|---|
+| 竖线 / 节点 / 卡片 / 展开动画 | `react-vertical-timeline-component@4` | 竖轴这套几何与动画它已经调好，我们只覆盖颜色与间距 |
+| 逐行与词级差异 | `react-diff-viewer-continued@4.4` | 行号、词级高亮、折叠上下文都有，颜色通过 `var(--…)` 传进去，跟随主题 |
+
+配色不写死：`src/ahub/styles/version-timeline.css` 里所有颜色都取自 `tokens.css` 的
+`--surface` / `--border` / `--success` / `--danger` 等，深浅主题自动跟随。
+
+用法：技能详情 → 右栏时间轴 → 点某一版 → 「当前 / 上一版」切换对比基准 → 看差异 → 「恢复」。
+
 ## 来源机制（已关掉）
 
 导入向导里的「来源确认」步骤**默认关闭**（`SOURCE_STEP_ENABLED = false`）：
