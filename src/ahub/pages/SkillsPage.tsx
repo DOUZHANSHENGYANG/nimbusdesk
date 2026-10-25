@@ -166,6 +166,8 @@ export function SkillsPage() {
   const [pageTab, setPageTab] = useState<"skills" | "tags">("skills");
   const [tagCommandOpen, setTagCommandOpen] = useState(false);
   const [batchTagOpen, setBatchTagOpen] = useState(false);
+  /** 刚导入的目录名：批量打标签优先作用在这批上，而不是当前勾选 */
+  const [tagTargetDirs, setTagTargetDirs] = useState<string[] | null>(null);
   const [upstreamOpen, setUpstreamOpen] = useState(false);
   const [upstreamRows, setUpstreamRows] = useState<UpstreamRow[]>([]);
   const [upstreamBusy, setUpstreamBusy] = useState(false);
@@ -607,9 +609,9 @@ export function SkillsPage() {
 
   /** 批量改标签：追加 / 移除 / 清空，作用于当前勾选的技能 */
   const applyTagsToSelection = async (mode: "add" | "remove" | "clear", tags: string[]) => {
-    const targets = skills.filter((meta) => batchSel.has(meta.dirName));
-    for (const meta of targets) {
-      const doc = await api.readSkill(meta.dirName);
+    const dirs = tagTargetDirs ?? [...batchSel];
+    for (const dirName of dirs) {
+      const doc = await api.readSkill(dirName);
       const next =
         mode === "clear"
           ? []
@@ -618,7 +620,7 @@ export function SkillsPage() {
             : doc.meta.tags.filter((tag) => !tags.includes(tag));
       if (next.join("\u0001") === doc.meta.tags.join("\u0001")) continue;
       await saveSkill({
-        dirName: meta.dirName,
+        dirName,
         name: doc.meta.name,
         description: doc.meta.description,
         tags: next,
@@ -630,7 +632,15 @@ export function SkillsPage() {
       });
     }
     await loadSkills();
-    toast.success(t("tagPicker.batchDone", { n: targets.length }));
+    toast.success(t("tagPicker.batchDone", { n: dirs.length }));
+    setTagTargetDirs(null);
+  };
+
+  /** 导入完成 → 直接拉起打标签弹窗，作用范围是刚导入的这批 */
+  const openTagForImported = (items: { dirName: string; name: string }[]) => {
+    if (!items.length) return;
+    setTagTargetDirs(items.map((it) => it.dirName));
+    setBatchTagOpen(true);
   };
 
   /**
@@ -875,7 +885,7 @@ export function SkillsPage() {
       actions={
         <>
           <SearchBar value={query} onChange={setQuery} placeholder={t("skills.searchPlaceholder")} className="w-56" />
-          <AddSkillDialog onDone={() => void loadSkills()} />
+          <AddSkillDialog onDone={() => void loadSkills()} onImported={openTagForImported} />
           <Button variant="secondary" onClick={() => setScanOpen(true)}>
             <ScanSearch />
             {t("common.scan")}
@@ -1108,7 +1118,10 @@ export function SkillsPage() {
                     variant="secondary"
                     className="h-7 w-[96px] justify-center text-[11px]"
                     disabled={batchSel.size === 0}
-                    onClick={() => setBatchTagOpen(true)}
+                    onClick={() => {
+                      setTagTargetDirs(null);
+                      setBatchTagOpen(true);
+                    }}
                   >
                     <Tag className="size-3.5" />
                     {t("skills.batchTagBtn")}
@@ -2102,7 +2115,13 @@ export function SkillsPage() {
         onDone={loadHarnesses}
       />
 
-      <AddSkillDialog onDone={() => void loadSkills()} open={addOpen} onOpenChange={setAddOpen} initialMode={addMode} />
+      <AddSkillDialog
+        onDone={() => void loadSkills()}
+        onImported={openTagForImported}
+        open={addOpen}
+        onOpenChange={setAddOpen}
+        initialMode={addMode}
+      />
 
       <SkillPipelineDialog
         open={pipelineOpen}
@@ -2125,8 +2144,11 @@ export function SkillsPage() {
       />
       <BatchTagDialog
         open={batchTagOpen}
-        onOpenChange={setBatchTagOpen}
-        count={batchSel.size}
+        onOpenChange={(v) => {
+          setBatchTagOpen(v);
+          if (!v) setTagTargetDirs(null);
+        }}
+        count={tagTargetDirs?.length ?? batchSel.size}
         allTags={allTags}
         onApply={applyTagsToSelection}
       />

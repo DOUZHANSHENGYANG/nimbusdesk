@@ -73,11 +73,14 @@ const PAGE_SIZE = 24;
  */
 export function AddSkillDialog({
   onDone,
+  onImported,
   open: openProp,
   onOpenChange,
   initialMode,
 }: {
   onDone: () => void;
+  /** 导入成功后把新条目交给页面，用来接着打标签（空白新建已经在表单里打过） */
+  onImported?: (items: { dirName: string; name: string }[]) => void;
   /** 受控打开：空态引导要能从外面直接拉起某个入口 */
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
@@ -224,6 +227,7 @@ export function AddSkillDialog({
       if (ok > 0) {
         toast.success(t("skills.marketInstalled", { ok, total: reps.length }));
         onDone();
+        onImported?.(reps.filter((r) => r.ok).map((r) => ({ dirName: r.dirName, name: r.name || r.slug })));
       }
       if (failed.length && ok === 0) toast.error(failed[0].error);
       if (ok > 0 && failed.length === 0) close();
@@ -307,12 +311,14 @@ export function AddSkillDialog({
     if (!paths.length) return;
     setBusy(true);
     let ok = 0;
+    const imported: { dirName: string; name: string }[] = [];
     const toExplore: string[] = [];
     try {
       for (const p of paths) {
         try {
           const meta = await api.importSkillFolder(p, overwrite);
           ok += 1;
+          imported.push({ dirName: meta.dirName, name: meta.name });
           toast.success(t("skills.imported", { name: meta.name }));
         } catch (e) {
           const msg = String(e);
@@ -325,6 +331,7 @@ export function AddSkillDialog({
       if (ok) {
         toast.info(t("skills.getDone", { ok, total: paths.length }));
         onDone();
+        if (!toExplore.length) onImported?.(imported);
       }
       if (toExplore.length) await exploreAndWizard(toExplore);
       else if (ok) close();
@@ -337,17 +344,23 @@ export function AddSkillDialog({
     if (!paths.length) return;
     setBusy(true);
     let ok = 0;
+    const imported: { dirName: string; name: string }[] = [];
     try {
       for (const p of paths) {
         try {
           const meta = await api.importSkillZip(p, overwrite);
           ok += 1;
+          imported.push({ dirName: meta.dirName, name: meta.name });
           toast.success(t("skills.imported", { name: meta.name }));
         } catch (e) {
           toast.error(`${p.split(/[\\/]/).pop()}: ${String(e)}`);
         }
       }
-      if (ok) { onDone(); close(); }
+      if (ok) {
+        onDone();
+        onImported?.(imported);
+        close();
+      }
     } finally {
       setBusy(false);
     }
@@ -1136,7 +1149,12 @@ export function AddSkillDialog({
       <ImportWizard
         report={wizard}
         onOpenChange={(value) => !value && setWizard(null)}
-        onDone={() => { onDone(); setWizard(null); close(); }}
+        onDone={(items) => {
+          onDone();
+          if (items?.length) onImported?.(items);
+          setWizard(null);
+          close();
+        }}
       />
     </>
   );

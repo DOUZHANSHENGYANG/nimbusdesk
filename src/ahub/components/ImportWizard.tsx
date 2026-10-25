@@ -45,7 +45,8 @@ export function ImportWizard({
   /** 探查报告（由 SkillsPage 传入，null 时不显示） */
   report: ExploreReport | null;
   onOpenChange: (open: boolean) => void;
-  onDone: () => void;
+  /** 导入成功的条目交回调用方（用于接着打标签） */
+  onDone: (items?: { dirName: string; name: string }[]) => void;
 }) {
   const { t } = useTranslation();
   const [step, setStep] = useState(0);
@@ -205,7 +206,9 @@ export function ImportWizard({
       setResult(r);
       if (r.succeeded > 0) {
         toast.success(t("skillImport.done", { ok: r.succeeded, total: r.total }));
-        onDone();
+        onDone(
+          r.outcomes.filter((o) => o.ok).map((o) => ({ dirName: o.dirName, name: o.name })),
+        );
       }
       if (r.failed > 0) toast.warning(t("skillImport.partial", { n: r.failed }));
     } catch (e) {
