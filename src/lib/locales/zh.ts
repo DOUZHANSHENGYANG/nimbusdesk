@@ -93,6 +93,8 @@ export const zh = {
     footSearch: "搜索",
   },
   dock: {
+    newFolder: "新建收纳盒",
+    newFolderName: "新收纳盒",
     dissolve: "解散收纳盒",
     defaultCategory: "默认分类",
     title: "桌面 Dock",
