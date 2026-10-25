@@ -664,11 +664,25 @@ function WeatherPanel() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const lat = useSettings.getState().weatherLat;
-    const lon = useSettings.getState().weatherLon;
     if (weatherCache && Date.now() - weatherCache.at < 10 * 60_000) return;
     let cancelled = false;
     void (async () => {
+      let lat = useSettings.getState().weatherLat;
+      let lon = useSettings.getState().weatherLon;
+      /*
+       * 首次使用（坐标还是默认上海）就先做一次 IP 定位 —— 别让人看到「上海」以为是假的。
+       * 失败就按原坐标继续，绝不阻塞天气请求；用户手动改过就不再覆盖。
+       */
+      if (Math.abs(lat - 31.23) < 0.01 && Math.abs(lon - 121.47) < 0.01) {
+        try {
+          const geo = await fetch("https://ipapi.co/json/").then((r) => r.json());
+          if (typeof geo.latitude === "number" && typeof geo.longitude === "number") {
+            lat = geo.latitude;
+            lon = geo.longitude;
+            useSettings.getState().setWeatherPlace(String(geo.city ?? geo.region ?? "本地"), lat, lon);
+          }
+        } catch { /* 定位失败按原坐标继续 */ }
+      }
       try {
         const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code,wind_speed_10m&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=auto&forecast_days=4`;
         const reply = await fetch(url).then((r) => r.json());
