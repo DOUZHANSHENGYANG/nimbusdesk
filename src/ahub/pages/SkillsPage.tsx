@@ -7,6 +7,7 @@ import { EmptyState } from "@/ahub/components/EmptyState";
 import { matchTags, type TagMode } from "@/ahub/components/TagFilter";
 import { TagShelf } from "@/ahub/components/TagShelf";
 import { BatchTagDialog, TagPicker } from "@/ahub/components/TagPicker";
+import { UpstreamCheckDialog, UpstreamCheckIcon, type UpstreamRow } from "@/ahub/components/UpstreamCheckDialog";
 import { TagManagerView } from "@/ahub/components/TagManagerView";
 import { TagCommand } from "@/ahub/components/TagCommand";
 import { SearchBar } from "@/ahub/components/SearchBar";
@@ -161,6 +162,9 @@ export function SkillsPage() {
   const [pageTab, setPageTab] = useState<"skills" | "tags">("skills");
   const [tagCommandOpen, setTagCommandOpen] = useState(false);
   const [batchTagOpen, setBatchTagOpen] = useState(false);
+  const [upstreamOpen, setUpstreamOpen] = useState(false);
+  const [upstreamRows, setUpstreamRows] = useState<UpstreamRow[]>([]);
+  const [upstreamBusy, setUpstreamBusy] = useState(false);
   const [scanOpen, setScanOpen] = useState(false);
   const [batchMode, setBatchMode] = useState(false);
   const [batchSel, setBatchSel] = useState<Set<string>>(new Set());
@@ -541,6 +545,38 @@ export function SkillsPage() {
     toast.success(t("tagPicker.batchDone", { n: targets.length }));
   };
 
+  /**
+   * 批量检查上游：勾了就只查勾选的，没勾就查全部。
+   * 逐个跑（每个一次 git ls-remote），失败只记在那一条上，不中断整批。
+   */
+  const runUpstreamCheck = async () => {
+    const targets = batchSel.size > 0 ? skills.filter((meta) => batchSel.has(meta.dirName)) : skills;
+    if (targets.length === 0) return;
+    setUpstreamBusy(true);
+    const rows: UpstreamRow[] = [];
+    try {
+      for (const meta of targets) {
+        try {
+          const report = await api.checkUpstream(meta.dirName);
+          const status = !report.watched
+            ? "untracked"
+            : report.changed
+              ? "changed"
+              : report.remoteHead
+                ? "current"
+                : "error";
+          rows.push({ dirName: meta.dirName, name: meta.name, status, remote: report.remote, note: report.note });
+        } catch (e) {
+          rows.push({ dirName: meta.dirName, name: meta.name, status: "error", remote: "", note: String(e) });
+        }
+      }
+      setUpstreamRows(rows);
+      setUpstreamOpen(true);
+    } finally {
+      setUpstreamBusy(false);
+    }
+  };
+
   /** 点击卡片上的标签：下钻筛选 */
   const drillTag = (tg: string) =>
     setActiveTags((prev) => {
@@ -719,6 +755,15 @@ export function SkillsPage() {
           <Button variant="secondary" onClick={() => setScanOpen(true)}>
             <ScanSearch />
             {t("common.scan")}
+          </Button>
+          <Button
+            variant="secondary"
+            onClick={() => void runUpstreamCheck()}
+            disabled={upstreamBusy || skills.length === 0}
+            title={t("skills.upBatchHint")}
+          >
+            <UpstreamCheckIcon busy={upstreamBusy} />
+            {t("skills.upBatchBtn")}
           </Button>
         </>
       }
@@ -1774,6 +1819,17 @@ export function SkillsPage() {
 
       <HarnessDialog open={scanOpen} onOpenChange={setScanOpen} kind="skills" />
 
+      <UpstreamCheckDialog
+        open={upstreamOpen}
+        onOpenChange={setUpstreamOpen}
+        rows={upstreamRows}
+        onOpenSkill={(dirName) => {
+          const meta = skills.find((item) => item.dirName === dirName);
+          if (!meta) return;
+          setUpstreamOpen(false);
+          void openDetail(meta);
+        }}
+      />
       <BatchTagDialog
         open={batchTagOpen}
         onOpenChange={setBatchTagOpen}

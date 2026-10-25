@@ -12,10 +12,11 @@ const skills=[
  mk('release-check','发布检查','上线前逐项核对：迁移、回滚、监控、通知。',['运维','发布','团队']),
 ];
 const settingsInfo={settings:{dataDir:'E:/SkillsFixture',envRoot:'',language:'zh',theme:'dark',skillSourceDirs:[],harnessOrder:[],aiBaseUrl:'',aiApiKey:'',aiModel:'',autoSummaryOnImport:false,aiProviders:[],aiDefaultProviderId:'',aiLegacyMigrated:true},dataDirs:{root:'E:/SkillsFixture',prompts:'E:/SkillsFixture/prompts',mcp:'E:/SkillsFixture/mcp',skills:'E:/SkillsFixture/skills'}};
-mockIPC(async(cmd)=>{
+mockIPC(async(cmd,args)=>{
  if(cmd==='list_skills')return structuredClone(skills);
  if(cmd==='get_settings')return structuredClone(settingsInfo);
  if(cmd==='preset_list'||cmd==='list_prompts'||cmd==='list_mcp'||cmd==='list_harnesses')return [];
+ if(cmd==='check_upstream'){ const m={'code-review':{watched:true,changed:true,remote:'https://github.com/team/skills',remoteHead:'a1b2c3',lastHead:'0f0e0d',note:''},'debug':{watched:true,changed:false,remote:'https://github.com/team/skills',remoteHead:'a1b2c3',lastHead:'a1b2c3',note:''},'frontend-design':{watched:false,changed:false,remote:'',remoteHead:'',lastHead:'',note:'未开启上游追踪'},'docs':{watched:true,changed:false,remote:'https://github.com/x/y',remoteHead:'',lastHead:'',note:'git ls-remote 失败: not found'}}; const r=m[args?.dirName] ?? {}; return {watched:false,changed:false,remote:'',remoteHead:'',lastHead:'',note:'',checkedAt:new Date().toISOString(),...r}; }
  if(cmd==='plugin:event|listen')return 1;
  if(cmd==='get_data_dir')return 'E:/SkillsFixture';
  return null;

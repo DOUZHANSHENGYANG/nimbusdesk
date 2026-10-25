@@ -1,0 +1,12 @@
+﻿import { loadPlaywright, resolveBrowser } from "./browser-harness.mjs";
+const { chromium } = await loadPlaywright();
+const b = await chromium.launch({ executablePath: resolveBrowser(), headless: true });
+const p = await b.newPage({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2 });
+const errs=[]; p.on("pageerror",e=>errs.push(e.message));
+await p.goto("http://127.0.0.1:17800/src/ahub/fixtures/tag-shelf.html");
+await p.waitForTimeout(2200);
+await p.getByRole("button",{name:/检查更新/}).click();
+await p.waitForTimeout(1500);
+await p.screenshot({ path: "E:/01-Desktop/仙台/工作台软件/docs/screenshots/upstream-check.png" });
+console.log("errors", errs);
+await b.close();
