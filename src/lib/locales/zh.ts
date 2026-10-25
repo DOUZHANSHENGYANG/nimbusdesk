@@ -82,6 +82,7 @@ export const zh = {
     openOriginal: "打开原文",
     favorite: "收藏",
     home: "主页", tab: { home: "主页", search: "搜索", fences: "收纳盒", plans: "计划", projects: "项目", collect: "收集", news: "资讯", cal: "日历", chat: "AI 助手", weather: "天气", notice: "通知", term: "终端", },
+    tools: "工具",
     searchPlaceholder: "搜文件、笔记、计划、网站…",
     searching: "正在搜索…",
     noResult: "没有匹配结果",

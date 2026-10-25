@@ -16,7 +16,7 @@
 | `src/features/desktop/dock-float-core.ts` | 今日进度、相对时间等纯函数 |
 | `src/features/desktop/dock-float.css` | 悬浮层材质与全部卡片样式 |
 | `src/features/desktop/dock.tsx` | 形态分流 + `applyFloat`（弹簧展开/收起） |
-| `src-tauri/src/commands/dock.rs` | `dock_spring_box`：x/y/w/h 四元组弹簧 |
+| `src-tauri/src/commands/dock.rs` | `dock_spring_to`：状态切换时一次性摆放窗口 |
 | `src-tauri/src/commands/capture_window.rs` | `window_capture`：前台窗口截图（data URL，不落盘） |
 
 ## 六个页
@@ -44,16 +44,19 @@ Flyout 与 `CapturePanel` **本体**通过 `panels` 属性注入进来 —— �
 
 ## 动效
 
-展开/收起不是一次 `set_bounds`，而是 `dock_spring_box` 逐帧插值：
+窗口只在状态切换时 `set_size` + `set_position` 各一次，视觉形变全部交给
+**固定 660×591 卡片的 CSS `clip-path`**（240ms，`cubic-bezier(.4,0,.2,1)`）。
+不再用 `scale` 伪造尺寸，所以动画中图标不会缩小、内容不会 reflow。
 
 | 参数 | 展开 | 收起 |
 |---|---|---|
-| 曲线 | response 0.38s / damping 0.78（freq 2.63、decay 12.9、460ms） | response 0.24 / damping 1.0（不回弹） |
-| 窗口 | x/y/w/h 四个量同一条曲线 | 同 |
-| 内容 | scale .96→1、opacity、blur 4px→0，头/标签/正文 stagger 20ms | 淡出 |
-| 圆角 | 999px 进场、380ms 收到 20px | 反向 |
+| 窗口 | 一次到位 660×591 | 等 clip 收完再回 464×44 |
+| 表面 | clip 从顶部居中 464×44 胶囊 → 全卡，圆角 22→20 | 反向 |
+| 内容 | 卡片按最终尺寸排版，内容延迟 70ms 淡入 | 内容保持可见，随 clip 收窄 |
+| 相位 | `resizing → expanding → expanded` | `collapsing → compact` |
 
-代数计数器在 Rust 侧共享：**展开到一半再点收起，会从中断处弹向新目标**，不跳回起点。
+相位切换带 generation 计数：**快速 hover 进出时旧动画自动作废**，不会停在半展开；
+原生 `set_size` 串行提交，避免两次尺寸切换互相超车。
 
 胶囊可拖：空白处按住 `startDragging()`，松手把横向位置记进 `dockFloatX`，下次展开
 还在那儿；不悬停时透明度 0.62（置顶但不挡视线）。
@@ -62,8 +65,9 @@ Flyout 与 `CapturePanel` **本体**通过 `panels` 属性注入进来 —— �
 
 - `node --test src/features/desktop/dock-float-core.test.mjs`：今日进度、相对时间单位。
 - `node scripts/check-dock-float-browser.mjs`（接进 `verify:dist`）：胶囊 44 → 展开
-  `dock_spring_box` 目标 660×591 → 六页切换尺寸不变（含收纳盒/计划/项目**真面板**在不在）
-  → 详情/对话副页进退 → 齿轮跳 `/settings` → 收起回 44。
+  `dock_spring_to` 目标 660×591、`data-phase=expanded`、卡片 `transform:none` 且
+  `clip-path` 生效、头部 4 工具 + 3 窗口操作、5 个主标签等宽 → 六页切换尺寸不变
+  → 详情/对话副页进退 → 齿轮跳 `/settings` → 收起回 `compact`/44。
 - `node scripts/shots-dock.mjs`：重新生成下面的截图（改了外观就重跑，别拿旧图当文档）。
 
 ## 截图
@@ -95,17 +99,21 @@ Flyout 与 `CapturePanel` **本体**通过 `panels` 属性注入进来 —— �
 
 ## 标签分层
 
-胶囊（收起态）只放 **6 个主标签**：主页 / 搜索 / 收纳盒 / 计划 / 项目 / 资讯 ——
+胶囊（收起态）只放 **5 个主标签**：搜索 / 收纳盒 / 计划 / 项目 / 资讯 ——
 再多就「选不过来」，其余功能只在展开态出现。
 
-卡片（展开态）两层：
+卡片头部（展开态）分三组，不再把 7 个图标平铺成同权重：
 
-| 层 | 内容 |
+| 组 | 内容 |
 | --- | --- |
-| 主标签（图标 + 文字） | 主页 · 搜索 · 收纳盒 · 计划 · 项目 · 资讯 |
-| 次标签（仅图标） | 收集 · 日历 · AI · 天气 · 通知 · 终端 |
+| 品牌区 | orb · 云台 · 今日待办/已完成 |
+| 工具组（4 个） | 日历 · 天气 · 通知 · 终端 |
+| 窗口操作组（3 个） | AI 对话 · 设置 · 收起 |
 
-回归断言：`scripts/check-dock-float-browser.mjs` 校验主标签 6、次标签 6、胶囊快捷图标 6。
+主标签（图标 + 文字）严格等宽 5 列：搜索 · 收纳盒 · 计划 · 项目 · 资讯。
+
+回归断言：`scripts/check-dock-float-browser.mjs` 校验主标签 5、工具组 4、
+窗口操作组 3、胶囊快捷图标 5，以及 5 个主标签宽度一致。
 
 ## 收纳盒的「点开」动效
 

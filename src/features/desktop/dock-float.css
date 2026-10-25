@@ -957,3 +957,129 @@
 .df-rail-item:hover { background: var(--surface-hover); color: var(--foreground); }
 .df-rail-item.is-on { background: var(--dock-face); color: var(--foreground); font-weight: var(--pr-weight-semibold); }
 .df-search-main { display: flex; flex-direction: column; gap: 8px; min-height: 0; min-width: 0; }
+
+/* ── 灵动岛表面 v2：窗口一次到位，表面用 clip-path 形变 ────────────────
+   不再用 scale 伪造尺寸：660×591 的卡片始终按最终布局排版，
+   只把可见区域从「顶部 464×44 胶囊」裁到整张卡片。
+   这样图标/字号在动画中不会缩小，也不会发生 reflow。 */
+.df-card {
+  transform: none !important;
+  animation: none !important;
+  border-radius: 20px;
+  clip-path: inset(0 98px calc(var(--df-card-h, 591px) - 44px) 98px round 22px);
+  transition:
+    clip-path 240ms cubic-bezier(0.4, 0, 0.2, 1),
+    opacity 140ms var(--pr-ease-out);
+  will-change: clip-path;
+}
+.df-capsule {
+  border-radius: 999px;
+}
+.df-root[data-phase="compact"] .df-card,
+.df-root[data-phase="resizing"] .df-card {
+  opacity: 0;
+  clip-path: inset(0 98px calc(var(--df-card-h, 591px) - 44px) 98px round 22px);
+}
+.df-root[data-phase="expanding"] .df-card {
+  opacity: 1;
+  clip-path: inset(0 0 0 0 round 20px);
+}
+.df-root[data-phase="expanded"] .df-card {
+  opacity: 1;
+  clip-path: inset(0 0 0 0 round 20px);
+}
+.df-root[data-phase="collapsing"] .df-card {
+  opacity: 1;
+  clip-path: inset(0 98px calc(var(--df-card-h, 591px) - 44px) 98px round 22px);
+}
+
+/* 卡片内容晚一拍出现：clip 已经张开一部分，避免「464 宽的头部先露半截」。 */
+.df-card > .df-head,
+.df-card > .df-tabs,
+.df-card > .df-body,
+.df-card > .df-foot,
+.df-card > .df-resize {
+  opacity: 0;
+  transition: opacity 120ms ease 70ms;
+}
+.df-root[data-phase="expanding"] .df-card > .df-head,
+.df-root[data-phase="expanding"] .df-card > .df-tabs,
+.df-root[data-phase="expanding"] .df-card > .df-body,
+.df-root[data-phase="expanding"] .df-card > .df-foot,
+.df-root[data-phase="expanding"] .df-card > .df-resize,
+.df-root[data-phase="expanded"] .df-card > .df-head,
+.df-root[data-phase="expanded"] .df-card > .df-tabs,
+.df-root[data-phase="expanded"] .df-card > .df-body,
+.df-root[data-phase="expanded"] .df-card > .df-foot,
+.df-root[data-phase="expanded"] .df-card > .df-resize,
+.df-root[data-phase="collapsing"] .df-card > .df-head,
+.df-root[data-phase="collapsing"] .df-card > .df-tabs,
+.df-root[data-phase="collapsing"] .df-card > .df-body,
+.df-root[data-phase="collapsing"] .df-card > .df-foot,
+.df-root[data-phase="collapsing"] .df-card > .df-resize {
+  opacity: 1;
+}
+
+/* 头部三组：品牌 / 工具 / 窗口操作。工具不再和设置/收起混在同一排。 */
+.df-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+}
+.df-brand {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  overflow: hidden;
+}
+.df-brand .df-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.df-brand .df-stat { flex: none; white-space: nowrap; }
+.df-tools {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  padding: 1px 4px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--pr-radius-md);
+  background: var(--dock-inset);
+}
+.df-window-actions {
+  display: flex;
+  align-items: center;
+  gap: 1px;
+  padding-left: 8px;
+  border-left: 1px solid var(--hairline);
+}
+
+/* 五个主标签严格等宽：任一个文字变长不会把整排挤歪。 */
+.df-tabs {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+.df-tab { min-width: 0; }
+.df-tab-label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .df-card { transition: none; }
+  .df-card > .df-head,
+  .df-card > .df-tabs,
+  .df-card > .df-body,
+  .df-card > .df-foot,
+  .df-card > .df-resize { transition: none; }
+}
+.df-root[data-phase="compact"] .df-card,
+.df-root[data-phase="resizing"] .df-card {
+  pointer-events: none;
+}

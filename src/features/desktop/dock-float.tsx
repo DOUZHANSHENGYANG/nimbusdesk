@@ -36,6 +36,13 @@ import "./dock-float.css";
  */
 type DockTab = "search" | "fences" | "plans" | "projects" | "collect" | "news" | "cal" | "chat" | "weather" | "notice" | "term";
 
+/**
+ * 表面形态。窗口只切换一次尺寸，视觉由 CSS clip-path 负责：
+ * compact → resizing（原生窗口先到位）→ expanding（clip 展开）→ expanded；
+ * 收起先 collapsing（clip 收窄）→ 原生窗口回胶囊 → compact。
+ */
+type SurfacePhase = "compact" | "resizing" | "expanding" | "expanded" | "collapsing";
+
 /** 胶囊里的快捷图标：六个入口全在（和标签栏是两份职责，分开命名免得改错） */
 const QUICK_TABS: { key: DockTab; icon: typeof Search }[] = [
   { key: "search", icon: Search },
@@ -84,7 +91,7 @@ export function DockFloat({ onExpand, onHide, panels }: {
   const { t } = useTranslation();
   const today = todayStr();
   const tasks = usePlans((state) => state.days[today]) ?? [];
-  const [open, setOpen] = useState(false);
+  const [phase, setPhase] = useState<SurfacePhase>("compact");
   const [tab, setTab] = useState<DockTab>("search");
   /** 对话是「副页」而不是第七个 tab：标签已经六个，再多就挤成图标了 */
   const [chatOpen, setChatOpen] = useState(false);
@@ -114,55 +121,37 @@ export function DockFloat({ onExpand, onHide, panels }: {
   }, []);
 
   /**
-   * 卡片的挂载期比「展开」长 320ms。
-   *
-   * 收起时窗口在缩，如果卡片这一刻直接卸载，用户看到的是「内容先没、窗口
-   * 后缩」—— 两次跳变。多留 320ms 让它在缩的过程中一起淡出，动作就合成一次。
+   * 卡片挂载一次之后常驻：收起时靠 clip 收窄，不卸载收纳盒/计划/项目
+   * 三个真面板 —— 再挂载一次要读数据、建列表，才是「展开卡一下」的来源。
    */
   const [mounted, setMounted] = useState(false);
-  /*
-   * 挂载一次之后就常驻。
-   *
-   * 之前每次收起 320ms 后卸载卡片，下次展开又要重新挂载收纳盒/计划/项目
-   * 三个真面板 —— 那一步要读数据、建列表，正是「展开卡一下」的来源。
-   * 现在只挂一次，之后靠 CSS 显隐；代价是收起时这几个面板仍在内存里。
-   */
-  useEffect(() => {
-    if (open) setMounted(true);
-  }, [open]);
-
-  /**
-   * 形状跟窗口共用同一条弹簧曲线。
-   *
-   * Rust 每帧 SetWindowPos 时顺手 emit 一个 0..1 的进度，这里直接写进 CSS
-   * 变量 —— **不走 setState**：8ms 一帧的 setState 会把 React 排进每帧的
-   * 同步渲染，掉帧就是从这来的。变量由合成器读，成本近乎为零。
-   */
-  useEffect(() => {
-    const root = document.documentElement;
-    let stop: (() => void) | undefined;
-    void listen<number>("dock-spring-progress", (event) => {
-      // 弹簧进度是「这一次动画走到哪」，与方向无关：收起时取反才是展开度
-      const p = root.dataset.dfClosing === "1" ? 1 - event.payload : event.payload;
-      root.style.setProperty("--df-p", String(p));
-    }).then((unlisten) => { stop = unlisten; }).catch(() => undefined);
-    return () => stop?.();
+  const phaseRef = useRef<SurfacePhase>("compact");
+  const transitionGeneration = useRef(0);
+  /** 同步更新 ref：快速连续点击时 setExpanded 不能读到上一次 useEffect 的旧相位。 */
+  const setSurfacePhase = useCallback((next: SurfacePhase) => {
+    phaseRef.current = next;
+    setPhase(next);
   }, []);
+  const phaseTimer = useRef<number | null>(null);
+  /** 原生窗口过渡串行化：快速 hover 时 set_size 不能互相超车。 */
+  const windowTransition = useRef<Promise<void>>(Promise.resolve());
 
-  /**
-   * 静止态必须把 --df-p 明确写回 0/1。
-   * 只靠动画事件的话，展开结束后若最后一帧没到 1（或事件丢失），圆角会卡在
-   * 半路 —— 卡片变成一个大药丸，四角把内容裁掉，看起来像「背景透明」。
-   */
+  const open = phase === "expanding" || phase === "expanded";
+
   useEffect(() => {
-    const root = document.documentElement;
-    root.style.setProperty("--df-card-h", String(useSettings.getState().dockCardHeight) + "px");
-    root.dataset.dfClosing = open ? "0" : "1";
-    const timer = setTimeout(() => {
-      root.style.setProperty("--df-p", open ? "1" : "0");
-    }, 480);
-    return () => clearTimeout(timer);
-  }, [open]);
+    phaseRef.current = phase;
+    if (phase !== "compact") setMounted(true);
+  }, [phase]);
+
+  useEffect(() => {
+    document.documentElement.style.setProperty(
+      "--df-card-h",
+      String(useSettings.getState().dockCardHeight) + "px",
+    );
+    return () => {
+      if (phaseTimer.current !== null) window.clearTimeout(phaseTimer.current);
+    };
+  }, []);
 
   useEffect(() => {
     if (summary.late <= 0) { setAlertOn(false); return; }
@@ -171,18 +160,52 @@ export function DockFloat({ onExpand, onHide, panels }: {
     return () => clearTimeout(timer);
   }, [summary.late]);
 
+  const runWindowTransition = useCallback((nextOpen: boolean) => {
+    const next = windowTransition.current.then(() => onExpand(nextOpen));
+    windowTransition.current = next.catch(() => undefined);
+    return next;
+  }, [onExpand]);
+
+  /**
+   * 展开/收起只做两件事：切换视觉相位 + 串行提交一次原生尺寸。
+   * 窗口尺寸永远先于 expand 动画、后于 collapse 动画，避免「内容先没、窗口后缩」
+   * 或「窗口突然变大、内容还在旧尺寸」的两次跳变。
+   */
   const setExpanded = useCallback((next: boolean) => {
-    if (!next) suppressHoverUntil.current = Date.now() + 700;
+    const current = phaseRef.current;
     if (next) {
-      // 并行：窗口摆放是「一帧」的，不必等它；等它反而把展开拖成两拍
-      void onExpand(true).catch(report);
-      setOpen(true);
+      if (current === "resizing" || current === "expanding" || current === "expanded") return;
+      const generation = ++transitionGeneration.current;
+      if (phaseTimer.current !== null) { window.clearTimeout(phaseTimer.current); phaseTimer.current = null; }
+      suppressHoverUntil.current = Date.now() + 700;
+      setMounted(true);
+      setSurfacePhase("resizing");
+      void runWindowTransition(true).then(() => {
+        if (generation !== transitionGeneration.current) return;
+        setSurfacePhase("expanding");
+        phaseTimer.current = window.setTimeout(() => {
+          if (generation !== transitionGeneration.current) return;
+          phaseTimer.current = null;
+          setSurfacePhase("expanded");
+        }, 240);
+      }).catch(report);
       return;
     }
-    // 收起：内容先淡出 180ms，之后才缩窗口
-    setOpen(false);
-    window.setTimeout(() => { void onExpand(false).catch(report); }, 180);
-  }, [onExpand]);
+
+    if (current === "compact" || current === "collapsing") return;
+    const generation = ++transitionGeneration.current;
+    if (phaseTimer.current !== null) { window.clearTimeout(phaseTimer.current); phaseTimer.current = null; }
+    suppressHoverUntil.current = Date.now() + 700;
+    setSurfacePhase("collapsing");
+    phaseTimer.current = window.setTimeout(() => {
+      if (generation !== transitionGeneration.current) return;
+      phaseTimer.current = null;
+      void runWindowTransition(false).then(() => {
+        if (generation !== transitionGeneration.current) return;
+        setSurfacePhase("compact");
+      }).catch(report);
+    }, 240);
+  }, [runWindowTransition, setSurfacePhase]);
 
   /**
    * 悬停展开、移开收起、Esc 收起 —— 这是「灵动岛」的手感来源。
@@ -218,7 +241,7 @@ export function DockFloat({ onExpand, onHide, panels }: {
 
 
   return (
-    <div className="df-root" data-open={open}
+    <div className="df-root" data-open={open} data-phase={phase}
       onPointerEnter={hoverExpand} onPointerLeave={hoverCollapse}>
       {compactStyle === "line" ? (
         <div className="df-line" data-open={open}
@@ -296,13 +319,15 @@ export function DockFloat({ onExpand, onHide, panels }: {
                 useSettings.getState().setDockFloatX(pos.x / (monitor?.scaleFactor ?? 1));
               })().catch(() => undefined);
             }}>
-            <span className="df-orb" aria-hidden="true" />
-            <span className="df-name">{t("dockFloat.title")}</span>
-            <span className="df-sep" aria-hidden="true" />
-            <span className="df-stat">
-              <b>{summary.todo}</b> {t("dockFloat.todoUnit")} · <b>{summary.done}</b> {t("dockFloat.doneUnit")}
+            <span className="df-brand">
+              <span className="df-orb" aria-hidden="true" />
+              <span className="df-name">{t("dockFloat.title")}</span>
+              <span className="df-sep" aria-hidden="true" />
+              <span className="df-stat">
+                <b>{summary.todo}</b> {t("dockFloat.todoUnit")} · <b>{summary.done}</b> {t("dockFloat.doneUnit")}
+              </span>
             </span>
-            <span className="df-head-actions">
+            <span className="df-tools" role="group" aria-label={t("dockFloat.tools")}>
               {/* 二级功能：只放图标，点开在卡片里就地显示 —— 省掉一整行标签 */}
               {TOOL_TABS.map(({ key, icon: Icon }) => (
                 <button key={key} type="button" className="df-icon-btn" title={t(`dockFloat.tab.${key}`)}
@@ -311,6 +336,8 @@ export function DockFloat({ onExpand, onHide, panels }: {
                   <Icon className="df-icon" aria-hidden="true" />
                 </button>
               ))}
+            </span>
+            <span className="df-window-actions">
               <button type="button" className="df-icon-btn" title={t("dockFloat.chatTitle")}
                 aria-label={t("dockFloat.chatTitle")} aria-pressed={chatOpen}
                 onClick={() => setChatOpen((value) => !value)}>
@@ -337,7 +364,7 @@ export function DockFloat({ onExpand, onHide, panels }: {
               <button key={key} type="button" role="tab" aria-selected={tab === key}
                 className="df-tab" onClick={() => setTab(key)}>
                 <Icon className="df-icon" aria-hidden="true" />
-                {t(`dockFloat.tab.${key}`)}
+                <span className="df-tab-label">{t(`dockFloat.tab.${key}`)}</span>
               </button>
             ))}
           </div>

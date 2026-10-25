@@ -45,7 +45,7 @@ try {
   // ② 展开：卡片与窗口一起变成 660×591
   await page.getByRole("button", { name: "展开卡片" }).click();
   await page.locator(".df-card").waitFor();
-  // 主标签 5 个 + 次标签 1 个；胶囊快捷图标仍必须是 6 个（防止再改错位置）
+  // 主标签 5 个；胶囊快捷图标也必须是 5 个（防止再改错位置）
   assert.equal(await page.locator(".df-tabs .df-tab").count(), 5, "主标签 5 个");
     await page.setViewportSize({ width: 660, height: 591 });
   await page.waitForTimeout(80);
@@ -165,7 +165,7 @@ try {
   assert.equal(collapsed.width, 464, "收起后窗口宽 464");
 
   assert.deepEqual(errors, [], "不许有页面异常");
-  console.log("OK   capsule 44 → card 660×591 → six tabs（含收纳盒/计划/项目本体）→ settings → collapse");
+  console.log("OK   capsule 44 → card 660×591 → 5 primary tabs + grouped tools → settings → collapse");
 } finally {
   await browser.close();
 }

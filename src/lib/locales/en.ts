@@ -85,6 +85,7 @@ export const en: AppMessages = {
     openOriginal: "Open original",
     favorite: "Save",
     home: "Home", tab: { home: "Home", search: "Search", fences: "Stash", plans: "Plans", projects: "Projects", collect: "Capture", news: "News", cal: "Calendar", chat: "AI", weather: "Weather", notice: "Alerts", term: "Terminal", },
+    tools: "Tools",
     searchPlaceholder: "Search files, notes, plans, sites…",
     searching: "Searching…",
     noResult: "No matches",
