@@ -100,6 +100,29 @@ try {
   await page.getByRole("tab", { name: "资讯", exact: true }).click();
   assert.equal(await page.locator(".df-news-row").count(), 3, "夹具里三条资讯都要出现");
 
+  // ⑥b 通知页：未授权只有一支可点击的提示；授权后按应用名/时间列出系统通知
+  await page.getByRole("button", { name: "通知", exact: true }).click();
+  await page.locator("[data-notice-permission]").waitFor();
+  assert.equal(await page.locator(".df-notice-section").count(), 2, "通知页必须分成云台提醒 / 系统通知两段");
+  assert.equal(await page.locator("[data-notice-permission]").count(), 1, "未授权时系统段只有一个授权提示");
+  assert.ok((await page.locator("[data-notice-permission]").innerText()).includes("去设置授权"), "授权提示要写清楚动作");
+  await page.locator("[data-notice-permission]").click();
+  assert.equal(await page.evaluate(() => window.__dockFloat.calls.some((call) => call.cmd === "open_notification_settings")), true, "点授权提示要打开设置页");
+
+  await page.evaluate(() => {
+    window.__dockFloat.systemSnapshot = {
+      access: "allowed",
+      detail: null,
+      items: [{ id: 7, appName: "微信", title: "新消息", body: "今晚一起吃饭", createdAt: new Date().toISOString() }],
+    };
+  });
+  await page.getByRole("tab", { name: "资讯", exact: true }).click();
+  await page.getByRole("button", { name: "通知", exact: true }).click();
+  await page.locator(".df-notice-sys").waitFor();
+  assert.equal(await page.locator(".df-notice-sys").count(), 1, "授权后要列出系统通知");
+  const systemText = await page.locator(".df-notice-sys").innerText();
+  assert.ok(systemText.includes("微信") && systemText.includes("新消息"), "系统通知要带应用名和标题");
+
   // ⑦ 齿轮：唯一跳主窗口的入口
   await page.getByRole("button", { name: "设置（打开主窗口）" }).click();
   const opened = await page.evaluate(() => window.__dockFloat.calls.filter((call) => call.cmd === "desktop_open_main").at(-1));

@@ -20,6 +20,7 @@ pub mod sys;
 pub mod fence_drop;
 pub mod desktop_shortcut;
 pub mod desktop;
+pub mod notifications;
 pub mod search;
 
 pub mod schedule;

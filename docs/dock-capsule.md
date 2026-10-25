@@ -76,6 +76,8 @@ Flyout 与 `CapturePanel` **本体**通过 `panels` 属性注入进来 —— �
 | `docs/screenshots/dock-capsule-news.png` | 资讯（按来源平铺） |
 | `docs/screenshots/dock-capsule-news-reader.png` | 卡片内读正文 |
 | `docs/screenshots/dock-capsule-chat.png` | AI 对话 |
+| `docs/screenshots/dock-card-cal-dark.png` | 日历（react-day-picker） |
+| `docs/screenshots/dock-card-notice-dark.png` | 通知（云台提醒 + 系统通知） |
 
 
 ## 交互（对齐 BrimDeck）
@@ -121,7 +123,9 @@ Flyout 与 `CapturePanel` **本体**通过 `panels` 属性注入进来 —— �
   当天条目（来自 `usePlans` 的 `days[dateKey]`，子任务缩进）。
   截图：`docs/screenshots/dock-card-cal-dark.png`。
 - **天气**：Open-Meteo（免 key），结果缓存 10 分钟；坐标在设置里配。
-- **通知**：应用内聚合（逾期 + 今天 + 未来两天），点一条跳计划页。
-  读 Windows 通知中心需要 WinRT `UserNotificationListener` 与打包权限，未做。
+- **通知**：两段 —— **云台提醒**（逾期 + 今天 + 未来两天，点一条跳计划页）
+  + **系统通知**（Windows 通知中心，只读，带应用名与时间）。未授权时系统段
+  只有一个可点击的「去设置授权」，不报错；授权与打包清单见
+  `docs/windows-notifications.md`。截图：`docs/screenshots/dock-card-notice-dark.png`。
 - **终端**：拉起系统终端（Windows Terminal / PowerShell / cmd）到指定目录，
   不内嵌 PTY。内嵌需要 `portable-pty` + `xterm.js`，见 `docs/dock-refactor-plan.md`。

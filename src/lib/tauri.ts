@@ -265,3 +265,32 @@ export interface FenceMoveResult {
 export function moveFenceEntries(paths: string[], destination: string): Promise<FenceMoveResult> {
   return invoke("move_fence_entries", { paths, destination });
 }
+
+/* ── 系统通知中心 ─────────────────────────────────────── */
+
+export type SystemNotificationAccess = "allowed" | "denied" | "unsupported";
+
+export interface SystemNotificationItem {
+  id: number;
+  appName: string;
+  title: string;
+  body: string;
+  /** RFC3339（UTC） */
+  createdAt: string;
+}
+
+export interface SystemNotificationSnapshot {
+  access: SystemNotificationAccess;
+  items: SystemNotificationItem[];
+  detail?: string | null;
+}
+
+/** 读取 Windows 通知中心；未授权时返回空列表而不是抛错。 */
+export async function systemNotifications(): Promise<SystemNotificationSnapshot> {
+  return invoke<SystemNotificationSnapshot>("system_notifications");
+}
+
+/** 打开 Windows「通知」权限设置页。 */
+export async function openNotificationSettings(): Promise<void> {
+  await invoke("open_notification_settings");
+}

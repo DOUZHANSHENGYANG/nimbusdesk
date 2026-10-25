@@ -5,7 +5,7 @@ import { listen } from "@tauri-apps/api/event";
 import { useTranslation } from "react-i18next";
 import {
   AppWindow, ArrowLeft, BookOpen, Bookmark, CalendarCheck, Camera, ChevronDown, ExternalLink, FileText, Folder,
-  Bell, CalendarDays, CloudSun, FolderKanban, SquareTerminal, Inbox, LayoutGrid, Newspaper, Rss, Search, Send, Settings2, Sparkles, Star, Trash2,
+  Bell, CalendarDays, CloudSun, FolderKanban, SquareTerminal, Inbox, LayoutGrid, Newspaper, RefreshCw, Rss, Search, Send, Settings2, Sparkles, Star, Trash2,
 } from "lucide-react";
 import { usePlans } from "@/features/plans/store";
 import { todayStr, type PlanTask } from "@/features/plans/types";
@@ -16,7 +16,12 @@ import type { SourceEntry } from "@/sources/types";
 import { useFeeds } from "@/stores/feeds";
 import { useFavorites } from "@/stores/favorites";
 import { ArticleReader } from "@/features/feeds/article-reader";
-import { openUrl } from "@/lib/tauri";
+import {
+  openUrl,
+  openNotificationSettings,
+  systemNotifications,
+  type SystemNotificationSnapshot,
+} from "@/lib/tauri";
 import { useSettings } from "@/stores/settings";
 import { DayPicker, type DayProps } from "react-day-picker";
 import { chatWithProvider, type ChatMessage } from "@/features/ai/client";
@@ -864,14 +869,14 @@ function WeatherPanel() {
 }
 
 /**
- * 通知：应用自己的提醒聚合。
+ * 通知：两段 —— 云台自己的提醒聚合 + Windows 通知中心。
  *
- * **不是** Windows 通知中心（那需要 WinRT UserNotificationListener + 打包权限，
- * 属于另一件事）。这里只汇总云台自己能算出来的事：逾期任务、今天剩余、
- * 未来两天要到期的。点一条跳到计划页，不在这里做编辑。
+ * 云台段汇总逾期任务、今天剩余、未来两天到期的，点一条跳到计划页。
+ * 系统段走 Rust 的 UserNotificationListener（只读、不弹 toast）：
+ * 未授权时**只渲染一个可点击的授权提示**，绝不因为 WinRT 报错让整页崩掉。
  */
 function NoticePanel({ onOpenPlans }: { onOpenPlans: () => void }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const days = usePlans((state) => state.days);
   const today = dateKey(new Date());
   const soonKey = dateKey(new Date(Date.now() + 2 * 86_400_000));
@@ -890,16 +895,86 @@ function NoticePanel({ onOpenPlans }: { onOpenPlans: () => void }) {
     return output.sort((a, b) => (a.late === b.late ? a.meta.localeCompare(b.meta) : a.late ? -1 : 1)).slice(0, 20);
   }, [days, today, soonKey]);
 
-  if (!rows.length) return <p className="df-hint">{t("dockFloat.noticeEmpty")}</p>;
+  const [system, setSystem] = useState<SystemNotificationSnapshot | null>(null);
+  const [systemLoading, setSystemLoading] = useState(true);
+  const loadSystem = useCallback(async () => {
+    setSystemLoading(true);
+    try {
+      const snapshot = await systemNotifications();
+      setSystem(snapshot && typeof snapshot.access === "string"
+        ? snapshot
+        : { access: "unsupported", items: [], detail: "empty snapshot" });
+    } catch (error) {
+      setSystem({ access: "unsupported", items: [], detail: String(error) });
+    } finally {
+      setSystemLoading(false);
+    }
+  }, []);
 
+  useEffect(() => { void loadSystem(); }, [loadSystem]);
+
+  const formatWhen = useCallback((value: string) => {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return value;
+    return new Intl.DateTimeFormat(i18n.language === "zh" ? "zh-CN" : "en-US", {
+      month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit",
+    }).format(date);
+  }, [i18n.language]);
+
+  const allowed = system?.access === "allowed";
+  const systemItems = system?.items ?? [];
   return (
     <div className="df-panel df-notice">
-      {rows.map((row) => (
-        <button key={row.id} type="button" className="df-news-row" onClick={onOpenPlans}>
-          <span className="df-row-title">{row.title}</span>
-          <span className="df-row-meta">{row.late ? t("dockFloat.noticeLate") : row.meta}</span>
-        </button>
-      ))}
+      <section className="df-notice-section">
+        <div className="df-notice-head">
+          <span>{t("dockFloat.noticeCloud")}</span>
+          <span className="df-row-meta">{t("dockFloat.calendarCount", { count: rows.length })}</span>
+        </div>
+        {rows.length === 0 ? (
+          <p className="df-hint">{t("dockFloat.noticeEmpty")}</p>
+        ) : rows.map((row) => (
+          <button key={row.id} type="button" className="df-news-row" onClick={onOpenPlans}>
+            <span className="df-row-title">{row.title}</span>
+            <span className="df-row-meta">{row.late ? t("dockFloat.noticeLate") : row.meta}</span>
+          </button>
+        ))}
+      </section>
+
+      <section className="df-notice-section">
+        <div className="df-notice-head">
+          <span>{t("dockFloat.noticeSystem")}</span>
+          {allowed && (
+            <button type="button" className="df-icon-btn" aria-label={t("dockFloat.noticeRefresh")}
+              title={t("dockFloat.noticeRefresh")} onClick={() => void loadSystem()}>
+              <RefreshCw className="df-icon" aria-hidden="true" />
+            </button>
+          )}
+        </div>
+        {systemLoading ? (
+          <p className="df-hint">{t("dockFloat.noticeSystemLoading")}</p>
+        ) : allowed ? (
+          systemItems.length === 0 ? (
+            <p className="df-hint">{t("dockFloat.noticeSystemEmpty")}</p>
+          ) : systemItems.map((item) => (
+            <div key={`${item.appName}-${item.id}`} className="df-notice-sys">
+              <span className="df-row-title">{item.title || item.appName}</span>
+              <span className="df-row-meta">{item.appName} · {formatWhen(item.createdAt)}</span>
+              {item.body && <span className="df-notice-body">{item.body}</span>}
+            </div>
+          ))
+        ) : (
+          <button type="button" data-notice-permission className="df-notice-permission"
+            onClick={() => { void openNotificationSettings().catch(report); }}>
+            <Bell className="df-icon" aria-hidden="true" />
+            <span className="df-notice-permission-main">
+              <span>{t("dockFloat.noticePermissionAction")}</span>
+              <span>{system?.access === "unsupported"
+                ? t("dockFloat.noticeUnsupported")
+                : t("dockFloat.noticePermissionHint")}</span>
+            </span>
+          </button>
+        )}
+      </section>
     </div>
   );
 }

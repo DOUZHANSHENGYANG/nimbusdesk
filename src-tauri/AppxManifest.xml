@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  通知中心需要 package identity：把本文件作为 MSIX / sparse package 的清单打包，
+  rescap:userNotificationListener 才会出现在系统「通知」权限页。
+  Tauri 的 NSIS/MSI 安装包不带包身份，所以开发态（直接跑 exe）读取会走 denied
+  分支 —— 这是预期行为，前端只显示「去设置授权」。
+-->
+<Package
+  xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+  xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:desktop="http://schemas.microsoft.com/appx/manifest/desktop/windows10"
+  xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+  IgnorableNamespaces="uap desktop rescap">
+
+  <Identity Name="com.nimbusdesk.app" Publisher="CN=NimbusDesk" Version="1.0.0.0" ProcessorArchitecture="x64" />
+
+  <Properties>
+    <DisplayName>NimbusDesk 云台</DisplayName>
+    <PublisherDisplayName>NimbusDesk</PublisherDisplayName>
+    <Logo>icons/128x128.png</Logo>
+  </Properties>
+
+  <Dependencies>
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.19041.0" MaxVersionTested="10.0.26100.0" />
+  </Dependencies>
+
+  <Resources>
+    <Resource Language="zh-CN" />
+    <Resource Language="en-US" />
+  </Resources>
+
+  <Applications>
+    <Application Id="NimbusDesk" Executable="nimbusdesk.exe" EntryPoint="Windows.FullTrustApplication">
+      <uap:VisualElements
+        DisplayName="NimbusDesk 云台"
+        Description="本机工作台"
+        BackgroundColor="transparent"
+        Square150x150Logo="icons/128x128.png"
+        Square44x44Logo="icons/32x32.png" />
+      <Extensions>
+        <uap:Extension Category="windows.appExecutionAlias" Executable="nimbusdesk.exe" EntryPoint="Windows.FullTrustApplication">
+          <uap:AppExecutionAlias>
+            <desktop:ExecutionAlias Alias="nimbusdesk.exe" />
+          </uap:AppExecutionAlias>
+        </uap:Extension>
+      </Extensions>
+    </Application>
+  </Applications>
+
+  <Capabilities>
+    <rescap:Capability Name="runFullTrust" />
+    <!-- 读取其他应用通知的唯一凭据；没有它 GetNotificationsAsync 只会拿到自己的 -->
+    <rescap:Capability Name="userNotificationListener" />
+  </Capabilities>
+</Package>

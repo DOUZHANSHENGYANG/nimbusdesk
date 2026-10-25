@@ -41,6 +41,8 @@ pub fn run() {
             commands::data::project_apply_remote_binding,
             commands::dock::dock_open,
             commands::dock::dock_close,
+            commands::notifications::system_notifications,
+            commands::notifications::open_notification_settings,
             commands::dock::dock_set_enabled,
             commands::dock::dock_set_click_through,
             commands::dock::shell_launch,
