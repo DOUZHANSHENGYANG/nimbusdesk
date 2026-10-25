@@ -22,7 +22,8 @@ import { open as openFileDialog } from "@tauri-apps/plugin-dialog";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { ImportWizard } from "@/ahub/components/ImportWizard";
 import { Markdown } from "@/ahub/components/Markdown";
-import { TagInput } from "@/ahub/components/TagInput";
+import { TagPicker } from "@/ahub/components/TagPicker";
+import { useData } from "@/ahub/stores/data";
 import { Badge } from "@/ahub/components/ui/badge";
 import { Button } from "@/ahub/components/ui/button";
 import {
@@ -82,6 +83,8 @@ export function AddSkillDialog({ onDone }: { onDone: () => void }) {
   const [newName, setNewName] = useState("");
   const [newDesc, setNewDesc] = useState("");
   const [newTags, setNewTags] = useState<string[]>([]);
+  const skills = useData((s) => s.skills);
+  const knownTags = useMemo(() => [...new Set(skills.flatMap((skill) => skill.tags))].sort(), [skills]);
   const [newBody, setNewBody] = useState(STARTER);
   const [newMode, setNewMode] = useState<"preview" | "edit" | "split">("edit");
 
@@ -772,7 +775,7 @@ export function AddSkillDialog({ onDone }: { onDone: () => void }) {
                     />
                   </Field>
                   <Field label={t("common.tags")} hint={t("common.tagPlaceholder")}>
-                    <TagInput value={newTags} onChange={setNewTags} />
+                    <TagPicker value={newTags} onChange={setNewTags} allTags={knownTags} />
                   </Field>
                 </div>
                 <Field label={t("common.description")} className="shrink-0">

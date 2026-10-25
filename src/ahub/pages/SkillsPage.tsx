@@ -6,6 +6,7 @@ import { ConfirmDialog } from "@/ahub/components/ConfirmDialog";
 import { EmptyState } from "@/ahub/components/EmptyState";
 import { matchTags, type TagMode } from "@/ahub/components/TagFilter";
 import { TagShelf } from "@/ahub/components/TagShelf";
+import { BatchTagDialog, TagPicker } from "@/ahub/components/TagPicker";
 import { TagManagerView } from "@/ahub/components/TagManagerView";
 import { TagCommand } from "@/ahub/components/TagCommand";
 import { SearchBar } from "@/ahub/components/SearchBar";
@@ -13,7 +14,6 @@ import { HarnessDialog } from "@/ahub/components/HarnessDialog";
 import { HarnessIcon } from "@/ahub/components/HarnessIcon";
 import { Markdown } from "@/ahub/components/Markdown";
 import { PageShell } from "@/ahub/components/PageShell";
-import { TagInput } from "@/ahub/components/TagInput";
 import { SkillPicker } from "@/ahub/components/SkillPicker";
 import { VersionList } from "@/ahub/components/VersionList";
 import { VetReviewPanel } from "@/ahub/components/VetReviewPanel";
@@ -160,6 +160,7 @@ export function SkillsPage() {
   const [tagMode, setTagMode] = useState<TagMode>("or");
   const [pageTab, setPageTab] = useState<"skills" | "tags">("skills");
   const [tagCommandOpen, setTagCommandOpen] = useState(false);
+  const [batchTagOpen, setBatchTagOpen] = useState(false);
   const [scanOpen, setScanOpen] = useState(false);
   const [batchMode, setBatchMode] = useState(false);
   const [batchSel, setBatchSel] = useState<Set<string>>(new Set());
@@ -534,6 +535,34 @@ export function SkillsPage() {
     await loadSkills();
   };
 
+  /** 批量改标签：追加 / 移除 / 清空，作用于当前勾选的技能 */
+  const applyTagsToSelection = async (mode: "add" | "remove" | "clear", tags: string[]) => {
+    const targets = skills.filter((meta) => batchSel.has(meta.dirName));
+    for (const meta of targets) {
+      const doc = await api.readSkill(meta.dirName);
+      const next =
+        mode === "clear"
+          ? []
+          : mode === "add"
+            ? [...new Set([...doc.meta.tags, ...tags])]
+            : doc.meta.tags.filter((tag) => !tags.includes(tag));
+      if (next.join("\u0001") === doc.meta.tags.join("\u0001")) continue;
+      await saveSkill({
+        dirName: meta.dirName,
+        name: doc.meta.name,
+        description: doc.meta.description,
+        tags: next,
+        body: doc.body,
+        frontmatter: doc.frontmatter,
+        level: "L1",
+        publish: false,
+        note: "",
+      });
+    }
+    await loadSkills();
+    toast.success(t("tagPicker.batchDone", { n: targets.length }));
+  };
+
   /** 点击卡片上的标签：下钻筛选 */
   const drillTag = (tg: string) =>
     setActiveTags((prev) => {
@@ -895,6 +924,18 @@ export function SkillsPage() {
                     {t("skills.packExportBtn")}
                   </Button>
 
+                  {/* 批量打标签：追加 / 移除 / 清空 */}
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    className="h-7 w-[96px] justify-center text-[11px]"
+                    disabled={batchSel.size === 0}
+                    onClick={() => setBatchTagOpen(true)}
+                  >
+                    <Tag className="size-3.5" />
+                    {t("skills.batchTagBtn")}
+                  </Button>
+
                   {/* 保存为预设：把当前选中的技能写成一个命名集合 */}
                   <Button
                     size="sm"
@@ -1239,7 +1280,7 @@ export function SkillsPage() {
                               <Textarea value={editDesc} onChange={(e) => setEditDesc(e.target.value)} className="min-h-16 resize-y" />
                             </Field>
                             <Field label={t("common.tags")}>
-                              <TagInput value={editTags} onChange={setEditTags} />
+                              <TagPicker value={editTags} onChange={setEditTags} allTags={allTags} />
                             </Field>
                           </div>
                         ) : null}
@@ -1759,6 +1800,13 @@ export function SkillsPage() {
 
       <HarnessDialog open={scanOpen} onOpenChange={setScanOpen} kind="skills" />
 
+      <BatchTagDialog
+        open={batchTagOpen}
+        onOpenChange={setBatchTagOpen}
+        count={batchSel.size}
+        allTags={allTags}
+        onApply={applyTagsToSelection}
+      />
       <TagCommand
         open={tagCommandOpen}
         onOpenChange={setTagCommandOpen}

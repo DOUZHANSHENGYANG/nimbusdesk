@@ -11,6 +11,17 @@ import { i18n } from "@/lib/i18n";
  * 语言也就只剩云台一处开关。
  */
 const zh = {
+  tagPicker: {
+    placeholder: "输入标签，或从已有标签里选",
+    create: "新建「{{tag}}」",
+    empty: "还没有标签",
+    batchTitle: "批量打标签 · 已选 {{n}} 个",
+    batchHint: "选择标签后点「追加」加到所选技能；「移除」只去掉这几个标签；「清空」清掉所选技能的全部标签。",
+    add: "追加",
+    remove: "移除",
+    clear: "清空",
+    batchDone: "已更新 {{n}} 个技能的标签",
+  },
   tagManager: {
     title: "标签管理",
     subtitle: "{{tags}} 个标签 · {{groups}} 组 · 被引用 {{uses}} 次",
@@ -618,6 +629,7 @@ const zh = {
     batchUnselectAll: "取消全选当前",
     batchSelectAllGlobal: "全局全选",
     batchUnselectAllGlobal: "取消全局全选",
+    batchTagBtn: "打标签",
     batchEnable: "批量启用",
     batchDisable: "批量停用",
     batchStatusDone: "已处理 {{ok}} 个，失败 {{failed}} 个",
@@ -1113,6 +1125,17 @@ const zh = {
 };
 
 const en: typeof zh = {
+  tagPicker: {
+    placeholder: "Type a tag, or pick an existing one",
+    create: "Create “{{tag}}”",
+    empty: "No tags yet",
+    batchTitle: "Tag {{n}} skills",
+    batchHint: "Pick tags, then Add / Remove / Clear applies to the selected skills.",
+    add: "Add",
+    remove: "Remove",
+    clear: "Clear",
+    batchDone: "Updated tags on {{n}} skills",
+  },
   tagManager: {
     title: "Tag manager",
     subtitle: "{{tags}} tags · {{groups}} groups · used {{uses}} times",
@@ -1719,6 +1742,7 @@ const en: typeof zh = {
     batchUnselectAll: "Unselect all shown",
     batchSelectAllGlobal: "Select all skills",
     batchUnselectAllGlobal: "Unselect all skills",
+    batchTagBtn: "Tags",
     batchEnable: "Bulk enable",
     batchDisable: "Bulk disable",
     batchStatusDone: "{{ok}} updated, {{failed}} failed",
