@@ -46,7 +46,7 @@ try {
   await page.getByRole("button", { name: "展开卡片" }).click();
   await page.locator(".df-card").waitFor();
   // 主标签 5 个；胶囊快捷图标也必须是 5 个（防止再改错位置）
-  assert.equal(await page.locator(".df-tabs .df-tab").count(), 5, "主标签 5 个");
+  assert.equal(await page.locator(".df-quick-btn").count(), 5, "主标签 5 个");
     await page.setViewportSize({ width: 660, height: 591 });
   await page.waitForTimeout(80);
   // 量布局尺寸：撑开动画用 transform 缩放，boundingBox 会量到中间帧
@@ -64,28 +64,42 @@ try {
   });
   assert.equal(surface.transform, "none", "展开不能再用 scale 伪造尺寸");
   assert.ok(surface.clipPath.includes("inset"), "展开必须走 clip-path 形变");
-  assert.equal(await page.locator(".df-head").evaluate((el) => getComputedStyle(el).display), "grid", "头部用三组网格");
+  assert.equal(await page.locator(".df-toolbar").evaluate((el) => getComputedStyle(el).display), "flex", "展开内容用工具条");
   assert.equal(await page.locator(".df-tools .df-icon-btn").count(), 4, "工具组只放 4 个内容工具");
-  assert.equal(await page.locator(".df-window-actions .df-icon-btn").count(), 3, "窗口操作组放 AI/设置/收起");
-  const tabWidths = await page.locator(".df-tab").evaluateAll((nodes) => nodes.map((node) => Math.round(node.getBoundingClientRect().width)));
-  assert.equal(new Set(tabWidths).size, 1, "五个主标签必须严格等宽");
-  assert.equal(await page.locator(".df-head").evaluate((el) => el.scrollWidth <= el.clientWidth + 1), true, "头部三组不能溢出");
+  assert.equal(await page.locator(".df-window-actions .df-icon-btn").count(), 2, "窗口操作组放 AI/设置");
+  const quickWidths = await page.locator(".df-quick-btn").evaluateAll((nodes) => nodes.map((node) => Math.round(node.getBoundingClientRect().width)));
+  assert.equal(new Set(quickWidths).size, 1, "五个主图标必须等宽");
+  assert.equal(await page.locator(".df-toolbar").evaluate((el) => el.scrollWidth <= el.clientWidth + 1), true, "工具条不能溢出");
+  // 中心栏在展开态必须原地不动：位置/尺寸都不能变
+  const expandedCapsule = await page.locator(".df-capsule").boundingBox();
+  const expandedCard = await page.locator(".df-card").boundingBox();
+  assert.ok(expandedCapsule && expandedCard, "展开态中心栏/卡片必须存在");
+  assert.equal(Math.round(expandedCapsule.y), Math.round(capsule.y), "中心栏顶边不变");
+  assert.equal(Math.round(expandedCapsule.width), 464, "中心栏宽不变");
+  assert.equal(Math.round(expandedCapsule.height), 44, "中心栏高不变");
+  assert.ok(
+    Math.abs((expandedCapsule.x + expandedCapsule.width / 2) - (expandedCard.x + expandedCard.width / 2)) <= 1,
+    "中心栏仍相对卡片水平居中",
+  );
+  const toolbarY = await page.locator(".df-toolbar").evaluate((el) => el.getBoundingClientRect().y);
+  assert.ok(toolbarY >= 44, "展开内容从中心栏下方开始");
   const expanded = await lastBounds();
   assert.equal(expanded.width, 660, "展开后窗口宽 660");
   assert.equal(expanded.height, 591, "展开后窗口高 591");
   assert.equal(expanded.x, Math.round((1360 - 660) / 2), "展开时水平居中（工作区 1360 宽）");
-  // 胶囊不再卸载，而是淡出让位（保留节点才能让形状连续）
+  // 中心栏不卸载、不淡出：它只是外壳变大后仍留在顶部中央
   assert.equal(
     await page.locator(".df-capsule").evaluate((node) => getComputedStyle(node).opacity),
-    "0",
-    "展开后胶囊淡出",
+    "1",
+    "展开后中心栏保持可见",
   );
 
-  // ③ 五个主标签：都能切，且卡片尺寸不变
+  // ③ 五个主图标：都能切，且卡片尺寸不变
+  const quick = page.locator(".df-quick");
   for (const name of ["搜索", "收纳盒", "计划", "项目", "资讯"]) {
-    await page.getByRole("tab", { name, exact: true }).click();
+    await quick.locator(`[aria-label="${name}"]`).click();
     await page.waitForTimeout(80);
-    assert.equal(await page.getByRole("tab", { name, exact: true }).getAttribute("aria-selected"), "true", `${name} 必须选中`);
+    assert.equal(await quick.locator(`[aria-label="${name}"]`).getAttribute("aria-pressed"), "true", `${name} 必须选中`);
     const box = await page.locator(".df-card").boundingBox();
     assert.equal(Math.round(box.width), 660, `切到 ${name} 后卡片宽度不变`);
     const height = await lastBounds();
@@ -93,11 +107,11 @@ try {
   }
 
   // ④ 三个真面板：收纳盒 / 计划 / 项目 必须是侧栏那套组件本体，不是卡片里重写的
-  await page.getByRole("tab", { name: "收纳盒", exact: true }).click();
+  await quick.locator('[aria-label="收纳盒"]').click();
   assert.equal(await page.locator('.df-host .dock-panel-input[placeholder="搜索条目标题…"]').count(), 1, "收纳盒必须是侧栏那个 FencesFlyout 本体");
-  await page.getByRole("tab", { name: "计划", exact: true }).click();
+  await quick.locator('[aria-label="计划"]').click();
   assert.ok(await page.locator(".df-host .dock-todo").count() >= 1, "计划要列出今日待办");
-  await page.getByRole("tab", { name: "项目", exact: true }).click();
+  await quick.locator('[aria-label="项目"]').click();
   assert.ok(await page.locator(".df-host .dock-pname").count() >= 1, "项目要列出在办项目");
 
   // ⑤b 日历：react-day-picker 固定 6 周，点日期列当天条目；切月高度不变
@@ -117,7 +131,7 @@ try {
   assert.equal((await lastBounds()).height, 591, "日历页卡片高度仍是 591");
 
   // ⑥ 资讯页：来源混排
-  await page.getByRole("tab", { name: "资讯", exact: true }).click();
+  await quick.locator('[aria-label="资讯"]').click();
   assert.equal(await page.locator(".df-news-row").count(), 3, "夹具里三条资讯都要出现");
 
   // ⑥b 通知页：未授权只有一支可点击的提示；授权后按应用名/时间列出系统通知
@@ -136,7 +150,7 @@ try {
       items: [{ id: 7, appName: "微信", title: "新消息", body: "今晚一起吃饭", createdAt: new Date().toISOString() }],
     };
   });
-  await page.getByRole("tab", { name: "资讯", exact: true }).click();
+  await quick.locator('[aria-label="资讯"]').click();
   await page.getByRole("button", { name: "通知", exact: true }).click();
   await page.locator(".df-notice-sys").waitFor();
   assert.equal(await page.locator(".df-notice-sys").count(), 1, "授权后要列出系统通知");
@@ -152,7 +166,7 @@ try {
   await page.getByRole("button", { name: "AI 对话" }).click();
   await page.locator(".df-chat-list").waitFor({ state: "visible" });
   await page.getByRole("button", { name: "返回列表" }).click();
-  await page.locator(".df-tabs").waitFor({ state: "visible" });
+  await page.locator(".df-toolbar").waitFor({ state: "visible" });
 
   // ⑧ 收起：窗口回到 44 高
   await page.getByRole("button", { name: "收起卡片" }).click();

@@ -1083,3 +1083,54 @@
 .df-root[data-phase="resizing"] .df-card {
   pointer-events: none;
 }
+
+/* ── 一个不动的中心栏 + 会生长的外壳 ──────────────────────────────
+   胶囊内容是常驻层：展开时它不位移、不缩放、不换布局，只是外壳
+   （.df-card 的 clip）从 464×44 长到 660×591；卡片内容从中心栏下方淡入。 */
+.df-card { z-index: 1; }
+.df-capsule { z-index: 2; }
+.df-root[data-open="true"] .df-capsule {
+  opacity: 1 !important;
+  pointer-events: auto;
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+.df-quick-btn[aria-pressed="true"] {
+  background: var(--dock-face);
+  color: var(--foreground);
+}
+.df-card-content {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+  padding-top: 50px; /* 给顶部 44px 常驻栏 + 6px 呼吸 */
+  opacity: 0;
+  transition: opacity 120ms ease 70ms;
+}
+.df-root[data-phase="expanding"] .df-card-content,
+.df-root[data-phase="expanded"] .df-card-content,
+.df-root[data-phase="collapsing"] .df-card-content {
+  opacity: 1;
+}
+.df-toolbar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px 6px;
+}
+.df-page-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--foreground);
+  font-size: var(--pr-text-sm);
+  font-weight: var(--pr-weight-semibold);
+}
+.df-toolbar .df-tools { padding: 1px 4px; }
+.df-toolbar .df-window-actions { padding-left: 8px; }

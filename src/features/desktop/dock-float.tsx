@@ -292,132 +292,105 @@ export function DockFloat({ onExpand, onHide, panels }: {
           <span className="df-quick">
             {QUICK_TABS.filter(({ key }) => PRIMARY_TABS.includes(key)).map(({ key, icon: Icon }) => (
               <button key={key} type="button" className="df-quick-btn" title={t(`dockFloat.tab.${key}`)}
-                aria-label={t(`dockFloat.tab.${key}`)}
-                onClick={() => { setTab(key); setExpanded(true); }}>
+                aria-label={t(`dockFloat.tab.${key}`)} aria-pressed={tab === key}
+                onClick={() => { setTab(key); if (!open) setExpanded(true); }}>
                 <Icon className="df-icon" aria-hidden="true" />
               </button>
             ))}
           </span>
-          <button type="button" className="df-expand" title={t("dockFloat.expand")} aria-label={t("dockFloat.expand")}
-            onClick={() => setExpanded(true)}>
-            <ChevronDown className="df-icon" aria-hidden="true" />
+          <button type="button" className="df-expand"
+            title={open ? t("dockFloat.collapse") : t("dockFloat.expand")}
+            aria-label={open ? t("dockFloat.collapse") : t("dockFloat.expand")}
+            onClick={() => setExpanded(!open)}>
+            <ChevronDown className={open ? "df-icon is-flip" : "df-icon"} aria-hidden="true" />
           </button>
         </div>
       )}
 
       {mounted && (
         <div className="df-card">
-          <div className="df-head" data-card-drag
-            onPointerDown={(event) => {
-              // 头部空白处按住就能拖动整张卡片；按钮照常点击
-              if (event.button !== 0 || (event.target as HTMLElement).closest("button")) return;
-              const win = getCurrentWebviewWindow();
-              void (async () => {
-                await win.startDragging();
-                const pos = await win.outerPosition();
-                const monitor = await import("@tauri-apps/api/window").then((m) => m.currentMonitor());
-                useSettings.getState().setDockFloatX(pos.x / (monitor?.scaleFactor ?? 1));
-              })().catch(() => undefined);
-            }}>
-            <span className="df-brand">
-              <span className="df-orb" aria-hidden="true" />
-              <span className="df-name">{t("dockFloat.title")}</span>
-              <span className="df-sep" aria-hidden="true" />
-              <span className="df-stat">
-                <b>{summary.todo}</b> {t("dockFloat.todoUnit")} · <b>{summary.done}</b> {t("dockFloat.doneUnit")}
+          <div className="df-card-content">
+            {/* 工具与设置只在展开态出现；顶部的 5 个主图标始终留在胶囊栏里不动 */}
+            <div className="df-toolbar">
+              <span className="df-page-title">
+                {chatOpen ? t("dockFloat.chatTitle") : t(`dockFloat.tab.${tab}`)}
               </span>
-            </span>
-            <span className="df-tools" role="group" aria-label={t("dockFloat.tools")}>
-              {/* 二级功能：只放图标，点开在卡片里就地显示 —— 省掉一整行标签 */}
-              {TOOL_TABS.map(({ key, icon: Icon }) => (
-                <button key={key} type="button" className="df-icon-btn" title={t(`dockFloat.tab.${key}`)}
-                  aria-label={t(`dockFloat.tab.${key}`)} aria-pressed={tab === key}
-                  onClick={() => setTab(key)}>
-                  <Icon className="df-icon" aria-hidden="true" />
+              <span className="df-sp" />
+              <span className="df-tools" role="group" aria-label={t("dockFloat.tools")}>
+                {TOOL_TABS.map(({ key, icon: Icon }) => (
+                  <button key={key} type="button" className="df-icon-btn" title={t(`dockFloat.tab.${key}`)}
+                    aria-label={t(`dockFloat.tab.${key}`)} aria-pressed={tab === key}
+                    onClick={() => setTab(key)}>
+                    <Icon className="df-icon" aria-hidden="true" />
+                  </button>
+                ))}
+              </span>
+              <span className="df-window-actions">
+                <button type="button" className="df-icon-btn" title={t("dockFloat.chatTitle")}
+                  aria-label={t("dockFloat.chatTitle")} aria-pressed={chatOpen}
+                  onClick={() => setChatOpen((value) => !value)}>
+                  <Sparkles className="df-icon" aria-hidden="true" />
                 </button>
-              ))}
-            </span>
-            <span className="df-window-actions">
-              <button type="button" className="df-icon-btn" title={t("dockFloat.chatTitle")}
-                aria-label={t("dockFloat.chatTitle")} aria-pressed={chatOpen}
-                onClick={() => setChatOpen((value) => !value)}>
-                <Sparkles className="df-icon" aria-hidden="true" />
-              </button>
-              <button type="button" className="df-icon-btn" title={t("dockFloat.settings")}
-                aria-label={t("dockFloat.settings")}
-                onClick={() => invoke("desktop_open_main", { route: "/settings" }).catch(report)}>
-                <Settings2 className="df-icon" aria-hidden="true" />
-              </button>
-              <button type="button" className="df-icon-btn" title={t("dockFloat.collapse")}
-                aria-label={t("dockFloat.collapse")} onClick={() => setExpanded(false)}>
-                <ChevronDown className="df-icon is-flip" aria-hidden="true" />
-              </button>
-            </span>
-          </div>
+                <button type="button" className="df-icon-btn" title={t("dockFloat.settings")}
+                  aria-label={t("dockFloat.settings")}
+                  onClick={() => invoke("desktop_open_main", { route: "/settings" }).catch(report)}>
+                  <Settings2 className="df-icon" aria-hidden="true" />
+                </button>
+              </span>
+            </div>
 
-          {chatOpen ? (
-            <div className="df-body"><ChatPanel onClose={() => setChatOpen(false)} /></div>
-          ) : (
-          <>
-          <div className="df-tabs" role="tablist" aria-label={t("dockFloat.title")}>
-            {QUICK_TABS.filter(({ key }) => PRIMARY_TABS.includes(key)).map(({ key, icon: Icon }) => (
-              <button key={key} type="button" role="tab" aria-selected={tab === key}
-                className="df-tab" onClick={() => setTab(key)}>
-                <Icon className="df-icon" aria-hidden="true" />
-                <span className="df-tab-label">{t(`dockFloat.tab.${key}`)}</span>
-              </button>
-            ))}
-          </div>
-
-          <div className="df-body">
-            {tab === "search" && <SearchPanel />}
-            {tab === "fences" && <div className="df-host">{panels.fences}</div>}
-            {tab === "plans" && <div className="df-host">{panels.plans}</div>}
-            {tab === "projects" && <div className="df-host">{panels.projects}</div>}
-            {tab === "collect" && (
-              <div className="df-collect">{panels.capture}</div>
+            {chatOpen ? (
+              <div className="df-body"><ChatPanel onClose={() => setChatOpen(false)} /></div>
+            ) : (
+              <div className="df-body">
+                {tab === "search" && <SearchPanel />}
+                {tab === "fences" && <div className="df-host">{panels.fences}</div>}
+                {tab === "plans" && <div className="df-host">{panels.plans}</div>}
+                {tab === "projects" && <div className="df-host">{panels.projects}</div>}
+                {tab === "collect" && (
+                  <div className="df-collect">{panels.capture}</div>
+                )}
+                {tab === "news" && <NewsPanel />}
+                {tab === "cal" && <CalendarPanel />}
+                {tab === "chat" && <div className="df-body-inner"><ChatPanel onClose={() => setTab("search")} /></div>}
+                {tab === "weather" && <WeatherPanel />}
+                {tab === "notice" && <NoticePanel onOpenPlans={() => setTab("plans")} />}
+                {tab === "term" && <TerminalPanel />}
+              </div>
             )}
-            {tab === "news" && <NewsPanel />}
-            {tab === "cal" && <CalendarPanel />}
-            {tab === "chat" && <div className="df-body-inner"><ChatPanel onClose={() => setTab("search")} /></div>}
-            {tab === "weather" && <WeatherPanel />}
-            {tab === "notice" && <NoticePanel onOpenPlans={() => setTab("plans")} />}
-            {tab === "term" && <TerminalPanel />}
-          </div>
-          </>
-          )}
 
-          <div className="df-foot">
-            <span>{t("dockFloat.footSummary", { todo: summary.todo, late: summary.late })}</span>
-            <span className="df-sp" />
-            <kbd>Ctrl K</kbd>
-            <span>{t("dockFloat.footSearch")}</span>
-            <button type="button" className="df-link" onClick={onHide}>{t("dockFloat.hide")}</button>
+            <div className="df-foot">
+              <span>{t("dockFloat.footSummary", { todo: summary.todo, late: summary.late })}</span>
+              <span className="df-sp" />
+              <kbd>Ctrl K</kbd>
+              <span>{t("dockFloat.footSearch")}</span>
+              <button type="button" className="df-link" onClick={onHide}>{t("dockFloat.hide")}</button>
+            </div>
+            <div className="df-resize" role="separator" aria-orientation="horizontal"
+              aria-label={t("dockFloat.resize")}
+              onPointerDown={(event) => {
+                if (event.button !== 0) return;
+                event.preventDefault();
+                const startY = event.clientY;
+                const startH = useSettings.getState().dockCardHeight;
+                let frame = 0;
+                let next = startH;
+                const move = (ev: PointerEvent) => {
+                  next = Math.round(Math.min(900, Math.max(420, startH + (ev.clientY - startY))) / 10) * 10;
+                  document.documentElement.style.setProperty("--df-card-h", next + "px");
+                  // 窗口跟着长：rAF 合并，避免每个 pointermove 都打一次 IPC
+                  if (!frame) frame = requestAnimationFrame(() => { frame = 0; void onExpand(true, next).catch(report); });
+                };
+                const up = () => {
+                  window.removeEventListener("pointermove", move);
+                  window.removeEventListener("pointerup", up);
+                  useSettings.getState().setDockCardHeight(next);
+                  void onExpand(true, next).catch(report);
+                };
+                window.addEventListener("pointermove", move);
+                window.addEventListener("pointerup", up);
+              }} />
           </div>
-          <div className="df-resize" role="separator" aria-orientation="horizontal"
-            aria-label={t("dockFloat.resize")}
-            onPointerDown={(event) => {
-              if (event.button !== 0) return;
-              event.preventDefault();
-              const startY = event.clientY;
-              const startH = useSettings.getState().dockCardHeight;
-              let frame = 0;
-              let next = startH;
-              const move = (ev: PointerEvent) => {
-                next = Math.round(Math.min(900, Math.max(420, startH + (ev.clientY - startY))) / 10) * 10;
-                document.documentElement.style.setProperty("--df-card-h", next + "px");
-                // 窗口跟着长：rAF 合并，避免每个 pointermove 都打一次 IPC
-                if (!frame) frame = requestAnimationFrame(() => { frame = 0; void onExpand(true, next).catch(report); });
-              };
-              const up = () => {
-                window.removeEventListener("pointermove", move);
-                window.removeEventListener("pointerup", up);
-                useSettings.getState().setDockCardHeight(next);
-                void onExpand(true, next).catch(report);
-              };
-              window.addEventListener("pointermove", move);
-              window.addEventListener("pointerup", up);
-            }} />
         </div>
       )}
     </div>

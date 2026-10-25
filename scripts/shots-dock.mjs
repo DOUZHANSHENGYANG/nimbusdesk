@@ -11,7 +11,8 @@ const { chromium } = await loadPlaywright();
 const browser = await chromium.launch({ executablePath: resolveBrowser(), headless: true });
 const page = await browser.newPage({ viewport: { width: 464, height: 44 }, deviceScaleFactor: 2 });
 const shot = async (name) => {
-  await page.locator(".df-card").screenshot({ path: `docs/screenshots/${name}.png` });
+  // 中心栏是卡片外的常驻层，截 .df-card 会漏掉它；截整个根节点才是用户看到的样子。
+  await page.locator(".df-root").screenshot({ path: `docs/screenshots/${name}.png` });
   console.log("saved", name);
 };
 
@@ -19,15 +20,16 @@ try {
   await page.goto(`${process.env.FIXTURE_ORIGIN ?? "http://127.0.0.1:17800"}/src/features/desktop/fixtures/dock-float.html`);
   await page.locator(".df-capsule").waitFor();
   await page.locator(".df-capsule").screenshot({ path: "docs/screenshots/dock-capsule.png" });
-  await page.getByRole("button", { name: "展开" }).click();
+  await page.getByRole("button", { name: "展开卡片" }).click();
   await page.setViewportSize({ width: 660, height: 591 });
   await page.locator(".df-card").waitFor();
 
-  await page.getByRole("tab", { name: "搜索", exact: true }).click();
+  const quick = (name) => page.locator(`.df-quick-btn[aria-label="${name}"]`).click();
+  await quick("搜索");
   await shot("dock-capsule-search");
-  await page.getByRole("tab", { name: "收纳盒", exact: true }).click();
+  await quick("收纳盒");
   await shot("dock-capsule-fences");
-  await page.getByRole("tab", { name: "资讯", exact: true }).click();
+  await quick("资讯");
   await shot("dock-capsule-news");
   const first = page.locator(".df-news-open").first();
   if (await first.count()) { await first.click(); await shot("dock-capsule-news-reader"); }
