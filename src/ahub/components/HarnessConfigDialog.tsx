@@ -8,6 +8,7 @@ import { Button } from "@/ahub/components/ui/button";
 import { Dialog, DialogBody, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/ahub/components/ui/dialog";
 import { Textarea } from "@/ahub/components/ui/input";
 import { HarnessIcon } from "@/ahub/components/HarnessIcon";
+import { SearchBar } from "@/ahub/components/SearchBar";
 import { api } from "@/ahub/lib/api";
 import type { HarnessReport, McpServer } from "@/ahub/lib/types";
 import { cn } from "@/ahub/lib/utils";
@@ -49,6 +50,8 @@ export function HarnessConfigDialog({
   const { t } = useTranslation();
   const [activeId, setActiveId] = useState<string>("");
   const [busy, setBusy] = useState<string | null>(null); // 正在操作的行 key
+  // 搜已配置与可添加两个列表；切工具不清空，关掉重开才清
+  const [q, setQ] = useState("");
 
   // 内嵌配置编辑器
   const [editOpen, setEditOpen] = useState(false);
@@ -70,11 +73,13 @@ export function HarnessConfigDialog({
       setEditOpen(false);
       setImportOpen(false);
       setImportText("");
+      setQ("");
       if (list.length && !list.some((r) => r.id === activeId)) setActiveId(list[0].id);
     }
   }, [open, list, activeId]);
 
   const active = list.find((r) => r.id === activeId) ?? null;
+  const needle = q.trim().toLowerCase();
   const poolByName = useMemo(() => new Map(pool.map((p) => [p.name, p])), [pool]);
 
   // 该工具已配置的 MCP（置顶）
@@ -86,12 +91,28 @@ export function HarnessConfigDialog({
     });
   }, [active, poolByName]);
 
+  const configuredHit = (c: { cfg: { name: string; transport?: string; command?: string; args?: string[]; url?: string } }) => {
+    if (!needle) return true;
+    return (
+      c.cfg.name.toLowerCase().includes(needle) ||
+      rowSummary(c.cfg).toLowerCase().includes(needle)
+    );
+  };
+
   // 池子中尚未配置到该工具的
   const addable = useMemo(() => {
     if (!active) return [];
     const have = new Set(active.mcpServers.map((x) => x.name));
     return pool.filter((p) => !have.has(p.name));
   }, [active, pool]);
+
+  const addableHit = (p: McpServer) => {
+    if (!needle) return true;
+    return (
+      p.name.toLowerCase().includes(needle) ||
+      (p.transport === "stdio" ? `${p.command} ${p.args.join(" ")}` : p.url).toLowerCase().includes(needle)
+    );
+  };
 
   const syncTargets = async (name: string, hid: string, add: boolean) => {
     const p = poolByName.get(name);
@@ -296,17 +317,28 @@ export function HarnessConfigDialog({
                     </Button>
                   </div>
 
+                  <SearchBar
+                    value={q}
+                    onChange={setQ}
+                    placeholder={t("mcp.cfgSearchPlaceholder")}
+                    className="mb-3 w-full"
+                  />
+
                   {/* 已配置（置顶） */}
                   <div className="mb-2 text-[11px] font-medium text-ink-3">
-                    {t("mcp.cfgExisting")} · {configured.length}
+                    {t("mcp.cfgExisting")} · {configured.filter(configuredHit).length}
                   </div>
                   {configured.length === 0 ? (
                     <div className="mb-4 rounded-lg border border-dashed border-border px-3 py-3 text-[11px] text-ink-3">
                       {t("mcp.cfgNoneExisting")}
                     </div>
+                  ) : configured.filter(configuredHit).length === 0 ? (
+                    <div className="mb-4 rounded-lg border border-dashed border-border px-3 py-3 text-[11px] text-ink-3">
+                      {t("mcp.cfgNoMatch", { q: q.trim() })}
+                    </div>
                   ) : (
                     <div className="mb-4 flex flex-col gap-1.5">
-                      {configured.map(({ cfg, pool: p, outdated }) => (
+                      {configured.filter(configuredHit).map(({ cfg, pool: p, outdated }) => (
                         <div
                           key={cfg.name}
                           className="flex items-center gap-2 rounded-lg border border-border bg-surface px-3 py-2"
@@ -338,15 +370,19 @@ export function HarnessConfigDialog({
 
                   {/* 池子可添加 */}
                   <div className="mb-2 text-[11px] font-medium text-ink-3">
-                    {t("mcp.cfgAddable")} · {addable.length}
+                    {t("mcp.cfgAddable")} · {addable.filter(addableHit).length}
                   </div>
                   {addable.length === 0 ? (
                     <div className="rounded-lg border border-dashed border-border px-3 py-3 text-[11px] text-ink-3">
                       {t("mcp.cfgNoneAddable")}
                     </div>
+                  ) : addable.filter(addableHit).length === 0 ? (
+                    <div className="rounded-lg border border-dashed border-border px-3 py-3 text-[11px] text-ink-3">
+                      {t("mcp.cfgNoMatch", { q: q.trim() })}
+                    </div>
                   ) : (
                     <div className="flex flex-col gap-1.5">
-                      {addable.map((p) => (
+                      {addable.filter(addableHit).map((p) => (
                         <div
                           key={p.id}
                           className="flex items-center gap-2 rounded-lg border border-border bg-bg-subtle px-3 py-2"
