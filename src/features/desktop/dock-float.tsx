@@ -30,7 +30,8 @@ import "./dock-float.css";
  */
 type DockTab = "search" | "fences" | "plans" | "projects" | "collect" | "news";
 
-const TABS: { key: DockTab; icon: typeof Search }[] = [
+/** 胶囊里的快捷图标：六个入口全在（和标签栏是两份职责，分开命名免得改错） */
+const QUICK_TABS: { key: DockTab; icon: typeof Search }[] = [
   { key: "search", icon: Search },
   { key: "fences", icon: LayoutGrid },
   { key: "plans", icon: CalendarCheck },
@@ -38,6 +39,10 @@ const TABS: { key: DockTab; icon: typeof Search }[] = [
   { key: "collect", icon: Inbox },
   { key: "news", icon: Newspaper },
 ];
+/** 主标签：日均用得多，图标 + 文字 */
+const PRIMARY_TABS: DockTab[] = ["search", "fences", "plans", "projects", "news"];
+/** 次标签：只放图标 —— 日历 / 天气 / 通知 / 终端以后都挂这一行 */
+const SECONDARY_TABS: DockTab[] = ["collect"];
 
 const report = (error: unknown) => console.error("[dock-float]", error);
 
@@ -246,7 +251,7 @@ export function DockFloat({ onExpand, onHide, panels }: {
             <span className="df-alert" role="status">{t("dockFloat.lateAlert", { count: summary.late })}</span>
           )}
           <span className="df-quick">
-            {TABS.map(({ key, icon: Icon }) => (
+            {QUICK_TABS.map(({ key, icon: Icon }) => (
               <button key={key} type="button" className="df-quick-btn" title={t(`dockFloat.tab.${key}`)}
                 aria-label={t(`dockFloat.tab.${key}`)}
                 onClick={() => { setTab(key); setExpanded(true); }}>
@@ -304,7 +309,7 @@ export function DockFloat({ onExpand, onHide, panels }: {
           ) : (
           <>
           <div className="df-tabs" role="tablist" aria-label={t("dockFloat.title")}>
-            {TABS.map(({ key, icon: Icon }) => (
+            {QUICK_TABS.filter(({ key }) => PRIMARY_TABS.includes(key)).map(({ key, icon: Icon }) => (
               <button key={key} type="button" role="tab" aria-selected={tab === key}
                 className="df-tab" onClick={() => setTab(key)}>
                 <Icon className="df-icon" aria-hidden="true" />
@@ -312,6 +317,18 @@ export function DockFloat({ onExpand, onHide, panels }: {
               </button>
             ))}
           </div>
+
+          {SECONDARY_TABS.length > 0 && (
+            <div className="df-subtabs" role="tablist" aria-label={t("dockFloat.title")}>
+              {QUICK_TABS.filter(({ key }) => SECONDARY_TABS.includes(key)).map(({ key, icon: Icon }) => (
+                <button key={key} type="button" role="tab" aria-selected={tab === key} className="df-subtab"
+                  title={t(`dockFloat.tab.${key}`)} aria-label={t(`dockFloat.tab.${key}`)}
+                  onClick={() => setTab(key)}>
+                  <Icon className="df-icon" aria-hidden="true" />
+                </button>
+              ))}
+            </div>
+          )}
 
           <div className="df-body">
             {tab === "search" && <SearchPanel />}

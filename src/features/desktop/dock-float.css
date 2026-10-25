@@ -711,3 +711,29 @@
 .df-root[data-open="false"] .df-card {
   will-change: auto;
 }
+
+/* 次标签：一行 24px 的图标轨道。主标签保留图标+文字，视觉上仍是
+   「常用在上、其余在下」；日历/天气/通知/终端以后都挂这一行。 */
+.df-subtabs {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  height: 24px;
+  margin: 0 12px 4px;
+  flex: none;
+}
+.df-subtab {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 22px;
+  border: 0;
+  border-radius: var(--pr-radius-sm);
+  background: transparent;
+  color: var(--muted-foreground);
+  cursor: pointer;
+  transition: background var(--pr-dur-fast) ease, color var(--pr-dur-fast) ease;
+}
+.df-subtab:hover { background: var(--surface-hover); color: var(--foreground); }
+.df-subtab[aria-selected="true"] { background: var(--dock-face); color: var(--brand); }

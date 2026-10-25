@@ -43,6 +43,9 @@ try {
   // ② 展开：卡片与窗口一起变成 660×591
   await page.getByRole("button", { name: "展开卡片" }).click();
   await page.locator(".df-card").waitFor();
+  // 主标签 5 个 + 次标签 1 个；胶囊快捷图标仍必须是 6 个（防止再改错位置）
+  assert.equal(await page.locator(".df-tabs .df-tab").count(), 5, "主标签 5 个");
+  assert.equal(await page.locator(".df-subtabs .df-subtab").count(), 1, "次标签 1 个");
   await page.setViewportSize({ width: 660, height: 591 });
   await page.waitForTimeout(80);
   // 量布局尺寸：撑开动画用 transform 缩放，boundingBox 会量到中间帧
