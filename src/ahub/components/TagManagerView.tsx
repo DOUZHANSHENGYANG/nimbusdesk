@@ -9,7 +9,7 @@ import { useTagGroups } from "@/ahub/stores/tag-groups";
  *
  * 标签**不可编辑**：它来自技能 / MCP / 提示词里用户自己写的那串字符串，
  * 在这里改名会静默改掉一堆条目的标签，用户根本不知道发生了什么。
- * 这里只做两件事：给标签**归组**（右列下拉）、管理**分组**本身（增 / 改 / 删）。
+ * 这里只做两件事：给标签**归组**（单条下拉或勾选后批量归组）、管理**分组**本身（增 / 改 / 删）。
  */
 export function TagManagerView({
   allTags,
@@ -35,6 +35,8 @@ export function TagManagerView({
   const [newGroup, setNewGroup] = useState<string | null>(null);
   const [editing, setEditing] = useState<{ id: string; name: string } | null>(null);
   const [confirming, setConfirming] = useState<string | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [batchGroup, setBatchGroup] = useState("");
 
   const groupOf = (tag: string) => groups.find((group) => group.tags.includes(tag)) ?? null;
   const totalUses = useMemo(() => allTags.reduce((sum, tag) => sum + (counts?.[tag] ?? 0), 0), [allTags, counts]);
@@ -185,8 +187,57 @@ export function TagManagerView({
           <span className="font-mono text-[10px] text-ink-3">{rows.length}</span>
         </div>
 
+        {selected.size > 0 ? (
+          <div className="flex flex-wrap items-center gap-2 rounded-md border border-primary/30 bg-primary/10 px-2 py-1.5 text-[11px]">
+            <span className="text-foreground">{t("tagManager.batchSelected", { n: selected.size })}</span>
+            <select
+              value={batchGroup}
+              onChange={(event) => setBatchGroup(event.target.value)}
+              className="h-6 rounded border border-border bg-surface px-1 text-[10.5px] text-ink-2 outline-none"
+            >
+              <option value="">{t("tagShelf.ungrouped")}</option>
+              {groups.map((group) => (
+                <option key={group.id} value={group.id}>
+                  {group.name}
+                </option>
+              ))}
+            </select>
+            <button
+              type="button"
+              className="h-6 rounded border border-primary/40 bg-primary px-2 text-[10.5px] text-primary-foreground"
+              onClick={() => {
+                for (const tag of selected) assignTag(tag, batchGroup || null);
+                setSelected(new Set());
+              }}
+            >
+              {t("tagManager.batchAssign")}
+            </button>
+            <button
+              type="button"
+              className="h-6 rounded px-1 text-[10.5px] text-ink-3 hover:text-foreground"
+              onClick={() => setSelected(new Set())}
+            >
+              {t("tagManager.batchClear")}
+            </button>
+          </div>
+        ) : null}
+
         <div className="min-h-0 flex-1 overflow-y-auto rounded-lg border border-border">
-          <div className="sticky top-0 z-10 grid grid-cols-[minmax(0,1fr)_150px_60px] gap-2 border-b border-border bg-surface-2 px-2.5 py-1.5 text-[10.5px] text-ink-3">
+          <div className="sticky top-0 z-10 grid grid-cols-[24px_minmax(0,1fr)_150px_60px] gap-2 border-b border-border bg-surface-2 px-2.5 py-1.5 text-[10.5px] text-ink-3">
+            <input
+              type="checkbox"
+              aria-label={t("tagManager.batchSelectAll")}
+              className="size-3 self-center accent-primary"
+              checked={rows.length > 0 && rows.every((tag) => selected.has(tag))}
+              onChange={(event) =>
+                setSelected((current) => {
+                  const next = new Set(current);
+                  if (event.target.checked) rows.forEach((tag) => next.add(tag));
+                  else rows.forEach((tag) => next.delete(tag));
+                  return next;
+                })
+              }
+            />
             <span>{t("tagManager.columnTag")}</span>
             <span>{t("tagManager.columnGroup")}</span>
             <span className="text-right">{t("tagManager.columnUses")}</span>
@@ -196,8 +247,22 @@ export function TagManagerView({
             return (
               <div
                 key={tag}
-                className="grid grid-cols-[minmax(0,1fr)_150px_60px] items-center gap-2 border-b border-border/60 px-2.5 py-1.5 text-[11.5px] last:border-0 hover:bg-muted/40"
+                className="grid grid-cols-[24px_minmax(0,1fr)_150px_60px] items-center gap-2 border-b border-border/60 px-2.5 py-1.5 text-[11.5px] last:border-0 hover:bg-muted/40"
               >
+                <input
+                  type="checkbox"
+                  aria-label={t("tagManager.batchSelectTag", { tag })}
+                  className="size-3 accent-primary"
+                  checked={selected.has(tag)}
+                  onChange={(event) =>
+                    setSelected((current) => {
+                      const next = new Set(current);
+                      if (event.target.checked) next.add(tag);
+                      else next.delete(tag);
+                      return next;
+                    })
+                  }
+                />
                 <span className="truncate text-foreground">{tag}</span>
                 <select
                   value={group?.id ?? ""}

@@ -19,6 +19,18 @@ try {
   await page.waitForTimeout(700);
   await page.screenshot({ path: `${dir}/tag-manager.png` });
 
+  // 标签治理台：勾两条 → 批量归组条
+  await page.getByLabel("选择标签 代码").check();
+  await page.getByLabel("选择标签 设计").check();
+  await page.getByText("已选 2 个标签").waitFor({ timeout: 5000 });
+  await page.screenshot({ path: `${dir}/tag-manager-batch.png` });
+  await page.locator("select").first().selectOption({ label: "阶段" });
+  await page.getByRole("button", { name: "归到分组" }).click();
+  const groups = await page.evaluate(() =>
+    window.tagShelfReview.useTagGroups.getState().groups.map((group) => ({ name: group.name, tags: group.tags })),
+  );
+  console.log("phaseTags", JSON.stringify(groups.find((group) => group.name === "阶段")?.tags ?? []));
+
   // 回到技能页，⌘K 检索面板
   await page.getByRole("button", { name: /^技能/ }).first().click();
   await page.waitForTimeout(400);

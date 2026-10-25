@@ -57,6 +57,11 @@ const zh = {
     confirmDelete: "确认删除分组",
     tagReadonly: "标签由技能 / MCP / 提示词里的内容决定，这里只能归组，不能改名或删除。",
     empty: "没有标签",
+    batchSelected: "已选 {{n}} 个标签",
+    batchAssign: "归到分组",
+    batchClear: "取消选择",
+    batchSelectAll: "全选当前标签",
+    batchSelectTag: "选择标签 {{tag}}",
   },
   tagCommand: {
     placeholder: "输入标签名，↑↓ 选择，回车应用",
@@ -1272,6 +1277,11 @@ const en: typeof zh = {
     confirmDelete: "Confirm deleting group",
     tagReadonly: "Tags come from the skills / MCP / prompts themselves — group them here, but they cannot be renamed or deleted.",
     empty: "No tags",
+    batchSelected: "{{n}} tags selected",
+    batchAssign: "Assign group",
+    batchClear: "Clear selection",
+    batchSelectAll: "Select all visible tags",
+    batchSelectTag: "Select tag {{tag}}",
   },
   tagCommand: {
     placeholder: "Type a tag, ↑↓ to move, Enter to apply",
