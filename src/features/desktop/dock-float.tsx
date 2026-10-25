@@ -5,7 +5,7 @@ import { listen } from "@tauri-apps/api/event";
 import { useTranslation } from "react-i18next";
 import {
   AppWindow, ArrowLeft, BookOpen, Bookmark, CalendarCheck, Camera, ChevronDown, ExternalLink, FileText, Folder,
-  Bell, CalendarDays, CloudSun, House, FolderKanban, SquareTerminal, Inbox, LayoutGrid, Newspaper, Rss, Search, Send, Settings2, Sparkles, Star, Trash2,
+  Bell, CalendarDays, CloudSun, FolderKanban, SquareTerminal, Inbox, LayoutGrid, Newspaper, Rss, Search, Send, Settings2, Sparkles, Star, Trash2,
 } from "lucide-react";
 import { usePlans } from "@/features/plans/store";
 import { todayStr } from "@/features/plans/types";
@@ -20,7 +20,7 @@ import { openUrl } from "@/lib/tauri";
 import { useSettings } from "@/stores/settings";
 import { SchedulePage } from "@/features/schedule/page";
 import { chatWithProvider, type ChatMessage } from "@/features/ai/client";
-import { ageBucket, dateKey, monthGrid, summarizeDay } from "./dock-float-core";
+import { ageBucket, dateKey, summarizeDay } from "./dock-float-core";
 import "./dock-float.css";
 
 /**
@@ -29,11 +29,10 @@ import "./dock-float.css";
  * 收纳盒 / 计划 / 项目 是侧栏形态里那三个飞出面板**本体**，由 dock.tsx 注入 ——
  * 卡片不重写它们，否则同一功能会出现两套实现、两套密度、两套交互。
  */
-type DockTab = "home" | "search" | "fences" | "plans" | "projects" | "collect" | "news" | "cal" | "chat" | "weather" | "notice" | "term";
+type DockTab = "search" | "fences" | "plans" | "projects" | "collect" | "news" | "cal" | "chat" | "weather" | "notice" | "term";
 
 /** 胶囊里的快捷图标：六个入口全在（和标签栏是两份职责，分开命名免得改错） */
 const QUICK_TABS: { key: DockTab; icon: typeof Search }[] = [
-  { key: "home", icon: House },
   { key: "search", icon: Search },
   { key: "fences", icon: LayoutGrid },
   { key: "plans", icon: CalendarCheck },
@@ -47,9 +46,9 @@ const QUICK_TABS: { key: DockTab; icon: typeof Search }[] = [
   { key: "term", icon: SquareTerminal },
 ];
 /** 主标签：日均用得多，图标 + 文字 */
-const PRIMARY_TABS: DockTab[] = ["home", "search", "fences", "plans", "projects", "news"];
-/** 次标签：只放图标 —— 日历 / 天气 / 通知 / 终端以后都挂这一行 */
-const SECONDARY_TABS: DockTab[] = ["collect", "cal", "chat", "weather", "notice", "term"];
+const PRIMARY_TABS: DockTab[] = ["search", "fences", "plans", "projects", "news"];
+/** 二级功能：日历 / 天气 / 通知 / 终端 —— 只出现在卡片头部的图标区 */
+const TOOL_TABS: { key: DockTab; icon: typeof Search }[] = [];
 
 const report = (error: unknown) => console.error("[dock-float]", error);
 
@@ -294,6 +293,14 @@ export function DockFloat({ onExpand, onHide, panels }: {
               <b>{summary.todo}</b> {t("dockFloat.todoUnit")} · <b>{summary.done}</b> {t("dockFloat.doneUnit")}
             </span>
             <span className="df-head-actions">
+              {/* 二级功能：只放图标，点开在卡片里就地显示 —— 省掉一整行标签 */}
+              {TOOL_TABS.map(({ key, icon: Icon }) => (
+                <button key={key} type="button" className="df-icon-btn" title={t(`dockFloat.tab.${key}`)}
+                  aria-label={t(`dockFloat.tab.${key}`)} aria-pressed={tab === key}
+                  onClick={() => setTab(key)}>
+                  <Icon className="df-icon" aria-hidden="true" />
+                </button>
+              ))}
               <button type="button" className="df-icon-btn" title={t("dockFloat.chatTitle")}
                 aria-label={t("dockFloat.chatTitle")} aria-pressed={chatOpen}
                 onClick={() => setChatOpen((value) => !value)}>
@@ -325,20 +332,7 @@ export function DockFloat({ onExpand, onHide, panels }: {
             ))}
           </div>
 
-          {SECONDARY_TABS.length > 0 && (
-            <div className="df-subtabs" role="tablist" aria-label={t("dockFloat.title")}>
-              {QUICK_TABS.filter(({ key }) => SECONDARY_TABS.includes(key)).map(({ key, icon: Icon }) => (
-                <button key={key} type="button" role="tab" aria-selected={tab === key} className="df-subtab"
-                  title={t(`dockFloat.tab.${key}`)} aria-label={t(`dockFloat.tab.${key}`)}
-                  onClick={() => setTab(key)}>
-                  <Icon className="df-icon" aria-hidden="true" />
-                </button>
-              ))}
-            </div>
-          )}
-
           <div className="df-body">
-            {tab === "home" && <HomePanel onOpen={setTab} />}
             {tab === "search" && <SearchPanel />}
             {tab === "fences" && <div className="df-host">{panels.fences}</div>}
             {tab === "plans" && <div className="df-host">{panels.plans}</div>}
@@ -791,70 +785,3 @@ function TerminalPanel() {
   );
 }
 
-/**
- * 主页：天气 / 今日待办 / 紧凑月历，三块挤一屏。
- *
- * 复用已有的月格组件类（.df-cal-*）与 plans 数据，不再手写第二套日历；
- * 天气直接用 WeatherPanel 的缓存，没缓存就不请求 —— 主页不做重复拉取。
- */
-function HomePanel({ onOpen }: { onOpen: (tab: DockTab) => void }) {
-  const { t } = useTranslation();
-  const days = usePlans((state) => state.days);
-  const today = new Date();
-  const todayKey = dateKey(today);
-  const cells = useMemo(() => monthGrid(today.getFullYear(), today.getMonth()), [today.getFullYear(), today.getMonth()]);
-
-  const stats = useMemo(() => {
-    let open = 0, late = 0;
-    for (const [day, tasks] of Object.entries(days)) {
-      for (const task of tasks) {
-        if (task.done || task.parentId) continue;
-        if (day < todayKey) late += 1;
-        else if (day === todayKey) open += 1;
-      }
-    }
-    return { open, late };
-  }, [days, todayKey]);
-
-  return (
-    <div className="df-panel df-home">
-      <div className="df-home-row">
-        <button type="button" className="df-home-card" onClick={() => onOpen("weather")}>
-          <span className="df-home-k">{t("dockFloat.homeWeather")}</span>
-          <span className="df-home-v">{weatherCache ? `${weatherCache.data.temp}°` : "--"}</span>
-          <span className="df-row-meta">{weatherCache ? t(`dockFloat.weatherCode.${weatherCache.data.code}`) : t("dockFloat.homeWeatherIdle")}</span>
-        </button>
-        <button type="button" className="df-home-card" onClick={() => onOpen("plans")}>
-          <span className="df-home-k">{t("dockFloat.homeToday")}</span>
-          <span className="df-home-v">{stats.open}</span>
-          <span className="df-row-meta">{t("dockFloat.footSummary", { todo: stats.open, late: stats.late })}</span>
-        </button>
-      </div>
-
-      <div className="df-cal-head">
-        <span className="df-cal-title">{new Intl.DateTimeFormat(undefined, { year: "numeric", month: "long" }).format(today)}</span>
-        <button type="button" className="df-icon-btn" onClick={() => onOpen("cal")} aria-label={t("dockFloat.tab.cal")}>
-          <CalendarDays className="df-icon" aria-hidden="true" />
-        </button>
-      </div>
-      <div className="df-cal-week">
-        {["mo","tu","we","th","fr","sa","su"].map((d) => (
-          <span key={d}>{t(`dockFloat.week.${d}`)}</span>
-        ))}
-      </div>
-      <div className="df-cal-grid is-compact">
-        {cells.map((cell) => {
-          const count = (days[cell.date] ?? []).filter((task) => !task.done).length;
-          return (
-            <button key={cell.date} type="button"
-              className={`df-cal-day${cell.inMonth ? "" : " is-out"}${cell.date === todayKey ? " is-today" : ""}`}
-              onClick={() => onOpen("cal")}>
-              <span>{cell.day}</span>
-              {count > 0 && <i className="df-cal-dot" aria-label={String(count)} />}
-            </button>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
