@@ -1,9 +1,10 @@
-import { Boxes, Package, ShieldCheck, Sparkles } from "lucide-react";
+import { Boxes, Package, ShieldCheck, Sparkles, Terminal } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { CollapsibleCard } from "@/ahub/components/CollapsibleCard";
 import { ConfigVaultSection } from "@/ahub/components/ConfigVaultSection";
 import { HarnessOverviewSection } from "@/ahub/components/HarnessOverviewSection";
 import { HarnessSkillsSection } from "@/ahub/components/HarnessSkillsSection";
+import { HarnessToolsSection } from "@/ahub/components/HarnessToolsSection";
 import { ToolManagerSection } from "@/ahub/components/ToolManagerSection";
 import { PageShell } from "@/ahub/components/PageShell";
 
@@ -15,10 +16,10 @@ import { PageShell } from "@/ahub/components/PageShell";
 export function ToolManagerPage() {
   const { t } = useTranslation();
   return (
-    <PageShell title={t("nav.vault")}>
+    <PageShell title={t("nav.harness")}>
       <div className="flex w-full flex-col gap-4">
-        <CollapsibleCard icon={Package} title={t("tools.sectionTitle")}>
-          <ToolManagerSection />
+        <CollapsibleCard icon={Terminal} title={t("harnessTools.title")}>
+          <HarnessToolsSection />
         </CollapsibleCard>
 
         <CollapsibleCard icon={Boxes} title={t("harnessOverview.title")}>
@@ -29,7 +30,11 @@ export function ToolManagerPage() {
           <HarnessSkillsSection />
         </CollapsibleCard>
 
-        <CollapsibleCard icon={ShieldCheck} title={t("settings.vault")}>
+        <CollapsibleCard icon={Package} title={t("tools.sectionTitle")} defaultOpen={false}>
+          <ToolManagerSection />
+        </CollapsibleCard>
+
+        <CollapsibleCard icon={ShieldCheck} title={t("settings.vault")} defaultOpen={false}>
           <ConfigVaultSection />
         </CollapsibleCard>
       </div>

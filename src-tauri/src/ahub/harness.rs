@@ -43,6 +43,8 @@ pub struct HarnessReport {
     pub supports_mcp: bool,
     pub supports_skills: bool,
     pub config_path: String,
+    /// 该工具定义的全部配置文件路径（存在与否都列出，供 Harness 工具页展示）
+    pub config_paths: Vec<String>,
     pub exists: bool,
     pub mcp_servers: Vec<DetectedServer>,
     pub skills_dirs: Vec<String>,
@@ -248,6 +250,7 @@ fn defs(app: &AppH) -> Vec<HarnessDef> {
             name: "CodeBuddy",
             mcp_sources: vec![
                 flat(home().join(".codebuddy").join("mcp.json")),
+                flat(home().join(".codebuddy").join(".mcp.json")),
                 flat(home().join(".codebuddy").join("config.json")),
             ],
             skills_dirs: vec![home().join(".codebuddy").join("skills")],
@@ -553,6 +556,11 @@ pub fn scan(app: &AppH) -> Vec<HarnessReport> {
                 supports_mcp: !def.mcp_sources.is_empty(),
                 supports_skills: !def.skills_dirs.is_empty(),
                 config_path: mcp_found.join(" · "),
+                config_paths: def
+                    .mcp_sources
+                    .iter()
+                    .map(|source| source.path.to_string_lossy().into_owned())
+                    .collect(),
                 exists,
                 mcp_servers,
                 skills_dirs,

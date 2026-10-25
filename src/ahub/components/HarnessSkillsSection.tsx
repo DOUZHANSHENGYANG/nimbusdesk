@@ -44,7 +44,7 @@ export function HarnessSkillsSection() {
 
   const hub = useMemo(() => new Map(skills.map((s) => [s.dirName.toLowerCase(), s])), [skills]);
   const tools = useMemo(() => (reports ?? []).filter((r) => r.supportsSkills), [reports]);
-  const total = useMemo(() => tools.reduce((n, r) => n + r.skills.length, 0), [tools]);
+  const total = useMemo(() => tools.reduce((n, r) => n + (r.skills?.length ?? 0), 0), [tools]);
 
   const act = async (key: string, run: () => Promise<unknown>, done: string) => {
     setActing(key);
@@ -81,6 +81,8 @@ export function HarnessSkillsSection() {
       ) : (
         tools.map((r) => {
           const open = !collapsed.has(r.id);
+          const skills = r.skills ?? [];
+          const dirs = r.skillsDirs ?? [];
           return (
             <section key={r.id} className="rounded-xl border border-border bg-surface/40">
               <header className="flex flex-wrap items-center gap-2 px-3 py-2">
@@ -101,15 +103,15 @@ export function HarnessSkillsSection() {
                   <HarnessIcon id={r.id} className="size-4 shrink-0" />
                   <span className="truncate text-[12.5px] font-semibold text-foreground">{r.name}</span>
                   <span className="rounded-full bg-surface-2 px-1.5 py-px font-mono text-[10px] tabular-nums text-ink-3">
-                    {r.skills.length}
+                    {skills.length}
                   </span>
                 </button>
-                {r.skillsDirs[0] ? (
+                {dirs[0] ? (
                   <Button
                     size="iconSm"
                     variant="ghost"
                     title={t("harnessSkills.reveal")}
-                    onClick={() => void api.revealPath(r.skillsDirs[0])}
+                    onClick={() => void api.revealPath(dirs[0])}
                   >
                     <FolderOpen />
                   </Button>
@@ -117,11 +119,11 @@ export function HarnessSkillsSection() {
               </header>
 
               {open ? (
-                r.skills.length === 0 ? (
+                skills.length === 0 ? (
                   <p className="px-3 pb-3 text-[11px] text-ink-3">{t("harnessSkills.noSkills")}</p>
                 ) : (
                   <div className="flex flex-col border-t border-border/60">
-                    {r.skills.map((d) => {
+                    {skills.map((d) => {
                       const dirName = dirBase(d.path);
                       const inHub = hub.get(dirName);
                       const key = `${r.id}:${dirName}`;

@@ -26,7 +26,7 @@ export const zh = {
     prompts: "提示词",
     mcp: "MCP",
     skills: "技能",
-    harness: "本机工具",
+    harness: "Harness 工具",
     dataDir: "数据保存目录",
   },
   titlebar: {

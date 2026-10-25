@@ -41,12 +41,12 @@ export function HarnessOverviewSection() {
     () => (reports ?? []).filter((report) => report.supportsSkills || report.supportsMcp),
     [reports],
   );
-  const totalSkills = useMemo(() => tools.reduce((sum, report) => sum + report.skills.length, 0), [tools]);
-  const totalMcp = useMemo(() => tools.reduce((sum, report) => sum + report.mcpServers.length, 0), [tools]);
+  const totalSkills = useMemo(() => tools.reduce((sum, report) => sum + (report.skills?.length ?? 0), 0), [tools]);
+  const totalMcp = useMemo(() => tools.reduce((sum, report) => sum + (report.mcpServers?.length ?? 0), 0), [tools]);
 
   /** 工具目录里的 SKILL.md 比中枢里的 updatedAt 旧 → 提示可以覆盖更新。留 1 分钟容差。 */
   const outdated = (report: HarnessReport) =>
-    report.skills.filter((detected) => {
+    (report.skills ?? []).filter((detected) => {
       const meta = hub.get(dirBase(detected.path).toLowerCase());
       if (!meta?.updatedAt || detected.updatedAt <= 0) return false;
       const hubAt = new Date(meta.updatedAt).getTime();
@@ -91,10 +91,10 @@ export function HarnessOverviewSection() {
                     <span className="truncate text-foreground">{report.name}</span>
                   </span>
                   <span className="text-right font-mono tabular-nums text-ink-2">
-                    {report.supportsSkills ? report.skills.length : "—"}
+                    {report.supportsSkills ? (report.skills?.length ?? 0) : "—"}
                   </span>
                   <span className="text-right font-mono tabular-nums text-ink-2">
-                    {report.supportsMcp ? report.mcpServers.length : "—"}
+                    {report.supportsMcp ? (report.mcpServers?.length ?? 0) : "—"}
                   </span>
                   <span className="text-right">
                     {stale > 0 ? (

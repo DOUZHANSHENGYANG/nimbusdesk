@@ -311,6 +311,8 @@ export interface HarnessReport {
   supportsMcp: boolean;
   supportsSkills: boolean;
   configPath: string;
+  /** 该工具定义的全部配置文件路径（存在与否都列出） */
+  configPaths: string[];
   exists: boolean;
   mcpServers: DetectedServer[];
   skillsDirs: string[];

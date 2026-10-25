@@ -29,7 +29,7 @@ export const en: AppMessages = {
     prompts: "Prompts",
     mcp: "MCP",
     skills: "Skills",
-    harness: "Local tools",
+    harness: "Harness tools",
     dataDir: "Data folder",
   },
   titlebar: {

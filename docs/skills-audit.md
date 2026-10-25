@@ -80,7 +80,7 @@
 3. **使用统计是代理指标**：现在用工具目录里 `SKILL.md` 的 mtime 表示「上次同步」，
    不是运行时调用次数；各 harness 不暴露调用日志，这一项只能做到「从未接入」这一层。
 4. ✅ **标签治理只能整组拖拽**（2026-10-26 已补）：标签治理台支持勾选多个标签后批量归组（也可清空到未分组）；标签本身仍不可改名/删除。
-5. ✅ **跨类型总览缺失**（2026-10-26 已补）：本机工具页新增 `HarnessOverviewSection`，一屏列出每个工具的 skills / MCP 数量、待更新技能数、配置是否存在。
+5. ✅ **跨类型总览缺失**（2026-10-26 已补）：Harness 工具页新增 `HarnessOverviewSection`，一屏列出每个工具的 skills / MCP 数量、待更新技能数、配置是否存在。
 6. ✅ **MCP 空态还很素**（2026-10-26 已补）：空态补「从 JSON 粘贴」「从工具导入」两个入口。
 
 > 导入打标签这一条本轮已经补上：ZIP / 文件夹 / Git / 市场导入成功后自动弹出批量打标签，
@@ -94,7 +94,7 @@
 | 删除联动工具副本 | 单个与批量删除共用 `DeleteSkillsDialog`：列出会动到的工具，默认勾选「同时从工具移出」，按工具合并调用 `remove_from_harness(kind="skills")`；不勾选则只删中枢 | `docs/screenshots/skill-delete-harness.png` |
 | 覆盖导入保留标签 | `import_skill_dir_as` 在覆盖时合并旧 `.hub.json` 标签与上游 frontmatter 新标签，不再把用户手打标签清掉 | `cargo test`（ahub::skills 57 项通过） |
 | 标签批量归组 | 治理台勾选多个标签 → 选分组 → 归到分组 / 取消选择 | `docs/screenshots/tag-manager-batch.png` |
-| 跨类型工具总览 | 本机工具页一屏显示每个 harness 的技能副本、MCP 数、待更新技能数、配置是否存在 | `docs/screenshots/harness-overview.png` |
+| 跨类型工具总览 | Harness 工具页一屏显示每个 harness 的技能副本、MCP 数、待更新技能数、配置是否存在 | `docs/screenshots/harness-overview.png` |
 | MCP 空态 | 空态补「从 JSON 粘贴」「从工具导入」，顶部「扫描本机」「新建 MCP」仍可用 | `docs/screenshots/mcp-empty.png` |
 
 第六节只剩第 3 条是**数据源限制**：harness 不提供运行时调用日志，无法在云台里算出真实调用次数；
