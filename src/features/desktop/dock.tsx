@@ -2,10 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { availableMonitors, currentMonitor, cursorPosition, type Monitor } from "@tauri-apps/api/window";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
-import {
-  BookOpen, CalendarCheck, ChevronLeft, ChevronRight, FolderKanban, GripHorizontal,
-  GripVertical, LayoutGrid, List, Search, Settings2, X,
-} from "lucide-react";
+import { BookOpen, CalendarCheck, FolderKanban, GripHorizontal, GripVertical, LayoutGrid, List, Search, Settings2, X, Folder } from "lucide-react";
 import { RiAddLine, RiAttachment2, RiClipboardLine, RiCloseLine, RiDeleteBinLine, RiPushpinLine, RiSparklingLine } from "@remixicon/react";
 import { chatWithProvider, testProvider } from "@/features/ai/client";
 import { selectProvider } from "@/features/ai/core";
@@ -629,31 +626,29 @@ function FencesFlyout() {
           </button>
         </span>
       </div>
-      <div className="dock-chips" role="tablist" aria-label={t("dock.fences")}>
-        <button type="button" role="tab" aria-selected={chip === null} className={`dock-chip${chip === null ? " is-active" : ""}`}
-          onClick={() => setChip(null)}>{t("dock.fencesAll")}</button>
-        {tops.map((category) => (
-          <span key={category.id} className="dock-chip-box">
-            <button type="button" role="tab" aria-selected={chip === category.id}
-              className={`dock-chip${chip === category.id ? " is-active" : ""}`}
+      {/* 文件夹网格：像手机桌面那样，先看盒子，点进去再看里面的东西 */}
+      <div className="dock-folders" role="tablist" aria-label={t("dock.fences")}>
+        {tops.map((category) => {
+          const count = items.filter((item) => item.categoryId === category.id).length;
+          return (
+            <button key={category.id} type="button" role="tab" aria-selected={chip === category.id}
+              className={`dock-folder${chip === category.id ? " is-on" : ""}`}
               onClick={(event) => {
                 const tile = event.currentTarget.getBoundingClientRect();
                 const panel = panelRef.current?.getBoundingClientRect() ?? tile;
-                setGridOrigin(`${Math.round(tile.left + tile.width / 2 - panel.left)}px ${Math.round(tile.bottom - panel.top)}px`);
-                setChip(category.id);
-              }}>{category.name}</button>
-            <span className="dock-chip-sort">
-              <button type="button" aria-label={t("dock.sortEarlier")} onClick={() => moveCategory(category.id, -1)}>
-                <ChevronLeft className="size-3" aria-hidden="true" />
-              </button>
-              <button type="button" aria-label={t("dock.sortLater")} onClick={() => moveCategory(category.id, 1)}>
-                <ChevronRight className="size-3" aria-hidden="true" />
-              </button>
-            </span>
-          </span>
-        ))}
-      </div>
-      {visible.length === 0
+                setGridOrigin(`${Math.round(tile.left + tile.width / 2 - panel.left)}px ${Math.round(tile.top + tile.height / 2 - panel.top)}px`);
+                setChip(chip === category.id ? null : category.id);
+              }}
+              onContextMenu={(event) => { event.preventDefault(); moveCategory(category.id, event.shiftKey ? -1 : 1); }}>
+              <span className="dock-folder-glyph" aria-hidden="true">
+                <Folder className="size-4" />
+              </span>
+              <span className="dock-folder-name">{category.name}</span>
+              <span className="dock-folder-count">{count}</span>
+            </button>
+          );
+        })}
+      </div>      {visible.length === 0
         ? <p className="dock-panel-empty">{t("dock.fencesEmpty")}</p>
         : view === "grid"
           ? <div key={chip ?? "all"} className={`dock-grid is-enter${tileSize <= 24 ? " is-compact" : ""}`}

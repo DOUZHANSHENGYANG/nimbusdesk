@@ -793,3 +793,32 @@
   from { transform: scale(0.42); opacity: 0.35; }
   to   { transform: scale(1); opacity: 1; }
 }
+
+/* 文件夹网格：像手机桌面，先看盒子再看内容。3 列自适应，格子里是图标 + 名字 + 数量 */
+.dock-folders {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 8px;
+  flex: none;
+}
+.dock-folder {
+  display: grid;
+  grid-template-columns: 28px 1fr auto;
+  align-items: center;
+  gap: 8px;
+  height: 44px;
+  padding: 0 10px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-md);
+  background: var(--dock-face);
+  color: var(--foreground);
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+  transition: background var(--dur-fast) ease, border-color var(--dur-fast) ease;
+}
+.dock-folder:hover { background: var(--surface-hover); }
+.dock-folder.is-on { border-color: var(--brand); background: var(--brand-soft); }
+.dock-folder-glyph { display: grid; place-items: center; width: 28px; height: 28px; border-radius: var(--radius-sm); background: var(--surface-hover); color: var(--brand); }
+.dock-folder-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-sm); }
+.dock-folder-count { font-size: var(--text-xs); color: var(--muted-fg); font-variant-numeric: tabular-nums; }
