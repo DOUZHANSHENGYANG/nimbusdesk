@@ -31,13 +31,6 @@ try {
   );
   console.log("phaseTags", JSON.stringify(groups.find((group) => group.name === "阶段")?.tags ?? []));
 
-  // 回到技能页，⌘K 检索面板
-  await page.getByRole("button", { name: /^技能/ }).first().click();
-  await page.waitForTimeout(400);
-  await page.locator('[data-testid="tag-shelf-command"]').click();
-  await page.waitForTimeout(600);
-  await page.screenshot({ path: `${dir}/tag-command.png` });
-
   console.log("errors", errors);
 } finally {
   await browser.close();

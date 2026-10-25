@@ -21,7 +21,6 @@ import { EmptyState } from "@/ahub/components/EmptyState";
 import { matchTags, type TagMode } from "@/ahub/components/TagFilter";
 import { TagShelf } from "@/ahub/components/TagShelf";
 import { TagManagerView } from "@/ahub/components/TagManagerView";
-import { TagCommand } from "@/ahub/components/TagCommand";
 import { SearchBar } from "@/ahub/components/SearchBar";
 import { PageShell } from "@/ahub/components/PageShell";
 import { PromptFillDialog, PromptVarsPanel } from "@/ahub/components/PromptVars";
@@ -82,7 +81,6 @@ export function PromptsPage() {
   const [query, setQuery] = useState("");
   const [activeTags, setActiveTags] = useState<Set<string>>(new Set());
   const [pageTab, setPageTab] = useState<"list" | "tags">("list");
-  const [tagCommandOpen, setTagCommandOpen] = useState(false);
   const [tagMode, setTagMode] = useState<TagMode>("or");
   const [editorOpen, setEditorOpen] = useState(false);
   const [editing, setEditing] = useState<Prompt | null>(null);
@@ -310,7 +308,6 @@ export function PromptsPage() {
                         counts={tagCounts}
                         hideWhenEmpty={false}
                         onManage={() => setPageTab("tags")}
-                        onCommand={() => setTagCommandOpen(true)}
                       />
             </aside>
             <div className="min-w-0 flex-1">
@@ -722,20 +719,6 @@ export function PromptsPage() {
         onConfirm={() => {
           if (deleting) void deletePrompt(deleting.id).then(() => toast.success(t("prompts.deleted")));
         }}
-      />
-      <TagCommand
-        open={tagCommandOpen}
-        onOpenChange={setTagCommandOpen}
-        allTags={allTags}
-        counts={tagCounts}
-        selected={activeTags}
-        onToggle={(tag) => {
-          const next = new Set(activeTags);
-          if (next.has(tag)) next.delete(tag);
-          else next.add(tag);
-          setActiveTags(next);
-        }}
-        resultCount={filtered.length}
       />
             </div>
           </div>

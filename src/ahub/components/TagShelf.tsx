@@ -28,7 +28,6 @@ export function TagShelf({
   className,
   hideWhenEmpty = true,
   onManage,
-  onCommand,
   variant = "bar",
 }: {
   allTags: string[];
@@ -43,8 +42,6 @@ export function TagShelf({
   onManage?: () => void;
   /** bar = 页头横排；rail = 左侧竖栏（卡片仓的默认形态） */
   variant?: "bar" | "rail";
-  /** 打开检索面板（B） */
-  onCommand?: () => void;
 }) {
   const { t } = useTranslation();
   const groups = useTagGroups((s) => s.groups);
@@ -225,19 +222,6 @@ export function TagShelf({
                 placeholder={t("prompts.tagSearch")}
                 className="h-6 min-w-0 flex-1 rounded border border-border bg-surface px-1.5 text-[10.5px] outline-none placeholder:text-ink-3 focus:border-primary"
               />
-            ) : (
-              <span className="min-w-0 flex-1 truncate text-[10px] text-ink-3">{t("tagShelf.hint")}</span>
-            )}
-            {onCommand ? (
-              <button
-                type="button"
-                data-testid="tag-shelf-command"
-                onClick={onCommand}
-                title={t("tagCommand.openHint")}
-                className="flex h-6 shrink-0 items-center rounded border border-border px-1.5 text-[10px] text-ink-3 hover:text-foreground"
-              >
-                ⌘K
-              </button>
             ) : null}
           </div>
           {selected.size > 0 ? (
@@ -306,9 +290,7 @@ export function TagShelf({
             {t("common.clear")}
           </button>
         </div>
-      ) : (
-        <span className="text-[10.5px] text-ink-3">{t("tagShelf.hint")}</span>
-      )}
+      ) : null}
           <div className="ml-auto flex items-center gap-1.5">
         {allTags.length > 8 || tagQuery ? (
           <input
@@ -317,17 +299,6 @@ export function TagShelf({
             placeholder={t("prompts.tagSearch")}
             className="h-6 w-28 rounded border border-border bg-surface px-1.5 text-[10.5px] outline-none placeholder:text-ink-3 focus:border-primary"
           />
-        ) : null}
-        {onCommand ? (
-          <button
-            type="button"
-            data-testid="tag-shelf-command"
-            onClick={onCommand}
-            title={t("tagCommand.openHint")}
-            className="flex h-6 shrink-0 items-center gap-1 rounded border border-border px-1.5 text-[10px] text-ink-3 hover:text-foreground"
-          >
-            ⌘K
-          </button>
         ) : null}
         <button
           type="button"
