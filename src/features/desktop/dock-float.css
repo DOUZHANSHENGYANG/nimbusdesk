@@ -774,14 +774,16 @@
 .df-pill:hover { background: var(--surface-hover); }
 
 /* 主页：两块概览卡并排 + 紧凑月历，一屏看完，不留大片空白 */
-.df-home { gap: 8px; }
+.df-home { gap: 6px; }
 .df-home-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; flex: none; }
 .df-home-card { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 10px 12px; border: 1px solid var(--hairline); border-radius: var(--pr-radius-md); background: var(--dock-face); color: var(--foreground); cursor: pointer; text-align: left; }
 .df-home-card:hover { background: var(--surface-hover); }
 .df-home-k { font-size: var(--pr-text-2xs); color: var(--muted-foreground); }
 .df-home-v { font-size: 26px; font-weight: var(--pr-weight-semibold); line-height: 1.1; letter-spacing: -0.01em; }
 .df-cal-grid.is-compact { gap: 0; }
-.df-cal-grid.is-compact .df-cal-day { height: 26px; }
+.df-cal-grid.is-compact .df-cal-day { height: 22px; font-size: var(--pr-text-2xs); }
+.df-home .df-cal-week span { font-size: 10px; }
+.df-home .df-cal-dot { bottom: 2px; width: 3px; height: 3px; margin-left: -1.5px; }
 
 /* 嵌入主窗口整页：卡片里给它一个可滚动的完整高度，内部布局由页面自己负责 */
 .df-embed { flex: 1; min-height: 0; overflow: auto; }

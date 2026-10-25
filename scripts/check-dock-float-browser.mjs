@@ -36,7 +36,7 @@ try {
   assert.equal(Math.round(capsule.height), 44, "胶囊必须 44 高");
   assert.equal(Math.round(capsule.width), 464, "胶囊铺满 464 宽的窗口");
   assert.ok(Math.abs(capsule.x) <= 1, "胶囊铺满窗口（窗口自己负责居中）");
-  assert.equal(await page.locator(".df-quick-btn").count(), 12, "十二个 tab 都要有直达入口");
+  assert.equal(await page.locator(".df-quick-btn").count(), 6, "胶囊只放主标签 6 个 都要有直达入口");
   const startBounds = await lastBounds();
   assert.equal(startBounds.height, 44, "启动时窗口就该是胶囊高度");
 

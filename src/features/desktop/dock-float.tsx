@@ -258,7 +258,7 @@ export function DockFloat({ onExpand, onHide, panels }: {
             <span className="df-alert" role="status">{t("dockFloat.lateAlert", { count: summary.late })}</span>
           )}
           <span className="df-quick">
-            {QUICK_TABS.map(({ key, icon: Icon }) => (
+            {QUICK_TABS.filter(({ key }) => PRIMARY_TABS.includes(key)).map(({ key, icon: Icon }) => (
               <button key={key} type="button" className="df-quick-btn" title={t(`dockFloat.tab.${key}`)}
                 aria-label={t(`dockFloat.tab.${key}`)}
                 onClick={() => { setTab(key); setExpanded(true); }}>
