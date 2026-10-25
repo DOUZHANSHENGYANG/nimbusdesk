@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { ConfirmDialog } from "@/ahub/components/ConfirmDialog";
+import { DeleteSkillsDialog, type DeleteSkillTarget } from "@/ahub/components/DeleteSkillsDialog";
 import { EmptyState } from "@/ahub/components/EmptyState";
 import { matchTags, type TagMode } from "@/ahub/components/TagFilter";
 import { TagShelf } from "@/ahub/components/TagShelf";
@@ -155,6 +156,7 @@ export function SkillsPage() {
   const [upstreamOpen, setUpstreamOpen] = useState(false);
   const [upstreamRows, setUpstreamRows] = useState<UpstreamRow[]>([]);
   const [upstreamBusy, setUpstreamBusy] = useState(false);
+  const [upstreamUpdating, setUpstreamUpdating] = useState<Set<string>>(new Set());
   const [pipelineOpen, setPipelineOpen] = useState(false);
   const [pipelineOutDir, setPipelineOutDir] = useState("");
   const [scanOpen, setScanOpen] = useState(false);
@@ -647,9 +649,9 @@ export function SkillsPage() {
               : report.remoteHead
                 ? "current"
                 : "error";
-          rows.push({ dirName: meta.dirName, name: meta.name, status, remote: report.remote, note: report.note });
+          rows.push({ dirName: meta.dirName, name: meta.name, status, remote: report.remote, mode: report.mode, note: report.note });
         } catch (e) {
-          rows.push({ dirName: meta.dirName, name: meta.name, status: "error", remote: "", note: String(e) });
+          rows.push({ dirName: meta.dirName, name: meta.name, status: "error", remote: "", mode: "", note: String(e) });
         }
       }
       setUpstreamRows(rows);
@@ -657,6 +659,138 @@ export function SkillsPage() {
     } finally {
       setUpstreamBusy(false);
     }
+  };
+
+  /**
+   * 一键更新：同一个远端只 clone 一次；逐个同名技能覆盖。
+   * 覆盖前 `import_skill_folder` 会自动把旧正文压成版本（后端逻辑），
+   * 覆盖后再把 `[source.upstream]` 写回去，避免更新完反而显示「未跟踪上游」。
+   */
+  const updateUpstream = async (targets: UpstreamRow[]) => {
+    const rows = targets.filter((row) => row.status === "changed" && row.remote);
+    if (!rows.length) return;
+    setUpstreamUpdating(new Set(rows.map((row) => row.dirName)));
+    const groups = new Map<string, UpstreamRow[]>();
+    for (const row of rows) {
+      const list = groups.get(row.remote) ?? [];
+      list.push(row);
+      groups.set(row.remote, list);
+    }
+    const normalize = (value: string) =>
+      value.trim().toLowerCase().replace(/[\s_]+/g, "-").replace(/[^a-z0-9\u4e00-\u9fa5-]/g, "");
+    const baseName = (path: string) =>
+      normalize(path.replace(/\\/g, "/").split("/").filter(Boolean).pop() ?? "");
+    const mark = (dirName: string, patch: Partial<UpstreamRow>) =>
+      setUpstreamRows((current) => current.map((row) => (row.dirName === dirName ? { ...row, ...patch } : row)));
+    let ok = 0;
+    let failed = 0;
+    for (const [remote, group] of groups) {
+      let fetched: Awaited<ReturnType<typeof api.gitFetchSkills>>;
+      try {
+        fetched = await api.gitFetchSkills(remote);
+      } catch (e) {
+        for (const row of group) {
+          mark(row.dirName, { status: "error", note: String(e) });
+          failed += 1;
+        }
+        continue;
+      }
+      try {
+        for (const row of group) {
+          const target = normalize(row.dirName);
+          const wanted = normalize(row.name);
+          const candidate =
+            fetched.skills.find((skill) => baseName(skill.path) === target) ??
+            fetched.skills.find((skill) => normalize(skill.name) === wanted) ??
+            fetched.skills.find((skill) => baseName(skill.path) === wanted);
+          if (!candidate) {
+            mark(row.dirName, { status: "error", note: t("skills.upUpdateNoMatch") });
+            failed += 1;
+            continue;
+          }
+          try {
+            await api.importSkillFolder(candidate.path, true);
+            // 覆盖会把远端仓库里的 SKILL.toml 带进来，上游跟踪信息要写回去；
+            // 随后 check_upstream 会把 remote_head 记成刚拉到的那一版。
+            await api.updateSkillExt(row.dirName, {
+              upstream: { watch: true, mode: row.mode || "git-scan", remote },
+            });
+            await api.checkUpstream(row.dirName);
+            mark(row.dirName, { status: "current", note: t("skills.upUpdated") });
+            ok += 1;
+          } catch (e) {
+            mark(row.dirName, { status: "error", note: String(e) });
+            failed += 1;
+          }
+        }
+      } finally {
+        await api.cleanupGitTemp(fetched.tempDir).catch(() => undefined);
+      }
+    }
+    setUpstreamUpdating(new Set());
+    await loadSkills();
+    if (ok) toast.success(t("skills.upUpdateDone", { n: ok }));
+    if (failed) toast.warning(t("skills.upUpdateFailed", { n: failed }));
+  };
+
+  const deleteTargetsOf = (items: SkillMeta[]): DeleteSkillTarget[] =>
+    items.map((skill) => ({
+      dirName: skill.dirName,
+      name: skill.name,
+      harnesses: (appliedMap.get(skill.dirName) ?? []).map((report) => ({ id: report.id, name: report.name })),
+    }));
+
+  /** 按工具合并：同一个工具一次调用移除它下面所有同名副本。 */
+  const removeHarnessCopies = async (targets: DeleteSkillTarget[]) => {
+    const byHarness = new Map<string, string[]>();
+    for (const target of targets) {
+      for (const harness of target.harnesses) {
+        const names = byHarness.get(harness.id) ?? [];
+        names.push(target.dirName);
+        byHarness.set(harness.id, names);
+      }
+    }
+    let failed = 0;
+    for (const [harness, names] of byHarness) {
+      try {
+        await api.removeFromHarness(harness, "skills", names);
+      } catch {
+        failed += 1;
+      }
+    }
+    return failed;
+  };
+
+  const deleteOne = async (removeCopies: boolean) => {
+    if (!deleting) return;
+    const target = deleteTargetsOf([deleting])[0];
+    const failed = removeCopies ? await removeHarnessCopies([target]) : 0;
+    await deleteSkill(deleting.dirName);
+    await loadHarnesses();
+    if (failed) toast.warning(t("skills.deleteHarnessFailed", { n: failed }));
+    else toast.success(t("skills.deleted"));
+  };
+
+  const deleteBatch = async (removeCopies: boolean) => {
+    const items = skills.filter((skill) => batchSel.has(skill.dirName));
+    if (!items.length) return;
+    const targets = deleteTargetsOf(items);
+    const failedHarness = removeCopies ? await removeHarnessCopies(targets) : 0;
+    let deleted = 0;
+    let failed = 0;
+    for (const skill of items) {
+      try {
+        await deleteSkill(skill.dirName);
+        deleted += 1;
+      } catch {
+        failed += 1;
+      }
+    }
+    await loadHarnesses();
+    setBatchSel(new Set());
+    if (failed) toast.warning(t("skills.batchDeletePartial", { ok: deleted, failed }));
+    else toast.success(t("skills.batchDeleted", { n: deleted }));
+    if (failedHarness) toast.warning(t("skills.deleteHarnessFailed", { n: failedHarness }));
   };
 
   /** 流水线单步：审查 = 体检（vet），摘要 = AI 批量，打包 = 导出 zip + index.json */
@@ -2108,6 +2242,8 @@ export function SkillsPage() {
         open={upstreamOpen}
         onOpenChange={setUpstreamOpen}
         rows={upstreamRows}
+        updating={upstreamUpdating}
+        onUpdate={(targets) => void updateUpstream(targets)}
         onOpenSkill={(dirName) => {
           const meta = skills.find((item) => item.dirName === dirName);
           if (!meta) return;
@@ -2188,15 +2324,13 @@ export function SkillsPage() {
         }}
       />
 
-      <ConfirmDialog
+      <DeleteSkillsDialog
         open={!!deleting}
-        onOpenChange={(v) => !v && setDeleting(null)}
+        onOpenChange={(next) => !next && setDeleting(null)}
         title={t("skills.deleteConfirmTitle")}
         message={t("skills.deleteConfirmMsg", { name: deleting?.name ?? "" })}
-        danger
-        onConfirm={() => {
-          if (deleting) void deleteSkill(deleting.dirName).then(() => toast.success(t("skills.deleted")));
-        }}
+        targets={deleting ? deleteTargetsOf([deleting]) : []}
+        onConfirm={deleteOne}
       />
 
       {/* ── 打包导出结果 ── */}
@@ -2267,20 +2401,13 @@ export function SkillsPage() {
       </Dialog>
 
       {/* ── 批量删除确认 ── */}
-      <ConfirmDialog
+      <DeleteSkillsDialog
         open={batchDeleteOpen}
         onOpenChange={setBatchDeleteOpen}
         title={t("skills.batchDeleteTitle")}
         message={t("skills.batchDeleteMsg", { n: batchSel.size })}
-        danger
-        onConfirm={() => {
-          const names = [...batchSel];
-          void (async () => {
-            for (const dirName of names) await deleteSkill(dirName);
-            toast.success(t("skills.batchDeleted", { n: names.length }));
-            setBatchSel(new Set());
-          })();
-        }}
+        targets={deleteTargetsOf(skills.filter((skill) => batchSel.has(skill.dirName)))}
+        onConfirm={deleteBatch}
       />
 
             </div>

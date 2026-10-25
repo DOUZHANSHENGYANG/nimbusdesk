@@ -13,7 +13,9 @@ const skills=[
 ];
 const settingsInfo={settings:{dataDir:'E:/SkillsFixture',envRoot:'',language:'zh',theme:'dark',skillSourceDirs:[],harnessOrder:[],aiBaseUrl:'',aiApiKey:'',aiModel:'',autoSummaryOnImport:false,aiProviders:[],aiDefaultProviderId:'',aiLegacyMigrated:true},dataDirs:{root:'E:/SkillsFixture',prompts:'E:/SkillsFixture/prompts',mcp:'E:/SkillsFixture/mcp',skills:'E:/SkillsFixture/skills'}};
 const empty=location.search.includes('empty');
+window.__ahubCalls=[];
 mockIPC(async(cmd,args)=>{
+ window.__ahubCalls.push({cmd,args});
  if(cmd==='list_skills')return empty?[]:structuredClone(skills);
  if(cmd==='get_settings')return structuredClone(settingsInfo);
  if(cmd==='preset_list'||cmd==='list_prompts'||cmd==='list_mcp'||cmd==='list_harnesses')return [];
@@ -30,7 +32,11 @@ mockIPC(async(cmd,args)=>{
   {id:'cursor',name:'Cursor',supportsMcp:true,supportsSkills:false,configPath:'',exists:false,mcpServers:[],skillsDirs:[],skills:[],notes:[]},
  ];}
  if(cmd==='apply_to_harness'||cmd==='remove_from_harness')return {applied:args?.names??[],warnings:[],backups:[],errors:[]};
- if(cmd==='check_upstream'){ const m={'code-review':{watched:true,changed:true,remote:'https://github.com/team/skills',remoteHead:'a1b2c3',lastHead:'0f0e0d',note:''},'debug':{watched:true,changed:false,remote:'https://github.com/team/skills',remoteHead:'a1b2c3',lastHead:'a1b2c3',note:''},'frontend-design':{watched:false,changed:false,remote:'',remoteHead:'',lastHead:'',note:'未开启上游追踪'},'docs':{watched:true,changed:false,remote:'https://github.com/x/y',remoteHead:'',lastHead:'',note:'git ls-remote 失败: not found'}}; const r=m[args?.dirName] ?? {}; return {watched:false,changed:false,remote:'',remoteHead:'',lastHead:'',note:'',checkedAt:new Date().toISOString(),...r}; }
+ if(cmd==='check_upstream'){ const m={'code-review':{watched:true,changed:true,remote:'https://github.com/team/skills',remoteHead:'a1b2c3',lastHead:'0f0e0d',note:''},'debug':{watched:true,changed:false,remote:'https://github.com/team/skills',remoteHead:'a1b2c3',lastHead:'a1b2c3',note:''},'frontend-design':{watched:false,changed:false,remote:'',remoteHead:'',lastHead:'',note:'未开启上游追踪'},'docs':{watched:true,changed:false,remote:'https://github.com/x/y',remoteHead:'',lastHead:'',note:'git ls-remote 失败: not found'}}; const r=m[args?.dirName] ?? {}; return {watched:false,changed:false,remote:'',remoteHead:'',lastHead:'',mode:'git-scan',note:'',checkedAt:new Date().toISOString(),...r}; }
+ if(cmd==='git_fetch_skills')return {tempDir:'E:/SkillsFixture/tmp-git',skills:[{path:'E:/SkillsFixture/tmp-git/code-review',name:'代码评审',description:'按团队规范评审 diff。'}]};
+ if(cmd==='import_skill_folder')return structuredClone(skills[0]);
+ if(cmd==='update_skill_ext')return structuredClone(skills[0]);
+ if(cmd==='cleanup_git_temp')return null;
  if(cmd==='onboard_skills_batch')return {total:1,succeeded:1,failed:0,created:1,rejected:0,review:0,install:0,outcomes:[{dirName:'code-review',ok:true,createdToml:true,version:'1.0.0',verdict:'pass',level:'L1',critical:0,high:0,medium:0,error:''}]};
  if(cmd==='skill_generate_summary_batch')return [{dirName:'code-review',ok:true,summary:'按团队规范评审 diff，指出风险与可读性问题。'}];
  if(cmd==='plugin:event|listen')return 1;

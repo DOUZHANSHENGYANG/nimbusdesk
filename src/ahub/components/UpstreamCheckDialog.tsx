@@ -1,4 +1,4 @@
-import { AlertTriangle, CheckCircle2, CloudDownload, HelpCircle, RefreshCw } from "lucide-react";
+import { AlertTriangle, CheckCircle2, CloudDownload, HelpCircle, Loader2, RefreshCw } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Badge } from "@/ahub/components/ui/badge";
 import { Button } from "@/ahub/components/ui/button";
@@ -12,6 +12,8 @@ export interface UpstreamRow {
   status: UpstreamStatus;
   /** 远端地址；未开启跟踪时为空 */
   remote: string;
+  /** 跟踪模式（git-scan / manual），更新后写回 */
+  mode: string;
   /** 后端给的说明（git 不可用 / 未开 watch / ls-remote 失败原因） */
   note: string;
 }
@@ -29,11 +31,16 @@ export function UpstreamCheckDialog({
   onOpenChange,
   rows,
   onOpenSkill,
+  onUpdate,
+  updating,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   rows: UpstreamRow[];
   onOpenSkill: (dirName: string) => void;
+  /** 拉取上游并覆盖同名技能；一次可以传多行 */
+  onUpdate?: (rows: UpstreamRow[]) => void | Promise<void>;
+  updating?: ReadonlySet<string>;
 }) {
   const { t } = useTranslation();
   const sorted = [...rows].sort((a, b) => ORDER[a.status] - ORDER[b.status] || a.name.localeCompare(b.name));
@@ -66,31 +73,51 @@ export function UpstreamCheckDialog({
           ) : (
             <div className="max-h-[52vh] overflow-y-auto rounded-lg border border-border">
               {sorted.map((row) => (
-                <button
+                <div
                   key={row.dirName}
-                  type="button"
-                  onClick={() => onOpenSkill(row.dirName)}
-                  className="flex w-full items-center gap-2 border-b border-border/60 px-3 py-2 text-left last:border-0 hover:bg-muted/50"
+                  className="flex items-center gap-2 border-b border-border/60 last:border-0"
                 >
-                  {icon(row.status)}
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-[12px] text-foreground">{row.name}</span>
-                    <span className="block truncate font-mono text-[10px] text-ink-3">
-                      {row.remote || row.note || t("skills.upNoRemote")}
+                  <button
+                    type="button"
+                    onClick={() => onOpenSkill(row.dirName)}
+                    className="flex min-w-0 flex-1 items-center gap-2 px-3 py-2 text-left hover:bg-muted/50"
+                  >
+                    {icon(row.status)}
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[12px] text-foreground">{row.name}</span>
+                      <span className="block truncate font-mono text-[10px] text-ink-3">
+                        {row.remote || row.note || t("skills.upNoRemote")}
+                      </span>
                     </span>
-                  </span>
-                  <Badge variant={tone(row.status)}>
-                    {t(
-                      row.status === "changed"
-                        ? "skills.upStateChanged"
-                        : row.status === "current"
-                          ? "skills.upStateCurrent"
-                          : row.status === "error"
-                            ? "skills.upStateError"
-                            : "skills.upStateUntracked",
-                    )}
-                  </Badge>
-                </button>
+                    <Badge variant={tone(row.status)}>
+                      {t(
+                        row.status === "changed"
+                          ? "skills.upStateChanged"
+                          : row.status === "current"
+                            ? "skills.upStateCurrent"
+                            : row.status === "error"
+                              ? "skills.upStateError"
+                              : "skills.upStateUntracked",
+                      )}
+                    </Badge>
+                  </button>
+                  {row.status === "changed" && onUpdate ? (
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      className="mr-2 h-7 shrink-0 text-[11px]"
+                      disabled={updating?.has(row.dirName)}
+                      onClick={() => void onUpdate([row])}
+                    >
+                      {updating?.has(row.dirName) ? (
+                        <Loader2 className="size-3.5 animate-spin" />
+                      ) : (
+                        <CloudDownload className="size-3.5" />
+                      )}
+                      {t(updating?.has(row.dirName) ? "skills.upUpdating" : "skills.upUpdate")}
+                    </Button>
+                  ) : null}
+                </div>
               ))}
             </div>
           )}
@@ -99,6 +126,15 @@ export function UpstreamCheckDialog({
           <Button variant="secondary" onClick={() => onOpenChange(false)}>
             {t("common.close")}
           </Button>
+          {changed > 0 && onUpdate ? (
+            <Button
+              disabled={Boolean(updating?.size)}
+              onClick={() => void onUpdate(sorted.filter((row) => row.status === "changed"))}
+            >
+              <CloudDownload className="size-3.5" />
+              {t("skills.upUpdateAll", { n: changed })}
+            </Button>
+          ) : null}
         </DialogFooter>
       </DialogContent>
     </Dialog>

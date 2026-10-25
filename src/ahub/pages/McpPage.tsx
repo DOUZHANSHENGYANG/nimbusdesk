@@ -637,10 +637,21 @@ export function McpPage() {
           title={t("common.empty")}
           hint={t("mcp.emptyHint")}
           action={
-            <Button onClick={() => setScanOpen(true)} variant="secondary">
-              <ScanSearch />
-              {t("common.scan")}
-            </Button>
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              <Button
+                onClick={() => {
+                  openNew();
+                  setNewMode("json");
+                }}
+              >
+                <Braces />
+                {t("mcp.emptyJson")}
+              </Button>
+              <Button onClick={() => setScanOpen(true)} variant="secondary">
+                <ScanSearch />
+                {t("mcp.emptyImport")}
+              </Button>
+            </div>
           }
         />
       ) : (

@@ -9,9 +9,19 @@ page.on("pageerror", (e) => errors.push(e.message));
 
 try {
   await page.goto("http://127.0.0.1:17800/src/ahub/fixtures/mcp-prompts.html");
-  await page.waitForTimeout(2500);
+  await page.getByText("filesystem", { exact: true }).first().waitFor({ timeout: 15000 });
+  await page.waitForTimeout(600);
   await page.screenshot({ path: `${dir}/mcp-rail.png` });
 
+  await page.goto("http://127.0.0.1:17800/src/ahub/fixtures/mcp-prompts.html?empty=1");
+  await page.waitForTimeout(1800);
+  for (const name of ["从 JSON 粘贴", "从工具导入"]) {
+    await page.getByRole("button", { name, exact: true }).waitFor({ timeout: 5000 });
+  }
+  await page.screenshot({ path: `${dir}/mcp-empty.png` });
+
+  await page.goto("http://127.0.0.1:17800/src/ahub/fixtures/mcp-prompts.html");
+  await page.waitForTimeout(1200);
   await page.locator('[data-fixture="prompts"]').click();
   await page.waitForTimeout(1200);
   await page.screenshot({ path: `${dir}/prompts-rail.png` });

@@ -14,8 +14,9 @@ const prompts=[
  {id:'p3',title:'需求澄清',description:'把模糊需求问成可执行条目。',content:'{{requirement}}',tags:['产品','审查'],variables:[],versions:[],createdAt:now,updatedAt:now},
 ];
 const settingsInfo={settings:{dataDir:'E:/McpFixture',envRoot:'',language:'zh',theme:'dark',skillSourceDirs:[],harnessOrder:[],aiBaseUrl:'',aiApiKey:'',aiModel:'',autoSummaryOnImport:false,aiProviders:[],aiDefaultProviderId:'',aiLegacyMigrated:true},dataDirs:{root:'E:/McpFixture',prompts:'E:/McpFixture/prompts',mcp:'E:/McpFixture/mcp',skills:'E:/McpFixture/skills'}};
+const empty=location.search.includes('empty');
 mockIPC(async(cmd,args)=>{
- if(cmd==='list_mcp')return structuredClone(mcp);
+ if(cmd==='list_mcp')return empty?[]:structuredClone(mcp);
  if(cmd==='list_prompts')return structuredClone(prompts);
  if(cmd==='list_skills')return [];
  if(cmd==='get_settings')return structuredClone(settingsInfo);

@@ -1947,12 +1947,14 @@ pub fn import_skill_dir_as(
     }
     match std::fs::rename(&staging, &dst) {
         Ok(()) => {
-            // merge hub metadata: keep origin + versions, take tags from the source frontmatter
+            // merge hub metadata: keep origin + versions + 用户自己打的标签，补上来源 frontmatter 的新标签
             let mut hub: SkillHub = store::read_json(&dst.join(".hub.json")).unwrap_or_default();
+            let mut old_tags: Vec<String> = Vec::new();
             if let Some(bak) = &backup {
                 if let Ok(old_hub) = store::read_json::<SkillHub>(&bak.join(".hub.json")) {
                     hub.versions = old_hub.versions;
                     hub.origin = old_hub.origin;
+                    old_tags = old_hub.tags;
                 }
                 let old_doc = std::fs::read_to_string(bak.join("SKILL.md")).unwrap_or_default();
                 if !old_doc.is_empty() && old_doc != new_text {
@@ -1971,6 +1973,8 @@ pub fn import_skill_dir_as(
             let (fm, _) = split_doc(&new_text);
             hub.tags = {
                 let mut t = fm_get_tags(&fm);
+                // 覆盖导入不能把用户在详情页加的标签抹掉：旧标签保留，新标签合并去重。
+                t.extend(old_tags);
                 t.sort();
                 t.dedup();
                 t

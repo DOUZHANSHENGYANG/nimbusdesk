@@ -41,9 +41,12 @@ OpenCode / WorkBuddy / CodeBuddy / DeepSeek），并把扫到的条目**默认�
 | 流水线 | 审查 → 摘要 → 打包，三步一条链（见下） |
 | 打包导出 | 打包成 `.zip` / `.skillpack` |
 | **批量启用 / 停用** | 逐个调 `setSkillStatus`；结束报「成功 N / 失败 M」 |
-| 批量删除 | 二次确认后删除 |
+| 批量删除 | 二次确认；有工具副本时可勾选「同时从工具移出」，默认勾选，确认框列出会动到的工具 |
 
 逐个调而不是新开批量命令：状态要写回每个技能自己的元信息，失败也只该影响那一个。
+
+删除确认截图：`docs/screenshots/skill-delete-harness.png`（默认勾选「同时从工具移出」，
+并列出 Claude Code 等工具名）。
 
 ## 发版流水线
 
@@ -107,7 +110,10 @@ MCP 页用的是同一套抽象：左栏标签仓下面同样有「工具」区�
 单个工具内的「更新配置 / 解绑」仍在工具配置对话框里（打开某工具后逐条操作）；
 批量跨工具用上面这个入口。
 
-截图：`docs/screenshots/mcp-rail.png`、`mcp-harness-batch.png`。
+0 个 MCP 时不再是空白：空态直接给「从 JSON 粘贴」与「从工具导入」两个入口，
+顶部「扫描本机」「新建 MCP」仍然可用。
+
+截图：`docs/screenshots/mcp-rail.png`、`mcp-empty.png`、`mcp-harness-batch.png`。
 
 ## 批量检查上游更新
 
@@ -115,10 +121,16 @@ MCP 页用的是同一套抽象：左栏标签仓下面同样有「工具」区�
 （每个技能一次 `git ls-remote <remote> HEAD`），结果显示在「上游检查结果」弹窗里，
 按 **有新版本 → 检查失败 → 未跟踪 → 已是最新** 排序，点任意一行直接打开那个技能。
 
+看到「有新版本」后不用再跳出去：弹窗每行有「拉取更新」，底部有「全部更新（n）」。
+更新时按远端地址分组，同一个仓库只 `git clone --depth 1` 一次；按目录名/技能名匹配
+同名技能，`import_skill_folder(overwrite=true)` 覆盖，旧正文自动进版本历史；
+覆盖后把 `[source.upstream]` 写回并重新 `check_upstream`，所以不会更新完反而变「未跟踪」。
+覆盖导入会**合并标签**（旧标签保留 + 上游 frontmatter 新标签去重），不会把用户加的标签抹掉。
+
 跟踪开关与上游地址在技能详情 →「来源与更新」里配置（`[source.upstream].watch = true` +
 `mode = "git-scan"` + `remote`）。没开跟踪的技能会显示「未跟踪上游」，不会被当成检查失败。
 
-截图：`docs/screenshots/upstream-check.png`。
+截图：`docs/screenshots/upstream-check.png`（拉取入口）、`upstream-updated.png`（更新完成）。
 
 ## 版本时间轴与差异
 
