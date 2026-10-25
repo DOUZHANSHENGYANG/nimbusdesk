@@ -45,8 +45,9 @@ try {
   await page.locator(".df-card").waitFor();
   await page.setViewportSize({ width: 660, height: 591 });
   await page.waitForTimeout(80);
-  const card = await page.locator(".df-card").boundingBox();
-  assert.equal(Math.round(card.width), 660, "卡片宽 660");
+  // 量布局尺寸：撑开动画用 transform 缩放，boundingBox 会量到中间帧
+  const card = await page.locator(".df-card").evaluate((el) => ({ width: el.offsetWidth, height: el.offsetHeight }));
+  assert.equal(Math.round(card.width), 660, "卡片布局宽 660");
   const expanded = await lastBounds();
   assert.equal(expanded.width, 660, "展开后窗口宽 660");
   assert.equal(expanded.height, 591, "展开后窗口高 591");

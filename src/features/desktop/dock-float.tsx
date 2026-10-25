@@ -147,8 +147,14 @@ export function DockFloat({ onExpand, onHide, panels }: {
 
   const setExpanded = useCallback((next: boolean) => {
     if (!next) suppressHoverUntil.current = Date.now() + 700;
-    setOpen(next);
-    void onExpand(next).catch(report);
+    if (next) {
+      // 等窗口一帧到位再显示内容，否则卡片按旧窗口宽度排一次再重排
+      void onExpand(true).then(() => setOpen(true)).catch(report);
+      return;
+    }
+    // 收起：内容先淡出 180ms，之后才缩窗口
+    setOpen(false);
+    window.setTimeout(() => { void onExpand(false).catch(report); }, 180);
   }, [onExpand]);
 
   /**
