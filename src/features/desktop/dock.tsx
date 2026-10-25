@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { availableMonitors, currentMonitor, cursorPosition, type Monitor } from "@tauri-apps/api/window";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
-import { BookOpen, CalendarCheck, FolderKanban, GripHorizontal, GripVertical, LayoutGrid, List, Search, Settings2, X, Folder } from "lucide-react";
+import { BookOpen, CalendarCheck, FolderKanban, GripHorizontal, GripVertical, LayoutGrid, List, Search, Settings2, X } from "lucide-react";
 import { RiAddLine, RiAttachment2, RiClipboardLine, RiCloseLine, RiDeleteBinLine, RiPushpinLine, RiSparklingLine } from "@remixicon/react";
 import { chatWithProvider, testProvider } from "@/features/ai/client";
 import { selectProvider } from "@/features/ai/core";
@@ -640,8 +640,14 @@ function FencesFlyout() {
                 setChip(chip === category.id ? null : category.id);
               }}
               onContextMenu={(event) => { event.preventDefault(); moveCategory(category.id, event.shiftKey ? -1 : 1); }}>
-              <span className="dock-folder-glyph" aria-hidden="true">
-                <Folder className="size-4" />
+              {/* 盒子里露 3×3 的图标预览 —— 一眼能看出这盒子装了什么东西 */}
+              <span className="dock-folder-preview" aria-hidden="true">
+                {items
+                  .filter((item) => item.categoryId === category.id)
+                  .slice(0, 6)
+                  .map((item) => (
+                    <ItemIcon key={item.id} type={item.type} path={item.path} iconUrl={item.iconUrl} size={16} />
+                  ))}
               </span>
               <span className="dock-folder-name">{category.name}</span>
               <span className="dock-folder-count">{count}</span>

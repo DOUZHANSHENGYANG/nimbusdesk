@@ -797,17 +797,16 @@
 /* 文件夹网格：像手机桌面，先看盒子再看内容。3 列自适应，格子里是图标 + 名字 + 数量 */
 .dock-folders {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-  gap: 8px;
+  grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
+  gap: 10px;
   flex: none;
 }
 .dock-folder {
-  display: grid;
-  grid-template-columns: 28px 1fr auto;
+  display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 8px;
-  height: 44px;
-  padding: 0 10px;
+  gap: 6px;
+  padding: 10px 8px 8px;
   border: 1px solid var(--hairline);
   border-radius: var(--radius-md);
   background: var(--dock-face);
@@ -819,6 +818,18 @@
 }
 .dock-folder:hover { background: var(--surface-hover); }
 .dock-folder.is-on { border-color: var(--brand); background: var(--brand-soft); }
-.dock-folder-glyph { display: grid; place-items: center; width: 28px; height: 28px; border-radius: var(--radius-sm); background: var(--surface-hover); color: var(--brand); }
-.dock-folder-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-sm); }
-.dock-folder-count { font-size: var(--text-xs); color: var(--muted-fg); font-variant-numeric: tabular-nums; }
+/* 盒子内部：3 列小图标，像 iOS 文件夹的预览 */
+.dock-folder-preview {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  place-items: center;
+  gap: 3px;
+  width: 66px;
+  height: 52px;
+  padding: 5px;
+  border-radius: var(--radius-md);
+  background: color-mix(in oklab, var(--foreground) 8%, transparent);
+}
+.dock-folder-preview > * { width: 16px; height: 16px; }
+.dock-folder-name { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-xs); }
+.dock-folder-count { font-size: 10px; color: var(--muted-fg); font-variant-numeric: tabular-nums; }
