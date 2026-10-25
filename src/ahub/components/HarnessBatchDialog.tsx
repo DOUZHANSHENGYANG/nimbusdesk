@@ -4,35 +4,43 @@ import { useTranslation } from "react-i18next";
 import { HarnessIcon } from "@/ahub/components/HarnessIcon";
 import { Button } from "@/ahub/components/ui/button";
 import { Dialog, DialogBody, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/ahub/components/ui/dialog";
-import { api } from "@/ahub/lib/api";
-import { isSkillApplied, type SkillRef } from "@/ahub/lib/skillHarness";
-import type { HarnessReport } from "@/ahub/lib/types";
+import type { ApplyResult, HarnessReport } from "@/ahub/lib/types";
 import { cn } from "@/ahub/lib/utils";
 
 type Mode = "apply" | "remove";
 
 type ToolResult = { id: string; name: string; ok: number; failed: number; skipped: number; errors: string[] };
 
+/** 一条待处理的条目：key 是调后端命令时用的名字（技能=dirName，MCP=name） */
+export type HarnessBatchItem = {
+  key: string;
+  /** 已接入的 harness id 列表 */
+  applied: string[];
+};
+
 /**
- * 批量接入 / 移出工具。
+ * 批量接入 / 移出工具（技能与 MCP 共用）。
  *
- * 选中的技能在页面上已经确定，这里只让用户挑工具 —— 每行直接写出
- * 「将新增 n 项 / 将移除 n 项」，跑完按工具报成功、失败、跳过。
- * 一次只做一种方向（接入或移出），避免同一个按钮里藏两种相反操作。
+ * 页面上已经勾好条目，这里只让用户挑工具 —— 每行直接写出「将新增 / 将移除 n 项」，
+ * 跑完按工具报成功、失败、跳过。一次只做一种方向，避免同一个按钮里藏两种相反操作。
  */
 export function HarnessBatchDialog({
   open,
   onOpenChange,
-  targets,
+  kind,
+  items,
   reports,
+  run,
   onDone,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  /** 页面上勾选的技能 */
-  targets: SkillRef[];
+  kind: "skills" | "mcp";
+  items: HarnessBatchItem[];
   reports: HarnessReport[];
-  /** 跑完刷新扫描结果 */
+  /** 调后端命令；技能只复制目录，MCP 还要同步 targets 元数据，所以交给调用方 */
+  run: (harnessId: string, mode: Mode, keys: string[]) => Promise<ApplyResult>;
+  /** 跑完刷新扫描结果 / 列表 */
   onDone: () => void | Promise<void>;
 }) {
   const { t } = useTranslation();
@@ -41,16 +49,19 @@ export function HarnessBatchDialog({
   const [running, setRunning] = useState(false);
   const [results, setResults] = useState<ToolResult[] | null>(null);
 
-  const tools = useMemo(() => reports.filter((r) => r.supportsSkills), [reports]);
+  const tools = useMemo(
+    () => reports.filter((r) => (kind === "skills" ? r.supportsSkills : r.supportsMcp)),
+    [reports, kind],
+  );
 
-  /** 每个工具下「已接入 / 未接入」的名单，由当前选中技能算出 */
+  /** 每个工具下「已接入 / 未接入」的名单 */
   const plan = useMemo(() => {
     return tools.map((r) => {
-      const have = targets.filter((s) => isSkillApplied(r, s));
-      const missing = targets.filter((s) => !isSkillApplied(r, s));
+      const have = items.filter((it) => it.applied.includes(r.id));
+      const missing = items.filter((it) => !it.applied.includes(r.id));
       return { report: r, have, missing };
     });
-  }, [tools, targets]);
+  }, [tools, items]);
 
   const actionable = (p: (typeof plan)[number]) => (mode === "apply" ? p.missing.length : p.have.length);
 
@@ -74,18 +85,15 @@ export function HarnessBatchDialog({
 
   const totalItems = plan.filter((p) => picked.has(p.report.id)).reduce((n, p) => n + actionable(p), 0);
 
-  const run = async () => {
+  const runAll = async () => {
     const chosen = plan.filter((p) => picked.has(p.report.id) && actionable(p) > 0);
     if (!chosen.length) return;
     setRunning(true);
     const out: ToolResult[] = [];
     for (const p of chosen) {
-      const names = (mode === "apply" ? p.missing : p.have).map((s) => s.dirName);
+      const keys = (mode === "apply" ? p.missing : p.have).map((it) => it.key);
       try {
-        const res =
-          mode === "apply"
-            ? await api.applyToHarness(p.report.id, "skills", names)
-            : await api.removeFromHarness(p.report.id, "skills", names);
+        const res = await run(p.report.id, mode, keys);
         out.push({
           id: p.report.id,
           name: p.report.name,
@@ -95,7 +103,7 @@ export function HarnessBatchDialog({
           errors: res.errors,
         });
       } catch (e) {
-        out.push({ id: p.report.id, name: p.report.name, ok: 0, failed: names.length, skipped: 0, errors: [String(e)] });
+        out.push({ id: p.report.id, name: p.report.name, ok: 0, failed: keys.length, skipped: 0, errors: [String(e)] });
       }
       setResults([...out]);
     }
@@ -111,8 +119,10 @@ export function HarnessBatchDialog({
     <Dialog open={open} onOpenChange={(v) => !running && onOpenChange(v)}>
       <DialogContent className="sm:max-w-xl">
         <DialogHeader>
-          <DialogTitle>{t("skills.harnessDlgTitle")}</DialogTitle>
-          <DialogDescription>{t("skills.harnessDlgDesc", { n: targets.length })}</DialogDescription>
+          <DialogTitle>{t(kind === "skills" ? "skills.harnessDlgTitle" : "mcp.harnessDlgTitle")}</DialogTitle>
+          <DialogDescription>
+            {t(kind === "skills" ? "skills.harnessDlgDesc" : "mcp.harnessDlgDesc", { n: items.length })}
+          </DialogDescription>
         </DialogHeader>
 
         <DialogBody className="flex flex-col gap-2">
@@ -221,7 +231,7 @@ export function HarnessBatchDialog({
             {done ? t("common.close") : t("common.cancel")}
           </Button>
           {done ? null : (
-            <Button onClick={() => void run()} disabled={running || totalItems === 0}>
+            <Button onClick={() => void runAll()} disabled={running || totalItems === 0}>
               {running ? <Loader2 className="size-3.5 animate-spin" /> : <Plug className="size-3.5" />}
               {mode === "apply"
                 ? t("skills.harnessRunApply", { n: totalItems })

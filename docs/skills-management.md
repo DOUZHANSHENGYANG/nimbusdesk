@@ -75,6 +75,20 @@ OpenCode / WorkBuddy / CodeBuddy / DeepSeek），并把扫到的条目**默认�
 `docs/screenshots/harness-filter.png`（按「未接入工具」收窄）、
 `docs/screenshots/harness-batch.png`、`harness-batch-remove.png`、`tag-empty.png`。
 
+## MCP 的工具维度（与技能同一套）
+
+MCP 页用的是同一套抽象：左栏标签仓下面同样有「工具」区块（按 `targets` 统计，
+带「未接入工具」），卡片上显示已写入哪些工具、没写过的显式标「未接入任何工具」。
+
+批量选择 →「接入工具」打开与技能共用的对话框：切「接入 / 移出」两个方向，
+每行写将新增/移除多少项，执行后按工具报成功、失败、跳过。写入成功后同步
+`targets` 元数据（`save_mcp`），所以卡片徽标、工具筛选和中枢记录始终一致。
+
+单个工具内的「更新配置 / 解绑」仍在工具配置对话框里（打开某工具后逐条操作）；
+批量跨工具用上面这个入口。
+
+截图：`docs/screenshots/mcp-rail.png`、`mcp-harness-batch.png`。
+
 ## 批量检查上游更新
 
 页头「检查更新」：勾了技能就只查勾选的，没勾就查全部，逐个跑 `check_upstream`

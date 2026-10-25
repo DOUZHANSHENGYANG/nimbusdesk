@@ -2091,8 +2091,14 @@ export function SkillsPage() {
       <HarnessBatchDialog
         open={harnessBatchOpen}
         onOpenChange={setHarnessBatchOpen}
-        targets={skills.filter((s) => batchSel.has(s.dirName))}
+        kind="skills"
+        items={skills
+          .filter((s) => batchSel.has(s.dirName))
+          .map((s) => ({ key: s.dirName, applied: (appliedMap.get(s.dirName) ?? []).map((r) => r.id) }))}
         reports={skillHarnesses}
+        run={(hid, mode, keys) =>
+          mode === "apply" ? api.applyToHarness(hid, "skills", keys) : api.removeFromHarness(hid, "skills", keys)
+        }
         onDone={loadHarnesses}
       />
 

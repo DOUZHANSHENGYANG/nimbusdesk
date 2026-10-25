@@ -1,4 +1,4 @@
-import { Braces, Check, ClipboardPaste, Copy, FolderOpen, ListChecks, Plus, PlugZap, ScanSearch, Server, Sparkles, Trash2, Wrench } from "lucide-react";
+import { Braces, Boxes, Check, ClipboardPaste, Copy, FolderOpen, ListChecks, Plus, PlugZap, ScanSearch, Server, Sparkles, Trash2, Wrench } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -9,6 +9,8 @@ import { TagManagerView } from "@/ahub/components/TagManagerView";
 import { TagCommand } from "@/ahub/components/TagCommand";
 import { SearchBar } from "@/ahub/components/SearchBar";
 import { HarnessConfigDialog } from "@/ahub/components/HarnessConfigDialog";
+import { HarnessFilterRail } from "@/ahub/components/HarnessFilterRail";
+import { HarnessBatchDialog } from "@/ahub/components/HarnessBatchDialog";
 import { KeyValueEditor, recordFromRows, rowsFromRecord, type KvRow } from "@/ahub/components/KeyValueEditor";
 import { EmptyState } from "@/ahub/components/EmptyState";
 import { HarnessDialog } from "@/ahub/components/HarnessDialog";
@@ -79,6 +81,8 @@ export function McpPage() {
   const [batchMode, setBatchMode] = useState(false);
   const [batchSel, setBatchSel] = useState<Set<string>>(new Set());
   const [reports, setReports] = useState<HarnessReport[] | null>(null);
+  const [harnessFilter, setHarnessFilter] = useState<string | null>(null);
+  const [harnessBatchOpen, setHarnessBatchOpen] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [cfgOpen, setCfgOpen] = useState(false);
   const [batchDeleteOpen, setBatchDeleteOpen] = useState(false);
@@ -124,11 +128,23 @@ export function McpPage() {
     return [...keys].sort((a, b) => (tagCounts[b] ?? 0) - (tagCounts[a] ?? 0) || a.localeCompare(b));
   }, [tagCounts, activeTags]);
 
+  const harnessCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const s of mcp) for (const hid of s.targets ?? []) counts[hid] = (counts[hid] ?? 0) + 1;
+    return counts;
+  }, [mcp]);
+
+  const unassignedCount = useMemo(() => mcp.filter((s) => (s.targets ?? []).length === 0).length, [mcp]);
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     const list = mcp.filter((s) => {
       if (transportFilter !== "all" && s.transport !== transportFilter) return false;
       if (!matchTags(s.tags, activeTags, tagMode)) return false;
+      if (harnessFilter) {
+        const targets = s.targets ?? [];
+        if (harnessFilter === "__none" ? targets.length > 0 : !targets.includes(harnessFilter)) return false;
+      }
       if (!q) return true;
       return (
         s.name.toLowerCase().includes(q) ||
@@ -144,7 +160,7 @@ export function McpPage() {
       return i === -1 ? Number.MAX_SAFE_INTEGER : i;
     };
     return list.map((x, i) => ({ x, i })).sort((a, b) => rank(a.x) - rank(b.x) || a.i - b.i).map(({ x }) => x);
-  }, [mcp, query, transportFilter, harnessOrder, activeTags, tagMode]);
+  }, [mcp, query, transportFilter, harnessOrder, activeTags, tagMode, harnessFilter]);
 
   const openNew = () => {
     setNewMode("manual");
@@ -288,6 +304,18 @@ export function McpPage() {
   }
 
 
+
+  const loadReports = () =>
+    api
+      .scanHarnesses()
+      .then(setReports)
+      .catch(() => setReports([]));
+
+  // 工具维度在页面打开时就要有数据：不能等用户点「扫描本机」
+  useEffect(() => {
+    void loadReports();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const doScan = () => {
     setScanning(true);
@@ -506,6 +534,16 @@ export function McpPage() {
                         onManage={() => setPageTab("tags")}
                         onCommand={() => setTagCommandOpen(true)}
                       />
+                      {mcp.length > 0 ? (
+                        <HarnessFilterRail
+                          reports={reports}
+                          counts={harnessCounts}
+                          total={mcp.length}
+                          unassigned={unassignedCount}
+                          value={harnessFilter}
+                          onChange={setHarnessFilter}
+                        />
+                      ) : null}
             </aside>
             <div className="min-w-0 flex-1">
 
@@ -566,6 +604,16 @@ export function McpPage() {
                   }
                 >
                   {filtered.length > 0 && batchSel.size === filtered.length ? t("mcp.unselectAll") : t("harness.selectAll")}
+                </Button>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  className="h-8"
+                  disabled={batchSel.size === 0}
+                  onClick={() => setHarnessBatchOpen(true)}
+                >
+                  <Boxes className="size-3.5" />
+                  {t("mcp.harnessApplyBtn")}
                 </Button>
                 <Button
                   size="sm"
@@ -676,6 +724,7 @@ export function McpPage() {
                     {harnessName(hid)}
                   </Badge>
                 ))}
+                {(s.targets ?? []).length === 0 ? <Badge variant="muted">{t("mcp.harnessNone")}</Badge> : null}
               </div>
               <div className="mt-auto flex flex-wrap items-center justify-end gap-0.5 pt-3">
                 <Button
@@ -956,6 +1005,34 @@ export function McpPage() {
         onRescan={doScan}
         pool={mcp}
         onChanged={() => void loadMcp()}
+      />
+
+      <HarnessBatchDialog
+        open={harnessBatchOpen}
+        onOpenChange={setHarnessBatchOpen}
+        kind="mcp"
+        items={mcp.filter((s) => batchSel.has(s.id)).map((s) => ({ key: s.name, applied: s.targets ?? [] }))}
+        reports={reports ?? []}
+        run={async (hid, mode, keys) => {
+          const res =
+            mode === "apply"
+              ? await api.applyToHarness(hid, "mcp", keys)
+              : await api.removeFromHarness(hid, "mcp", keys);
+          // targets 是中枢侧的应用记录：写入成功后跟着更新，卡片徽标和工具筛选才不会撒谎
+          for (const name of res.applied) {
+            const cur = useData.getState().mcp.find((x) => x.name === name);
+            if (!cur) continue;
+            const set = new Set(cur.targets ?? []);
+            if (mode === "apply") set.add(hid);
+            else set.delete(hid);
+            await saveMcp({ ...cur, targets: [...set] });
+          }
+          return res;
+        }}
+        onDone={async () => {
+          await loadMcp();
+          await loadReports();
+        }}
       />
 
       <HarnessDialog open={scanOpen} onOpenChange={setScanOpen} kind="mcp" />

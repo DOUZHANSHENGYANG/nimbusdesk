@@ -14,12 +14,22 @@ const prompts=[
  {id:'p3',title:'需求澄清',description:'把模糊需求问成可执行条目。',content:'{{requirement}}',tags:['产品','审查'],variables:[],versions:[],createdAt:now,updatedAt:now},
 ];
 const settingsInfo={settings:{dataDir:'E:/McpFixture',envRoot:'',language:'zh',theme:'dark',skillSourceDirs:[],harnessOrder:[],aiBaseUrl:'',aiApiKey:'',aiModel:'',autoSummaryOnImport:false,aiProviders:[],aiDefaultProviderId:'',aiLegacyMigrated:true},dataDirs:{root:'E:/McpFixture',prompts:'E:/McpFixture/prompts',mcp:'E:/McpFixture/mcp',skills:'E:/McpFixture/skills'}};
-mockIPC(async(cmd)=>{
+mockIPC(async(cmd,args)=>{
  if(cmd==='list_mcp')return structuredClone(mcp);
  if(cmd==='list_prompts')return structuredClone(prompts);
  if(cmd==='list_skills')return [];
  if(cmd==='get_settings')return structuredClone(settingsInfo);
  if(cmd==='preset_list'||cmd==='list_harnesses')return [];
+ if(cmd==='scan_harnesses')return [
+  {id:'claude-code',name:'Claude Code',supportsMcp:true,supportsSkills:true,configPath:'C:/Users/dz/.claude.json',exists:true,mcpServers:[
+   {name:'filesystem',transport:'stdio',command:'npx',args:[],env:{},url:'',headers:{}},
+   {name:'github',transport:'stdio',command:'npx',args:[],env:{},url:'',headers:{}},
+  ],skillsDirs:[],skills:[],notes:[]},
+  {id:'codex',name:'Codex',supportsMcp:true,supportsSkills:true,configPath:'C:/Users/dz/.codex/config.toml',exists:true,mcpServers:[],skillsDirs:[],skills:[],notes:[]},
+  {id:'gemini-cli',name:'Gemini CLI',supportsMcp:true,supportsSkills:false,configPath:'C:/Users/dz/.gemini/settings.json',exists:true,mcpServers:[],skillsDirs:[],skills:[],notes:[]},
+ ];
+ if(cmd==='apply_to_harness'||cmd==='remove_from_harness')return {applied:args?.names??[],warnings:[],backups:[],errors:[]};
+ if(cmd==='save_mcp')return args?.server ?? null;
  if(cmd==='plugin:event|listen')return 1;
  if(cmd==='get_data_dir')return 'E:/McpFixture';
  return null;
