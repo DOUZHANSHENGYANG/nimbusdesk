@@ -243,15 +243,6 @@ export function PromptsPage() {
     }
   };
 
-  /** 治理台里改名/删标签：逐个写回提示词 */
-  const rewritePromptTags = async (map: (tags: string[]) => string[]) => {
-    for (const prompt of prompts) {
-      const current = prompt.tags ?? [];
-      const next = map(current);
-      if (next.join("\u0001") === current.join("\u0001")) continue;
-      await savePrompt({ ...prompt, tags: next });
-    }
-  };
 
   return (
     <PageShell
@@ -304,8 +295,7 @@ export function PromptsPage() {
       </div>
 
       {pageTab === "tags" ? (
-        <TagManagerView allTags={allTags} counts={tagCounts} resultCount={filtered.length}
-          onRenameTag={(from, to) => rewritePromptTags((tags) => tags.map((tag) => (tag === from ? to : tag)))} onDeleteTag={(tag) => rewritePromptTags((tags) => tags.filter((item) => item !== tag))} />
+        <TagManagerView allTags={allTags} counts={tagCounts} resultCount={filtered.length} />
       ) : (
         <>
       <TagShelf

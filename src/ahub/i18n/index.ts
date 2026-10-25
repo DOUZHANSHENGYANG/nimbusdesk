@@ -36,6 +36,8 @@ const zh = {
     sideHint: "改动分组会立刻反映到技能页的卡片仓，不需要保存。",
     sideStats: "{{tags}} 个标签 · {{groups}} 组 · 被引用 {{uses}} 次",
     deleteTag: "删除标签",
+    confirmDelete: "确认删除分组",
+    tagReadonly: "标签由技能 / MCP / 提示词里的内容决定，这里只能归组，不能改名或删除。",
     empty: "没有标签",
   },
   tagCommand: {
@@ -1150,6 +1152,8 @@ const en: typeof zh = {
     sideHint: "Group changes apply to the shelf on the skills page immediately.",
     sideStats: "{{tags}} tags · {{groups}} groups · used {{uses}} times",
     deleteTag: "Delete tag",
+    confirmDelete: "Confirm deleting group",
+    tagReadonly: "Tags come from the skills / MCP / prompts themselves — group them here, but they cannot be renamed or deleted.",
     empty: "No tags",
   },
   tagCommand: {

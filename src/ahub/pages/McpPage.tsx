@@ -434,15 +434,6 @@ export function McpPage() {
     return { mcpServers: map };
   }
 
-  /** 治理台里改名/删标签：逐个写回 MCP 条目 */
-  const rewriteMcpTags = async (map: (tags: string[]) => string[]) => {
-    for (const server of mcp) {
-      const current = server.tags ?? [];
-      const next = map(current);
-      if (next.join("\u0001") === current.join("\u0001")) continue;
-      await saveMcp({ ...server, tags: next });
-    }
-  };
 
   return (
     <PageShell
@@ -496,8 +487,7 @@ export function McpPage() {
       </div>
 
       {pageTab === "tags" ? (
-        <TagManagerView allTags={allTags} counts={tagCounts} resultCount={filtered.length}
-          onRenameTag={(from, to) => rewriteMcpTags((tags) => tags.map((tag) => (tag === from ? to : tag)))} onDeleteTag={(tag) => rewriteMcpTags((tags) => tags.filter((item) => item !== tag))} />
+        <TagManagerView allTags={allTags} counts={tagCounts} resultCount={filtered.length} />
       ) : (
         <>
       {/* 标签筛选常驻：即便当前没有标签也保留入口，否则用户不知道有这个能力，

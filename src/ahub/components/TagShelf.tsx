@@ -29,6 +29,7 @@ export function TagShelf({
   hideWhenEmpty = true,
   onManage,
   onCommand,
+  variant = "bar",
 }: {
   allTags: string[];
   selected: Set<string>;
@@ -40,6 +41,8 @@ export function TagShelf({
   hideWhenEmpty?: boolean;
   /** 打开治理台（C）；没传就退回行内整理模式 */
   onManage?: () => void;
+  /** bar = 页头横排；rail = 左侧竖栏（卡片仓的默认形态） */
+  variant?: "bar" | "rail";
   /** 打开检索面板（B） */
   onCommand?: () => void;
 }) {
@@ -133,7 +136,8 @@ export function TagShelf({
         onDragLeave={() => setDragOver(null)}
         onDrop={(event) => drop(event, id)}
         className={cn(
-          "flex min-w-[150px] max-w-[260px] flex-none flex-col rounded-lg border bg-surface/60 p-2 transition-colors",
+          "flex flex-col rounded-lg border bg-surface/60 p-2 transition-colors",
+          variant === "bar" ? "min-w-[150px] max-w-[260px] flex-none" : "w-full",
           isOver ? "border-primary/60 bg-primary-soft/40" : "border-border",
         )}
       >
@@ -264,7 +268,7 @@ export function TagShelf({
       </div>
 
       {collapsed ? null : (
-        <div className="flex flex-wrap gap-1.5 border-t border-border/60 p-2">
+        <div className={cn("flex gap-1.5 border-t border-border/60 p-2", variant === "rail" ? "flex-col" : "flex-wrap")}>
           {view.groups.map((group) => groupCard(group.id, group.name, group.tags))}
           {groupCard(null, t("tagShelf.ungrouped"), view.ungrouped)}
           {managing ? (
