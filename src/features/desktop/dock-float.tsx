@@ -721,11 +721,13 @@ function WeatherPanel() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    const lat = useSettings.getState().weatherLat;
+    const lon = useSettings.getState().weatherLon;
     if (weatherCache && Date.now() - weatherCache.at < 10 * 60_000) return;
     let cancelled = false;
     void (async () => {
       try {
-        const url = "https://api.open-meteo.com/v1/forecast?latitude=31.23&longitude=121.47&current=temperature_2m,weather_code,wind_speed_10m&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=auto&forecast_days=4";
+        const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code,wind_speed_10m&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=auto&forecast_days=4`;
         const reply = await fetch(url).then((r) => r.json());
         const next: WeatherNow = {
           temp: Math.round(reply.current.temperature_2m),
@@ -754,6 +756,7 @@ function WeatherPanel() {
         <span className="df-weather-temp">{data.temp}°</span>
         <span className="df-row-meta">{t(`dockFloat.weatherCode.${data.code}`)} · {data.wind} km/h</span>
       </div>
+      <p className="df-hint">{useSettings.getState().weatherCity}</p>
       <div className="df-weather-days">
         {data.days.map((day, index) => (
           <div key={day.date} className="df-weather-day">

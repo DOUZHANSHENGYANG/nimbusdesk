@@ -64,6 +64,10 @@ interface SettingsState {
   dockMonitorId: string | null;
   /** 整窗鼠标穿透：点击直接穿到后面的窗口 */
   dockClickThrough: boolean;
+  /** 天气坐标：城市名只用于显示，实际请求用经纬度 */
+  weatherCity: string;
+  weatherLat: number;
+  weatherLon: number;
   /** 收纳盒飞出面板的磁贴图标边长（Ctrl+滚轮调节，32–72） */
   dockTileSize: number;
   /** Dock 显隐全局快捷键（空 = 无）；按下在托盘外切换 Dock 显示 */
@@ -109,6 +113,7 @@ interface SettingsState {
   setDockCardHeight: (height: number) => void;
   setDockMonitorId: (id: string | null) => void;
   setDockClickThrough: (on: boolean) => void;
+  setWeatherPlace: (city: string, lat: number, lon: number) => void;
   setDockEnabled: (v: boolean) => void;
   setDockOpen: (v: boolean) => void;
   setAlwaysOnTop: (v: boolean) => void;
@@ -159,6 +164,9 @@ export const useSettings = create<SettingsState>()(
       dockCardHeight: 591,
       dockMonitorId: null,
       dockClickThrough: false,
+      weatherCity: "上海",
+      weatherLat: 31.23,
+      weatherLon: 121.47,
       dockEnabled: false,
       dockOpen: true,
       alwaysOnTop: false,
@@ -193,6 +201,7 @@ export const useSettings = create<SettingsState>()(
       setDockCardHeight: (dockCardHeight) => set({ dockCardHeight }),
       setDockMonitorId: (dockMonitorId) => set({ dockMonitorId }),
       setDockClickThrough: (dockClickThrough) => set({ dockClickThrough }),
+      setWeatherPlace: (city, lat, lon) => set({ weatherCity: city, weatherLat: lat, weatherLon: lon }),
       setDockEnabled: (dockEnabled) => set({ dockEnabled }),
       setDockOpen: (dockOpen) => set({ dockOpen }),
       setAlwaysOnTop: (alwaysOnTop) => set({ alwaysOnTop }),

@@ -713,6 +713,7 @@ export const zh = {
     accent_ocean: "海洋",
     accent_graphite: "石墨",
     accent_warm: "暖色",
+    weatherPlace: "天气位置（城市 / 纬度 / 经度）",
     clickThrough: "鼠标穿透",
     clickThroughHint: "开启后点击直接穿到后面的窗口；此时悬停展开会失效",
     clickThroughOn: "已开启",

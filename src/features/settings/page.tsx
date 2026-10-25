@@ -308,6 +308,10 @@ function DesktopDockCard() {
   const dockStyle = useSettings((s) => s.dockStyle);
   const setDockStyle = useSettings((s) => s.setDockStyle);
   const dockCompactStyle = useSettings((s) => s.dockCompactStyle);
+  const weatherCity = useSettings((s) => s.weatherCity);
+  const weatherLat = useSettings((s) => s.weatherLat);
+  const weatherLon = useSettings((s) => s.weatherLon);
+  const setWeatherPlace = useSettings((s) => s.setWeatherPlace);
   const dockClickThrough = useSettings((s) => s.dockClickThrough);
   const setDockClickThrough = useSettings((s) => s.setDockClickThrough);
   const dockMonitorId = useSettings((s) => s.dockMonitorId);
@@ -425,6 +429,16 @@ function DesktopDockCard() {
               onClick={() => setDockClickThrough(!dockClickThrough)}>
               {dockClickThrough ? t("settings.clickThroughOn") : t("settings.clickThroughOff")}
             </Button>
+          </div>
+        </Field>
+        <Field label={t("settings.weatherPlace")}>
+          <div className="flex flex-wrap items-center gap-2">
+            <input className="h-8 w-32 rounded-md border border-border bg-background px-2 text-sm" value={weatherCity}
+              onChange={(e) => setWeatherPlace(e.target.value, weatherLat, weatherLon)} />
+            <input className="h-8 w-24 rounded-md border border-border bg-background px-2 text-sm" type="number" step="0.01" value={weatherLat}
+              onChange={(e) => setWeatherPlace(weatherCity, Number(e.target.value), weatherLon)} />
+            <input className="h-8 w-24 rounded-md border border-border bg-background px-2 text-sm" type="number" step="0.01" value={weatherLon}
+              onChange={(e) => setWeatherPlace(weatherCity, weatherLat, Number(e.target.value))} />
           </div>
         </Field>
         <Field label={t("settings.accentPreset")}>

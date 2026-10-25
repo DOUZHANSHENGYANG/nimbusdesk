@@ -722,6 +722,7 @@ export const en: AppMessages = {
     accent_ocean: "Ocean",
     accent_graphite: "Graphite",
     accent_warm: "Warm",
+    weatherPlace: "Weather place (city / lat / lon)",
     clickThrough: "Click-through",
     clickThroughHint: "Clicks pass through to the window behind; hover-expand stops working",
     clickThroughOn: "On",
