@@ -86,6 +86,14 @@ OpenCode / WorkBuddy / CodeBuddy / DeepSeek），并把扫到的条目**默认�
 `docs/screenshots/harness-filter.png`（按「未接入工具」收窄）、
 `docs/screenshots/harness-batch.png`、`harness-batch-remove.png`、`tag-empty.png`。
 
+## 本机工具总览（技能 + MCP）
+
+「工具 → 本机工具」最上面是一张总览表：每个 harness 一行，同时给出**技能副本数**、
+**MCP 数**、**待更新技能数**（中枢里的版本比工具目录新）以及配置是否找到。
+它回答的是「本机这些工具里到底有什么」，具体操作仍在下面的「本机技能」和 MCP 页里。
+
+截图：`docs/screenshots/harness-overview.png`。
+
 ## 本机工具里的技能（工具箱 → 本机工具）
 
 技能页只服务**自己的技能池**：卡片不再显示「来自 OpenCode / Claude Code」这类来源徽标，

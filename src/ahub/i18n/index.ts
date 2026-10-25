@@ -11,6 +11,21 @@ import { i18n } from "@/lib/i18n";
  * 语言也就只剩云台一处开关。
  */
 const zh = {
+  harnessOverview: {
+    title: "本机工具总览",
+    summary: "{{tools}} 个工具 · {{skills}} 个技能副本 · {{mcp}} 个 MCP",
+    colTool: "工具",
+    colSkills: "技能",
+    colMcp: "MCP",
+    colOutdated: "待更新",
+    colStatus: "配置",
+    installed: "已找到",
+    missing: "未安装",
+    outdated: "{{n}} 项",
+    outdatedHint: "中枢里的版本比工具目录新；去「本机技能」点覆盖更新",
+    refresh: "重新扫描",
+    empty: "没有检测到支持技能或 MCP 的工具",
+  },
   harnessSkills: {
     title: "本机技能",
     summary: "{{tools}} 个工具 · {{skills}} 个技能副本",
@@ -1231,6 +1246,21 @@ const zh = {
 };
 
 const en: typeof zh = {
+  harnessOverview: {
+    title: "Tools on this machine",
+    summary: "{{tools}} tools · {{skills}} skill copies · {{mcp}} MCP servers",
+    colTool: "Tool",
+    colSkills: "Skills",
+    colMcp: "MCP",
+    colOutdated: "Stale",
+    colStatus: "Config",
+    installed: "Found",
+    missing: "Not installed",
+    outdated: "{{n}}",
+    outdatedHint: "The hub version is newer than the tool copy; use Overwrite update under Skills on this machine",
+    refresh: "Rescan",
+    empty: "No tool supporting skills or MCP was detected",
+  },
   harnessSkills: {
     title: "Skills on this machine",
     summary: "{{tools}} tools · {{skills}} skill copies",
