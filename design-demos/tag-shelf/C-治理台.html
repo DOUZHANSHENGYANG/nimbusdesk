@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>方向 C · 标签治理台</title>
+<style>
+  :root{
+    --bg:#0a0a0b; --surface:#131316; --surface-2:#17171b; --surface-3:#1d1d22;
+    --border:#26262b; --border-soft:#1f1f24;
+    --text:#f2f2f4; --muted:#8b8b94; --dim:#6b6b74;
+    --primary:#2f6bff; --primary-soft:rgba(47,107,255,.15);
+    --g1:#5b8def; --g2:#c084fc; --g3:#4ade80; --g4:#fbbf24;
+    --r:12px; --font:-apple-system,"Segoe UI","Microsoft YaHei",system-ui,sans-serif;
+    --mono:"JetBrains Mono",ui-monospace,Consolas,monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font-family:var(--font);font-size:14px;-webkit-font-smoothing:antialiased;height:900px;overflow:hidden}
+  button{font-family:inherit;cursor:pointer;border:none;background:none;color:inherit}
+  .topbar{height:64px;display:flex;align-items:center;gap:12px;padding:0 24px}
+  .topbar h1{font-size:18px;font-weight:600}
+  .tabs{display:flex;gap:2px;margin-left:16px;background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:2px}
+  .tabs span{font-size:12px;color:var(--dim);padding:4px 10px;border-radius:6px}
+  .tabs span.on{background:var(--surface-3);color:var(--text)}
+  .tabs span b{font-family:var(--mono);font-size:10px;opacity:.7;margin-left:4px;font-weight:400}
+  .spacer{flex:1}
+  .btn{display:inline-flex;align-items:center;gap:6px;height:34px;padding:0 12px;border-radius:9px;font-size:12.5px;border:1px solid var(--border);background:var(--surface);color:var(--text)}
+  .btn.primary{background:var(--primary);border-color:var(--primary);color:#fff}
+
+  .body{display:grid;grid-template-columns:180px minmax(0,1fr) 236px;gap:14px;padding:0 24px 24px;height:calc(900px - 64px)}
+
+  /* 左：分组导航 */
+  .rail{display:flex;flex-direction:column;gap:2px;padding-top:2px}
+  .rail .lab{font-size:10.5px;color:var(--dim);padding:6px 10px 4px;letter-spacing:.4px}
+  .rail button{display:flex;align-items:center;gap:8px;height:32px;padding:0 10px;border-radius:7px;font-size:12px;color:var(--muted);text-align:left}
+  .rail button .dot{width:6px;height:6px;border-radius:2px;flex:none}
+  .rail button .n{margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--dim)}
+  .rail button.on{background:var(--surface-3);color:var(--text)}
+  .rail .add{margin-top:6px;color:var(--dim);border:1px dashed var(--border)}
+
+  /* 中：facet + 表 */
+  .mid{min-width:0;display:flex;flex-direction:column;gap:10px}
+  .facets{display:flex;align-items:center;gap:6px;height:40px;padding:0 10px;border:1px solid var(--border);border-radius:10px;background:var(--surface)}
+  .facets .fl{font-size:10.5px;color:var(--dim);margin-right:2px}
+  .seg{display:flex;border:1px solid var(--border);border-radius:7px;overflow:hidden}
+  .seg span{font-size:11px;padding:3px 8px;color:var(--dim);border-right:1px solid var(--border)}
+  .seg span:last-child{border-right:none}
+  .seg span.on{background:var(--surface-3);color:var(--text)}
+  .facets .right{margin-left:auto;display:flex;align-items:center;gap:8px;font-size:11px;color:var(--dim)}
+  .facets input{border:none;background:none;outline:none;color:var(--text);font-size:11.5px;width:120px;font-family:inherit}
+  .facets .box{display:flex;align-items:center;gap:6px;border:1px solid var(--border);border-radius:7px;padding:3px 8px;background:var(--bg)}
+
+  .dupe{display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid rgba(251,191,36,.28);background:rgba(251,191,36,.07);border-radius:9px;font-size:11.5px;color:#e5c47a}
+  .dupe b{font-weight:500}
+  .dupe button{margin-left:auto;height:24px;padding:0 9px;border-radius:6px;border:1px solid rgba(251,191,36,.35);color:#e5c47a;font-size:11px}
+
+  .table{border:1px solid var(--border);border-radius:var(--r);background:var(--surface);overflow:hidden;display:flex;flex-direction:column;min-height:0}
+  .thead,.trow{display:grid;grid-template-columns:26px 1.4fr 88px 70px 92px 84px;align-items:center;gap:8px;padding:0 12px}
+  .thead{height:34px;font-size:10.5px;color:var(--dim);border-bottom:1px solid var(--border);background:var(--surface-2)}
+  .ghead{height:30px;display:flex;align-items:center;gap:7px;padding:0 12px;background:rgba(255,255,255,.02);border-bottom:1px solid var(--border-soft);font-size:11px;color:var(--muted)}
+  .ghead .dot{width:6px;height:6px;border-radius:2px}
+  .ghead .n{margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--dim)}
+  .trow{height:38px;border-bottom:1px solid var(--border-soft);font-size:12px}
+  .trow:hover{background:rgba(255,255,255,.025)}
+  .trow.sel{background:var(--primary-soft)}
+  .cb{width:13px;height:13px;border:1px solid #3a3a44;border-radius:3.5px}
+  .cb.on{background:var(--primary);border-color:var(--primary);position:relative}
+  .cb.on::after{content:"";position:absolute;left:3.5px;top:1px;width:4px;height:7px;border-right:1.5px solid #fff;border-bottom:1.5px solid #fff;transform:rotate(42deg)}
+  .tname{display:flex;align-items:center;gap:6px;min-width:0}
+  .tname b{font-weight:500;color:#e6e6ea;font-size:12.5px}
+  .tname .warn{font-size:9.5px;color:#e5c47a;border:1px solid rgba(251,191,36,.3);border-radius:3px;padding:0 3px}
+  .num{font-family:var(--mono);font-size:11px;color:var(--muted)}
+  .muted{font-size:11px;color:var(--dim)}
+  .gsel{display:inline-flex;align-items:center;gap:4px;font-size:11px;color:var(--muted);border:1px solid var(--border);border-radius:6px;padding:2px 6px;background:var(--surface-2)}
+  .gsel .dot{width:5px;height:5px;border-radius:1.5px}
+  .acts{display:flex;gap:4px;justify-content:flex-end;opacity:.32}
+  .trow:hover .acts{opacity:1}
+  .acts button{width:22px;height:22px;border-radius:5px;color:var(--dim);font-size:11px;display:grid;place-items:center}
+  .acts button:hover{background:var(--surface-3);color:var(--text)}
+
+  .batchbar{display:flex;align-items:center;gap:8px;padding:8px 12px;border-top:1px solid var(--border);background:var(--surface-2);font-size:11px;color:var(--muted)}
+  .batchbar b{color:var(--text);font-weight:500}
+  .batchbar .btns{margin-left:auto;display:flex;gap:6px}
+  .batchbar .btns button{height:24px;padding:0 8px;border:1px solid var(--border);border-radius:6px;font-size:11px;color:var(--muted);background:var(--surface)}
+  .batchbar .btns .danger{color:#f08a8a;border-color:rgba(240,138,138,.3)}
+
+  /* 右：实时命中 */
+  .side{border:1px solid var(--border);border-radius:var(--r);background:var(--surface);display:flex;flex-direction:column;min-height:0;align-self:start}
+  .side header{padding:11px 12px;border-bottom:1px solid var(--border-soft);font-size:11.5px;color:var(--muted);display:flex;align-items:center;gap:6px}
+  .side header b{color:var(--text);font-weight:600;font-size:13px;font-family:var(--mono)}
+  .side .list{padding:8px;display:flex;flex-direction:column;gap:2px;overflow:auto}
+  .side .item{display:flex;align-items:center;gap:8px;padding:7px 6px;border-radius:7px;font-size:12px;color:#d6d6dc}
+  .side .item:hover{background:var(--surface-2)}
+  .side .item .s{margin-left:auto;font-size:10px;color:var(--dim)}
+  .side .why{padding:9px 12px;border-top:1px solid var(--border-soft);font-size:10.5px;line-height:1.6;color:var(--dim)}
+  .side .why b{color:var(--muted);font-weight:500}
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <h1>技能</h1>
+  <div class="tabs"><span>技能<b>6</b></span><span class="on">标签<b>12</b></span></div>
+  <div class="spacer"></div>
+  <button class="btn">导入标签</button>
+  <button class="btn primary">＋ 新建标签</button>
+</header>
+
+<div class="body">
+
+  <nav class="rail">
+    <div class="lab">分组</div>
+    <button class="on"><span class="dot" style="background:#6e6e78"></span>全部 <span class="n">12</span></button>
+    <button><span class="dot" style="background:var(--g1)"></span>领域 <span class="n">4</span></button>
+    <button><span class="dot" style="background:var(--g2)"></span>阶段 <span class="n">4</span></button>
+    <button><span class="dot" style="background:var(--g3)"></span>来源 <span class="n">3</span></button>
+    <button><span class="dot" style="background:var(--g4)"></span>状态 <span class="n">3</span></button>
+    <button class="add">＋ 新建分组</button>
+  </nav>
+
+  <section class="mid">
+    <div class="facets">
+      <span class="fl">筛选</span>
+      <div class="seg"><span class="on">全部</span><span>领域</span><span>阶段</span></div>
+      <div class="box">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#6b6b74" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <input placeholder="搜标签…">
+      </div>
+      <div class="right"><span>12 个标签 · 被引用 32 次</span></div>
+    </div>
+
+    <div class="dupe">
+      <span>⚠</span>
+      <span>发现 <b>2 组疑似重复</b>：<b>code</b> 与 <b>代码</b>（8 项）、<b>review</b> 与 <b>审查</b>（3 项）</span>
+      <button>合并建议 ›</button>
+    </div>
+
+    <div class="table">
+      <div class="thead">
+        <span></span><span>标签</span><span>分组</span><span>使用</span><span>最近使用</span><span style="text-align:right">操作</span>
+      </div>
+
+      <div class="ghead"><span class="dot" style="background:var(--g1)"></span>领域<span class="n">4</span></div>
+      <div class="trow sel">
+        <span class="cb on"></span>
+        <span class="tname"><b>代码</b><span class="warn">重复</span></span>
+        <span class="gsel"><span class="dot" style="background:var(--g1)"></span>领域</span>
+        <span class="num">8</span><span class="muted">今天</span>
+        <span class="acts"><button>✎</button><button>⇄</button><button>🗑</button></span>
+      </div>
+      <div class="trow">
+        <span class="cb"></span>
+        <span class="tname"><b>设计</b></span>
+        <span class="gsel"><span class="dot" style="background:var(--g1)"></span>领域</span>
+        <span class="num">3</span><span class="muted">3 天前</span>
+        <span class="acts"><button>✎</button><button>⇄</button><button>🗑</button></span>
+      </div>
+      <div class="trow">
+        <span class="cb"></span>
+        <span class="tname"><b>写作</b></span>
+        <span class="gsel"><span class="dot" style="background:var(--g1)"></span>领域</span>
+        <span class="num">2</span><span class="muted">1 周前</span>
+        <span class="acts"><button>✎</button><button>⇄</button><button>🗑</button></span>
+      </div>
+      <div class="trow">
+        <span class="cb"></span>
+        <span class="tname"><b>运维</b></span>
+        <span class="gsel"><span class="dot" style="background:var(--g1)"></span>领域</span>
+        <span class="num">1</span><span class="muted">3 周前</span>
+        <span class="acts"><button>✎</button><button>⇄</button><button>🗑</button></span>
+      </div>
+
+      <div class="ghead"><span class="dot" style="background:var(--g2)"></span>阶段<span class="n">4</span></div>
+      <div class="trow sel">
+        <span class="cb on"></span>
+        <span class="tname"><b>审查</b><span class="warn">重复</span></span>
+        <span class="gsel"><span class="dot" style="background:var(--g2)"></span>阶段</span>
+        <span class="num">3</span><span class="muted">今天</span>
+        <span class="acts"><button>✎</button><button>⇄</button><button>🗑</button></span>
+      </div>
+      <div class="trow">
+        <span class="cb"></span>
+        <span class="tname"><b>实现</b></span>
+        <span class="gsel"><span class="dot" style="background:var(--g2)"></span>阶段</span>
+        <span class="num">5</span><span class="muted">2 天前</span>
+        <span class="acts"><button>✎</button><button>⇄</button><button>🗑</button></span>
+      </div>
+      <div class="trow">
+        <span class="cb"></span>
+        <span class="tname"><b>规划</b></span>
+        <span class="gsel"><span class="dot" style="background:var(--g2)"></span>阶段</span>
+        <span class="num">2</span><span class="muted">1 周前</span>
+        <span class="acts"><button>✎</button><button>⇄</button><button>🗑</button></span>
+      </div>
+      <div class="trow">
+        <span class="cb"></span>
+        <span class="tname"><b>发布</b></span>
+        <span class="gsel"><span class="dot" style="background:var(--g2)"></span>阶段</span>
+        <span class="num">1</span><span class="muted">1 个月前</span>
+        <span class="acts"><button>✎</button><button>⇄</button><button>🗑</button></span>
+      </div>
+
+      <div class="ghead"><span class="dot" style="background:var(--g3)"></span>来源<span class="n">3</span></div>
+      <div class="trow">
+        <span class="cb"></span>
+        <span class="tname"><b>本地</b></span>
+        <span class="gsel"><span class="dot" style="background:var(--g3)"></span>来源</span>
+        <span class="num">6</span><span class="muted">今天</span>
+        <span class="acts"><button>✎</button><button>⇄</button><button>🗑</button></span>
+      </div>
+      <div class="trow">
+        <span class="cb"></span>
+        <span class="tname"><b>团队</b></span>
+        <span class="gsel"><span class="dot" style="background:var(--g3)"></span>来源</span>
+        <span class="num">4</span><span class="muted">昨天</span>
+        <span class="acts"><button>✎</button><button>⇄</button><button>🗑</button></span>
+      </div>
+
+      <div class="batchbar">
+        <span>已选 <b>2</b> 个标签</span>
+        <div class="btns">
+          <button>移到分组…</button>
+          <button>合并…</button>
+          <button class="danger">删除</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <aside class="side">
+    <header>实时命中 <b>3</b> <span style="margin-left:auto;font-size:10px">技能</span></header>
+    <div class="list">
+      <div class="item">代码评审 <span class="s">今天</span></div>
+      <div class="item">前端设计 <span class="s">2 天前</span></div>
+      <div class="item">调试排错 <span class="s">5 天前</span></div>
+    </div>
+    <div class="why">当前条件：<b>代码 AND 审查</b>。<br>点击任意一行可在主视图里打开该技能；清除条件回到全部 6 项。</div>
+  </aside>
+</div>
+</body>
+</html>

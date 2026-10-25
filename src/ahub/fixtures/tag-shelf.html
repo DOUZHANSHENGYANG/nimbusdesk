@@ -1,0 +1,39 @@
+<!doctype html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body><div id="root" style="height:100vh"></div><script type="module">
+import React from 'react';
+import {createRoot} from 'react-dom/client';
+import {mockIPC,mockWindows} from '@tauri-apps/api/mocks';
+const mk=(dirName,name,description,tags)=>({dirName,name,description,frontmatter:{name,description},body:'## 用法\n',versions:[],tags,status:'active'});
+const skills=[
+ mk('code-review','代码评审','按团队规范过一遍 diff，指出风险点与可读性问题。',['代码','审查','团队']),
+ mk('debug','调试排错','从报错栈回溯到最小复现，给出可验证的修复路径。',['代码','实现']),
+ mk('frontend-design','前端设计','页面版式、层级与间距的评审，输出可直接落地的改法。',['设计','审查','团队']),
+ mk('docs','文档写作','把设计决策写成能交接的文档，去掉形容词与废话。',['写作','发布']),
+ mk('dataviz','数据可视化','为一份数据挑选最合适的图，而不是默认柱状图。',['设计','规划']),
+ mk('release-check','发布检查','上线前逐项核对：迁移、回滚、监控、通知。',['运维','发布','团队']),
+];
+const settingsInfo={settings:{dataDir:'E:/SkillsFixture',envRoot:'',language:'zh',theme:'dark',skillSourceDirs:[],harnessOrder:[],aiBaseUrl:'',aiApiKey:'',aiModel:'',autoSummaryOnImport:false,aiProviders:[],aiDefaultProviderId:'',aiLegacyMigrated:true},dataDirs:{root:'E:/SkillsFixture',prompts:'E:/SkillsFixture/prompts',mcp:'E:/SkillsFixture/mcp',skills:'E:/SkillsFixture/skills'}};
+mockIPC(async(cmd)=>{
+ if(cmd==='list_skills')return structuredClone(skills);
+ if(cmd==='get_settings')return structuredClone(settingsInfo);
+ if(cmd==='preset_list'||cmd==='list_prompts'||cmd==='list_mcp'||cmd==='list_harnesses')return [];
+ if(cmd==='plugin:event|listen')return 1;
+ if(cmd==='get_data_dir')return 'E:/SkillsFixture';
+ return null;
+});
+mockWindows('main');
+await import('/src/index.css');
+const {i18n,I18nextProvider}=await import('/src/lib/i18n.ts');
+const {AhubSkillsPage}=await import('/src/features/agenthub/ahub-host-skills.tsx');
+const {useTagGroups}=await import('/src/ahub/stores/tag-groups.ts');
+const {Toaster}=await import('/src/components/ui/sonner.tsx');
+// 预置分组：领域 / 阶段 / 来源，剩下的进「未分组」
+const g1=useTagGroups.getState().create('领域');
+const g2=useTagGroups.getState().create('阶段');
+const g3=useTagGroups.getState().create('来源');
+for(const tag of ['代码','设计','写作','运维'])useTagGroups.getState().assign(tag,g1);
+for(const tag of ['规划','实现','审查','发布'])useTagGroups.getState().assign(tag,g2);
+for(const tag of ['本地','团队','市场'])useTagGroups.getState().assign(tag,g3);
+window.tagShelfReview={useTagGroups};
+document.documentElement.classList.add('dark');
+createRoot(document.getElementById('root')).render(React.createElement(I18nextProvider,{i18n},React.createElement('div',{className:'flex min-h-0 flex-1 flex-col',style:{height:'100vh'}},React.createElement(AhubSkillsPage)),React.createElement(Toaster)));
+</script></body></html>

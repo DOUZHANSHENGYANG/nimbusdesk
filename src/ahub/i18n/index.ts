@@ -11,6 +11,21 @@ import { i18n } from "@/lib/i18n";
  * 语言也就只剩云台一处开关。
  */
 const zh = {
+  // ── 标签卡片仓（技能 / MCP / 提示词共用）──
+  tagShelf: {
+    title: "标签",
+    hint: "点标签收窄结果",
+    manage: "管理",
+    done: "完成",
+    newGroup: "新建分组",
+    groupName: "分组名",
+    rename: "重命名",
+    deleteGroup: "删除分组",
+    removeFromGroup: "移出分组",
+    dragHint: "拖到其它分组即可移动",
+    ungrouped: "未分组",
+    emptyGroup: "拖标签进来",
+  },
   // 应用名：中文语境用雅名，英文语境用原名
   app: {
     name: "归藏",
@@ -1076,6 +1091,21 @@ const zh = {
 };
 
 const en: typeof zh = {
+  // ── tag shelf (shared by skills / MCP / prompts) ──
+  tagShelf: {
+    title: "Tags",
+    hint: "Click a tag to narrow results",
+    manage: "Manage",
+    done: "Done",
+    newGroup: "New group",
+    groupName: "Group name",
+    rename: "Rename",
+    deleteGroup: "Delete group",
+    removeFromGroup: "Remove from group",
+    dragHint: "Drag to another group to move",
+    ungrouped: "Ungrouped",
+    emptyGroup: "Drop tags here",
+  },
   app: {
     name: "AgentHub",
   },

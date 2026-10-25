@@ -3,7 +3,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { ConfirmDialog } from "@/ahub/components/ConfirmDialog";
-import { matchTags, TagFilter, type TagMode } from "@/ahub/components/TagFilter";
+import { matchTags, type TagMode } from "@/ahub/components/TagFilter";
+import { TagShelf } from "@/ahub/components/TagShelf";
 import { SearchBar } from "@/ahub/components/SearchBar";
 import { HarnessConfigDialog } from "@/ahub/components/HarnessConfigDialog";
 import { KeyValueEditor, recordFromRows, rowsFromRecord, type KvRow } from "@/ahub/components/KeyValueEditor";
@@ -469,13 +470,12 @@ export function McpPage() {
     >
       {/* 标签筛选常驻：即便当前没有标签也保留入口，否则用户不知道有这个能力，
           与 Skills 页保持一致（那边是无条件显示的） */}
-      <TagFilter
+      <TagShelf
         allTags={allTags}
         selected={activeTags}
         onChange={setActiveTags}
         mode={tagMode}
         onModeChange={setTagMode}
-        searchable
         counts={tagCounts}
         hideWhenEmpty={false}
       />

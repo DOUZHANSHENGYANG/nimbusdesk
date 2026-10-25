@@ -1,10 +1,11 @@
-import { Archive, ArrowRight, Boxes, Check, ChevronDown, ChevronRight, CircleAlert, Clock, CloudUpload, Columns2, Eye, Filter, FolderOpen, GitCompare, History, LayoutGrid, Layers, ListChecks, Loader2, Package, Paperclip, Pencil, Plus, RefreshCw, RotateCw, Save, ScanSearch, Settings2, ShieldAlert, ShieldCheck, Sparkles, Tag, Trash2, X, Zap } from "lucide-react";
+import { Archive, ArrowRight, Boxes, Check, ChevronDown, ChevronRight, CircleAlert, Clock, CloudUpload, Columns2, Eye, FolderOpen, GitCompare, History, LayoutGrid, Layers, ListChecks, Loader2, Package, Paperclip, Pencil, Plus, RefreshCw, RotateCw, Save, ScanSearch, Settings2, ShieldAlert, ShieldCheck, Sparkles, Tag, Trash2, X, Zap } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { ConfirmDialog } from "@/ahub/components/ConfirmDialog";
 import { EmptyState } from "@/ahub/components/EmptyState";
-import { matchTags, TagFilter, type TagMode } from "@/ahub/components/TagFilter";
+import { matchTags, type TagMode } from "@/ahub/components/TagFilter";
+import { TagShelf } from "@/ahub/components/TagShelf";
 import { SearchBar } from "@/ahub/components/SearchBar";
 import { HarnessDialog } from "@/ahub/components/HarnessDialog";
 import { HarnessIcon } from "@/ahub/components/HarnessIcon";
@@ -156,7 +157,6 @@ export function SkillsPage() {
   const [activeTags, setActiveTags] = useState<Set<string>>(new Set());
   const [tagMode, setTagMode] = useState<TagMode>("or");
   const [scanOpen, setScanOpen] = useState(false);
-  const [harnessFilter, setHarnessFilter] = useState<Set<string>>(new Set());
   const [batchMode, setBatchMode] = useState(false);
   const [batchSel, setBatchSel] = useState<Set<string>>(new Set());
   const [groupByTag, setGroupByTag] = useState(false);
@@ -362,22 +362,18 @@ export function SkillsPage() {
   const [editBody, setEditBody] = useState("");
 
   /**
-   * 标签池：来源筛选 + 关键词命中的技能（不含标签筛选本身），
+   * 标签池：关键词命中的技能（不含标签筛选本身），
    * 这样勾选标签时其余标签不会消失。
    */
   const tagPool = useMemo(() => {
     const q = query.trim().toLowerCase();
     return skills.filter((s) => {
-      if (harnessFilter.size) {
-        const h = s.origin?.harness ?? "__local";
-        if (!harnessFilter.has(h)) return false;
-      }
       if (!q) return true;
       return (
         s.name.toLowerCase().includes(q) || s.description.toLowerCase().includes(q) || s.tags.some((tg) => tg.toLowerCase().includes(q))
       );
     });
-  }, [skills, query, harnessFilter]);
+  }, [skills, query]);
 
   /** 标签 → 当前上下文下的技能数 */
   const tagCounts = useMemo(() => {
@@ -392,16 +388,6 @@ export function SkillsPage() {
     activeTags.forEach((k) => keys.add(k));
     return [...keys].sort((a, b) => (tagCounts[b] ?? 0) - (tagCounts[a] ?? 0) || a.localeCompare(b));
   }, [tagCounts, activeTags]);
-
-  /** 出现过的来源工具（含未收集来源的技能归入「本地/手动」） */
-  const allHarnesses = useMemo(() => {
-    const set = new Set<string>();
-    skills.forEach((s) => {
-      if (s.origin?.harness) set.add(s.origin.harness);
-      else set.add("__local");
-    });
-    return [...set].sort();
-  }, [skills]);
 
   /** 当前筛选中的预设（用于筛选条件与成员计数） */
   const selectedPreset = useMemo(
@@ -419,14 +405,10 @@ export function SkillsPage() {
     return skills.filter((s) => {
       if (presetDirs && !presetDirs.has(s.dirName)) return false;
       if (!matchTags(s.tags, activeTags, tagMode)) return false;
-      if (harnessFilter.size) {
-        const h = s.origin?.harness ?? "__local";
-        if (!harnessFilter.has(h)) return false;
-      }
       if (!q) return true;
       return s.name.toLowerCase().includes(q) || s.description.toLowerCase().includes(q) || s.tags.some((tg) => tg.toLowerCase().includes(q));
     });
-  }, [skills, query, activeTags, tagMode, harnessFilter, selectedPreset]);
+  }, [skills, query, activeTags, tagMode, selectedPreset]);
 
   /** 按标签分组（未打标签归入「未分类」） */
   const grouped = useMemo(() => {
@@ -505,13 +487,11 @@ export function SkillsPage() {
   };
 
   /** 当前是否有任何筛选条件（用于「清空筛选」）；预设筛选也算一种条件 */
-  const hasFilter =
-    query.trim().length > 0 || activeTags.size > 0 || harnessFilter.size > 0 || selectedPresetId !== null;
+  const hasFilter = query.trim().length > 0 || activeTags.size > 0 || selectedPresetId !== null;
 
   const clearFilters = () => {
     setQuery("");
     setActiveTags(new Set());
-    setHarnessFilter(new Set());
     setSelectedPresetId(null);
   };
 
@@ -717,36 +697,8 @@ export function SkillsPage() {
           data-anim
           className="ah-material sticky top-0 z-20 mb-4 rounded-xl border border-border px-3 py-2.5"
         >
-          {/* 第一行：来源筛选 + 结果计数 + 视图切换 */}
+          {/* 第一行：结果计数 + 视图切换（来源筛选已删：一页里只服务一种来源，纯占地方） */}
           <div className="flex flex-wrap items-center gap-1.5">
-            <span className="mr-0.5 flex shrink-0 items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-ink-3">
-              <Filter className="size-3.5" />
-              {t("skills.filterByHarness")}
-            </span>
-            {allHarnesses.map((h) => (
-              <button
-                key={h}
-                type="button"
-                onClick={() =>
-                  setHarnessFilter((prev) => {
-                    const next = new Set(prev);
-                    if (next.has(h)) next.delete(h);
-                    else next.add(h);
-                    return next;
-                  })
-                }
-                className={cn(
-                  "flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors",
-                  harnessFilter.has(h) ? "border-primary bg-primary-soft text-primary" : "border-border text-ink-2 hover:border-primary/40",
-                )}
-              >
-                <HarnessIcon id={h} className="size-3.5" />
-                {h === "__local" ? t("skills.srcLocal") : (HARNESS_LABEL[h] ?? h)}
-                <span className="tabular-nums opacity-60">
-                  {skills.filter((s) => (s.origin?.harness ?? "__local") === h).length}
-                </span>
-              </button>
-            ))}
 
             <span className="ml-auto flex shrink-0 items-center gap-2">
               <span className="tabular-nums text-[11px] text-ink-3">{t("skills.resultCount", { n: filtered.length })}</span>
@@ -786,10 +738,10 @@ export function SkillsPage() {
           </div>
 
           {/* 第二行：标签 + 批量操作 */}
-          <div className="mt-2 flex flex-wrap items-center gap-2 border-t border-border/60 pt-2">
+          <div className="mt-2 flex flex-wrap items-start gap-2 border-t border-border/60 pt-2">
             {allTags.length > 0 ? (
               <div className="min-w-0 flex-1">
-                <TagFilter
+                <TagShelf
                   allTags={allTags}
                   counts={tagCounts}
                 hideWhenEmpty={false}
@@ -797,7 +749,6 @@ export function SkillsPage() {
                   onChange={setActiveTags}
                   mode={tagMode}
                   onModeChange={setTagMode}
-                  searchable={allTags.length > 12}
                   className=""
                 />
               </div>

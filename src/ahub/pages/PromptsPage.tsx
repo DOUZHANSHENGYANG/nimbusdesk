@@ -18,7 +18,8 @@ import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { ConfirmDialog } from "@/ahub/components/ConfirmDialog";
 import { EmptyState } from "@/ahub/components/EmptyState";
-import { matchTags, TagFilter, type TagMode } from "@/ahub/components/TagFilter";
+import { matchTags, type TagMode } from "@/ahub/components/TagFilter";
+import { TagShelf } from "@/ahub/components/TagShelf";
 import { SearchBar } from "@/ahub/components/SearchBar";
 import { PageShell } from "@/ahub/components/PageShell";
 import { PromptFillDialog, PromptVarsPanel } from "@/ahub/components/PromptVars";
@@ -275,13 +276,12 @@ export function PromptsPage() {
         </>
       }
     >
-      <TagFilter
+      <TagShelf
         allTags={allTags}
         selected={activeTags}
         onChange={setActiveTags}
         mode={tagMode}
         onModeChange={setTagMode}
-        searchable
         counts={tagCounts}
         hideWhenEmpty={false}
       />
