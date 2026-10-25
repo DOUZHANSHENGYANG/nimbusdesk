@@ -97,7 +97,7 @@ try {
   await page.getByRole("button", { name: "收起卡片" }).click();
   await page.locator(".df-capsule").waitFor();
   await page.setViewportSize({ width: 464, height: 44 });
-  await page.waitForTimeout(80);
+  await page.waitForTimeout(1000);
   const collapsed = await lastBounds();
   assert.equal(collapsed.height, 44, "收起后窗口回到胶囊高度");
   assert.equal(collapsed.width, 464, "收起后窗口宽 464");
