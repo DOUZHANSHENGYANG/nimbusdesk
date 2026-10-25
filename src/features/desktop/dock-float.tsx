@@ -819,9 +819,7 @@ function NoticePanel({ onOpenPlans }: { onOpenPlans: () => void }) {
  */
 function TerminalPanel() {
   const { t } = useTranslation();
-  const projects = useProjects((state) => state.projects);
   const [cwd, setCwd] = useState<string>("");
-  const options = projects.filter((project) => project.path).slice(0, 12);
 
   const launch = (kind: string) => {
     void invoke("shell_launch", { kind, cwd: cwd || null }).catch(report);
@@ -834,15 +832,6 @@ function TerminalPanel() {
         <input className="df-term-input" value={cwd} placeholder={t("dockFloat.termDirPlaceholder")}
           onChange={(event) => setCwd(event.target.value)} />
       </label>
-      {options.length > 0 && (
-        <div className="df-term-projects">
-          {options.map((project) => (
-            <button key={project.id} type="button" className="df-pill" onClick={() => setCwd(project.path)}>
-              {project.name}
-            </button>
-          ))}
-        </div>
-      )}
       <div className="df-term-actions">
         {["wt", "powershell", "cmd"].map((kind) => (
           <button key={kind} type="button" className="df-pill" onClick={() => launch(kind)}>
