@@ -829,7 +829,7 @@ export function SkillsPage() {
       ) : (
         <>
           <div className="flex min-h-0 flex-1 items-start gap-3">
-            <aside className="w-[232px] shrink-0">
+            <aside className="w-[196px] shrink-0">
               <TagShelf
                 variant="rail"
                 allTags={allTags}
@@ -1101,7 +1101,7 @@ export function SkillsPage() {
                 data-anim
                 onClick={() => (batchMode ? toggleBatch(s.dirName) : void openDetail(s))}
                 className={cn(
-                  "group flex cursor-pointer flex-col rounded-xl border border-border bg-card p-4 shadow-sm outline-none transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md",
+                  "group flex cursor-pointer flex-col rounded-xl border border-border bg-card p-2.5 shadow-sm outline-none transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md",
                   picked && "border-primary shadow-[0_0_0_3px_var(--ah-primary-soft)]",
                 )}
               >
@@ -1116,7 +1116,7 @@ export function SkillsPage() {
                       {picked ? <Check className="size-3.5" strokeWidth={3} /> : null}
                     </span>
                   ) : null}
-                  <h3 className="min-w-0 flex-1 truncate font-mono text-sm font-semibold text-foreground">{s.name}</h3>
+                  <h3 className="min-w-0 flex-1 truncate font-mono text-[12.5px] font-semibold text-foreground">{s.name}</h3>
                   {s.origin ? (
                     <Badge variant="muted" title={s.origin.file} className="shrink-0">
                       <HarnessIcon id={hid} />
@@ -1129,7 +1129,7 @@ export function SkillsPage() {
                   )}
                 </div>
                 {s.description ? (
-                  <p className="mt-1.5 line-clamp-2 text-xs leading-relaxed text-ink-2">{s.description}</p>
+                  <p className="mt-1 line-clamp-2 text-[11.5px] leading-snug text-ink-2">{s.description}</p>
                 ) : null}
                 {/* AI 摘要：有摘要时给一行速览，没有则不占位（详情页有生成入口） */}
                 {s.summary ? (
@@ -1142,7 +1142,7 @@ export function SkillsPage() {
                     {s.summary.oneLiner}
                   </p>
                 ) : null}
-                <div className="mt-3 flex flex-wrap items-center gap-1">
+                <div className="mt-2 flex flex-wrap items-center gap-1">
                   {s.tags.map((tg) => {
                     const on = activeTags.has(tg);
                     return (
@@ -1274,14 +1274,14 @@ export function SkillsPage() {
                           </button>
                         ) : null}
                       </h2>
-                      {collapsed ? null : <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">{list.map(card)}</div>}
+                      {collapsed ? null : <div className="grid grid-cols-[repeat(auto-fill,minmax(230px,1fr))] gap-2">{list.map(card)}</div>}
                     </section>
                   );
                 })}
               </div>
             );
           }
-          return <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">{filtered.map(card)}</div>;
+          return <div className="grid grid-cols-[repeat(auto-fill,minmax(230px,1fr))] gap-2">{filtered.map(card)}</div>;
         })()
       )}
 

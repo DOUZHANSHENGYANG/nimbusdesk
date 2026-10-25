@@ -493,7 +493,7 @@ export function McpPage() {
       {/* 标签筛选常驻：即便当前没有标签也保留入口，否则用户不知道有这个能力，
           与 Skills 页保持一致（那边是无条件显示的） */}
           <div className="flex min-h-0 flex-1 items-start gap-3">
-            <aside className="w-[232px] shrink-0">
+            <aside className="w-[196px] shrink-0">
               <TagShelf
                 variant="rail"
                         allTags={allTags}
@@ -596,7 +596,7 @@ export function McpPage() {
           }
         />
       ) : (
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(230px,1fr))] gap-2">
           {filtered.map((s) => (
             <div
               key={s.id}
@@ -612,14 +612,14 @@ export function McpPage() {
               }}
               onDoubleClick={() => openEdit(s)}
               className={cn(
-                "group flex flex-col rounded-xl border border-border bg-card p-4 shadow-sm transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md",
+                "group flex flex-col rounded-xl border border-border bg-card p-2.5 shadow-sm transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md",
                 !s.enabled && "opacity-60",
                 batchMode && "cursor-pointer",
                 batchMode && batchSel.has(s.id) && "border-primary shadow-[0_0_0_3px_var(--ah-primary-soft)]",
               )}
             >
               <div className="flex items-start justify-between gap-2">
-                <h3 className="min-w-0 flex-1 truncate font-mono text-sm font-semibold text-foreground">{s.name}</h3>
+                <h3 className="min-w-0 flex-1 truncate font-mono text-[12.5px] font-semibold text-foreground">{s.name}</h3>
                 {batchMode ? (
                   <span
                     className={cn(

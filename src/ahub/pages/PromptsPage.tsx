@@ -299,7 +299,7 @@ export function PromptsPage() {
       ) : (
         <>
           <div className="flex min-h-0 flex-1 items-start gap-3">
-            <aside className="w-[232px] shrink-0">
+            <aside className="w-[196px] shrink-0">
               <TagShelf
                 variant="rail"
                         allTags={allTags}
@@ -490,16 +490,16 @@ export function PromptsPage() {
           </div>
         </div>
       ) : (
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(230px,1fr))] gap-2">
           {filtered.map((p) => (
             <div
               key={p.id}
               data-anim
               onClick={() => openEdit(p)}
-              className="group flex cursor-pointer flex-col rounded-xl border border-border bg-card p-4 shadow-sm outline-none transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md"
+              className="group flex cursor-pointer flex-col rounded-xl border border-border bg-card p-2.5 shadow-sm outline-none transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md"
             >
               <div className="flex items-start justify-between gap-2">
-                <h3 className="min-w-0 flex-1 truncate text-sm font-semibold text-foreground">{p.title}</h3>
+                <h3 className="min-w-0 flex-1 truncate text-[12.5px] font-semibold text-foreground">{p.title}</h3>
                 <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
                   {/* 只有正文里真有占位符时才出现「填充」，否则这个按钮点进去是空的 */}
                   {hasVars(p) ? (
@@ -540,18 +540,18 @@ export function PromptsPage() {
                 </div>
               </div>
               {p.description ? (
-                <p className="mt-1.5 line-clamp-2 text-xs leading-relaxed text-ink-2">{p.description}</p>
+                <p className="mt-1 line-clamp-2 text-[11.5px] leading-snug text-ink-2">{p.description}</p>
               ) : (
                 <p className="mt-1.5 line-clamp-2 text-xs leading-relaxed text-ink-3">{p.content.slice(0, 120)}</p>
               )}
-              <div className="mt-3 flex flex-wrap gap-1">
+              <div className="mt-2 flex flex-wrap gap-1">
                 {p.tags.map((tg) => (
                   <Badge key={tg} variant="default">
                     {tg}
                   </Badge>
                 ))}
               </div>
-              <div className="mt-auto flex items-center gap-2 pt-3 text-[11px] text-ink-3">
+              <div className="mt-auto flex items-center gap-2 pt-2 text-[10.5px] text-ink-3">
                 <span>{t("common.updatedAt")} {fmt(p.updatedAt)}</span>
                 {p.versions.length > 0 ? (
                   <span className="ml-auto inline-flex items-center gap-1">
