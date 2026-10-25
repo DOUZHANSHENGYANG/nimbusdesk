@@ -5,7 +5,7 @@ import { listen } from "@tauri-apps/api/event";
 import { useTranslation } from "react-i18next";
 import {
   AppWindow, ArrowLeft, BookOpen, Bookmark, CalendarCheck, Camera, ChevronDown, ExternalLink, FileText, Folder,
-  FolderKanban, Inbox, LayoutGrid, Newspaper, Rss, Search, Send, Settings2, Sparkles, Star, Trash2,
+  CalendarDays, FolderKanban, Inbox, LayoutGrid, Newspaper, Rss, Search, Send, Settings2, Sparkles, Star, Trash2,
 } from "lucide-react";
 import { usePlans } from "@/features/plans/store";
 import { todayStr } from "@/features/plans/types";
@@ -19,7 +19,7 @@ import { ArticleReader } from "@/features/feeds/article-reader";
 import { openUrl } from "@/lib/tauri";
 import { useSettings } from "@/stores/settings";
 import { chatWithProvider, type ChatMessage } from "@/features/ai/client";
-import { ageBucket, summarizeDay } from "./dock-float-core";
+import { ageBucket, dateKey, monthGrid, summarizeDay } from "./dock-float-core";
 import "./dock-float.css";
 
 /**
@@ -28,7 +28,7 @@ import "./dock-float.css";
  * 收纳盒 / 计划 / 项目 是侧栏形态里那三个飞出面板**本体**，由 dock.tsx 注入 ——
  * 卡片不重写它们，否则同一功能会出现两套实现、两套密度、两套交互。
  */
-type DockTab = "search" | "fences" | "plans" | "projects" | "collect" | "news";
+type DockTab = "search" | "fences" | "plans" | "projects" | "collect" | "news" | "cal";
 
 /** 胶囊里的快捷图标：六个入口全在（和标签栏是两份职责，分开命名免得改错） */
 const QUICK_TABS: { key: DockTab; icon: typeof Search }[] = [
@@ -38,11 +38,12 @@ const QUICK_TABS: { key: DockTab; icon: typeof Search }[] = [
   { key: "projects", icon: FolderKanban },
   { key: "collect", icon: Inbox },
   { key: "news", icon: Newspaper },
+  { key: "cal", icon: CalendarDays },
 ];
 /** 主标签：日均用得多，图标 + 文字 */
 const PRIMARY_TABS: DockTab[] = ["search", "fences", "plans", "projects", "news"];
 /** 次标签：只放图标 —— 日历 / 天气 / 通知 / 终端以后都挂这一行 */
-const SECONDARY_TABS: DockTab[] = ["collect"];
+const SECONDARY_TABS: DockTab[] = ["collect", "cal"];
 
 const report = (error: unknown) => console.error("[dock-float]", error);
 
@@ -339,6 +340,7 @@ export function DockFloat({ onExpand, onHide, panels }: {
               <div className="df-collect">{panels.capture}</div>
             )}
             {tab === "news" && <NewsPanel />}
+            {tab === "cal" && <CalendarPanel />}
           </div>
           </>
           )}
@@ -637,6 +639,65 @@ function ChatPanel({ onClose }: { onClose: () => void }) {
           <Send className="df-icon" aria-hidden="true" />
         </button>
       </form>
+    </div>
+  );
+}
+
+/**
+ * 日历：月格 + 选中日的待办。
+ *
+ * 只做「看」和「跳」：卡片里点日期看当天有什么，要改任务就跳主窗口 ——
+ * 日历编辑（拖拽改期、重复规则）不属于「3 秒内能完成」的事。
+ */
+function CalendarPanel() {
+  const { t } = useTranslation();
+  const today = new Date();
+  const [cursor, setCursor] = useState({ year: today.getFullYear(), month: today.getMonth() });
+  const [picked, setPicked] = useState(dateKey(today));
+  const days = usePlans((state) => state.days);
+  const cells = useMemo(() => monthGrid(cursor.year, cursor.month), [cursor]);
+  const tasks = days[picked] ?? [];
+  const label = new Intl.DateTimeFormat(undefined, { year: "numeric", month: "long" }).format(new Date(cursor.year, cursor.month, 1));
+
+  return (
+    <div className="df-panel df-cal">
+      <div className="df-cal-bar">
+        <button type="button" className="df-icon-btn" aria-label={t("dockFloat.prevMonth")}
+          onClick={() => setCursor((c) => { const d = new Date(c.year, c.month - 1, 1); return { year: d.getFullYear(), month: d.getMonth() }; })}>
+          <ChevronDown className="df-icon is-left" aria-hidden="true" />
+        </button>
+        <span className="df-cal-label">{label}</span>
+        <button type="button" className="df-icon-btn" aria-label={t("dockFloat.nextMonth")}
+          onClick={() => setCursor((c) => { const d = new Date(c.year, c.month + 1, 1); return { year: d.getFullYear(), month: d.getMonth() }; })}>
+          <ChevronDown className="df-icon is-right" aria-hidden="true" />
+        </button>
+      </div>
+      <div className="df-cal-week">
+        {["mo","tu","we","th","fr","sa","su"].map((d) => (
+          <span key={d}>{t(`dockFloat.week.${d}`)}</span>
+        ))}
+      </div>
+      <div className="df-cal-grid">
+        {cells.map((cell) => {
+          const count = (days[cell.date] ?? []).filter((task) => !task.done).length;
+          return (
+            <button key={cell.date} type="button"
+              className={`df-cal-day${cell.inMonth ? "" : " is-out"}${cell.date === picked ? " is-on" : ""}${cell.date === dateKey(today) ? " is-today" : ""}`}
+              onClick={() => setPicked(cell.date)}>
+              <span>{cell.day}</span>
+              {count > 0 && <i className="df-cal-dot" aria-label={String(count)} />}
+            </button>
+          );
+        })}
+      </div>
+      <div className="df-cal-list">
+        {tasks.length === 0 && <p className="df-hint">{t("dockFloat.dayEmpty")}</p>}
+        {tasks.filter((task) => !task.parentId).map((task) => (
+          <div key={task.id} className={`df-news-row${task.done ? " is-done" : ""}`}>
+            <span className="df-row-title">{task.title}</span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
