@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { ConfirmDialog } from "@/ahub/components/ConfirmDialog";
 import { matchTags, type TagMode } from "@/ahub/components/TagFilter";
 import { TagShelf } from "@/ahub/components/TagShelf";
-import { TagManagerDialog } from "@/ahub/components/TagManagerDialog";
+import { TagManagerView } from "@/ahub/components/TagManagerView";
 import { TagCommand } from "@/ahub/components/TagCommand";
 import { SearchBar } from "@/ahub/components/SearchBar";
 import { HarnessConfigDialog } from "@/ahub/components/HarnessConfigDialog";
@@ -83,7 +83,7 @@ export function McpPage() {
   const [cfgOpen, setCfgOpen] = useState(false);
   const [batchDeleteOpen, setBatchDeleteOpen] = useState(false);
   const [activeTags, setActiveTags] = useState<Set<string>>(new Set());
-  const [tagManagerOpen, setTagManagerOpen] = useState(false);
+  const [pageTab, setPageTab] = useState<"list" | "tags">("list");
   const [tagCommandOpen, setTagCommandOpen] = useState(false);
   const [tagMode, setTagMode] = useState<TagMode>("or");
   // 连通性测试：进行中的服务 id + 每个服务最近一次的结果
@@ -482,6 +482,24 @@ export function McpPage() {
         </>
       }
     >
+      <div className="mb-3 flex w-fit items-center gap-1 rounded-lg border border-border bg-surface p-0.5">
+        {([
+          { id: "list" as const, label: t("nav.mcp") },
+          { id: "tags" as const, label: t("tagShelf.title") },
+        ]).map((item) => (
+          <button key={item.id} type="button" aria-pressed={pageTab === item.id} onClick={() => setPageTab(item.id)}
+            className={cn("flex h-7 items-center rounded-md px-2.5 text-[11.5px] font-medium",
+              pageTab === item.id ? "bg-primary-soft text-primary" : "text-ink-3 hover:text-foreground")}>
+            {item.label}
+          </button>
+        ))}
+      </div>
+
+      {pageTab === "tags" ? (
+        <TagManagerView allTags={allTags} counts={tagCounts} resultCount={filtered.length}
+          onRenameTag={(from, to) => rewriteMcpTags((tags) => tags.map((tag) => (tag === from ? to : tag)))} onDeleteTag={(tag) => rewriteMcpTags((tags) => tags.filter((item) => item !== tag))} />
+      ) : (
+        <>
       {/* 标签筛选常驻：即便当前没有标签也保留入口，否则用户不知道有这个能力，
           与 Skills 页保持一致（那边是无条件显示的） */}
       <TagShelf
@@ -492,7 +510,7 @@ export function McpPage() {
         onModeChange={setTagMode}
         counts={tagCounts}
         hideWhenEmpty={false}
-        onManage={() => setTagManagerOpen(true)}
+        onManage={() => setPageTab("tags")}
         onCommand={() => setTagCommandOpen(true)}
       />
 
@@ -957,14 +975,6 @@ export function McpPage() {
           if (deleting) void deleteMcp(deleting.id).then(() => toast.success(t("mcp.deleted")));
         }}
       />
-      <TagManagerDialog
-        open={tagManagerOpen}
-        onOpenChange={setTagManagerOpen}
-        allTags={allTags}
-        counts={tagCounts}
-        onRenameTag={(from, to) => rewriteMcpTags((tags) => tags.map((tag) => (tag === from ? to : tag)))}
-        onDeleteTag={(tag) => rewriteMcpTags((tags) => tags.filter((item) => item !== tag))}
-      />
       <TagCommand
         open={tagCommandOpen}
         onOpenChange={setTagCommandOpen}
@@ -979,6 +989,8 @@ export function McpPage() {
         }}
         resultCount={filtered.length}
       />
+        </>
+      )}
     </PageShell>
   );
 }

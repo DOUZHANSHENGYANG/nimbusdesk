@@ -20,7 +20,7 @@ import { ConfirmDialog } from "@/ahub/components/ConfirmDialog";
 import { EmptyState } from "@/ahub/components/EmptyState";
 import { matchTags, type TagMode } from "@/ahub/components/TagFilter";
 import { TagShelf } from "@/ahub/components/TagShelf";
-import { TagManagerDialog } from "@/ahub/components/TagManagerDialog";
+import { TagManagerView } from "@/ahub/components/TagManagerView";
 import { TagCommand } from "@/ahub/components/TagCommand";
 import { SearchBar } from "@/ahub/components/SearchBar";
 import { PageShell } from "@/ahub/components/PageShell";
@@ -81,7 +81,7 @@ export function PromptsPage() {
 
   const [query, setQuery] = useState("");
   const [activeTags, setActiveTags] = useState<Set<string>>(new Set());
-  const [tagManagerOpen, setTagManagerOpen] = useState(false);
+  const [pageTab, setPageTab] = useState<"list" | "tags">("list");
   const [tagCommandOpen, setTagCommandOpen] = useState(false);
   const [tagMode, setTagMode] = useState<TagMode>("or");
   const [editorOpen, setEditorOpen] = useState(false);
@@ -290,6 +290,24 @@ export function PromptsPage() {
         </>
       }
     >
+      <div className="mb-3 flex w-fit items-center gap-1 rounded-lg border border-border bg-surface p-0.5">
+        {([
+          { id: "list" as const, label: t("nav.prompts") },
+          { id: "tags" as const, label: t("tagShelf.title") },
+        ]).map((item) => (
+          <button key={item.id} type="button" aria-pressed={pageTab === item.id} onClick={() => setPageTab(item.id)}
+            className={cn("flex h-7 items-center rounded-md px-2.5 text-[11.5px] font-medium",
+              pageTab === item.id ? "bg-primary-soft text-primary" : "text-ink-3 hover:text-foreground")}>
+            {item.label}
+          </button>
+        ))}
+      </div>
+
+      {pageTab === "tags" ? (
+        <TagManagerView allTags={allTags} counts={tagCounts} resultCount={filtered.length}
+          onRenameTag={(from, to) => rewritePromptTags((tags) => tags.map((tag) => (tag === from ? to : tag)))} onDeleteTag={(tag) => rewritePromptTags((tags) => tags.filter((item) => item !== tag))} />
+      ) : (
+        <>
       <TagShelf
         allTags={allTags}
         selected={activeTags}
@@ -298,7 +316,7 @@ export function PromptsPage() {
         onModeChange={setTagMode}
         counts={tagCounts}
         hideWhenEmpty={false}
-        onManage={() => setTagManagerOpen(true)}
+        onManage={() => setPageTab("tags")}
         onCommand={() => setTagCommandOpen(true)}
       />
 
@@ -710,14 +728,6 @@ export function PromptsPage() {
           if (deleting) void deletePrompt(deleting.id).then(() => toast.success(t("prompts.deleted")));
         }}
       />
-      <TagManagerDialog
-        open={tagManagerOpen}
-        onOpenChange={setTagManagerOpen}
-        allTags={allTags}
-        counts={tagCounts}
-        onRenameTag={(from, to) => rewritePromptTags((tags) => tags.map((tag) => (tag === from ? to : tag)))}
-        onDeleteTag={(tag) => rewritePromptTags((tags) => tags.filter((item) => item !== tag))}
-      />
       <TagCommand
         open={tagCommandOpen}
         onOpenChange={setTagCommandOpen}
@@ -732,6 +742,8 @@ export function PromptsPage() {
         }}
         resultCount={filtered.length}
       />
+        </>
+      )}
     </PageShell>
   );
 }
