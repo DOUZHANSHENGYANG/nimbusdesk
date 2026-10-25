@@ -63,6 +63,8 @@ export function DockWindow() {
   /** 光标所在显示器的工作区（逻辑像素）；Dock 出现在你正在工作的那块屏上。 */
   /** 当前是否展开：显示器插拔后要按这个状态重新摆窗口 */
   const openRef = useRef(false);
+  /** 上次解析出的 DPI 缩放：和 areaRef 一起构成「无枚举」的快路径 */
+  const scaleRef = useRef(1);
 
   const resolveArea = useCallback(async (): Promise<{ area: DockArea; scale: number } | null> => {
     if (!inTauri) return null;
@@ -117,10 +119,18 @@ export function DockWindow() {
    */
   const applyFloat = useCallback(async (open: boolean, heightOverride?: number) => {
     openRef.current = open;
-    const resolved = await resolveArea();
+    /*
+     * 快路径：已经知道当前工作区时就别再枚举显示器。
+     * availableMonitors() 走一次 IPC + 系统枚举，几十到几百毫秒不等 ——
+     * 展开前等它，用户看到的就是「点了半天才动」。显示器变化由 4 秒轮询兜底。
+     */
+    const resolved = areaRef.current
+      ? { area: areaRef.current, scale: scaleRef.current }
+      : await resolveArea();
     if (!resolved) return;
     const { area } = resolved;
     areaRef.current = area;
+    scaleRef.current = (resolved as { scale?: number }).scale ?? scaleRef.current;
     // 展开方向固定居中：卡片从胶囊中心左右撑开，胶囊本身的位置一点不动。
     // 左缘锚定做成过一版，实测观感是「从左边拉出来」，反而丢了灵动岛那种
     // 居中呼吸的感觉，所以不再作为选项暴露。

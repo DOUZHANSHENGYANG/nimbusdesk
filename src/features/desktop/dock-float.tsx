@@ -148,8 +148,9 @@ export function DockFloat({ onExpand, onHide, panels }: {
   const setExpanded = useCallback((next: boolean) => {
     if (!next) suppressHoverUntil.current = Date.now() + 700;
     if (next) {
-      // 等窗口一帧到位再显示内容，否则卡片按旧窗口宽度排一次再重排
-      void onExpand(true).then(() => setOpen(true)).catch(report);
+      // 并行：窗口摆放是「一帧」的，不必等它；等它反而把展开拖成两拍
+      void onExpand(true).catch(report);
+      setOpen(true);
       return;
     }
     // 收起：内容先淡出 180ms，之后才缩窗口
