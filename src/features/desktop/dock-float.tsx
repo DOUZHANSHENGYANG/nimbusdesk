@@ -5,7 +5,7 @@ import { listen } from "@tauri-apps/api/event";
 import { useTranslation } from "react-i18next";
 import {
   AppWindow, ArrowLeft, BookOpen, Bookmark, CalendarCheck, Camera, ChevronDown, ExternalLink, FileText, Folder,
-  CalendarDays, CloudSun, FolderKanban, Inbox, LayoutGrid, Newspaper, Rss, Search, Send, Settings2, Sparkles, Star, Trash2,
+  Bell, CalendarDays, CloudSun, FolderKanban, Inbox, LayoutGrid, Newspaper, Rss, Search, Send, Settings2, Sparkles, Star, Trash2,
 } from "lucide-react";
 import { usePlans } from "@/features/plans/store";
 import { todayStr } from "@/features/plans/types";
@@ -28,7 +28,7 @@ import "./dock-float.css";
  * 收纳盒 / 计划 / 项目 是侧栏形态里那三个飞出面板**本体**，由 dock.tsx 注入 ——
  * 卡片不重写它们，否则同一功能会出现两套实现、两套密度、两套交互。
  */
-type DockTab = "search" | "fences" | "plans" | "projects" | "collect" | "news" | "cal" | "chat" | "weather";
+type DockTab = "search" | "fences" | "plans" | "projects" | "collect" | "news" | "cal" | "chat" | "weather" | "notice";
 
 /** 胶囊里的快捷图标：六个入口全在（和标签栏是两份职责，分开命名免得改错） */
 const QUICK_TABS: { key: DockTab; icon: typeof Search }[] = [
@@ -41,11 +41,12 @@ const QUICK_TABS: { key: DockTab; icon: typeof Search }[] = [
   { key: "cal", icon: CalendarDays },
   { key: "chat", icon: Sparkles },
   { key: "weather", icon: CloudSun },
+  { key: "notice", icon: Bell },
 ];
 /** 主标签：日均用得多，图标 + 文字 */
 const PRIMARY_TABS: DockTab[] = ["search", "fences", "plans", "projects", "news"];
 /** 次标签：只放图标 —— 日历 / 天气 / 通知 / 终端以后都挂这一行 */
-const SECONDARY_TABS: DockTab[] = ["collect", "cal", "chat", "weather"];
+const SECONDARY_TABS: DockTab[] = ["collect", "cal", "chat", "weather", "notice"];
 
 const report = (error: unknown) => console.error("[dock-float]", error);
 
@@ -345,6 +346,7 @@ export function DockFloat({ onExpand, onHide, panels }: {
             {tab === "cal" && <CalendarPanel />}
             {tab === "chat" && <div className="df-body-inner"><ChatPanel onClose={() => setTab("search")} /></div>}
             {tab === "weather" && <WeatherPanel />}
+            {tab === "notice" && <NoticePanel onOpenPlans={() => setTab("plans")} />}
           </div>
           </>
           )}
@@ -765,6 +767,44 @@ function WeatherPanel() {
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+/**
+ * 通知：应用自己的提醒聚合。
+ *
+ * **不是** Windows 通知中心（那需要 WinRT UserNotificationListener + 打包权限，
+ * 属于另一件事）。这里只汇总云台自己能算出来的事：逾期任务、今天剩余、
+ * 未来两天要到期的。点一条跳到计划页，不在这里做编辑。
+ */
+function NoticePanel({ onOpenPlans }: { onOpenPlans: () => void }) {
+  const { t } = useTranslation();
+  const days = usePlans((state) => state.days);
+  const today = dateKey(new Date());
+  const rows = useMemo(() => {
+    const output: { id: string; title: string; meta: string; late: boolean }[] = [];
+    for (const [day, tasks] of Object.entries(days)) {
+      for (const task of tasks) {
+        if (task.done || task.parentId) continue;
+        const late = day < today;
+        if (!late && day !== today) continue;
+        output.push({ id: task.id, title: task.title, meta: day, late });
+      }
+    }
+    return output.sort((a, b) => (a.late === b.late ? a.meta.localeCompare(b.meta) : a.late ? -1 : 1)).slice(0, 20);
+  }, [days, today]);
+
+  if (!rows.length) return <p className="df-hint">{t("dockFloat.noticeEmpty")}</p>;
+
+  return (
+    <div className="df-panel df-notice">
+      {rows.map((row) => (
+        <button key={row.id} type="button" className="df-news-row" onClick={onOpenPlans}>
+          <span className="df-row-title">{row.title}</span>
+          <span className="df-row-meta">{row.late ? t("dockFloat.noticeLate") : row.meta}</span>
+        </button>
+      ))}
     </div>
   );
 }
