@@ -316,22 +316,22 @@ pub async fn dock_spring_to(
     to_h: f64,
     _style: String,
 ) -> Result<(), String> {
-    let _ = to_x;
     let window = app.get_webview_window(&label).ok_or("窗口不存在")?;
-    let previous = window
-        .outer_size()
-        .and_then(|size| window.outer_position().map(|position| (size, position)))
-        .ok()
-        .and_then(|(size, position)| window.scale_factor().ok().map(|scale| (size, position, scale)));
-    window
-        .set_size(tauri::Size::Logical(tauri::LogicalSize { width: to_w, height: to_h }))
+    let scale = window.scale_factor().map_err(|e| e.to_string())?;
+    let hwnd = hwnd_of(&app, &label)?;
+    // 位置和尺寸必须一次 SetWindowPos 提交：先 set_size 再 set_position 会让
+    // 窗口在一帧内停在错误 x 上，收起时看起来就是「闪一下/刷新一下」。
+    unsafe {
+        SetWindowPos(
+            hwnd,
+            None,
+            (to_x * scale).round() as i32,
+            (to_y * scale).round() as i32,
+            (to_w * scale).round().max(1.0) as i32,
+            (to_h * scale).round().max(1.0) as i32,
+            SWP_NOACTIVATE | SWP_NOZORDER,
+        )
         .map_err(|e| e.to_string())?;
-    if let Some((old_size, old_position, scale)) = previous {
-        let new_width_px = (to_w * scale).round().max(1.0) as i32;
-        let dx = (old_size.width as i32 - new_width_px) / 2;
-        window
-            .set_position(tauri::PhysicalPosition::new(old_position.x + dx, (to_y * scale).round() as i32))
-            .map_err(|e| e.to_string())?;
     }
     Ok(())
 }

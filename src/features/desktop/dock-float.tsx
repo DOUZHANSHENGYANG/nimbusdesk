@@ -182,12 +182,16 @@ export function DockFloat({ onExpand, onHide, panels }: {
       setSurfacePhase("resizing");
       void runWindowTransition(true).then(() => {
         if (generation !== transitionGeneration.current) return;
-        setSurfacePhase("expanding");
-        phaseTimer.current = window.setTimeout(() => {
+        // 等 WebView2 收到 WM_SIZE 再开始 clip，避免窗口还没到位、内容先展开。
+        window.setTimeout(() => {
           if (generation !== transitionGeneration.current) return;
-          phaseTimer.current = null;
-          setSurfacePhase("expanded");
-        }, 240);
+          setSurfacePhase("expanding");
+          phaseTimer.current = window.setTimeout(() => {
+            if (generation !== transitionGeneration.current) return;
+            phaseTimer.current = null;
+            setSurfacePhase("expanded");
+          }, 240);
+        }, 16);
       }).catch(report);
       return;
     }
@@ -202,7 +206,12 @@ export function DockFloat({ onExpand, onHide, panels }: {
       phaseTimer.current = null;
       void runWindowTransition(false).then(() => {
         if (generation !== transitionGeneration.current) return;
-        setSurfacePhase("compact");
+        // 先让缩小后的 WebView2 完成一帧布局，再切 compact；否则卡片会先消失、
+        // 窗口后缩，看起来就是「收起时刷新了一下」。
+        window.setTimeout(() => {
+          if (generation !== transitionGeneration.current) return;
+          setSurfacePhase("compact");
+        }, 16);
       }).catch(report);
     }, 240);
   }, [runWindowTransition, setSurfacePhase]);
@@ -241,7 +250,7 @@ export function DockFloat({ onExpand, onHide, panels }: {
 
 
   return (
-    <div className="df-root" data-open={open} data-phase={phase}
+    <div className="df-root" data-open={open} data-phase={phase} data-compact-style={compactStyle}
       onPointerEnter={hoverExpand} onPointerLeave={hoverCollapse}>
       {compactStyle === "line" ? (
         <div className="df-line" data-open={open}

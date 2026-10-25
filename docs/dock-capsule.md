@@ -44,9 +44,14 @@ Flyout 与 `CapturePanel` **本体**通过 `panels` 属性注入进来 —— �
 
 ## 动效
 
-窗口只在状态切换时 `set_size` + `set_position` 各一次，视觉形变全部交给
+窗口只在状态切换时改一次 bounds（**位置和尺寸同一次 `SetWindowPos` 提交**，
+不是先 `set_size` 再 `set_position`，避免中间一帧停在错误的 x 上），视觉形变交给
 **固定 660×591 卡片的 CSS `clip-path`**（240ms，`cubic-bezier(.4,0,.2,1)`）。
 不再用 `scale` 伪造尺寸，所以动画中图标不会缩小、内容不会 reflow。
+
+收起时先跑完 240ms clip，再缩窗口；缩完等 16ms 让 WebView2 收到 `WM_SIZE`，
+最后才切 `compact`。胶囊模式下卡片外壳在 compact 也保留在中心栏后面，
+所以收起结束不会出现「卡片先消失、窗口后缩」的闪一下。
 
 | 参数 | 展开 | 收起 |
 |---|---|---|

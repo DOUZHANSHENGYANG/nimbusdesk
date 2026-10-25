@@ -1134,3 +1134,6 @@
 }
 .df-toolbar .df-tools { padding: 1px 4px; }
 .df-toolbar .df-window-actions { padding-left: 8px; }
+
+/* 胶囊模式下卡片外壳在 compact 也留着：它和中心栏同色，收起结束时不闪一下白/透明 */
+.df-root[data-compact-style="capsule"][data-phase="compact"] .df-card { opacity: 1; }
