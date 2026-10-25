@@ -301,6 +301,8 @@ export interface DetectedSkill {
   name: string;
   path: string;
   description: string;
+  /** SKILL.md 修改时间（毫秒时间戳）；0 = 读不到 */
+  updatedAt: number;
 }
 
 export interface HarnessReport {

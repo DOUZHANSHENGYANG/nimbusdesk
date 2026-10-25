@@ -14,6 +14,8 @@ import { TagCommand } from "@/ahub/components/TagCommand";
 import { SearchBar } from "@/ahub/components/SearchBar";
 import { HarnessDialog } from "@/ahub/components/HarnessDialog";
 import { HarnessIcon } from "@/ahub/components/HarnessIcon";
+import { HarnessFilterRail } from "@/ahub/components/HarnessFilterRail";
+import { HarnessBatchDialog } from "@/ahub/components/HarnessBatchDialog";
 import { Markdown } from "@/ahub/components/Markdown";
 import { PageShell } from "@/ahub/components/PageShell";
 import { SkillPicker } from "@/ahub/components/SkillPicker";
@@ -43,7 +45,8 @@ import { PresetBar } from "@/ahub/components/PresetBar";
 import { PresetDialog } from "@/ahub/components/PresetDialog";
 import { PresetManager } from "@/ahub/components/PresetManager";
 import { presetErrorText } from "@/ahub/lib/presetErrors";
-import type { Preset, SkillDoc, SkillMeta } from "@/ahub/lib/types";
+import type { HarnessReport, Preset, SkillDoc, SkillMeta } from "@/ahub/lib/types";
+import { appliedHarnesses, lastAppliedAt, shortHarnessName } from "@/ahub/lib/skillHarness";
 import { cn } from "@/ahub/lib/utils";
 import { useData } from "@/ahub/stores/data";
 import { useSettings } from "@/ahub/stores/settings";
@@ -169,6 +172,11 @@ export function SkillsPage() {
   const [pipelineOpen, setPipelineOpen] = useState(false);
   const [pipelineOutDir, setPipelineOutDir] = useState("");
   const [scanOpen, setScanOpen] = useState(false);
+  const [harnessReports, setHarnessReports] = useState<HarnessReport[] | null>(null);
+  const [harnessFilter, setHarnessFilter] = useState<string | null>(null);
+  const [harnessBatchOpen, setHarnessBatchOpen] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
+  const [addMode, setAddMode] = useState<"create" | "file" | "git">("file");
   const [batchMode, setBatchMode] = useState(false);
   const [batchSel, setBatchSel] = useState<Set<string>>(new Set());
   const [groupByTag, setGroupByTag] = useState(false);
@@ -410,6 +418,50 @@ export function SkillsPage() {
   /** 技能池里仍存在的目录名（预设栏与成员面板据此标出失效成员） */
   const liveDirs = useMemo(() => new Set(skills.map((s) => s.dirName)), [skills]);
 
+  /**
+   * 各 harness 的技能目录扫描结果。
+   * 失败只让「工具」区块显示为空，页面其余部分照常可用 —— 不能因为工具没装就挡住技能管理。
+   */
+  const loadHarnesses = async () => {
+    try {
+      setHarnessReports(await api.scanHarnesses());
+    } catch {
+      setHarnessReports([]);
+    }
+  };
+
+  useEffect(() => {
+    void loadHarnesses();
+    // 只在挂载时扫一次；接入/移出后由对话框回调刷新
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /** 支持技能目录的工具 */
+  const skillHarnesses = useMemo(
+    () => (harnessReports ?? []).filter((r) => r.supportsSkills),
+    [harnessReports],
+  );
+
+  /** dirName → 已接入的工具列表（一次算完，卡片与筛选共用） */
+  const appliedMap = useMemo(() => {
+    const map = new Map<string, HarnessReport[]>();
+    for (const s of skills) map.set(s.dirName, appliedHarnesses(skillHarnesses, s));
+    return map;
+  }, [skills, skillHarnesses]);
+
+  const harnessCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const list of appliedMap.values()) {
+      for (const r of list) counts[r.id] = (counts[r.id] ?? 0) + 1;
+    }
+    return counts;
+  }, [appliedMap]);
+
+  const unassignedCount = useMemo(
+    () => [...appliedMap.values()].filter((list) => list.length === 0).length,
+    [appliedMap],
+  );
+
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     // 预设筛选：只保留成员目录名命中的技能（与其他筛选取交集）
@@ -417,10 +469,15 @@ export function SkillsPage() {
     return skills.filter((s) => {
       if (presetDirs && !presetDirs.has(s.dirName)) return false;
       if (!matchTags(s.tags, activeTags, tagMode)) return false;
+      // 工具收窄：左栏「未接入工具」把从未同步到任何工具的技能挑出来
+      if (harnessFilter) {
+        const attached = appliedMap.get(s.dirName) ?? [];
+        if (harnessFilter === "__none" ? attached.length > 0 : !attached.some((r) => r.id === harnessFilter)) return false;
+      }
       if (!q) return true;
       return s.name.toLowerCase().includes(q) || s.description.toLowerCase().includes(q) || s.tags.some((tg) => tg.toLowerCase().includes(q));
     });
-  }, [skills, query, activeTags, tagMode, selectedPreset]);
+  }, [skills, query, activeTags, tagMode, selectedPreset, harnessFilter, appliedMap]);
 
   /** 按标签分组（未打标签归入「未分类」） */
   const grouped = useMemo(() => {
@@ -499,12 +556,13 @@ export function SkillsPage() {
   };
 
   /** 当前是否有任何筛选条件（用于「清空筛选」）；预设筛选也算一种条件 */
-  const hasFilter = query.trim().length > 0 || activeTags.size > 0 || selectedPresetId !== null;
+  const hasFilter = query.trim().length > 0 || activeTags.size > 0 || selectedPresetId !== null || harnessFilter !== null;
 
   const clearFilters = () => {
     setQuery("");
     setActiveTags(new Set());
     setSelectedPresetId(null);
+    setHarnessFilter(null);
   };
 
   /** ⌘K / Ctrl+K：打开标签检索面板 */
@@ -842,6 +900,16 @@ export function SkillsPage() {
                 onManage={() => setPageTab("tags")}
                 onCommand={() => setTagCommandOpen(true)}
               />
+              {skills.length > 0 ? (
+                <HarnessFilterRail
+                  reports={harnessReports}
+                  counts={harnessCounts}
+                  total={skills.length}
+                  unassigned={unassignedCount}
+                  value={harnessFilter}
+                  onChange={setHarnessFilter}
+                />
+              ) : null}
             </aside>
             <div className="min-w-0 flex-1">
       {/* ── 预设栏（skill-presets）：页面内容最顶部，筛选与列表之上 ── */}
@@ -986,6 +1054,18 @@ export function SkillsPage() {
                     {t("skills.packExportBtn")}
                   </Button>
 
+                  {/* 批量接入工具：选工具 → 一次复制 / 移除，按工具报成败 */}
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    className="h-7 w-[96px] justify-center text-[11px]"
+                    disabled={batchSel.size === 0}
+                    onClick={() => setHarnessBatchOpen(true)}
+                  >
+                    <Boxes className="size-3.5" />
+                    {t("skills.harnessApplyBtn")}
+                  </Button>
+
                   {/* 批量打标签：追加 / 移除 / 清空 */}
                   <Button
                     size="sm"
@@ -1079,22 +1159,48 @@ export function SkillsPage() {
       ) : null}
 
       {skills.length === 0 ? (
-        <EmptyState
-          icon={Sparkles}
-          title={t("common.empty")}
-          hint={t("skills.emptyHint")}
-          action={
-            <Button onClick={() => setScanOpen(true)} variant="secondary">
-              <ScanSearch />
-              {t("common.scan")}
-            </Button>
-          }
-        />
+        <div className="flex flex-col items-center gap-5 py-14">
+          <div className="text-center">
+            <Sparkles className="mx-auto size-6 text-ink-3" />
+            <h3 className="mt-2 text-sm font-semibold text-foreground">{t("skills.emptyTitle")}</h3>
+            <p className="mt-1 text-xs text-ink-3">{t("skills.emptyHint")}</p>
+          </div>
+          <div className="grid w-full max-w-2xl gap-2 sm:grid-cols-3">
+            {(
+              [
+                { icon: Archive, title: t("skills.emptyPickZip"), hint: t("skills.emptyPickZipHint"), mode: "file" as const },
+                { icon: FolderOpen, title: t("skills.emptyPickFolder"), hint: t("skills.emptyPickFolderHint"), mode: "file" as const },
+                { icon: GitCompare, title: t("skills.emptyPickGit"), hint: t("skills.emptyPickGitHint"), mode: "git" as const },
+              ] as const
+            ).map(({ icon: Icon, title, hint, mode }) => (
+              <button
+                key={title}
+                type="button"
+                onClick={() => {
+                  setAddMode(mode);
+                  setAddOpen(true);
+                }}
+                className="flex flex-col items-start gap-2 rounded-xl border border-border bg-card p-4 text-left outline-none transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md"
+              >
+                <span className="grid size-8 place-items-center rounded-lg bg-primary-soft text-primary">
+                  <Icon className="size-4" />
+                </span>
+                <span className="text-[12.5px] font-semibold text-foreground">{title}</span>
+                <span className="text-[11px] leading-snug text-ink-3">{hint}</span>
+              </button>
+            ))}
+          </div>
+          <Button onClick={() => setScanOpen(true)} variant="secondary">
+            <ScanSearch />
+            {t("common.scan")}
+          </Button>
+        </div>
       ) : filtered.length === 0 ? null : (
         (() => {
           const card = (s: SkillMeta) => {
             const hid = s.origin?.harness ?? "__local";
             const picked = batchSel.has(s.dirName);
+            const attached = appliedMap.get(s.dirName) ?? [];
             return (
               <div
                 key={s.dirName}
@@ -1208,6 +1314,36 @@ export function SkillsPage() {
                   </Badge>
                 </div>
 
+                {/* 工具维度：接了哪些 harness —— 这是「删不删」最直接的依据 */}
+                {harnessReports ? (
+                  <div className="mt-1.5 flex flex-wrap items-center gap-1 text-[10px] text-ink-3">
+                    {attached.length === 0 ? (
+                      <span className="inline-flex items-center gap-1">
+                        <CircleAlert className="size-2.5" />
+                        {t("skills.harnessNone")}
+                      </span>
+                    ) : (
+                      <>
+                        <span>{t("skills.harnessConnected")}</span>
+                        {attached.slice(0, 3).map((r) => {
+                          const at = lastAppliedAt([r], s);
+                          return (
+                            <span
+                              key={r.id}
+                              title={at > 0 ? `${r.name} · ${fmtTime(new Date(at).toISOString())}` : r.name}
+                              className="inline-flex items-center gap-0.5 rounded-full border border-border bg-surface/60 px-1.5 py-px text-ink-2"
+                            >
+                              <HarnessIcon id={r.id} className="size-2.5" />
+                              {shortHarnessName(r.name)}
+                            </span>
+                          );
+                        })}
+                        {attached.length > 3 ? <span className="font-mono">+{attached.length - 3}</span> : null}
+                      </>
+                    )}
+                  </div>
+                ) : null}
+
                 {/* 底部行：更新时间为常态信息，动作按钮固定在右下角（整列对齐） */}
                 <div className="mt-auto flex items-center gap-1 border-t border-border/60 pt-2.5">
                   <span className="min-w-0 flex-1 truncate text-[11px] text-ink-3" title={fmtTime(s.updatedAt)}>
@@ -1298,6 +1434,36 @@ export function SkillsPage() {
                 <DialogDescription className="font-mono" dir="ltr">
                   {t("skills.dirName")}: {detail.meta.dirName} · {detail.meta.contentLen} chars
                 </DialogDescription>
+                {/* 接入情况与最近同步时间：判断「能不能删」的第一手依据 */}
+                {harnessReports ? (
+                  (() => {
+                    const attached = appliedMap.get(detail.meta.dirName) ?? [];
+                    return (
+                      <div className="mt-1.5 flex flex-wrap items-center gap-1 text-[10.5px] text-ink-3">
+                        {attached.length === 0 ? (
+                          <span>{t("skills.harnessNeverApplied")}</span>
+                        ) : (
+                          <>
+                            <span>{t("skills.harnessConnected")}</span>
+                            {attached.map((r) => {
+                              const at = lastAppliedAt([r], detail.meta);
+                              return (
+                                <span
+                                  key={r.id}
+                                  className="inline-flex items-center gap-1 rounded-full border border-border bg-surface/60 px-1.5 py-0.5 text-ink-2"
+                                >
+                                  <HarnessIcon id={r.id} className="size-3" />
+                                  {r.name}
+                                  {at > 0 ? <span className="text-ink-3">· {fmtTime(new Date(at).toISOString())}</span> : null}
+                                </span>
+                              );
+                            })}
+                          </>
+                        )}
+                      </div>
+                    );
+                  })()
+                ) : null}
               </DialogHeader>
 
               <div className="border-b border-border px-5 pt-3">
@@ -1861,6 +2027,16 @@ export function SkillsPage() {
       </Dialog>
 
       <HarnessDialog open={scanOpen} onOpenChange={setScanOpen} kind="skills" />
+
+      <HarnessBatchDialog
+        open={harnessBatchOpen}
+        onOpenChange={setHarnessBatchOpen}
+        targets={skills.filter((s) => batchSel.has(s.dirName))}
+        reports={skillHarnesses}
+        onDone={loadHarnesses}
+      />
+
+      <AddSkillDialog onDone={() => void loadSkills()} open={addOpen} onOpenChange={setAddOpen} initialMode={addMode} />
 
       <SkillPipelineDialog
         open={pipelineOpen}

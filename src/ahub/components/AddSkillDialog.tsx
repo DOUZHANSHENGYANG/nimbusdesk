@@ -71,10 +71,26 @@ const PAGE_SIZE = 24;
  * - 从文件导入：文件夹（已解包）或 ZIP（压缩包）
  * - 从 Git 仓库 / 市场：克隆仓库自动发现，或从内置腾讯 SkillHub 搜索安装
  */
-export function AddSkillDialog({ onDone }: { onDone: () => void }) {
+export function AddSkillDialog({
+  onDone,
+  open: openProp,
+  onOpenChange,
+  initialMode,
+}: {
+  onDone: () => void;
+  /** 受控打开：空态引导要能从外面直接拉起某个入口 */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  initialMode?: Mode;
+}) {
   const { t } = useTranslation();
-  const [open, setOpen] = useState(false);
-  const [mode, setMode] = useState<Mode>("create");
+  const [openState, setOpenState] = useState(false);
+  const open = openProp ?? openState;
+  const setOpen = (v: boolean) => {
+    setOpenState(v);
+    onOpenChange?.(v);
+  };
+  const [mode, setMode] = useState<Mode>(initialMode ?? "create");
   const [gitSub, setGitSub] = useState<GitSource>("repo");
   const [busy, setBusy] = useState(false);
   const [overwrite, setOverwrite] = useState(false);
@@ -114,6 +130,11 @@ export function AddSkillDialog({ onDone }: { onDone: () => void }) {
   const [preview, setPreview] = useState<ImportPreview | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewErr, setPreviewErr] = useState("");
+
+  // 外部指定了入口（ZIP / 文件夹 / Git）时，每次打开都落到那个入口
+  useEffect(() => {
+    if (open && initialMode) setMode(initialMode);
+  }, [open, initialMode]);
 
   const reset = () => {
     setMode("create");
@@ -470,10 +491,12 @@ export function AddSkillDialog({ onDone }: { onDone: () => void }) {
 
   return (
     <>
-      <Button onClick={() => setOpen(true)}>
-        <Plus />
-        {t("skills.addSkill")}
-      </Button>
+      {openProp === undefined ? (
+        <Button onClick={() => setOpen(true)}>
+          <Plus />
+          {t("skills.addSkill")}
+        </Button>
+      ) : null}
 
       <Dialog
         open={open}

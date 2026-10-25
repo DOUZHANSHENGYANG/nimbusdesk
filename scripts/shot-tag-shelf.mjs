@@ -9,7 +9,9 @@ page.on("pageerror", (e) => errors.push(e.message));
 
 try {
   await page.goto("http://127.0.0.1:17800/src/ahub/fixtures/tag-shelf.html");
-  await page.waitForTimeout(2500);
+  // 等真内容出现再截：Vite 改完文件后第一次编译可能超过固定等待
+  await page.getByRole("button", { name: "批量选择" }).waitFor({ timeout: 20000 });
+  await page.waitForTimeout(900);
   await page.screenshot({ path: `${dir}/tag-shelf.png` });
 
   // 页签：标签（不是弹窗）

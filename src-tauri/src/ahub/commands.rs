@@ -215,10 +215,11 @@ pub fn merge_harness_config(app: AppH, harness: String, text: String, json: Stri
 
 #[tauri::command]
 pub fn remove_from_harness(app: AppH, harness: String, kind: String, names: Vec<String>) -> Result<ApplyResult, String> {
-    if kind != "mcp" {
-        return Err("仅支持 MCP 条目移除".into());
+    match kind.as_str() {
+        "mcp" => Ok(harness::remove_mcp(&app, &harness, &names)),
+        "skills" => Ok(harness::remove_skills(&app, &harness, &names)),
+        other => Err(format!("未知类型: {other}")),
     }
-    Ok(harness::remove_mcp(&app, &harness, &names))
 }
 
 /// 技能目录树

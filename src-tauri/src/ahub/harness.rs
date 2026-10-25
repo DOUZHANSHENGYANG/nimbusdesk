@@ -30,6 +30,9 @@ pub struct DetectedSkill {
     pub name: String,
     pub path: String,
     pub description: String,
+    /// SKILL.md 的修改时间（毫秒时间戳）。用来回答「这个技能上次同步到该工具是什么时候」，
+    /// 也是界面上「上次使用 / 从未使用」的可用信号 —— 工具运行时的真实调用记录各家都不落盘。
+    pub updated_at: i64,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -465,10 +468,17 @@ fn scan_skills_dirs(dirs: &[PathBuf]) -> (Vec<DetectedSkill>, Vec<String>) {
                             n
                         }
                     };
+                    let updated_at = std::fs::metadata(path.join("SKILL.md"))
+                        .and_then(|m| m.modified())
+                        .ok()
+                        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+                        .map(|d| d.as_millis() as i64)
+                        .unwrap_or(0);
                     out.push(DetectedSkill {
                         name,
                         path: path.to_string_lossy().into_owned(),
                         description: skills::fm_get_str(&fm, "description"),
+                        updated_at,
                     });
                 }
             }
@@ -846,6 +856,53 @@ pub fn remove_mcp(app: &AppH, harness_id: &str, names: &[String]) -> ApplyResult
                 }
                 Err(e) => res.errors.push(e.to_string()),
             }
+        }
+    }
+    res
+}
+
+/// 从工具的技能目录里移除同名技能副本。
+///
+/// 只删该工具 skills_dirs 里、且确实含 SKILL.md 的目录 —— 中枢库（data_root/skills）
+/// 不会被碰到。目录名即技能 dirName，与 apply(kind="skills") 的入参一致。
+pub fn remove_skills(app: &AppH, harness_id: &str, names: &[String]) -> ApplyResult {
+    let mut res = ApplyResult {
+        applied: vec![],
+        warnings: vec![],
+        backups: vec![],
+        errors: vec![],
+    };
+    let Some(def) = defs(app).into_iter().find(|d| d.id == harness_id) else {
+        res.errors.push(format!("未知工具: {harness_id}"));
+        return res;
+    };
+    if def.skills_dirs.is_empty() {
+        res.errors.push("该工具未配置技能目录".into());
+        return res;
+    }
+    for name in names {
+        // 防御：只接受单层目录名，避免 ../ 之类把删除带出技能目录
+        if name.is_empty() || name.contains('/') || name.contains('\\') || name == "." || name == ".." {
+            res.errors.push(format!("非法技能名: {name}"));
+            continue;
+        }
+        let mut removed = false;
+        let mut found = false;
+        for dir in &def.skills_dirs {
+            let target = dir.join(name);
+            if !target.join("SKILL.md").is_file() {
+                continue;
+            }
+            found = true;
+            match std::fs::remove_dir_all(&target) {
+                Ok(_) => removed = true,
+                Err(e) => res.errors.push(format!("{name} ← {}: {e}", target.display())),
+            }
+        }
+        if removed {
+            res.applied.push(name.clone());
+        } else if !found {
+            res.warnings.push(format!("{name}: 该工具下没有这份技能"));
         }
     }
     res
