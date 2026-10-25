@@ -717,17 +717,18 @@
 .df-subtabs {
   display: flex;
   align-items: center;
-  justify-content: center;
   gap: 2px;
-  height: 24px;
+  height: 26px;
   margin: 0 12px 4px;
   flex: none;
 }
 .df-subtab {
   display: grid;
   place-items: center;
-  width: 26px;
-  height: 22px;
+  /* 平均分配：每个按钮吃等份宽度，视觉上和上面那排主标签对齐 */
+  flex: 1 1 0;
+  min-width: 0;
+  height: 24px;
   border: 0;
   border-radius: var(--pr-radius-sm);
   background: transparent;
