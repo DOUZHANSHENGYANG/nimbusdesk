@@ -690,9 +690,12 @@
 }
 
 /* 内容撑开：窗口一帧到位，动画全在 DOM（对齐 LuckyIsland） */
+/* 只做缩放，不做透明度淡入 ——
+   淡入一旦被打断（展开/收起快速切换），卡片会停在半透明，
+   背景直接透出桌面，看起来像「整个窗口都虚了」。 */
 @keyframes df-morph {
-  from { transform: scale(0.703); opacity: 0.55; }
-  to   { transform: scale(1);     opacity: 1; }
+  from { transform: scale(0.703); }
+  to   { transform: scale(1); }
 }
 .df-card {
   transform-origin: top center;
@@ -712,6 +715,8 @@
   transform: scale(0.72);
   transition: opacity 180ms cubic-bezier(0.4, 0, 0.2, 1), transform 180ms cubic-bezier(0.4, 0, 0.2, 1);
 }
+/* 兜底：展开态强制不透明，任何被打断的过渡都不该让背景透出来 */
+.df-root[data-open="true"] .df-card { opacity: 1; }
 
 /* 展开动画期间提升为合成层：避免每帧重新栅格化整张卡片 */
 .df-root[data-open="true"] .df-card {
