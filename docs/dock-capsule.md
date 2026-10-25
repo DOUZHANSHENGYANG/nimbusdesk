@@ -115,7 +115,11 @@ Flyout 与 `CapturePanel` **本体**通过 `panels` 属性注入进来 —— �
 ## 相关页面
 
 - **主页**：天气卡 + 今日待办卡 + 紧凑月历，一屏看完；点月格进日历页。
-- **日历**：直接嵌主窗口的 `SchedulePage`，一份代码两处渲染。
+- **日历**：`react-day-picker`（v10）单日选择，`fixedWeeks` 固定 42 格 ——
+  切月份日历高度不变，卡片不会跟着跳。用 `components.Day` 覆盖成项目 token
+  风格（**不引它自带的 style.css**），有任务的日子打圆点；点日期在下方列出
+  当天条目（来自 `usePlans` 的 `days[dateKey]`，子任务缩进）。
+  截图：`docs/screenshots/dock-card-cal-dark.png`。
 - **天气**：Open-Meteo（免 key），结果缓存 10 分钟；坐标在设置里配。
 - **通知**：应用内聚合（逾期 + 今天 + 未来两天），点一条跳计划页。
   读 Windows 通知中心需要 WinRT `UserNotificationListener` 与打包权限，未做。

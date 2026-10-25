@@ -8,7 +8,7 @@ import {
   Bell, CalendarDays, CloudSun, FolderKanban, SquareTerminal, Inbox, LayoutGrid, Newspaper, Rss, Search, Send, Settings2, Sparkles, Star, Trash2,
 } from "lucide-react";
 import { usePlans } from "@/features/plans/store";
-import { todayStr } from "@/features/plans/types";
+import { todayStr, type PlanTask } from "@/features/plans/types";
 import { openSearchResult, searchQuery } from "@/features/search/api";
 import type { SearchHit } from "@/features/search/types";
 import { mergedSources } from "@/sources/custom";
@@ -18,7 +18,7 @@ import { useFavorites } from "@/stores/favorites";
 import { ArticleReader } from "@/features/feeds/article-reader";
 import { openUrl } from "@/lib/tauri";
 import { useSettings } from "@/stores/settings";
-import { SchedulePage } from "@/features/schedule/page";
+import { DayPicker, type DayProps } from "react-day-picker";
 import { chatWithProvider, type ChatMessage } from "@/features/ai/client";
 import { ageBucket, dateKey, summarizeDay } from "./dock-float-core";
 import "./dock-float.css";
@@ -346,7 +346,7 @@ export function DockFloat({ onExpand, onHide, panels }: {
               <div className="df-collect">{panels.capture}</div>
             )}
             {tab === "news" && <NewsPanel />}
-            {tab === "cal" && <div className="df-embed"><SchedulePage /></div>}
+            {tab === "cal" && <CalendarPanel />}
             {tab === "chat" && <div className="df-body-inner"><ChatPanel onClose={() => setTab("search")} /></div>}
             {tab === "weather" && <WeatherPanel />}
             {tab === "notice" && <NoticePanel onOpenPlans={() => setTab("plans")} />}
@@ -548,6 +548,133 @@ function NewsPanel() {
           </div>
         );
       })}
+    </div>
+  );
+}
+
+/**
+ * 日历页：react-day-picker + 项目 token。
+ *
+ * **不 import 它自带的 style.css**：默认样式表会覆盖 tokens 的字号、圆角与颜色。
+ * 这里只用 classNames / components.Day 接结构，所有视觉值都走 var(--...)；
+ * fixedWeeks 保证 6 行恒定，切月份不会把卡片高度顶来顶去。
+ */
+function CalendarDay({ day, modifiers, className, children, ...props }: DayProps) {
+  return (
+    <td
+      {...props}
+      data-date={dateKey(day.date)}
+      className={["df-calpicker-cell", className, modifiers.hasTasks ? "has-tasks" : ""]
+        .filter(Boolean)
+        .join(" ")}
+    >
+      {children}
+      {modifiers.hasTasks && <span className="df-calpicker-dot" aria-hidden="true" />}
+    </td>
+  );
+}
+
+function CalendarPanel() {
+  const { t } = useTranslation();
+  const days = usePlans((state) => state.days);
+  const [selectedDate, setSelectedDate] = useState(() => new Date());
+
+  const hasTasks = useCallback(
+    (date: Date) => (days[dateKey(date)]?.length ?? 0) > 0,
+    [days],
+  );
+
+  /** 当天条目按树展开：父任务在前，子任务缩进跟在后面。 */
+  const rows = useMemo(() => {
+    const tasks = days[dateKey(selectedDate)] ?? [];
+    const output: { task: PlanTask; depth: number }[] = [];
+    const seen = new Set<string>();
+    const walk = (parentId: string | null, depth: number) => {
+      for (const task of tasks) {
+        if (task.parentId !== parentId) continue;
+        seen.add(task.id);
+        output.push({ task, depth });
+        walk(task.id, depth + 1);
+      }
+    };
+    walk(null, 0);
+    // 数据异常时别把孤儿任务吞掉（父 id 指向已删除的条目）
+    for (const task of tasks) if (!seen.has(task.id)) output.push({ task, depth: 0 });
+    return output;
+  }, [days, selectedDate]);
+
+  const weekday = ["su", "mo", "tu", "we", "th", "fr", "sa"][selectedDate.getDay()];
+  return (
+    <div className="df-calendar">
+      <DayPicker
+        mode="single"
+        selected={selectedDate}
+        onSelect={(date) => { if (date) setSelectedDate(date); }}
+        showOutsideDays
+        fixedWeeks
+        weekStartsOn={1}
+        modifiers={{ hasTasks }}
+        modifiersClassNames={{ hasTasks: "has-tasks" }}
+        components={{ Day: CalendarDay }}
+        formatters={{
+          formatCaption: (month) =>
+            t("dockFloat.calendarMonth", { year: month.getFullYear(), month: month.getMonth() + 1 }),
+          formatWeekdayName: (date) =>
+            t(`dockFloat.week.${["su", "mo", "tu", "we", "th", "fr", "sa"][date.getDay()]}`),
+        }}
+        labels={{
+          labelPrevious: () => t("dockFloat.prevMonth"),
+          labelNext: () => t("dockFloat.nextMonth"),
+        }}
+        classNames={{
+          root: "df-calpicker",
+          months: "df-calpicker-months",
+          month: "df-calpicker-month",
+          month_caption: "df-calpicker-caption",
+          caption_label: "df-calpicker-caption-label",
+          nav: "df-calpicker-nav",
+          button_previous: "df-calpicker-nav-btn",
+          button_next: "df-calpicker-nav-btn",
+          month_grid: "df-calpicker-grid",
+          weekdays: "df-calpicker-weekdays",
+          weekday: "df-calpicker-weekday",
+          week: "df-calpicker-week",
+          day_button: "df-calpicker-day",
+          selected: "is-selected",
+          today: "is-today",
+          outside: "is-outside",
+          disabled: "is-disabled",
+          hidden: "is-hidden",
+        }}
+      />
+      <div className="df-calendar-day">
+        <div className="df-calendar-day-head">
+          <span>
+            {t("dockFloat.calendarDayTitle", { month: selectedDate.getMonth() + 1, day: selectedDate.getDate() })}
+            <span className="df-calendar-weekday">{t(`dockFloat.week.${weekday}`)}</span>
+          </span>
+          <span className="df-row-meta">{t("dockFloat.calendarCount", { count: rows.length })}</span>
+        </div>
+        {rows.length === 0 ? (
+          <p className="df-hint">{t("dockFloat.dayEmpty")}</p>
+        ) : (
+          <div className="df-calendar-list">
+            {rows.map(({ task, depth }) => (
+              <div key={task.id} className="df-calendar-row" style={{ paddingLeft: 6 + depth * 14 }}>
+                <span className={`df-calendar-mark${task.done ? " is-done" : ""}`} aria-hidden="true" />
+                <span className="df-calendar-row-main">
+                  <span className={`df-calendar-title${task.done ? " is-done" : ""}`}>{task.title}</span>
+                  {(task.start || task.end) && (
+                    <span className="df-row-meta">
+                      {task.start ?? ""}{task.end ? ` – ${task.end}` : ""}
+                    </span>
+                  )}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

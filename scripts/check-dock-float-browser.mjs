@@ -80,6 +80,22 @@ try {
   await page.getByRole("tab", { name: "项目", exact: true }).click();
   assert.ok(await page.locator(".df-host .dock-pname").count() >= 1, "项目要列出在办项目");
 
+  // ⑤b 日历：react-day-picker 固定 6 周，点日期列当天条目；切月高度不变
+  await page.getByRole("button", { name: "日历", exact: true }).click();
+  await page.locator(".df-calendar").waitFor();
+  assert.equal(await page.locator(".df-calpicker-weekday").count(), 7, "日历要有 7 个星期表头");
+  assert.equal(await page.locator(".df-calpicker-cell").count(), 42, "fixedWeeks 固定 42 格");
+  assert.ok(await page.locator(".df-calpicker-dot").count() >= 1, "有任务的日子要有圆点");
+  assert.equal(await page.locator(".df-calendar-row").count(), 5, "今天应列出 5 条计划（含子任务）");
+  const calendarBefore = await page.locator(".df-calpicker").boundingBox();
+  assert.ok(calendarBefore, "日历必须渲染");
+  await page.getByRole("button", { name: "下个月" }).click();
+  await page.waitForTimeout(120);
+  assert.equal(await page.locator(".df-calpicker-cell").count(), 42, "切月后仍是 42 格");
+  const calendarAfter = await page.locator(".df-calpicker").boundingBox();
+  assert.ok(calendarAfter && Math.abs(calendarAfter.height - calendarBefore.height) <= 1, "切月份日历高度不变");
+  assert.equal((await lastBounds()).height, 591, "日历页卡片高度仍是 591");
+
   // ⑥ 资讯页：来源混排
   await page.getByRole("tab", { name: "资讯", exact: true }).click();
   assert.equal(await page.locator(".df-news-row").count(), 3, "夹具里三条资讯都要出现");
