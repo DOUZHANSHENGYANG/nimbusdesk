@@ -605,6 +605,7 @@ export const zh = {
       edit: "编辑并重发",
       resend: "保存并重发",
       continue: "继续生成",
+      revert: "回退到这里",
     },
     model: {
       none: "未选模型",
@@ -951,6 +952,13 @@ export const zh = {
   schedule: {
     title: "定时任务",
     subtitle: "到点自动执行的小任务，应用在运行时才会触发",
+    ai: {
+      title: "用一句话生成",
+      hint: "描述时间和要做什么，AI 会填好频率、动作与指令；生成后仍可修改。",
+      placeholder: "例如：每个工作日早上 9 点，把昨天合入的 PR 整理成晨报",
+      generate: "AI 生成",
+      working: "生成中…",
+    },
     desktopNote: "定时任务只在云台运行时触发（它不是系统计划任务）：应用没在运行时错过的时刻默认记为「跳过」，需要时可为单个任务打开「错过后补跑一次」。",
     reload: "刷新",
     newTask: "新建任务",

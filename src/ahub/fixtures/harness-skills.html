@@ -1,0 +1,35 @@
+<!doctype html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body><div id="root" style="height:100vh"></div><script type="module">
+import React from 'react';
+import {createRoot} from 'react-dom/client';
+import {mockIPC,mockWindows} from '@tauri-apps/api/mocks';
+const now='2026-10-25T00:00:00Z';
+const mk=(dirName,name,description)=>({dirName,name,description,frontmatter:{name,description},body:'## 用法\n',versions:[],tags:[],status:'active',createdAt:now,updatedAt:now,version:'1.0.0',hasToml:true,stale:false,vetVerdict:'',vetCritical:0,vetHigh:0,vetMedium:0,vetCheckedAt:'',vetPending:0,vetIgnored:0,hasAssets:false,contentLen:20,origin:null});
+const skills=[mk('code-review','代码评审','按团队规范过一遍 diff。'),mk('debug','调试排错','从报错栈回溯到最小复现。')];
+const reports=[
+ {id:'claude-code',name:'Claude Code',supportsMcp:true,supportsSkills:true,configPath:'C:/Users/dz/.claude.json',exists:true,mcpServers:[],skillsDirs:['C:/Users/dz/.claude/skills'],skills:[
+  {name:'代码评审',path:'C:/Users/dz/.claude/skills/code-review',description:'按团队规范过一遍 diff。',updatedAt:new Date('2026-10-22').getTime()},
+  {name:'手改过的技能',path:'C:/Users/dz/.claude/skills/handmade',description:'只在工具里，中枢没有。',updatedAt:new Date('2026-10-20').getTime()},
+ ],notes:[]},
+ {id:'codex',name:'Codex',supportsMcp:true,supportsSkills:true,configPath:'C:/Users/dz/.codex/config.toml',exists:true,mcpServers:[],skillsDirs:['C:/Users/dz/.codex/skills'],skills:[
+  {name:'调试排错',path:'C:/Users/dz/.codex/skills/debug',description:'从报错栈回溯到最小复现。',updatedAt:new Date('2026-10-21').getTime()},
+ ],notes:[]},
+];
+mockIPC(async(cmd,args)=>{
+ if(cmd==='list_skills')return structuredClone(skills);
+ if(cmd==='scan_harnesses')return structuredClone(reports);
+ if(cmd==='apply_to_harness'||cmd==='remove_from_harness')return {applied:args?.names??[],warnings:[],backups:[],errors:[]};
+ if(cmd==='import_skill_folder')return mk('handmade','手改过的技能','只在工具里，中枢没有。');
+ if(cmd==='plugin:event|listen')return 1;
+ return null;
+});
+mockWindows('main');
+await import('/src/index.css');
+await import('/src/ahub/i18n');
+const {i18n,I18nextProvider}=await import('/src/lib/i18n.ts');
+const {HarnessSkillsSection}=await import('/src/ahub/components/HarnessSkillsSection.tsx');
+const {useData}=await import('/src/ahub/stores/data.ts');
+const {Toaster}=await import('/src/components/ui/sonner.tsx');
+await useData.getState().loadSkills();
+document.documentElement.classList.add('dark');
+createRoot(document.getElementById('root')).render(React.createElement(I18nextProvider,{i18n},React.createElement('div',{className:'p-6',style:{maxWidth:'900px'}},React.createElement(HarnessSkillsSection)),React.createElement(Toaster)));
+</script></body></html>

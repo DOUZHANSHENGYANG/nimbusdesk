@@ -29,6 +29,8 @@
 .agent-thread { padding:22px 30px; }
 /* 文字块出现时淡入（按块，不是按字：一段 text part 只挂载一次） */
 .agent-text { color:var(--foreground); font-size:13.5px; line-height:1.7; white-space:pre-wrap; animation:agent-text-in 240ms var(--workbench-ease); }
+/* Markdown 正文自己排版：外层别再用 pre-wrap，否则块级元素之间会多出空行 */
+.agent-markdown { white-space:normal; }
 @keyframes agent-text-in { from { opacity:0; transform:translateY(1px) } to { opacity:1; transform:none } }
 @media (prefers-reduced-motion: reduce) { .agent-text { animation:none } }
 .agent-meta { color:var(--muted-foreground); font-size:10.5px; }
@@ -55,8 +57,7 @@
 .agent-guide { display:flex; flex-direction:column; flex:1; min-height:0; }
 
 .agent-composer { flex-shrink:0; padding:12px 30px 18px; border-top:1px solid var(--workbench-line); container-type:inline-size; }
-.agent-composer-box { display:flex; flex-direction:column; gap:4px; padding:8px 8px 6px 14px; border:1px solid var(--workbench-line); border-radius:var(--pr-radius-lg); background:var(--workbench-raised); transition:border-color 160ms var(--workbench-ease); }
-.agent-composer-box:focus-within { border-color:color-mix(in srgb,var(--ring) 70%,var(--workbench-line)); }
+.agent-composer-box { display:flex; flex-direction:column; gap:4px; padding:8px 8px 6px 14px; border:0; border-radius:var(--pr-radius-lg); background:var(--workbench-raised); }
 .agent-composer-box textarea { flex:1; min-height:24px; max-height:166px; padding:6px 0 2px; border:0; background:transparent; box-shadow:none; outline:0; resize:none; overflow-y:auto; font-size:13px; line-height:1.6; }
 .agent-composer-box[data-disabled="true"] { opacity:.6; }
 

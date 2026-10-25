@@ -11,6 +11,24 @@ import { i18n } from "@/lib/i18n";
  * 语言也就只剩云台一处开关。
  */
 const zh = {
+  harnessSkills: {
+    title: "本机技能",
+    summary: "{{tools}} 个工具 · {{skills}} 个技能副本",
+    refresh: "重新扫描",
+    empty: "没有检测到支持技能目录的工具",
+    noSkills: "该工具下暂无技能",
+    inHub: "池内",
+    onlyTool: "仅在此工具",
+    update: "覆盖更新",
+    importToHub: "导入到池子",
+    reveal: "打开目录",
+    remove: "移出",
+    removed: "已从「{{name}}」移出「{{skill}}」",
+    updated: "已把「{{skill}}」更新到「{{name}}」",
+    imported: "已导入「{{skill}}」到技能池",
+    removeTitle: "从工具移出技能",
+    removeMsg: "从「{{name}}」删除「{{skill}}」的副本？技能池里的原件不受影响。",
+  },
   tagPicker: {
     placeholder: "输入标签，或从已有标签里选",
     create: "新建「{{tag}}」",
@@ -1194,6 +1212,24 @@ const zh = {
 };
 
 const en: typeof zh = {
+  harnessSkills: {
+    title: "Skills on this machine",
+    summary: "{{tools}} tools · {{skills}} skill copies",
+    refresh: "Rescan",
+    empty: "No tool with a skills directory was detected",
+    noSkills: "No skills in this tool yet",
+    inHub: "In hub",
+    onlyTool: "This tool only",
+    update: "Overwrite update",
+    importToHub: "Import to hub",
+    reveal: "Open folder",
+    remove: "Remove",
+    removed: "Removed \"{{skill}}\" from {{name}}",
+    updated: "Updated \"{{skill}}\" in {{name}}",
+    imported: "Imported \"{{skill}}\" to the hub",
+    removeTitle: "Remove skill from tool",
+    removeMsg: "Delete the copy of \"{{skill}}\" from {{name}}? The hub original is untouched.",
+  },
   tagPicker: {
     placeholder: "Type a tag, or pick an existing one",
     create: "Create “{{tag}}”",

@@ -1,0 +1,61 @@
+<!doctype html>
+<html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<style>html,body{margin:0;height:100%;} #root{height:100vh;display:flex;}</style></head>
+<body><div id="root"></div>
+<script type="module">
+/* 定时任务编辑器的浏览器夹具：验证「一句话生成」把 JSON 落到频率 / 动作 / 指令上。 */
+import { mockIPC, mockWindows } from '@tauri-apps/api/mocks';
+
+const provider = {
+  id: 'mock', name: 'Mock', baseUrl: 'https://mock.local/v1', model: 'deepseek-chat',
+  vision: false, models: [{ id: 'deepseek-chat', vision: false, parameters: {} }],
+};
+const fixtures = {
+  settings: { version: 7, state: { theme: 'dark', lang: 'zh' } },
+  'ai-providers': {
+    version: 1,
+    state: { providers: [provider], defaultTextId: 'mock', defaultVisionId: null, defaultVisionModel: null },
+  },
+};
+const actions = [{
+  id: 'ai_prompt', label: 'schedule.action.aiPrompt', timeoutMs: 90000, delegated: false,
+  fields: [
+    { name: 'promptId', type: 'prompt', label: 'schedule.field.promptId', hint: 'schedule.field.promptIdHint' },
+    { name: 'instruction', type: 'textarea', label: 'schedule.field.instruction', hint: 'schedule.field.instructionHint' },
+    { name: 'title', type: 'text', label: 'schedule.field.title', hint: 'schedule.field.titleHint' },
+  ],
+}];
+
+mockIPC(async (cmd, args) => {
+  if (cmd === 'read_json') return structuredClone(fixtures[args.key] ?? null);
+  if (cmd === 'write_json') { fixtures[args.key] = structuredClone(args.value); return args.value; }
+  if (cmd === 'schedule_snapshot') return { tasks: [], history: [], actions };
+  if (cmd === 'schedule_preview') return ['2026-10-26T09:00:00', '2026-10-27T09:00:00', '2026-10-28T09:00:00'];
+  if (cmd === 'list_prompts') return [];
+  if (cmd === 'ai_chat') {
+    return JSON.stringify({
+      name: '工作日晨报',
+      frequency: { kind: 'weekly', weekdays: [1, 2, 3, 4, 5], time: '09:00' },
+      action: { id: 'ai_prompt', params: { promptId: '', instruction: '把昨天合入的 PR 整理成晨报', title: '晨报' } },
+    });
+  }
+  if (cmd === 'plugin:event|listen') return 1;
+  return null;
+}, { shouldMockEvents: true });
+mockWindows('main');
+
+const React = (await import('react')).default;
+const { createRoot } = await import('react-dom/client');
+const { I18nextProvider } = await import('react-i18next');
+const { i18n } = await import('/src/lib/i18n.ts');
+const { TooltipProvider } = await import('/src/components/ui/tooltip.tsx');
+await import('/src/index.css');
+const { SchedulePage } = await import('/src/features/schedule/page.tsx');
+
+createRoot(document.getElementById('root')).render(
+  React.createElement(I18nextProvider, { i18n },
+    React.createElement(TooltipProvider, { delayDuration: 300 },
+      React.createElement('div', { className: 'workbench-ui', style: { display: 'flex', flex: 1, minWidth: 0 } },
+        React.createElement(SchedulePage)))),
+);
+</script></body></html>

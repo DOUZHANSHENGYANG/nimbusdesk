@@ -8,7 +8,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { invoke } from "@tauri-apps/api/core";
-import { Loader2 } from "lucide-react";
+import { Loader2, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -18,6 +18,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/motion/switch";
 import { Tabs, TabsList, TabsTrigger } from "@/components/motion/tabs";
 import { inTauri } from "@/lib/tauri";
+import { chatWithProvider } from "@/features/ai/client";
 import { mergedSources } from "@/sources/custom";
 import {
     FREQUENCY_KINDS,
@@ -276,6 +277,22 @@ function ActionFields({
     );
 }
 
+type AiTaskDraft = {
+    name?: string;
+    frequency?: { kind?: string } & Record<string, unknown>;
+    action?: { id?: string; params?: Record<string, unknown> };
+};
+
+/** 模型有时会包 ```json 围栏或加一句解释：只取最外层 JSON 对象。 */
+function parseTaskJson(text: string): AiTaskDraft {
+    const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+    const body = fenced ? fenced[1] : text;
+    const start = body.indexOf("{");
+    const end = body.lastIndexOf("}");
+    if (start < 0 || end <= start) throw new Error("AI 没有返回可解析的任务配置");
+    return JSON.parse(body.slice(start, end + 1)) as AiTaskDraft;
+}
+
 export function ScheduleEditor({
     task,
     actions,
@@ -293,6 +310,9 @@ export function ScheduleEditor({
     const [error, setError] = useState<string | null>(null);
     const [saving, setSaving] = useState(false);
     const [preview, setPreview] = useState<string[]>([]);
+    const [aiText, setAiText] = useState("");
+    const [aiBusy, setAiBusy] = useState(false);
+    const [aiError, setAiError] = useState<string | null>(null);
 
     const action = actions.find((item) => item.id === draft.action.id);
 
@@ -311,6 +331,104 @@ export function ScheduleEditor({
         return () => { alive = false; clearTimeout(timer); };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [JSON.stringify(draft.frequency), JSON.stringify(draft.action.params), draft.name]);
+
+    /**
+     * 用一句话生成任务：模型只负责「翻译」成人话之外的配置，落到已有字段上，
+     * 生成后仍走同一套校验与保存 —— AI 出错时用户还能手改。
+     */
+    const aiGenerate = async () => {
+        const brief = aiText.trim();
+        if (!brief || aiBusy) return;
+        setAiBusy(true);
+        setAiError(null);
+        try {
+            const now = new Date();
+            const stamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")} ${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+            const reply = await chatWithProvider([
+                {
+                    role: "system",
+                    content: [
+                        "你是「云台」的定时任务配置助手。把用户的一句话变成 JSON，只输出 JSON，不要解释。",
+                        "可用动作 id：ai_prompt（让 AI 执行提示词或指令）、refresh_feeds（刷新资讯源）、backup（备份）。",
+                        "频率 kind 与字段：once{at:\"YYYY-MM-DDTHH:mm\"}、daily{time:\"HH:mm\"}、weekly{weekdays:[1-7],time}、monthly{day:1-31,time}、yearly{month:1-12,day,time}、interval{minutes}。",
+                        "输出形状：{\"name\":\"任务名\",\"frequency\":{\"kind\":\"daily\",\"time\":\"09:00\"},\"action\":{\"id\":\"ai_prompt\",\"params\":{\"promptId\":\"\",\"instruction\":\"给 AI 的完整指令\",\"title\":\"笔记标题前缀\"}}}",
+                        "规则：没提时间用 09:00；每周一用 weekly [1]；每 30 分钟用 interval 30；动作默认 ai_prompt，instruction 要把用户的意思写完整。",
+                        `当前本地时间：${stamp}。`,
+                    ].join("\n"),
+                },
+                { role: "user", content: brief },
+            ]);
+            const parsed = parseTaskJson(reply);
+            const kind = (["once", "daily", "weekly", "monthly", "yearly", "interval"] as FrequencyKind[]).includes(
+                parsed.frequency?.kind as FrequencyKind,
+            )
+                ? (parsed.frequency!.kind as FrequencyKind)
+                : "daily";
+            const safeTime = (value: unknown) =>
+                typeof value === "string" && /^([01]\d|2[0-3]):[0-5]\d$/.test(value) ? value : "09:00";
+            const f = parsed.frequency ?? {};
+            let frequency: Frequency;
+            switch (kind) {
+                case "once":
+                    frequency = {
+                        kind,
+                        at: typeof f.at === "string" && f.at
+                            ? f.at
+                            : (defaultFrequency("once") as Extract<Frequency, { kind: "once" }>).at,
+                    };
+                    break;
+                case "weekly": {
+                    const days = Array.isArray(f.weekdays)
+                        ? (f.weekdays as unknown[]).map(Number).filter((n) => Number.isInteger(n) && n >= 1 && n <= 7)
+                        : [];
+                    frequency = { kind, weekdays: days.length ? [...new Set(days)].sort((a, b) => a - b) : [1], time: safeTime(f.time) };
+                    break;
+                }
+                case "monthly": {
+                    const day = Number(f.day);
+                    frequency = { kind, day: Number.isInteger(day) && day >= 1 && day <= 31 ? day : 1, time: safeTime(f.time) };
+                    break;
+                }
+                case "yearly": {
+                    const month = Number(f.month);
+                    const day = Number(f.day);
+                    frequency = {
+                        kind,
+                        month: Number.isInteger(month) && month >= 1 && month <= 12 ? month : 1,
+                        day: Number.isInteger(day) && day >= 1 && day <= 31 ? day : 1,
+                        time: safeTime(f.time),
+                    };
+                    break;
+                }
+                case "interval": {
+                    const minutes = Number(f.minutes);
+                    frequency = { kind, minutes: Number.isFinite(minutes) && minutes > 0 ? Math.round(minutes) : 30 };
+                    break;
+                }
+                default:
+                    frequency = { kind: "daily", time: safeTime(f.time) };
+            }
+            const wanted = parsed.action?.id;
+            const actionId = actions.some((item) => item.id === wanted) ? wanted! : "ai_prompt";
+            const spec = actions.find((item) => item.id === actionId);
+            const params: Record<string, unknown> = {};
+            for (const field of spec?.fields ?? []) {
+                const value = parsed.action?.params?.[field.name];
+                if (value !== undefined && value !== null) params[field.name] = value;
+            }
+            if (actionId === "ai_prompt") {
+                if (typeof params.instruction !== "string" || !params.instruction.trim()) params.instruction = brief;
+                if (typeof params.promptId !== "string") params.promptId = "";
+                if (typeof params.title !== "string" || !params.title.trim()) params.title = parsed.name?.trim() || brief.slice(0, 20);
+            }
+            const name = typeof parsed.name === "string" && parsed.name.trim() ? parsed.name.trim().slice(0, 100) : draft.name || brief.slice(0, 30);
+            setDraft({ ...draft, name, frequency, action: { id: actionId, params } });
+        } catch (cause) {
+            setAiError(cause instanceof Error ? cause.message : String(cause));
+        } finally {
+            setAiBusy(false);
+        }
+    };
 
     const save = async () => {
         const problem = validateTask(draft);
@@ -337,6 +455,33 @@ export function ScheduleEditor({
                 </DialogHeader>
 
                 <div className="space-y-4 py-1">
+                    <div className="rounded-lg border border-border bg-muted/20 p-3">
+                        <Label className="flex items-center gap-1.5">
+                            <Sparkles className="size-3.5 text-primary" />
+                            {t("schedule.ai.title")}
+                        </Label>
+                        <Textarea
+                            className="mt-2"
+                            rows={2}
+                            value={aiText}
+                            placeholder={t("schedule.ai.placeholder")}
+                            onChange={(event) => setAiText(event.target.value)}
+                        />
+                        <div className="mt-2 flex items-center gap-2">
+                            <p className="min-w-0 flex-1 text-[11px] text-muted-foreground">{t("schedule.ai.hint")}</p>
+                            <Button
+                                size="sm"
+                                variant="secondary"
+                                disabled={aiBusy || !aiText.trim()}
+                                onClick={() => void aiGenerate()}
+                            >
+                                {aiBusy ? <Loader2 className="size-3.5 animate-spin" /> : <Sparkles className="size-3.5" />}
+                                {t(aiBusy ? "schedule.ai.working" : "schedule.ai.generate")}
+                            </Button>
+                        </div>
+                        {aiError ? <p className="text-xs text-destructive">{aiError}</p> : null}
+                    </div>
+
                     <div className="schedule-field">
                         <Label htmlFor="schedule-name">{t("schedule.field.name")}</Label>
                         <Input

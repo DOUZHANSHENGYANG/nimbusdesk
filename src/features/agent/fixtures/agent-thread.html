@@ -1,0 +1,101 @@
+<!doctype html>
+<html>
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<style>html,body{margin:0;height:100%;} #root{height:100vh;display:flex;}</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="module">
+/*
+ * AI 对话的浏览器夹具：喂一段带 Markdown 的会话，用来验收
+ * 「助手正文按 Markdown 排版」与用户消息上的「回退到这里」。
+ *
+ * 打开：http://127.0.0.1:17800/src/features/agent/fixtures/agent-thread.html
+ */
+import { mockIPC, mockWindows } from '@tauri-apps/api/mocks';
+
+const now = Date.now();
+const provider = {
+  id: 'mock', name: 'Mock', baseUrl: 'https://mock.local/v1', model: 'deepseek-chat',
+  vision: true, models: [{ id: 'deepseek-chat', vision: true, parameters: { reasoningEffort: 'high' } }],
+};
+const markdown = [
+  '## 今日安排',
+  '',
+  '一共 **3 件事**，按优先级排：',
+  '',
+  '1. 09:30 站会：同步昨天合入的 PR',
+  '2. 11:00 评审 `skills-audit.md` 的第六节',
+  '3. 下午把 MCP 页的空态补上',
+  '',
+  '> 提醒：第二件依赖设计稿，没收到就先做第三件。',
+  '',
+  '| 时间 | 事项 | 状态 |',
+  '| --- | --- | --- |',
+  '| 09:30 | 站会 | 待开始 |',
+  '| 11:00 | 评审 | 待开始 |',
+  '',
+  '```ts',
+  'const done = tasks.filter((task) => task.status === "done");',
+  'console.log(done.length);',
+  '```',
+  '',
+  '需要我把这些写进今天的计划吗？',
+].join('\n');
+const messages = [
+  {
+    id: 'u1', role: 'user',
+    parts: [{ type: 'text', text: '帮我把今天的安排整理一下，顺便看看哪些能并到一起。' }],
+    metadata: { createdAt: now - 120000 },
+  },
+  {
+    id: 'a1', role: 'assistant',
+    parts: [{ type: 'text', text: markdown }],
+    metadata: { createdAt: now - 110000, elapsedMs: 2100, model: 'deepseek-chat', usage: { totalTokens: 386 } },
+  },
+];
+const fixtures = {
+  settings: { version: 7, state: { theme: 'dark', lang: 'zh' } },
+  'ai-providers': {
+    version: 1,
+    state: { providers: [provider], defaultTextId: 'mock', defaultVisionId: null, defaultVisionModel: null },
+  },
+  'ai-agent': {
+    version: 1,
+    state: {
+      currentId: 's1',
+      sessions: [{
+        id: 's1', title: null, providerId: 'mock', model: 'deepseek-chat', goal: null,
+        createdAt: now - 180000, updatedAt: now - 100000, messages,
+      }],
+    },
+  },
+};
+
+mockIPC(async (cmd, args) => {
+  if (cmd === 'read_json') return structuredClone(fixtures[args.key] ?? null);
+  if (cmd === 'write_json') { fixtures[args.key] = structuredClone(args.value); return args.value; }
+  if (cmd === 'plugin:event|listen') return 1;
+  return null;
+}, { shouldMockEvents: true });
+mockWindows('main');
+
+const React = (await import('react')).default;
+const { createRoot } = await import('react-dom/client');
+const { MemoryRouter } = await import('react-router-dom');
+const { I18nextProvider } = await import('react-i18next');
+const { i18n } = await import('/src/lib/i18n.ts');
+const { TooltipProvider } = await import('/src/components/ui/tooltip.tsx');
+await import('/src/index.css');
+const { AgentPage } = await import('/src/features/agent/panel.tsx');
+
+createRoot(document.getElementById('root')).render(
+  React.createElement(I18nextProvider, { i18n },
+    React.createElement(TooltipProvider, { delayDuration: 300 },
+      React.createElement(MemoryRouter, { initialEntries: ['/agent'] },
+        React.createElement('div', { className: 'workbench-ui', style: { display: 'flex', flex: 1, minWidth: 0 } },
+          React.createElement(AgentPage))))),
+);
+</script>
+</body>
+</html>

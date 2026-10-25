@@ -14,6 +14,7 @@ import {
   ShieldCheck,
   Sparkles,
   StepForward,
+  Undo2,
   X,
 } from "lucide-react";
 import { Message, MessageContent, MessageFooter } from "@/components/ui/message";
@@ -26,6 +27,7 @@ import {
   MessageScrollerViewport,
 } from "@/components/ui/message-scroller";
 import { Bubble, BubbleContent } from "@/components/ui/bubble";
+import { Markdown } from "@/ahub/components/Markdown";
 import { Button } from "@/components/ui/button";
 import { CodeBlock, CodeBlockContent } from "@/components/ui/code-block";
 import {
@@ -60,7 +62,7 @@ const Spinner = () => (
 );
 
 type Part = AgentMessage["parts"][number];
-type Extra = "copy" | "regenerate" | "continue" | "edit";
+type Extra = "copy" | "regenerate" | "continue" | "edit" | "revert";
 
 /** `file` part 在联合类型里不带可选 url，这里统一收窄一次。 */
 interface FileLike { type: "file"; mediaType: string; url?: string; filename?: string }
@@ -72,6 +74,7 @@ function Actions({ message, items, onEdit }: { message: AgentMessage; items: Ext
   const [copied, setCopied] = useState(false);
   const regenerate = useAgent((state) => state.regenerate);
   const continueLast = useAgent((state) => state.continueLast);
+  const revertTo = useAgent((state) => state.revertTo);
   // 复制的是用户自己写的那段（文本附件内联的包装不带给用户）
   const text = messageText(message);
 
@@ -80,6 +83,7 @@ function Actions({ message, items, onEdit }: { message: AgentMessage; items: Ext
     regenerate: RefreshCw,
     continue: StepForward,
     edit: Pencil,
+    revert: Undo2,
   };
 
   return (
@@ -90,7 +94,8 @@ function Actions({ message, items, onEdit }: { message: AgentMessage; items: Ext
           item === "copy" ? t("agent.action.copy")
             : item === "regenerate" ? t("agent.regenerate")
               : item === "continue" ? t("agent.action.continue")
-                : t("agent.action.edit");
+                : item === "revert" ? t("agent.action.revert")
+                  : t("agent.action.edit");
         return (
           <Button
             key={item}
@@ -108,6 +113,7 @@ function Actions({ message, items, onEdit }: { message: AgentMessage; items: Ext
               }
               if (item === "regenerate") void regenerate(message.id);
               if (item === "continue") void continueLast();
+              if (item === "revert") void revertTo(message.id);
               if (item === "edit") onEdit?.();
             }}
           >
@@ -148,7 +154,7 @@ function UserMessage({ message }: { message: AgentMessage }) {
         </Bubble>
         {attachments.length > 0 && <Attachments items={attachments} />}
         <MessageFooter className="agent-meta">{time && <span>{time}</span>}</MessageFooter>
-        <Actions message={message} items={["copy", "edit"]} onEdit={() => setEditing(true)} />
+        <Actions message={message} items={["copy", "edit", "revert"]} onEdit={() => setEditing(true)} />
       </MessageContent>
     </Message>
   );
@@ -362,9 +368,7 @@ function AssistantParts({ message, streaming }: { message: AgentMessage; streami
       {message.parts.map((part, index) => {
         if (part.type === "text") {
           return part.text ? (
-            <p key={index} className="agent-text">
-              {part.text}
-            </p>
+            <Markdown key={index} source={part.text} className="agent-text agent-markdown" />
           ) : null;
         }
         if (part.type === "reasoning") {

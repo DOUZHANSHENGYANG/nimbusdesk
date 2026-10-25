@@ -128,22 +128,6 @@ function semverSatisfies(have: string, req: string): boolean {
 }
 
 
-/** 来源工具 id → 展示名（未命中的 id 原样显示） */
-const HARNESS_LABEL: Record<string, string> = {
-  "claude-code": "Claude Code",
-  codex: "Codex",
-  "gemini-cli": "Gemini CLI",
-  cursor: "Cursor",
-  cline: "Cline",
-  windsurf: "Windsurf",
-  opencode: "OpenCode",
-  deepseek: "DeepSeek",
-  vscode: "VS Code",
-  workbuddy: "WorkBuddy",
-  codebuddy: "CodeBuddy",
-  "pi-agent": "PI Agent",
-};
-
 /**
  * 摘要相关错误 → 界面文案：未配置 AI 时后端返回中文提示，
  * 英文界面下要换成英文（其它错误原样显示原因）。
@@ -1247,7 +1231,6 @@ export function SkillsPage() {
       ) : filtered.length === 0 ? null : (
         (() => {
           const card = (s: SkillMeta) => {
-            const hid = s.origin?.harness ?? "__local";
             const picked = batchSel.has(s.dirName);
             const attached = appliedMap.get(s.dirName) ?? [];
             return (
@@ -1272,16 +1255,6 @@ export function SkillsPage() {
                     </span>
                   ) : null}
                   <h3 className="min-w-0 flex-1 truncate font-mono text-[12.5px] font-semibold text-foreground">{s.name}</h3>
-                  {s.origin ? (
-                    <Badge variant="muted" title={s.origin.file} className="shrink-0">
-                      <HarnessIcon id={hid} />
-                      {HARNESS_LABEL[hid] ?? hid}
-                    </Badge>
-                  ) : (
-                    <Badge variant="muted" className="shrink-0">
-                      {t("skills.srcLocal")}
-                    </Badge>
-                  )}
                 </div>
                 {s.description ? (
                   <p className="mt-1 line-clamp-2 text-[11.5px] leading-snug text-ink-2">{s.description}</p>

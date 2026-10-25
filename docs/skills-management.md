@@ -83,6 +83,18 @@ OpenCode / WorkBuddy / CodeBuddy / DeepSeek），并把扫到的条目**默认�
 `docs/screenshots/harness-filter.png`（按「未接入工具」收窄）、
 `docs/screenshots/harness-batch.png`、`harness-batch-remove.png`、`tag-empty.png`。
 
+## 本机工具里的技能（工具箱 → 本机工具）
+
+技能页只服务**自己的技能池**：卡片不再显示「来自 OpenCode / Claude Code」这类来源徽标，
+来源归因不再占卡片位置。要看**各工具目录里到底有什么**，去「工具 → 本机工具」页的
+「本机技能」区：
+
+- 按工具分组列出每个技能副本，标出「池内 / 仅在此工具」；
+- 「覆盖更新」把池内同名技能重新写入该工具；「导入到池子」把只在工具里的技能收进中枢；
+- 「打开目录」定位到该技能文件夹；「移出」只删这个工具目录里的副本，删前确认。
+
+截图：`docs/screenshots/harness-skills.png`。
+
 ## MCP 的工具维度（与技能同一套）
 
 MCP 页用的是同一套抽象：左栏标签仓下面同样有「工具」区块（按 `targets` 统计，

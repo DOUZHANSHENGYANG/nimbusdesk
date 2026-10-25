@@ -614,6 +614,7 @@ export const en: AppMessages = {
       edit: "Edit and resend",
       resend: "Save and resend",
       continue: "Continue generating",
+      revert: "Roll back to here",
     },
     model: {
       none: "No model selected",
@@ -965,6 +966,13 @@ export const en: AppMessages = {
   schedule: {
     title: "Schedules",
     subtitle: "Small tasks that fire on time, while the app is running",
+    ai: {
+      title: "Generate from one sentence",
+      hint: "Describe when and what to do; AI fills the frequency, action and instruction. Everything stays editable.",
+      placeholder: "e.g. Every weekday at 9am, turn yesterday's merged PRs into a morning brief",
+      generate: "Generate",
+      working: "Generating…",
+    },
     desktopNote: "Scheduled tasks fire only while NimbusDesk is running (this is not a system scheduler): a moment missed while the app was closed is recorded as skipped by default. Turn on run-after-miss per task if you want a catch-up.",
     reload: "Refresh",
     newTask: "New task",

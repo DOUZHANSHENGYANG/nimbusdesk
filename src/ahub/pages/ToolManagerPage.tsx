@@ -1,7 +1,8 @@
-import { Package, ShieldCheck } from "lucide-react";
+import { Package, ShieldCheck, Sparkles } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { CollapsibleCard } from "@/ahub/components/CollapsibleCard";
 import { ConfigVaultSection } from "@/ahub/components/ConfigVaultSection";
+import { HarnessSkillsSection } from "@/ahub/components/HarnessSkillsSection";
 import { ToolManagerSection } from "@/ahub/components/ToolManagerSection";
 import { PageShell } from "@/ahub/components/PageShell";
 
@@ -17,6 +18,10 @@ export function ToolManagerPage() {
       <div className="flex w-full flex-col gap-4">
         <CollapsibleCard icon={Package} title={t("tools.sectionTitle")}>
           <ToolManagerSection />
+        </CollapsibleCard>
+
+        <CollapsibleCard icon={Sparkles} title={t("harnessSkills.title")}>
+          <HarnessSkillsSection />
         </CollapsibleCard>
 
         <CollapsibleCard icon={ShieldCheck} title={t("settings.vault")}>

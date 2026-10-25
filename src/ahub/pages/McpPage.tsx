@@ -714,11 +714,6 @@ export function McpPage() {
                     {tg}
                   </Badge>
                 ))}
-                {s.origin ? (
-                  <Badge variant="muted" title={s.origin.file}>
-                    {t("mcp.origin")}: {s.origin.harness}
-                  </Badge>
-                ) : null}
                 {(s.targets ?? []).map((hid) => (
                   <Badge key={hid} variant="info">
                     {harnessName(hid)}

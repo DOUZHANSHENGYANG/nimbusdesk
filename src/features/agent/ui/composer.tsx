@@ -40,7 +40,6 @@ const describeAttachment = (error: unknown) => {
  */
 export function Composer() {
   const { t } = useTranslation();
-  const [text, setText] = useState("");
   const [pending, setPending] = useState<Pending[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
@@ -50,6 +49,8 @@ export function Composer() {
   const filePicker = useRef<HTMLInputElement>(null);
   const send = useAgent((state) => state.send);
   const stop = useAgent((state) => state.stop);
+  const text = useAgent((state) => state.draft);
+  const setText = useAgent((state) => state.setDraft);
   const newSession = useAgent((state) => state.newSession);
   const starting = useAgent((state) => state.starting);
   const guide = useAgent((state) => state.guide);

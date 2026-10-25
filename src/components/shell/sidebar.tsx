@@ -173,7 +173,7 @@ export function Sidebar() {
                     return (
                       <div key={section.key} className="flex flex-col gap-0.5">
                         {/* 多小节时给一行小标签（「资料」里的 AI 那一节），只有一节则不重复组标题 */}
-                        {group.sections.length > 1 && !collapsed && (
+                        {group.sections.length > 1 && !collapsed && section.key !== group.key && (
                           <p className="px-2.5 pt-2 pb-0.5 text-[10.5px] font-medium text-muted-foreground/60">{t(section.key)}</p>
                         )}
                         {sectionItems.map(item)}

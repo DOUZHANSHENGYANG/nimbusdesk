@@ -14,7 +14,7 @@ import {
 } from "./model";
 import { cleanGoal } from "./composer-core";
 import { ensureSession, sessionsReady, useSessions, type AgentSession } from "./sessions";
-import { isIncomplete, trimContext } from "./transcript";
+import { isIncomplete, messageText, trimContext } from "./transcript";
 import { buildPrompt, type Pending } from "./attachments";
 
 /** 归一化后的错误类别：UI 只用它去查一句人话，原始报文另存。 */
@@ -112,6 +112,8 @@ interface AgentState {
   guide: boolean;
   /** 本次会话的目标（可空）：非空时进 instructions，并在会话顶部显示一条。 */
   goal: string | null;
+  /** 输入框里的草稿（放 store 里，「回退」才能把旧消息放回去）。 */
+  draft: string;
   init: () => Promise<void>;
   refresh: () => void;
   selectModel: (providerId: string, modelId: string) => Promise<void>;
@@ -122,6 +124,9 @@ interface AgentState {
   removeSession: (id: string) => Promise<void>;
   clearCurrent: () => void;
   send: (text: string, attachments?: Pending[]) => Promise<void>;
+  setDraft: (text: string) => void;
+  /** 回退到某条用户消息：删掉它和它之后的内容，并把原文放回输入框。 */
+  revertTo: (messageId: string) => Promise<void>;
   stop: () => Promise<void>;
   retry: () => Promise<void>;
   regenerate: (messageId: string) => Promise<void>;
@@ -255,6 +260,7 @@ export const useAgent = create<AgentState>((set, get) => {
       starting: false,
       guide: !provider,
       goal: session.goal ?? null,
+      draft: "",
     });
     if (provider) applyProvider(set, provider);
     else set({ providerId: null, providerName: "", baseUrl: "", model: "", vision: false });
@@ -291,6 +297,7 @@ export const useAgent = create<AgentState>((set, get) => {
     starting: false,
     guide: false,
     goal: null,
+    draft: "",
 
     init: async () => {
       await Promise.all([sessionsReady(), Promise.resolve()]);
@@ -340,6 +347,34 @@ export const useAgent = create<AgentState>((set, get) => {
       set({ goal: value });
     },
 
+    setDraft: (text) => set({ draft: text }),
+
+    revertTo: async (messageId) => {
+      const entry = currentLive();
+      if (entry && busyStatus(entry.chat.status)) await entry.chat.stop();
+      const messages = entry ? entry.chat.messages : get().messages;
+      const index = messages.findIndex((message) => message.id === messageId);
+      if (index < 0) return;
+      const text = messageText(messages[index]);
+      const kept = messages.slice(0, index);
+      // 直接改 chat.messages（与重新批准同一个路子），再手动同步一次：
+      // AI SDK 的 messages 回调只在 send/regenerate 时触发，这里得自己落盘。
+      if (entry) entry.chat.messages = kept;
+      startedAt = undefined;
+      useSessions.getState().save(get().sessionId, { messages: kept });
+      set({
+        messages: kept,
+        status: entry ? entry.chat.status : "ready",
+        error: null,
+        usage: null,
+        elapsedMs: null,
+        stopped: false,
+        incomplete: false,
+        droppedContext: 0,
+        draft: text,
+      });
+    },
+
     newSession: async () => {
       await settle();
       const provider = resolveSelection(useProviders.getState(), get().providerId, get().model);
@@ -379,7 +414,7 @@ export const useAgent = create<AgentState>((set, get) => {
       if (entry) entry.chat.messages = [];
       useSessions.getState().save(id, { messages: [] });
       startedAt = undefined;
-      set({ messages: [], status: "ready", error: null, usage: null, elapsedMs: null, stopped: false, incomplete: false, droppedContext: 0 });
+      set({ messages: [], status: "ready", error: null, usage: null, elapsedMs: null, stopped: false, incomplete: false, droppedContext: 0, draft: "" });
     },
 
     send: async (text, attachments = []) => {
@@ -461,7 +496,7 @@ export const useAgent = create<AgentState>((set, get) => {
     },
 
     editMessage: async (messageId, text) => {
-      const entry = currentLive();
+      const entry = await entryForCall();
       if (!entry) return;
       if (busyStatus(entry.chat.status)) await entry.chat.stop();
       const trimmed = text.trim();
