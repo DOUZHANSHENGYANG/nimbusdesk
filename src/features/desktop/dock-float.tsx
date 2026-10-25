@@ -99,10 +99,15 @@ export function DockFloat({ onExpand, onHide, panels }: {
    * 后缩」—— 两次跳变。多留 320ms 让它在缩的过程中一起淡出，动作就合成一次。
    */
   const [mounted, setMounted] = useState(false);
+  /*
+   * 挂载一次之后就常驻。
+   *
+   * 之前每次收起 320ms 后卸载卡片，下次展开又要重新挂载收纳盒/计划/项目
+   * 三个真面板 —— 那一步要读数据、建列表，正是「展开卡一下」的来源。
+   * 现在只挂一次，之后靠 CSS 显隐；代价是收起时这几个面板仍在内存里。
+   */
   useEffect(() => {
-    if (open) { setMounted(true); return; }
-    const timer = setTimeout(() => setMounted(false), 320);
-    return () => clearTimeout(timer);
+    if (open) setMounted(true);
   }, [open]);
 
   /**
