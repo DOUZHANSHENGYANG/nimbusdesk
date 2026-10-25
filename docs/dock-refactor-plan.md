@@ -49,3 +49,36 @@
 
 - 卡片内所有横排（搜索筛选项、次标签行、收集页顶部按钮）统一「等分整行」，
   不留右侧空白 —— 这一条已经有两次踩坑记录：按内容宽度排会让整行看着歪。
+
+## 剩余两项（已确认要做，尚未开工）
+
+### A. 日历换成成熟组件
+
+现状：卡片日历嵌的是主窗口的 `SchedulePage`（自己写的）。用户要求用现成组件、
+要有 Windows 那种月份视图观感。
+
+做法：
+
+1. `npm i react-day-picker`（MIT，零运行时依赖，支持 `showOutsideDays`、`modifiers`、
+   `components` 自定义单元格，正好能做「有任务的日子打点」）。
+2. 新增 `src/features/desktop/dock-calendar.tsx`：`<DayPicker mode="single" showOutsideDays` 
+   `modifiers={{ hasTask }} modifiersClassNames={{ hasTask: "df-cal-day-has" }} />`。
+3. 主题：用 `components={{ Day: ... }}` 覆盖成项目 token（`--dock-face` / `--brand`），
+   不要引入它自带 CSS —— 会跟 tokens 打架。
+4. 回归：卡片宽高不变（660×591）；切月份不改变卡片高度。
+
+### B. 通知接 Windows 通知中心
+
+现状：通知页是应用内聚合（逾期 + 今天 + 未来两天），读不到微信/QQ 的系统通知。
+
+做法：
+
+1. Rust 侧加 `windows` crate 的 `UI_Notifications_Management` 特性，
+   调 `UserNotificationListener::Current().GetNotificationsAsync(...)`。
+2. 需要打包清单声明能力：`rescap:Capability Name="userNotificationListener"`，
+   并且在「设置 → 隐私 → 通知」里让用户手动授权该应用。**未授权时返回空列表**，
+   不能报错 —— 否则用户会以为功能坏了。
+3. 前端：通知页分两段，「云台提醒」+「系统通知」，后者带应用名与时间。
+4. 权限状态要有可见提示（例如「未授权，点这里去设置」）。
+
+两项都要各开一次独立改动，别和别的混。
