@@ -93,7 +93,11 @@
 | 上游一键更新 | 检查结果每行「拉取更新」、底部「全部更新（n）」；同一 remote 只 clone 一次，按目录名/技能名匹配后覆盖；旧正文自动写入版本历史；覆盖后写回 `[source.upstream]` 并重新检查 | `docs/screenshots/upstream-check.png`、`upstream-updated.png` |
 | 删除联动工具副本 | 单个与批量删除共用 `DeleteSkillsDialog`：列出会动到的工具，默认勾选「同时从工具移出」，按工具合并调用 `remove_from_harness(kind="skills")`；不勾选则只删中枢 | `docs/screenshots/skill-delete-harness.png` |
 | 覆盖导入保留标签 | `import_skill_dir_as` 在覆盖时合并旧 `.hub.json` 标签与上游 frontmatter 新标签，不再把用户手打标签清掉 | `cargo test`（ahub::skills 57 项通过） |
+| 标签批量归组 | 治理台勾选多个标签 → 选分组 → 归到分组 / 取消选择 | `docs/screenshots/tag-manager-batch.png` |
+| 跨类型工具总览 | 本机工具页一屏显示每个 harness 的技能副本、MCP 数、待更新技能数、配置是否存在 | `docs/screenshots/harness-overview.png` |
+| MCP 空态 | 空态补「从 JSON 粘贴」「从工具导入」，顶部「扫描本机」「新建 MCP」仍可用 | `docs/screenshots/mcp-empty.png` |
 
-剩余体验层差距仍是第六节第 3–6 条；下一步优先做「跨类型工具总览」或「标签治理批量归组」。
+第六节只剩第 3 条是**数据源限制**：harness 不提供运行时调用日志，无法在云台里算出真实调用次数；
+现在的「上次同步」用工具目录 `SKILL.md` 的 mtime，且「未接入任何工具」已能直接筛出来。其余体验层缺口已补齐。
 
 
