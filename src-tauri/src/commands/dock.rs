@@ -108,6 +108,29 @@ pub async fn window_set_no_activate(
     Ok(())
 }
 
+/// 在指定目录拉起一个终端窗口（Windows Terminal 优先，没有就退回 PowerShell）。
+///
+/// 这是「终端页」的第一版：**拉起系统终端**，不是把 PTY 嵌进卡片。
+/// 嵌入式要 portable-pty + xterm.js + 会话生命周期，属于另一件事；
+/// 这一版先解决「在云台里一键把终端叫到当前项目目录」，风险低、当场能用。
+#[tauri::command]
+pub async fn shell_launch(kind: String, cwd: Option<String>) -> Result<(), String> {
+    let dir = cwd.unwrap_or_default();
+    let mut command = std::process::Command::new("cmd");
+    let args: Vec<String> = match kind.as_str() {
+        "wt" => vec!["/C".into(), "start".into(), "".into(), "wt.exe".into(), "-d".into(), dir.clone()],
+        "powershell" => vec!["/C".into(), "start".into(), "".into(), "powershell.exe".into(), "-NoExit".into(), "-Command".into(), format!("Set-Location -LiteralPath '{}'", dir.replace('\'', "''"))],
+        "cmd" => vec!["/C".into(), "start".into(), "".into(), "cmd.exe".into(), "/K".into(), format!("cd /d \"{}\"", dir)],
+        other => return Err(format!("未知的终端类型：{other}")),
+    };
+    command
+        .args(args)
+        .creation_flags(0x08000000) // CREATE_NO_WINDOW：不要闪一个黑框
+        .spawn()
+        .map_err(|e| format!("拉起终端失败：{e}"))?;
+    Ok(())
+}
+
 /// 整窗鼠标穿透：开启后点击穿过 Dock 落到后面的窗口。
 ///
 /// 需要 WS_EX_LAYERED + WS_EX_TRANSPARENT 同时存在；只加 TRANSPARENT 在部分
@@ -443,6 +466,9 @@ pub async fn set_dock_shortcut(
 /// 全屏自动隐藏：前台窗口铺满所在显示器即视为全屏，Dock 收起；退出自动回来。
 /// 收起后贴边热区仍可唤起（光标贴住停靠边 = 临时唤出，离开即回）。
 /// 前台窗口是否铺满所在显示器（>95% 视为全屏应用）。
+#[cfg(windows)]
+use std::os::windows::process::CommandExt;
+
 #[cfg(windows)]
 fn foreground_covers_monitor(dock: HWND) -> bool {
     unsafe {

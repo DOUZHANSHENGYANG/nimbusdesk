@@ -5,7 +5,7 @@ import { listen } from "@tauri-apps/api/event";
 import { useTranslation } from "react-i18next";
 import {
   AppWindow, ArrowLeft, BookOpen, Bookmark, CalendarCheck, Camera, ChevronDown, ExternalLink, FileText, Folder,
-  Bell, CalendarDays, CloudSun, FolderKanban, Inbox, LayoutGrid, Newspaper, Rss, Search, Send, Settings2, Sparkles, Star, Trash2,
+  Bell, CalendarDays, CloudSun, FolderKanban, SquareTerminal, Inbox, LayoutGrid, Newspaper, Rss, Search, Send, Settings2, Sparkles, Star, Trash2,
 } from "lucide-react";
 import { usePlans } from "@/features/plans/store";
 import { todayStr } from "@/features/plans/types";
@@ -28,7 +28,7 @@ import "./dock-float.css";
  * 收纳盒 / 计划 / 项目 是侧栏形态里那三个飞出面板**本体**，由 dock.tsx 注入 ——
  * 卡片不重写它们，否则同一功能会出现两套实现、两套密度、两套交互。
  */
-type DockTab = "search" | "fences" | "plans" | "projects" | "collect" | "news" | "cal" | "chat" | "weather" | "notice";
+type DockTab = "search" | "fences" | "plans" | "projects" | "collect" | "news" | "cal" | "chat" | "weather" | "notice" | "term";
 
 /** 胶囊里的快捷图标：六个入口全在（和标签栏是两份职责，分开命名免得改错） */
 const QUICK_TABS: { key: DockTab; icon: typeof Search }[] = [
@@ -42,11 +42,12 @@ const QUICK_TABS: { key: DockTab; icon: typeof Search }[] = [
   { key: "chat", icon: Sparkles },
   { key: "weather", icon: CloudSun },
   { key: "notice", icon: Bell },
+  { key: "term", icon: SquareTerminal },
 ];
 /** 主标签：日均用得多，图标 + 文字 */
 const PRIMARY_TABS: DockTab[] = ["search", "fences", "plans", "projects", "news"];
 /** 次标签：只放图标 —— 日历 / 天气 / 通知 / 终端以后都挂这一行 */
-const SECONDARY_TABS: DockTab[] = ["collect", "cal", "chat", "weather", "notice"];
+const SECONDARY_TABS: DockTab[] = ["collect", "cal", "chat", "weather", "notice", "term"];
 
 const report = (error: unknown) => console.error("[dock-float]", error);
 
@@ -347,6 +348,7 @@ export function DockFloat({ onExpand, onHide, panels }: {
             {tab === "chat" && <div className="df-body-inner"><ChatPanel onClose={() => setTab("search")} /></div>}
             {tab === "weather" && <WeatherPanel />}
             {tab === "notice" && <NoticePanel onOpenPlans={() => setTab("plans")} />}
+            {tab === "term" && <TerminalPanel />}
           </div>
           </>
           )}
@@ -805,6 +807,49 @@ function NoticePanel({ onOpenPlans }: { onOpenPlans: () => void }) {
           <span className="df-row-meta">{row.late ? t("dockFloat.noticeLate") : row.meta}</span>
         </button>
       ))}
+    </div>
+  );
+}
+
+/**
+ * 终端：在卡片里一键把系统终端叫起来（Windows Terminal 优先）。
+ *
+ * 这一版**不嵌 PTY** —— 嵌入要 portable-pty + xterm.js + 会话生命周期，
+ * 属于另一件事。先把「打开就到当前项目目录」这条最常用的路径打通。
+ */
+function TerminalPanel() {
+  const { t } = useTranslation();
+  const projects = useProjects((state) => state.projects);
+  const [cwd, setCwd] = useState<string>("");
+  const options = projects.filter((project) => project.path).slice(0, 12);
+
+  const launch = (kind: string) => {
+    void invoke("shell_launch", { kind, cwd: cwd || null }).catch(report);
+  };
+
+  return (
+    <div className="df-panel df-term">
+      <label className="df-term-field">
+        <span className="df-row-meta">{t("dockFloat.termDir")}</span>
+        <input className="df-term-input" value={cwd} placeholder={t("dockFloat.termDirPlaceholder")}
+          onChange={(event) => setCwd(event.target.value)} />
+      </label>
+      {options.length > 0 && (
+        <div className="df-term-projects">
+          {options.map((project) => (
+            <button key={project.id} type="button" className="df-pill" onClick={() => setCwd(project.path)}>
+              {project.name}
+            </button>
+          ))}
+        </div>
+      )}
+      <div className="df-term-actions">
+        {["wt", "powershell", "cmd"].map((kind) => (
+          <button key={kind} type="button" className="df-pill" onClick={() => launch(kind)}>
+            {kind === "wt" ? t("dockFloat.termWt") : kind === "powershell" ? "PowerShell" : "cmd"}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }

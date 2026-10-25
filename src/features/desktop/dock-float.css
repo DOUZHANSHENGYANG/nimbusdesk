@@ -745,3 +745,12 @@
 .df-weather-temp { font-size: 40px; font-weight: var(--pr-weight-semibold); line-height: 1; letter-spacing: -0.02em; }
 .df-weather-days { display: flex; flex-direction: column; gap: 4px; }
 .df-weather-day { display: flex; align-items: center; justify-content: space-between; padding: 5px 8px; border-radius: var(--pr-radius-sm); background: var(--dock-face); }
+
+/* 终端页：目录输入 + 项目快捷 + 三种终端 */
+.df-term { gap: 10px; }
+.df-term-field { display: flex; flex-direction: column; gap: 4px; }
+.df-term-input { height: 30px; padding: 0 10px; border-radius: var(--pr-radius-sm); border: 1px solid var(--hairline); background: var(--dock-face); color: var(--foreground); font-size: var(--pr-text-xs); }
+.df-term-projects { display: flex; flex-wrap: wrap; gap: 6px; }
+.df-term-actions { display: flex; gap: 8px; margin-top: 2px; }
+.df-pill { height: 26px; padding: 0 12px; border: 1px solid var(--hairline); border-radius: 999px; background: var(--dock-face); color: var(--foreground); font-size: var(--pr-text-xs); cursor: pointer; }
+.df-pill:hover { background: var(--surface-hover); }
