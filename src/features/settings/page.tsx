@@ -308,6 +308,8 @@ function DesktopDockCard() {
   const dockStyle = useSettings((s) => s.dockStyle);
   const setDockStyle = useSettings((s) => s.setDockStyle);
   const dockCompactStyle = useSettings((s) => s.dockCompactStyle);
+  const dockClickThrough = useSettings((s) => s.dockClickThrough);
+  const setDockClickThrough = useSettings((s) => s.setDockClickThrough);
   const dockMonitorId = useSettings((s) => s.dockMonitorId);
   const setDockMonitorId = useSettings((s) => s.setDockMonitorId);
   const [monitors, setMonitors] = useState<{ name: string; primary: boolean }[]>([]);
@@ -414,6 +416,15 @@ function DesktopDockCard() {
                 {m.name}{m.primary ? " (主屏)" : ""}
               </Button>
             ))}
+          </div>
+        </Field>
+        <Field label={t("settings.clickThrough")}>
+          <div>
+            <Button variant={dockClickThrough ? "secondary" : "ghost"}
+              className={dockClickThrough ? "ring-1 ring-brand" : undefined}
+              onClick={() => setDockClickThrough(!dockClickThrough)}>
+              {dockClickThrough ? t("settings.clickThroughOn") : t("settings.clickThroughOff")}
+            </Button>
           </div>
         </Field>
         <Field label={t("settings.accentPreset")}>

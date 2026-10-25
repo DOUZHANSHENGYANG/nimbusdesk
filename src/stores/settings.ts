@@ -62,6 +62,8 @@ interface SettingsState {
   dockCardHeight: number;
   /** 岛所在显示器（Tauri 的 monitor.name）；null = 跟随鼠标 */
   dockMonitorId: string | null;
+  /** 整窗鼠标穿透：点击直接穿到后面的窗口 */
+  dockClickThrough: boolean;
   /** 收纳盒飞出面板的磁贴图标边长（Ctrl+滚轮调节，32–72） */
   dockTileSize: number;
   /** Dock 显隐全局快捷键（空 = 无）；按下在托盘外切换 Dock 显示 */
@@ -106,6 +108,7 @@ interface SettingsState {
   setAccentPreset: (preset: "sky" | "ocean" | "graphite" | "warm") => void;
   setDockCardHeight: (height: number) => void;
   setDockMonitorId: (id: string | null) => void;
+  setDockClickThrough: (on: boolean) => void;
   setDockEnabled: (v: boolean) => void;
   setDockOpen: (v: boolean) => void;
   setAlwaysOnTop: (v: boolean) => void;
@@ -155,6 +158,7 @@ export const useSettings = create<SettingsState>()(
       accentPreset: "sky",
       dockCardHeight: 591,
       dockMonitorId: null,
+      dockClickThrough: false,
       dockEnabled: false,
       dockOpen: true,
       alwaysOnTop: false,
@@ -188,6 +192,7 @@ export const useSettings = create<SettingsState>()(
       setAccentPreset: (accentPreset) => set({ accentPreset }),
       setDockCardHeight: (dockCardHeight) => set({ dockCardHeight }),
       setDockMonitorId: (dockMonitorId) => set({ dockMonitorId }),
+      setDockClickThrough: (dockClickThrough) => set({ dockClickThrough }),
       setDockEnabled: (dockEnabled) => set({ dockEnabled }),
       setDockOpen: (dockOpen) => set({ dockOpen }),
       setAlwaysOnTop: (alwaysOnTop) => set({ alwaysOnTop }),

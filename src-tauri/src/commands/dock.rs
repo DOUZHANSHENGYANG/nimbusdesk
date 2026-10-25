@@ -10,7 +10,7 @@ use windows::Win32::Graphics::Gdi::{
     GetMonitorInfoW, MonitorFromWindow, MONITOR_DEFAULTTONEAREST, MONITORINFO,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
-    GetForegroundWindow, GetWindowLongPtrW, IsZoomed, GetWindowRect, SetWindowLongPtrW, SetWindowPos,
+    GetForegroundWindow, GetWindowLongPtrW, IsZoomed, WS_EX_LAYERED, WS_EX_TRANSPARENT, GetWindowRect, SetWindowLongPtrW, SetWindowPos,
     ShowWindow, GWL_EXSTYLE, HWND_TOPMOST, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER,
     SW_SHOWNOACTIVATE, WS_EX_NOACTIVATE,
 };
@@ -103,6 +103,23 @@ pub async fn window_set_no_activate(
         } else {
             style & !(WS_EX_NOACTIVATE.0 as isize)
         };
+        SetWindowLongPtrW(hwnd, GWL_EXSTYLE, next);
+    }
+    Ok(())
+}
+
+/// 整窗鼠标穿透：开启后点击穿过 Dock 落到后面的窗口。
+///
+/// 需要 WS_EX_LAYERED + WS_EX_TRANSPARENT 同时存在；只加 TRANSPARENT 在部分
+/// Windows 版本上不生效。开着穿透时窗口收不到 hover，所以前端会在开启时
+/// 同时禁用悬停展开 —— 这两件事必须一起开关，否则用户会遇到「岛再也点不到」。
+#[tauri::command]
+pub async fn dock_set_click_through(app: AppHandle, label: String, on: bool) -> Result<(), String> {
+    let hwnd = hwnd_of(&app, &label)?;
+    unsafe {
+        let style = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+        let flags = (WS_EX_TRANSPARENT.0 | WS_EX_LAYERED.0) as isize;
+        let next = if on { style | flags } else { style & !flags };
         SetWindowLongPtrW(hwnd, GWL_EXSTYLE, next);
     }
     Ok(())
@@ -427,12 +444,16 @@ pub async fn set_dock_shortcut(
 /// 收起后贴边热区仍可唤起（光标贴住停靠边 = 临时唤出，离开即回）。
 /// 前台窗口是否铺满所在显示器（>95% 视为全屏应用）。
 #[cfg(windows)]
-fn foreground_covers_monitor() -> bool {
+fn foreground_covers_monitor(dock: HWND) -> bool {
     unsafe {
         let fg = GetForegroundWindow();
+        if fg.is_invalid() || fg == dock {
+            return false;
+        }
         let mut rect = RECT::default();
         let _ = GetWindowRect(fg, &mut rect);
-        let monitor = MonitorFromWindow(fg, MONITOR_DEFAULTTONEAREST);
+        // 按**岛所在**显示器判定：多屏时主屏的全屏应用不该把副屏上的岛藏起来
+        let monitor = MonitorFromWindow(dock, MONITOR_DEFAULTTONEAREST);
         let mut info = MONITORINFO {
             cbSize: std::mem::size_of::<MONITORINFO>() as u32,
             ..Default::default()
@@ -499,7 +520,8 @@ pub async fn dock_set_autohide(app: AppHandle, on: bool, edge: Option<String>) -
              */
             #[cfg(windows)]
             {
-                let next = if foreground_covers_monitor() { 2u8 } else if foreground_maximized() { 1 } else { 0 };
+                let dock_hwnd2 = hwnd_of(&handle, "desktop-dock").unwrap_or_default();
+                let next = if !dock_hwnd2.is_invalid() && foreground_covers_monitor(dock_hwnd2) { 2u8 } else if foreground_maximized() { 1 } else { 0 };
                 if LAST_FG.swap(next, Ordering::Relaxed) != next {
                     let _ = handle.emit("dock-foreground", next);
                 }
@@ -509,7 +531,8 @@ pub async fn dock_set_autohide(app: AppHandle, on: bool, edge: Option<String>) -
             }
             #[cfg(windows)]
             {
-                let fullscreen = foreground_covers_monitor();
+                let dock_hwnd = hwnd_of(&handle, "desktop-dock").unwrap_or_default();
+                let fullscreen = if dock_hwnd.is_invalid() { false } else { foreground_covers_monitor(dock_hwnd) };
                 let near_edge = cursor_near_dock_edge();
                 if let Some(win) = handle.get_webview_window("desktop-dock") {
                     let visible = win.is_visible().unwrap_or(false);

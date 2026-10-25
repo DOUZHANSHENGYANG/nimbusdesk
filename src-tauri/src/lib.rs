@@ -42,6 +42,7 @@ pub fn run() {
             commands::dock::dock_open,
             commands::dock::dock_close,
             commands::dock::dock_set_enabled,
+            commands::dock::dock_set_click_through,
             commands::dock::dock_spring,
             commands::stash::stash_import,
             commands::capture_window::window_capture,

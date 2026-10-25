@@ -148,6 +148,17 @@ export function DockWindow() {
       style: open ? "soft" : "stiff",
     });
   }, [resolveArea]);
+  // 穿透开关：开启时同时关掉悬停展开（穿透后窗口收不到 hover，否则岛就点不到了）
+  useEffect(() => {
+    if (!inTauri || dockStyle !== "capsule") return;
+    const apply = () => {
+      const on = useSettings.getState().dockClickThrough;
+      void invoke("dock_set_click_through", { label: LABEL, on }).catch(report);
+    };
+    apply();
+    return useSettings.subscribe((state, prev) => { if (state.dockClickThrough !== prev.dockClickThrough) apply(); });
+  }, [dockStyle]);
+
   // 显示器插拔没有可靠的 Tauri 事件，4 秒一轮比对「现在会在哪块屏」即可：
   // 副屏拔掉 → 自动回主屏；插回来 → 同一个 id 命中，自动移回原副屏。
   useEffect(() => {
