@@ -1,5 +1,5 @@
 import { useMemo, useState, type DragEvent } from "react";
-import { ChevronDown, ChevronRight, FolderPlus, GripVertical, Pencil, Tag, X } from "lucide-react";
+import { ChevronDown, ChevronRight, FolderPlus, GripVertical, Pencil, Settings2, Tag, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/ahub/lib/utils";
 import { groupTags } from "@/ahub/lib/tag-groups";
@@ -194,78 +194,152 @@ export function TagShelf({
 
   return (
     <div className={cn("rounded-xl border border-border bg-surface/40", className)}>
-      <div className="flex flex-wrap items-center gap-2 px-2.5 py-1.5">
-        <button
-          type="button"
-          onClick={() => setCollapsed((value) => !value)}
-          className="flex items-center gap-1 text-[11px] font-medium text-ink-2 hover:text-foreground"
-        >
-          {collapsed ? <ChevronRight className="size-3" /> : <ChevronDown className="size-3" />}
-          <Tag className="size-3" />
-          {t("tagShelf.title")}
-          <span className="font-mono text-[9.5px] text-ink-3">{allTags.length}</span>
-        </button>
-
-        {selected.size > 0 ? (
-          <div className="flex flex-wrap items-center gap-1">
-            {[...selected].map((tag) => (
-              <span key={tag} className="inline-flex h-5 items-center gap-1 rounded border border-primary/40 bg-primary-soft px-1.5 text-[10.5px] text-primary">
-                {tag}
-                <button type="button" aria-label={`remove ${tag}`} onClick={() => toggle(tag)} className="rounded p-0.5 hover:bg-primary/15">
-                  <X className="size-2" />
-                </button>
-              </span>
-            ))}
-            <div className="flex items-center overflow-hidden rounded border border-border">
-              {MODES.map((m) => (
-                <button
-                  key={m}
-                  type="button"
-                  onClick={() => onModeChange(m)}
-                  className={cn("px-1.5 py-0.5 text-[9.5px] font-medium", mode === m ? "bg-primary-soft text-primary" : "text-ink-3 hover:text-foreground")}
-                >
-                  {m === "or" ? t("common.tagOr") : t("common.tagAnd")}
-                </button>
-              ))}
-            </div>
-            <button type="button" onClick={() => onChange(new Set())} className="text-[10.5px] text-ink-3 hover:text-danger">
-              {t("common.clear")}
-            </button>
-          </div>
-        ) : (
-          <span className="text-[10.5px] text-ink-3">{t("tagShelf.hint")}</span>
-        )}
-
-        <div className="ml-auto flex items-center gap-1.5">
-          {allTags.length > 8 || tagQuery ? (
-            <input
-              value={tagQuery}
-              onChange={(event) => setTagQuery(event.target.value)}
-              placeholder={t("prompts.tagSearch")}
-              className="h-6 w-28 rounded border border-border bg-surface px-1.5 text-[10.5px] outline-none placeholder:text-ink-3 focus:border-primary"
-            />
-          ) : null}
-          {onCommand ? (
+      {variant === "rail" ? (
+        <div className="flex flex-col gap-1.5 px-2.5 py-1.5">
+          <div className="flex items-center gap-1.5">
+      <button
+        type="button"
+        onClick={() => setCollapsed((value) => !value)}
+        className="flex min-w-0 items-center gap-1 text-[11px] font-medium text-ink-2 hover:text-foreground"
+      >
+        {collapsed ? <ChevronRight className="size-3 shrink-0" /> : <ChevronDown className="size-3 shrink-0" />}
+        <Tag className="size-3 shrink-0" />
+        <span className="truncate">{t("tagShelf.title")}</span>
+        <span className="shrink-0 font-mono text-[9.5px] text-ink-3">{allTags.length}</span>
+      </button>
             <button
               type="button"
-              data-testid="tag-shelf-command"
-              onClick={onCommand}
-              title={t("tagCommand.openHint")}
-              className="flex h-6 items-center gap-1 rounded border border-border px-1.5 text-[10px] text-ink-3 hover:text-foreground"
+              aria-label={t("tagShelf.manage")}
+              data-testid="tag-shelf-manage"
+              onClick={() => (onManage ? onManage() : setManaging((value) => !value))}
+              className="ml-auto shrink-0 rounded px-1 py-0.5 text-[10px] text-ink-3 hover:text-foreground"
             >
-              ⌘K
+              <Settings2 className="size-3" />
             </button>
-          ) : null}
-          <button
-            type="button"
-            data-testid="tag-shelf-manage"
-            onClick={() => (onManage ? onManage() : setManaging((value) => !value))}
-            className={cn("rounded px-1.5 py-0.5 text-[10.5px]", managing && !onManage ? "bg-primary-soft text-primary" : "text-ink-3 hover:text-foreground")}
-          >
-            {managing && !onManage ? t("tagShelf.done") : t("tagShelf.manage")}
+          </div>
+          <div className="flex items-center gap-1.5">
+            {allTags.length > 8 || tagQuery ? (
+              <input
+                value={tagQuery}
+                onChange={(event) => setTagQuery(event.target.value)}
+                placeholder={t("prompts.tagSearch")}
+                className="h-6 min-w-0 flex-1 rounded border border-border bg-surface px-1.5 text-[10.5px] outline-none placeholder:text-ink-3 focus:border-primary"
+              />
+            ) : (
+              <span className="min-w-0 flex-1 truncate text-[10px] text-ink-3">{t("tagShelf.hint")}</span>
+            )}
+            {onCommand ? (
+              <button
+                type="button"
+                data-testid="tag-shelf-command"
+                onClick={onCommand}
+                title={t("tagCommand.openHint")}
+                className="flex h-6 shrink-0 items-center rounded border border-border px-1.5 text-[10px] text-ink-3 hover:text-foreground"
+              >
+                ⌘K
+              </button>
+            ) : null}
+          </div>
+          {selected.size > 0 ? (
+        <div className="flex flex-wrap items-center gap-1">
+          {[...selected].map((tag) => (
+            <span key={tag} className="inline-flex h-5 items-center gap-1 rounded border border-primary/40 bg-primary-soft px-1.5 text-[10.5px] text-primary">
+              {tag}
+              <button type="button" aria-label={`remove ${tag}`} onClick={() => toggle(tag)} className="rounded p-0.5 hover:bg-primary/15">
+                <X className="size-2" />
+              </button>
+            </span>
+          ))}
+          <div className="flex items-center overflow-hidden rounded border border-border">
+            {MODES.map((m) => (
+              <button
+                key={m}
+                type="button"
+                onClick={() => onModeChange(m)}
+                className={cn("px-1.5 py-0.5 text-[9.5px] font-medium", mode === m ? "bg-primary-soft text-primary" : "text-ink-3 hover:text-foreground")}
+              >
+                {m === "or" ? t("common.tagOr") : t("common.tagAnd")}
+              </button>
+            ))}
+          </div>
+          <button type="button" onClick={() => onChange(new Set())} className="text-[10.5px] text-ink-3 hover:text-danger">
+            {t("common.clear")}
           </button>
         </div>
-      </div>
+      ) : null}
+        </div>
+      ) : (
+        <div className="flex flex-wrap items-center gap-2 px-2.5 py-1.5">
+      <button
+        type="button"
+        onClick={() => setCollapsed((value) => !value)}
+        className="flex min-w-0 items-center gap-1 text-[11px] font-medium text-ink-2 hover:text-foreground"
+      >
+        {collapsed ? <ChevronRight className="size-3 shrink-0" /> : <ChevronDown className="size-3 shrink-0" />}
+        <Tag className="size-3 shrink-0" />
+        <span className="truncate">{t("tagShelf.title")}</span>
+        <span className="shrink-0 font-mono text-[9.5px] text-ink-3">{allTags.length}</span>
+      </button>
+      {selected.size > 0 ? (
+        <div className="flex flex-wrap items-center gap-1">
+          {[...selected].map((tag) => (
+            <span key={tag} className="inline-flex h-5 items-center gap-1 rounded border border-primary/40 bg-primary-soft px-1.5 text-[10.5px] text-primary">
+              {tag}
+              <button type="button" aria-label={`remove ${tag}`} onClick={() => toggle(tag)} className="rounded p-0.5 hover:bg-primary/15">
+                <X className="size-2" />
+              </button>
+            </span>
+          ))}
+          <div className="flex items-center overflow-hidden rounded border border-border">
+            {MODES.map((m) => (
+              <button
+                key={m}
+                type="button"
+                onClick={() => onModeChange(m)}
+                className={cn("px-1.5 py-0.5 text-[9.5px] font-medium", mode === m ? "bg-primary-soft text-primary" : "text-ink-3 hover:text-foreground")}
+              >
+                {m === "or" ? t("common.tagOr") : t("common.tagAnd")}
+              </button>
+            ))}
+          </div>
+          <button type="button" onClick={() => onChange(new Set())} className="text-[10.5px] text-ink-3 hover:text-danger">
+            {t("common.clear")}
+          </button>
+        </div>
+      ) : (
+        <span className="text-[10.5px] text-ink-3">{t("tagShelf.hint")}</span>
+      )}
+          <div className="ml-auto flex items-center gap-1.5">
+        {allTags.length > 8 || tagQuery ? (
+          <input
+            value={tagQuery}
+            onChange={(event) => setTagQuery(event.target.value)}
+            placeholder={t("prompts.tagSearch")}
+            className="h-6 w-28 rounded border border-border bg-surface px-1.5 text-[10.5px] outline-none placeholder:text-ink-3 focus:border-primary"
+          />
+        ) : null}
+        {onCommand ? (
+          <button
+            type="button"
+            data-testid="tag-shelf-command"
+            onClick={onCommand}
+            title={t("tagCommand.openHint")}
+            className="flex h-6 shrink-0 items-center gap-1 rounded border border-border px-1.5 text-[10px] text-ink-3 hover:text-foreground"
+          >
+            ⌘K
+          </button>
+        ) : null}
+        <button
+          type="button"
+          data-testid="tag-shelf-manage"
+          onClick={() => (onManage ? onManage() : setManaging((value) => !value))}
+          className={cn("shrink-0 rounded px-1.5 py-0.5 text-[10.5px]", managing && !onManage ? "bg-primary-soft text-primary" : "text-ink-3 hover:text-foreground")}
+        >
+          {managing && !onManage ? t("tagShelf.done") : t("tagShelf.manage")}
+        </button>
+          </div>
+        </div>
+      )}
 
       {collapsed ? null : (
         <div className={cn("flex gap-1.5 border-t border-border/60 p-2", variant === "rail" ? "flex-col" : "flex-wrap")}>

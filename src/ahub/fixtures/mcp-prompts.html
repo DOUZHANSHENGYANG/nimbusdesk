@@ -1,0 +1,49 @@
+<!doctype html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body><div id="root" style="height:100vh"></div><script type="module">
+import React from 'react';
+import {createRoot} from 'react-dom/client';
+import {mockIPC,mockWindows} from '@tauri-apps/api/mocks';
+const now='2026-01-01T00:00:00Z';
+const mcp=[
+ {id:'fs',name:'filesystem',description:'读写本地文件，白名单目录内生效。',transport:'stdio',command:'npx',args:['-y','@modelcontextprotocol/server-filesystem','E:/work'],env:{},url:'',headers:{},tags:['本地','读写'],enabled:true,targets:['claude-code'],targetsInitialized:true,origin:null,versions:[],createdAt:now,updatedAt:now},
+ {id:'gh',name:'github',description:'查 issue、拉 PR、建分支。',transport:'stdio',command:'npx',args:['-y','@modelcontextprotocol/server-github'],env:{},url:'',headers:{},tags:['团队','仓库'],enabled:true,targets:['claude-code'],targetsInitialized:true,origin:null,versions:[],createdAt:now,updatedAt:now},
+ {id:'pg',name:'postgres',description:'只读账号连报表库，跑分析查询。',transport:'stdio',command:'npx',args:['-y','@modelcontextprotocol/server-postgres'],env:{},url:'',headers:{},tags:['数据','只读'],enabled:false,targets:[],targetsInitialized:true,origin:null,versions:[],createdAt:now,updatedAt:now},
+];
+const prompts=[
+ {id:'p1',title:'代码评审',description:'按团队规范评审一段 diff。',content:'你是严格的评审者。\n\n{{diff}}',tags:['代码','审查'],variables:[],versions:[],createdAt:now,updatedAt:now},
+ {id:'p2',title:'周报整理',description:'把一周的提交与会议整理成周报。',content:'{{notes}}',tags:['写作'],variables:[],versions:[],createdAt:now,updatedAt:now},
+ {id:'p3',title:'需求澄清',description:'把模糊需求问成可执行条目。',content:'{{requirement}}',tags:['产品','审查'],variables:[],versions:[],createdAt:now,updatedAt:now},
+];
+const settingsInfo={settings:{dataDir:'E:/McpFixture',envRoot:'',language:'zh',theme:'dark',skillSourceDirs:[],harnessOrder:[],aiBaseUrl:'',aiApiKey:'',aiModel:'',autoSummaryOnImport:false,aiProviders:[],aiDefaultProviderId:'',aiLegacyMigrated:true},dataDirs:{root:'E:/McpFixture',prompts:'E:/McpFixture/prompts',mcp:'E:/McpFixture/mcp',skills:'E:/McpFixture/skills'}};
+mockIPC(async(cmd)=>{
+ if(cmd==='list_mcp')return structuredClone(mcp);
+ if(cmd==='list_prompts')return structuredClone(prompts);
+ if(cmd==='list_skills')return [];
+ if(cmd==='get_settings')return structuredClone(settingsInfo);
+ if(cmd==='preset_list'||cmd==='list_harnesses')return [];
+ if(cmd==='plugin:event|listen')return 1;
+ if(cmd==='get_data_dir')return 'E:/McpFixture';
+ return null;
+});
+mockWindows('main');
+await import('/src/index.css');
+const {i18n,I18nextProvider}=await import('/src/lib/i18n.ts');
+const {AhubMcpPage}=await import('/src/features/agenthub/ahub-host.tsx');
+const {AhubPromptsPage}=await import('/src/features/agenthub/ahub-host-prompts.tsx');
+const {useTagGroups}=await import('/src/ahub/stores/tag-groups.ts');
+const {Toaster}=await import('/src/components/ui/sonner.tsx');
+const g1=useTagGroups.getState().create('领域');
+const g2=useTagGroups.getState().create('阶段');
+for(const tag of ['代码','写作','数据'])useTagGroups.getState().assign(tag,g1);
+for(const tag of ['审查','读写'])useTagGroups.getState().assign(tag,g2);
+window.fixture={useTagGroups};
+document.documentElement.classList.add('dark');
+function Frame(){
+ const [page,setPage]=React.useState('mcp');
+ return React.createElement('div',{className:'flex min-h-0 flex-1 flex-col',style:{height:'100vh'}},
+  React.createElement('div',{className:'flex gap-1 border-b border-border px-2 py-1'},
+   React.createElement('button',{type:'button','data-fixture':'mcp',onClick:()=>setPage('mcp')},'MCP'),
+   React.createElement('button',{type:'button','data-fixture':'prompts',onClick:()=>setPage('prompts')},'提示词')),
+  page==='mcp'?React.createElement(AhubMcpPage):React.createElement(AhubPromptsPage));
+}
+createRoot(document.getElementById('root')).render(React.createElement(I18nextProvider,{i18n},React.createElement(Frame),React.createElement(Toaster)));
+</script></body></html>

@@ -492,17 +492,22 @@ export function McpPage() {
         <>
       {/* 标签筛选常驻：即便当前没有标签也保留入口，否则用户不知道有这个能力，
           与 Skills 页保持一致（那边是无条件显示的） */}
-      <TagShelf
-        allTags={allTags}
-        selected={activeTags}
-        onChange={setActiveTags}
-        mode={tagMode}
-        onModeChange={setTagMode}
-        counts={tagCounts}
-        hideWhenEmpty={false}
-        onManage={() => setPageTab("tags")}
-        onCommand={() => setTagCommandOpen(true)}
-      />
+          <div className="flex min-h-0 flex-1 items-start gap-3">
+            <aside className="w-[232px] shrink-0">
+              <TagShelf
+                variant="rail"
+                        allTags={allTags}
+                        selected={activeTags}
+                        onChange={setActiveTags}
+                        mode={tagMode}
+                        onModeChange={setTagMode}
+                        counts={tagCounts}
+                        hideWhenEmpty={false}
+                        onManage={() => setPageTab("tags")}
+                        onCommand={() => setTagCommandOpen(true)}
+                      />
+            </aside>
+            <div className="min-w-0 flex-1">
 
       {filtered.length > 0 ? (
         <div data-anim className="mb-3 flex flex-wrap items-center gap-2">
@@ -979,6 +984,8 @@ export function McpPage() {
         }}
         resultCount={filtered.length}
       />
+            </div>
+          </div>
         </>
       )}
     </PageShell>

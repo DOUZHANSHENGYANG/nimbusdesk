@@ -512,28 +512,6 @@ export function SkillsPage() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  /**
-   * 改写标签：治理台里的改名 / 删除要落到条目上，逐个读全文再保存，
-   * 这样不会把正文或 frontmatter 冲掉（saveSkill 需要完整 payload）。
-   */
-  const rewriteSkillTags = async (map: (tags: string[]) => string[]) => {
-    const affected = skills.filter((meta) => map(meta.tags).join("\u0001") !== meta.tags.join("\u0001"));
-    for (const meta of affected) {
-      const doc = await api.readSkill(meta.dirName);
-      await saveSkill({
-        dirName: meta.dirName,
-        name: doc.meta.name,
-        description: doc.meta.description,
-        tags: map(doc.meta.tags),
-        body: doc.body,
-        frontmatter: doc.frontmatter,
-        level: "L1",
-        publish: false,
-        note: "",
-      });
-    }
-    await loadSkills();
-  };
 
   /** 批量改标签：追加 / 移除 / 清空，作用于当前勾选的技能 */
   const applyTagsToSelection = async (mode: "add" | "remove" | "clear", tags: string[]) => {
@@ -770,12 +748,26 @@ export function SkillsPage() {
         <TagManagerView
           allTags={allTags}
           counts={tagCounts}
-          onRenameTag={(from, to) => rewriteSkillTags((tags) => tags.map((tag) => (tag === from ? to : tag)))}
-          onDeleteTag={(tag) => rewriteSkillTags((tags) => tags.filter((item) => item !== tag))}
           resultCount={filtered.length}
         />
       ) : (
         <>
+          <div className="flex min-h-0 flex-1 items-start gap-3">
+            <aside className="w-[232px] shrink-0">
+              <TagShelf
+                variant="rail"
+                allTags={allTags}
+                counts={tagCounts}
+                hideWhenEmpty={false}
+                selected={activeTags}
+                onChange={setActiveTags}
+                mode={tagMode}
+                onModeChange={setTagMode}
+                onManage={() => setPageTab("tags")}
+                onCommand={() => setTagCommandOpen(true)}
+              />
+            </aside>
+            <div className="min-w-0 flex-1">
       {/* ── 预设栏（skill-presets）：页面内容最顶部，筛选与列表之上 ── */}
       <PresetBar
         presets={presets}
@@ -838,24 +830,6 @@ export function SkillsPage() {
 
           {/* 第二行：标签 + 批量操作 */}
           <div className="mt-2 flex flex-wrap items-start gap-2 border-t border-border/60 pt-2">
-            {allTags.length > 0 ? (
-              <div className="min-w-0 flex-1">
-                <TagShelf
-                  allTags={allTags}
-                  counts={tagCounts}
-                hideWhenEmpty={false}
-                  selected={activeTags}
-                  onChange={setActiveTags}
-                  mode={tagMode}
-                  onModeChange={setTagMode}
-                  onManage={() => setTab("tags")}
-                  onCommand={() => setTagCommandOpen(true)}
-                  className=""
-                />
-              </div>
-            ) : (
-              <span className="flex-1 text-[11px] text-ink-3">{t("skills.tagsEmpty")}</span>
-            )}
 
             {/*
               人因要点：切换键固定钉在这一行的右端，批量操作按钮出现在它左侧。
@@ -1965,6 +1939,8 @@ export function SkillsPage() {
         }}
       />
 
+            </div>
+          </div>
         </>
       )}
    </PageShell>

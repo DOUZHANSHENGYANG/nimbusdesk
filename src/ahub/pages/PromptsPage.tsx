@@ -298,17 +298,22 @@ export function PromptsPage() {
         <TagManagerView allTags={allTags} counts={tagCounts} resultCount={filtered.length} />
       ) : (
         <>
-      <TagShelf
-        allTags={allTags}
-        selected={activeTags}
-        onChange={setActiveTags}
-        mode={tagMode}
-        onModeChange={setTagMode}
-        counts={tagCounts}
-        hideWhenEmpty={false}
-        onManage={() => setPageTab("tags")}
-        onCommand={() => setTagCommandOpen(true)}
-      />
+          <div className="flex min-h-0 flex-1 items-start gap-3">
+            <aside className="w-[232px] shrink-0">
+              <TagShelf
+                variant="rail"
+                        allTags={allTags}
+                        selected={activeTags}
+                        onChange={setActiveTags}
+                        mode={tagMode}
+                        onModeChange={setTagMode}
+                        counts={tagCounts}
+                        hideWhenEmpty={false}
+                        onManage={() => setPageTab("tags")}
+                        onCommand={() => setTagCommandOpen(true)}
+                      />
+            </aside>
+            <div className="min-w-0 flex-1">
 
       {filtered.length === 0 ? (
         <EmptyState
@@ -732,6 +737,8 @@ export function PromptsPage() {
         }}
         resultCount={filtered.length}
       />
+            </div>
+          </div>
         </>
       )}
     </PageShell>
