@@ -737,3 +737,10 @@
 }
 .df-subtab:hover { background: var(--surface-hover); color: var(--foreground); }
 .df-subtab[aria-selected="true"] { background: var(--dock-face); color: var(--brand); }
+
+/* 天气：一个大号温度 + 四天预报，信息密度对齐其余页 */
+.df-weather { gap: 10px; }
+.df-weather-now { display: flex; align-items: baseline; gap: 10px; }
+.df-weather-temp { font-size: 40px; font-weight: var(--pr-weight-semibold); line-height: 1; letter-spacing: -0.02em; }
+.df-weather-days { display: flex; flex-direction: column; gap: 4px; }
+.df-weather-day { display: flex; align-items: center; justify-content: space-between; padding: 5px 8px; border-radius: var(--pr-radius-sm); background: var(--dock-face); }

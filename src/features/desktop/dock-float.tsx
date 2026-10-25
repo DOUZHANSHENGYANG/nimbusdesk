@@ -5,7 +5,7 @@ import { listen } from "@tauri-apps/api/event";
 import { useTranslation } from "react-i18next";
 import {
   AppWindow, ArrowLeft, BookOpen, Bookmark, CalendarCheck, Camera, ChevronDown, ExternalLink, FileText, Folder,
-  CalendarDays, FolderKanban, Inbox, LayoutGrid, Newspaper, Rss, Search, Send, Settings2, Sparkles, Star, Trash2,
+  CalendarDays, CloudSun, FolderKanban, Inbox, LayoutGrid, Newspaper, Rss, Search, Send, Settings2, Sparkles, Star, Trash2,
 } from "lucide-react";
 import { usePlans } from "@/features/plans/store";
 import { todayStr } from "@/features/plans/types";
@@ -28,7 +28,7 @@ import "./dock-float.css";
  * 收纳盒 / 计划 / 项目 是侧栏形态里那三个飞出面板**本体**，由 dock.tsx 注入 ——
  * 卡片不重写它们，否则同一功能会出现两套实现、两套密度、两套交互。
  */
-type DockTab = "search" | "fences" | "plans" | "projects" | "collect" | "news" | "cal" | "chat";
+type DockTab = "search" | "fences" | "plans" | "projects" | "collect" | "news" | "cal" | "chat" | "weather";
 
 /** 胶囊里的快捷图标：六个入口全在（和标签栏是两份职责，分开命名免得改错） */
 const QUICK_TABS: { key: DockTab; icon: typeof Search }[] = [
@@ -40,11 +40,12 @@ const QUICK_TABS: { key: DockTab; icon: typeof Search }[] = [
   { key: "news", icon: Newspaper },
   { key: "cal", icon: CalendarDays },
   { key: "chat", icon: Sparkles },
+  { key: "weather", icon: CloudSun },
 ];
 /** 主标签：日均用得多，图标 + 文字 */
 const PRIMARY_TABS: DockTab[] = ["search", "fences", "plans", "projects", "news"];
 /** 次标签：只放图标 —— 日历 / 天气 / 通知 / 终端以后都挂这一行 */
-const SECONDARY_TABS: DockTab[] = ["collect", "cal", "chat"];
+const SECONDARY_TABS: DockTab[] = ["collect", "cal", "chat", "weather"];
 
 const report = (error: unknown) => console.error("[dock-float]", error);
 
@@ -343,6 +344,7 @@ export function DockFloat({ onExpand, onHide, panels }: {
             {tab === "news" && <NewsPanel />}
             {tab === "cal" && <CalendarPanel />}
             {tab === "chat" && <div className="df-body-inner"><ChatPanel onClose={() => setTab("search")} /></div>}
+            {tab === "weather" && <WeatherPanel />}
           </div>
           </>
           )}
@@ -697,6 +699,66 @@ function CalendarPanel() {
         {tasks.filter((task) => !task.parentId).map((task) => (
           <div key={task.id} className={`df-news-row${task.done ? " is-done" : ""}`}>
             <span className="df-row-title">{task.title}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/**
+ * 天气：Open-Meteo（免 key、免注册）。
+ *
+ * 坐标暂时写死在上海，设置项等确认数据源后再补 —— 先把「能拿到真数据」
+ * 这条路打通，比先做配置界面重要。缓存 10 分钟，避免每次切页都请求。
+ */
+let weatherCache: { at: number; data: WeatherNow } | null = null;
+interface WeatherNow { temp: number; code: number; wind: number; days: { date: string; max: number; min: number; code: number }[] }
+
+function WeatherPanel() {
+  const { t } = useTranslation();
+  const [data, setData] = useState<WeatherNow | null>(weatherCache?.data ?? null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (weatherCache && Date.now() - weatherCache.at < 10 * 60_000) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const url = "https://api.open-meteo.com/v1/forecast?latitude=31.23&longitude=121.47&current=temperature_2m,weather_code,wind_speed_10m&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=auto&forecast_days=4";
+        const reply = await fetch(url).then((r) => r.json());
+        const next: WeatherNow = {
+          temp: Math.round(reply.current.temperature_2m),
+          code: reply.current.weather_code,
+          wind: Math.round(reply.current.wind_speed_10m),
+          days: (reply.daily.time as string[]).map((date, i) => ({
+            date,
+            max: Math.round(reply.daily.temperature_2m_max[i]),
+            min: Math.round(reply.daily.temperature_2m_min[i]),
+            code: reply.daily.weather_code[i],
+          })),
+        };
+        weatherCache = { at: Date.now(), data: next };
+        if (!cancelled) setData(next);
+      } catch (cause) { if (!cancelled) setError(String(cause)); }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  if (error) return <p className="df-hint">{t("dockFloat.weatherFailed")}</p>;
+  if (!data) return <p className="df-hint">{t("dockFloat.weatherLoading")}</p>;
+
+  return (
+    <div className="df-panel df-weather">
+      <div className="df-weather-now">
+        <span className="df-weather-temp">{data.temp}°</span>
+        <span className="df-row-meta">{t(`dockFloat.weatherCode.${data.code}`)} · {data.wind} km/h</span>
+      </div>
+      <div className="df-weather-days">
+        {data.days.map((day, index) => (
+          <div key={day.date} className="df-weather-day">
+            <span>{index === 0 ? t("dockFloat.today") : day.date.slice(5)}</span>
+            <span className="df-row-meta">{day.max}° / {day.min}°</span>
           </div>
         ))}
       </div>
