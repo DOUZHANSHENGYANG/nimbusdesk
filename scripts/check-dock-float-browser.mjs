@@ -30,6 +30,8 @@ const lastBounds = () => page.evaluate(() => {
 try {
   await page.goto(`${process.env.FIXTURE_ORIGIN ?? "http://127.0.0.1:17800"}/src/features/desktop/fixtures/dock-float.html`);
   await page.locator(".df-capsule").waitFor();
+  // 胶囊有 180ms 的入场缩放（0.96 → 1）；不等动画结束就量，四舍五入会得到 42。
+  await page.waitForTimeout(260);
 
   // ① 胶囊：44 高、水平居中、五个直达图标 + 展开箭头
   const capsule = await page.locator(".df-capsule").boundingBox();
@@ -50,6 +52,24 @@ try {
   // 量布局尺寸：撑开动画用 transform 缩放，boundingBox 会量到中间帧
   const card = await page.locator(".df-card").evaluate((el) => ({ width: el.offsetWidth, height: el.offsetHeight }));
   assert.equal(Math.round(card.width), 660, "卡片布局宽 660");
+  // 表面形变：最终相位 + 禁用 scale + clip-path 已到全开
+  await page.waitForFunction(
+    () => document.querySelector(".df-root")?.getAttribute("data-phase") === "expanded",
+    undefined,
+    { timeout: 3000 },
+  );
+  const surface = await page.locator(".df-card").evaluate((el) => {
+    const style = getComputedStyle(el);
+    return { transform: style.transform, clipPath: style.clipPath };
+  });
+  assert.equal(surface.transform, "none", "展开不能再用 scale 伪造尺寸");
+  assert.ok(surface.clipPath.includes("inset"), "展开必须走 clip-path 形变");
+  assert.equal(await page.locator(".df-head").evaluate((el) => getComputedStyle(el).display), "grid", "头部用三组网格");
+  assert.equal(await page.locator(".df-tools .df-icon-btn").count(), 4, "工具组只放 4 个内容工具");
+  assert.equal(await page.locator(".df-window-actions .df-icon-btn").count(), 3, "窗口操作组放 AI/设置/收起");
+  const tabWidths = await page.locator(".df-tab").evaluateAll((nodes) => nodes.map((node) => Math.round(node.getBoundingClientRect().width)));
+  assert.equal(new Set(tabWidths).size, 1, "五个主标签必须严格等宽");
+  assert.equal(await page.locator(".df-head").evaluate((el) => el.scrollWidth <= el.clientWidth + 1), true, "头部三组不能溢出");
   const expanded = await lastBounds();
   assert.equal(expanded.width, 660, "展开后窗口宽 660");
   assert.equal(expanded.height, 591, "展开后窗口高 591");
@@ -139,6 +159,7 @@ try {
   await page.locator(".df-capsule").waitFor();
   await page.setViewportSize({ width: 464, height: 44 });
   await page.waitForTimeout(1000);
+  assert.equal(await page.locator(".df-root").getAttribute("data-phase"), "compact", "收起后相位必须回到 compact");
   const collapsed = await lastBounds();
   assert.equal(collapsed.height, 44, "收起后窗口回到胶囊高度");
   assert.equal(collapsed.width, 464, "收起后窗口宽 464");
