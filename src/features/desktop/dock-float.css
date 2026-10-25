@@ -90,8 +90,6 @@
 .df-card {
   display: flex;
   flex-direction: column;
-  width: 100%;
-  height: 100%;
   border-radius: var(--pr-radius-xl);
   background: var(--dock-fill);
   border: 1px solid var(--dock-edge);
@@ -576,8 +574,7 @@
 /* 从根节点判形态：胶囊自身的属性会被 :hover 规则顶掉 */
 .df-root[data-open="true"] .df-capsule { opacity: 0 !important; pointer-events: none; }
 /* 卡片本身只动圆角，不动 scale —— 量尺寸的地方（含回归）必须拿到 660 的实宽 */
-.df-card { animation: df-open-radius 380ms var(--pr-ease-out) both; }
-.df-root[data-open="false"] .df-card { opacity: 0; transform: scale(0.98); transition: opacity 200ms var(--pr-ease-out), transform 200ms var(--pr-ease-out); }
+.df-root[data-open="false"] .df-card { opacity: 0; transition: opacity 180ms var(--pr-ease-out); }
 
 /* 形状由弹簧进度驱动：--df-p 由 Rust 每帧推送（1 = 完全展开）。
    calc 里做线性插值，和窗口的 SetWindowPos 同帧，形状就追不上这回事不存在。 */
@@ -591,7 +588,7 @@
 /* 胶囊必须脱离文档流：它和卡片是兄弟节点，留在流里就会把卡片往下挤 44px
    （实测卡片顶边因此低了 41px、高度少了 41px —— 这就是「往下挪了一点」）。 */
 .df-root { position: relative; }
-.df-capsule { position: absolute; inset: 0; }
+.df-capsule { position: absolute; }
 .df-card { position: relative; }
 
 /* ── 卡片固定按 660×591 排版，窗口只负责「裁出中间一块」 ──
