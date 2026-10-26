@@ -158,15 +158,17 @@ export function Sidebar() {
       style={{ transitionTimingFunction: "cubic-bezier(0.22, 1, 0.36, 1)" }}
     >
       <motion.div ref={listRef} layoutRoot className="relative flex min-h-0 flex-col overflow-y-auto px-2 pt-3 pb-2">
-        {NAV_GROUPS.map((group, index) => {
+        {NAV_GROUPS.map((group) => {
           const state = groupState[group.key];
           const open = state.open;
           // 功能开关：被关掉的条目直接不渲染；一组全关掉，整组连标题一起消失
           const items = group.items.filter((entry) => !navDisabled.includes(entry.to));
           if (!items.length) return null;
           const groupActive = items.some((entry) => entry.to === location.pathname);
+          // 一级与二级的行距一致（都是 h-40 + gap-0.5）：原来一级之间额外留 mt-6，
+          // 看起来像三个互不相干的分区，也让侧栏显得空。
           return (
-            <div key={group.key} className={cn("flex flex-col gap-0.5", !collapsed && index > 0 && "mt-6")}>
+            <div key={group.key} className="flex flex-col gap-0.5">
               {/* 一级就是一条正常导航项（图标 + 标签 + 箭头），不是分区小标签：
                   按用户给的 Ant Pro 式参考，一级字号 ≥ 二级，二级选中时一级也变色。 */}
               <button
