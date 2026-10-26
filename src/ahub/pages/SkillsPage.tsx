@@ -1305,63 +1305,45 @@ export function SkillsPage() {
                     </button>
                   ) : null}
                   <h3 className="min-w-0 flex-1 truncate font-mono text-[12.5px] font-semibold text-foreground">{s.name}</h3>
-                </div>
-                {/* 状态行：版本号 · 审核状态 · 生命周期；行距由卡片根部的 gap 给 */}
-                <div className="flex flex-wrap items-center gap-1">
-                  {/* 协议状态：未纳入管理时显式标出，方便批量挑出来处理；点版本号直达版本时间轴 */}
-                  {s.hasToml ? (
-                    s.version !== "0.0.0" ? (
+                  {/* 右上角：只在「需要你知道」时才出现的状态徽标（生命周期 / 审查结论）。
+                      常态是空的 —— 大多数技能这两件事都没什么要说。 */}
+                  <span className="flex shrink-0 items-center gap-1">
+                    {s.hasToml && s.status !== "active" ? (
+                      <Badge variant="warning" title={t("skills.statusHint")}>
+                        {STATUS_LABEL[s.status] ?? s.status}
+                      </Badge>
+                    ) : null}
+                    {s.vetPending > 0 ? (
                       <Badge
-                        variant="muted"
-                        title={batchMode ? t("skills.protoVersionHint") : t("skills.gotoVersionsHint")}
+                        variant="warning"
+                        title={batchMode ? t("skills.reviewPendingHint") : t("skills.gotoReviewHint")}
                         onClick={(e) => {
                           if (batchMode) return;
                           e.stopPropagation();
-                          void openDetail(s, "proto");
+                          void openDetail(s, "review");
                         }}
-                        className={batchMode ? undefined : "cursor-pointer hover:ring-1 hover:ring-info/40"}
+                        className={batchMode ? undefined : "cursor-pointer hover:ring-1 hover:ring-warning/40"}
                       >
-                        v{s.version}
+                        <ShieldAlert />
+                        {t("skills.reviewBadge")}
                       </Badge>
-                    ) : null
-                  ) : (
-                    <Badge variant="warning" title={t("skills.noProtoHint")}>
-                      <CircleAlert />
-                      {t("skills.noProto")}
-                    </Badge>
-                  )}
-                  {s.hasToml && s.status !== "active" ? (
-                    <Badge variant="warning" title={t("skills.statusHint")}>
-                      {STATUS_LABEL[s.status] ?? s.status}
-                    </Badge>
-                  ) : null}
-                  {/* 安全审查：有待处置的发现就黄标（点它直达审查页签），全处置完绿标，机器结论 REJECT 红标 */}
-                  {s.vetPending > 0 ? (
-                    <Badge
-                      variant="warning"
-                      title={batchMode ? t("skills.reviewPendingHint") : t("skills.gotoReviewHint")}
-                      onClick={(e) => {
-                        if (batchMode) return;
-                        e.stopPropagation();
-                        void openDetail(s, "review");
-                      }}
-                      className={batchMode ? undefined : "cursor-pointer hover:ring-1 hover:ring-warning/40"}
-                    >
-                      <ShieldAlert />
-                      {t("skills.reviewBadge")}
-                    </Badge>
-                  ) : s.vetVerdict && s.vetPending === 0 && s.vetIgnored > 0 ? (
-                    <Badge variant="success" title={t("skills.reviewOkHint")}>
-                      <ShieldCheck />
-                      {t("skills.reviewOk")}
-                    </Badge>
-                  ) : s.vetVerdict === "REJECT" ? (
-                    <Badge variant="danger" title={t("skills.reviewRejectHint")}>
-                      <ShieldAlert />
-                      {t("skills.vetReject")}
-                    </Badge>
-                  ) : null}
+                    ) : s.vetVerdict && s.vetPending === 0 && s.vetIgnored > 0 ? (
+                      <Badge variant="success" title={t("skills.reviewOkHint")}>
+                        <ShieldCheck />
+                        {t("skills.reviewOk")}
+                      </Badge>
+                    ) : s.vetVerdict === "REJECT" ? (
+                      <Badge variant="danger" title={t("skills.reviewRejectHint")}>
+                        <ShieldAlert />
+                        {t("skills.vetReject")}
+                      </Badge>
+                    ) : null}
+                  </span>
                 </div>
+                {/* 徽标行腾出来的位置给描述：一行截断，放不下也不换行 */}
+                {s.description ? (
+                  <p className="truncate text-[11.5px] leading-snug text-ink-2">{s.description}</p>
+                ) : null}
 
                 {/* 标签行 */}
                 {s.tags.length ? (
@@ -1396,6 +1378,29 @@ export function SkillsPage() {
                   <span className="min-w-0 flex-1 truncate text-[11px] text-ink-3" title={fmtTime(s.updatedAt)}>
                     {fmtDay(s.updatedAt)}
                   </span>
+                  {/* 版本号（或「无协议」）放右下角，和提示词卡片同一形态：图标 + 版本；点它直达版本时间轴 */}
+                  {s.hasToml ? (
+                    s.version !== "0.0.0" ? (
+                      <button
+                        type="button"
+                        disabled={batchMode}
+                        title={batchMode ? t("skills.protoVersionHint") : t("skills.gotoVersionsHint")}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void openDetail(s, "proto");
+                        }}
+                        className="inline-flex shrink-0 items-center gap-1 text-[11px] text-ink-3 outline-none transition-colors hover:text-foreground"
+                      >
+                        <History className="size-3" />
+                        v{s.version}
+                      </button>
+                    ) : null
+                  ) : (
+                    <Badge variant="warning" title={t("skills.noProtoHint")} className="shrink-0">
+                      <CircleAlert />
+                      {t("skills.noProto")}
+                    </Badge>
+                  )}
                   {batchMode ? null : (
                     <span className="flex shrink-0 items-center gap-0.5">
                       <Button
