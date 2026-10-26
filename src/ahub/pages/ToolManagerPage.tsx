@@ -51,7 +51,7 @@ export function ToolManagerPage() {
         <Fold title={t("tools.sectionTitle")}>
           <ToolManagerSection />
         </Fold>
-        <Fold title={t("settings.vault")}>
+        <Fold title={t("settings.vaultGlobal")}>
           <ConfigVaultSection />
         </Fold>
       </div>

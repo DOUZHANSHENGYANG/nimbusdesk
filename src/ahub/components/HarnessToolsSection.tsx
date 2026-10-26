@@ -1,7 +1,8 @@
-import { Copy, FileCode, FolderOpen, Loader2, RefreshCw, Save, Terminal, TriangleAlert } from "lucide-react";
+import { Check, Clock, Copy, FileCode, FolderOpen, Loader2, RefreshCw, Save, Terminal, TriangleAlert } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
+import { Badge } from "@/ahub/components/ui/badge";
 import { ConfigEditorPanel } from "@/ahub/components/ConfigEditorPanel";
 import { HarnessIcon } from "@/ahub/components/HarnessIcon";
 import { Button } from "@/ahub/components/ui/button";
@@ -11,6 +12,7 @@ import { loadHarnessReports, writeHarnessScan } from "@/ahub/lib/harnessScan";
 import { sortByOrder } from "@/ahub/lib/harnessOrder";
 import { cn } from "@/ahub/lib/utils";
 import { useSettings } from "@/ahub/stores/settings";
+import { useVault } from "@/ahub/stores/vault";
 
 /** 稳定的空数组引用：没配过顺序时给 selector 用，避免每次返回新数组 */
 const NO_ORDER: string[] = [];
@@ -54,6 +56,17 @@ export function HarnessToolsSection() {
   const [acting, setActing] = useState<string | null>(null);
   const [editing, setEditing] = useState<{ id: string; name: string } | null>(null);
   const [migration, setMigration] = useState<HarnessReport | null>(null);
+  /** 展开版本列表的那张卡（一次只展开一个） */
+  const [openVersions, setOpenVersions] = useState<string | null>(null);
+  // 配置版本库：状态与动作都在 store 里，工具卡和「全局」区块共用同一份
+  const vault = useVault();
+  const vaultStatus = useVault((s) => s.status);
+  const vaultIndex = useVault((s) => s.index);
+  const loadVault = useVault((s) => s.load);
+
+  useEffect(() => {
+    void loadVault().catch((e) => toast.error(String(e)));
+  }, [loadVault]);
 
   const load = useCallback(async () => {
     setBusy(true);
@@ -141,7 +154,7 @@ export function HarnessToolsSection() {
   const backup = async (report: HarnessReport) => {
     setActing(`backup:${report.id}`);
     try {
-      const saved = await api.vaultSnapshot([report.id], "manual");
+      const saved = await vault.snapshot([report.id]);
       toast.success(t("harnessTools.backupDone", { n: saved.length }));
       await refreshOne(report, false);
     } catch (e) {
@@ -415,6 +428,102 @@ export function HarnessToolsSection() {
                       )}
                     </div>
                   </div>
+
+                  {/* 配置版本：这一份配置在版本库里存了几版、能不能回滚。
+                      原来整块是「配置版本」那一页，现在跟着工具卡走 —— 一个工具的东西放一起。 */}
+                  {(() => {
+                    const vs = vaultStatus?.find((item) => item.harness === report.id) ?? null;
+                    if (!vs?.exists) return null;
+                    const watched = (vaultIndex?.watched ?? []).includes(report.id);
+                    const versions = vaultIndex?.entries.find((entry) => entry.harness === report.id)?.versions ?? [];
+                    const open = openVersions === report.id;
+                    const latest = versions[versions.length - 1];
+                    return (
+                      <div className="flex items-start gap-2">
+                        <span className="w-12 shrink-0 pt-0.5 text-[10px] text-ink-3">{t("harnessTools.version")}</span>
+                        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
+                          <button
+                            type="button"
+                            title={t("settings.vault")}
+                            aria-pressed={watched}
+                            aria-label={t("settings.vault")}
+                            onClick={() =>
+                              void vault
+                                .setWatched(
+                                  watched
+                                    ? (vaultIndex?.watched ?? []).filter((id) => id !== report.id)
+                                    : [...(vaultIndex?.watched ?? []), report.id],
+                                )
+                                .catch((e) => toast.error(String(e)))
+                            }
+                            className={cn(
+                              "grid size-4 shrink-0 place-items-center rounded border transition-colors",
+                              watched ? "border-primary bg-primary text-white" : "border-border-strong bg-surface",
+                            )}
+                          >
+                            {watched ? <Check className="size-3" strokeWidth={3} /> : null}
+                          </button>
+
+                          {versions.length ? (
+                            <button
+                              type="button"
+                              aria-expanded={open}
+                              onClick={() => setOpenVersions(open ? null : report.id)}
+                              className="inline-flex min-w-0 items-center gap-1 rounded px-1 py-0.5 text-[11px] text-ink-2 outline-none hover:bg-surface-2 hover:text-foreground"
+                            >
+                              <Clock className="size-3 shrink-0 text-ink-3" />
+                              <span className="font-mono">v{latest.v}</span>
+                              <span className="text-ink-3">{t("harnessTools.versionCount", { n: versions.length })}</span>
+                            </button>
+                          ) : (
+                            <span className="text-[11px] text-ink-3">{t("harnessTools.versionNone")}</span>
+                          )}
+
+                          {watched && !vs.upToDate ? <Badge variant="warning">{t("settings.vaultChanged")}</Badge> : null}
+                        </div>
+                      </div>
+                    );
+                  })()}
+
+                  {openVersions === report.id
+                    ? (vaultIndex?.entries.find((entry) => entry.harness === report.id)?.versions ?? [])
+                        .slice()
+                        .reverse()
+                        .map((ver) => (
+                          <div key={ver.v} className="ml-14 flex items-center gap-2 text-[11px]">
+                            <span className="shrink-0 font-mono text-ink-3">v{ver.v}</span>
+                            <span className="shrink-0 tabular-nums text-ink-3">{ver.savedAt}</span>
+                            <span className="min-w-0 flex-1 truncate font-mono text-[10px] text-ink-3">{ver.kind}</span>
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              className="h-6 shrink-0 px-2 text-[10.5px]"
+                              disabled={vault.busy}
+                              onClick={() =>
+                                void vault
+                                  .restore(report.id, ver.v)
+                                  .then(() => toast.success(t("settings.vaultRestored", { v: ver.v })))
+                                  .catch((e) => toast.error(String(e)))
+                              }
+                            >
+                              {t("settings.vaultRestore")}
+                            </Button>
+                            <button
+                              type="button"
+                              disabled={vault.busy}
+                              onClick={() =>
+                                void vault
+                                  .clear([report.id])
+                                  .then(() => toast.success(t("settings.vaultCleared")))
+                                  .catch((e) => toast.error(String(e)))
+                              }
+                              className="shrink-0 rounded px-1.5 py-0.5 text-[10.5px] text-ink-3 outline-none hover:bg-danger/10 hover:text-danger disabled:opacity-40"
+                            >
+                              {t("settings.vaultClear")}
+                            </button>
+                          </div>
+                        ))
+                    : null}
                 </div>
               </section>
             );
