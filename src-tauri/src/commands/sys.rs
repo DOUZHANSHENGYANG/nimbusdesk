@@ -37,6 +37,10 @@ pub async fn set_developer_mode(window: tauri::WebviewWindow, enabled: bool) -> 
 /// 前端首帧渲染完成后调用：显示调用方窗口（防白闪，主窗/设置窗通用）。
 #[tauri::command]
 pub fn window_ready(window: tauri::Window) -> Result<(), String> {
+    // 这个窗口是「隐藏创建、等前端就绪才显示」的（配置里 visible:false）。实测它的
+    // 扩展样式已经是 WS_EX_APPWINDOW（够格进任务栏），但 Windows 偶尔不给这种
+    // 后显示的窗口补登记任务栏按钮 —— 显示的这一下再显式声明一次，比指望默认值稳。
+    let _ = window.set_skip_taskbar(false);
     let _ = window.show();
     let _ = window.set_focus();
     Ok(())

@@ -30,6 +30,7 @@ import {
 import { Field, Input, Textarea } from "@/ahub/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/ahub/components/ui/select";
 import { api, copyText, pasteText } from "@/ahub/lib/api";
+import { loadHarnessReports } from "@/ahub/lib/harnessScan";
 import { parseMcpConfig } from "@/ahub/lib/mcpParse";
 import { presetErrorText } from "@/ahub/lib/presetErrors";
 import { sortByOrder } from "@/ahub/lib/harnessOrder";
@@ -337,8 +338,7 @@ export function McpPage() {
 
 
   const loadReports = () =>
-    api
-      .scanHarnesses()
+    loadHarnessReports()
       .then(setReports)
       .catch(() => setReports([]));
 

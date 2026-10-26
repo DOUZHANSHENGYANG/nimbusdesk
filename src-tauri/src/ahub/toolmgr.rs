@@ -197,8 +197,42 @@ fn probe_cli(cmd: &str) -> (bool, String) {
 
 // ---------------- 对外命令 ----------------
 
-/// 列出工具及其本地安装状态。**不打 registry**，纯本地查询，快。
+/*
+ * `list()` 的缓存。
+ *
+ * 实测：`npm ls -g --json` 一次 ~1.6 s，每个 CLI 的 `--version` 探针 0.1–0.2 s ×
+ * 十几个（node 系的 CLI 启动本身就慢），而 Harness 目录扫描只要 ~26 ms。
+ * 也就是这个页面「加载中」几乎全花在探针上 —— 每次进页面都重来一遍，
+ * 所以给人的感觉是「一直在扫、还特别慢」。5 分钟 TTL：真装了新工具不用等太久，
+ * 反复进出页面又不必重复探。更新/安装之后显式失效，避免显示旧版本。
+ */
+static LIST_CACHE: std::sync::Mutex<Option<(std::time::Instant, ToolList)>> = std::sync::Mutex::new(None);
+const LIST_TTL: std::time::Duration = std::time::Duration::from_secs(300);
+
+/// 装了/更新了工具之后调它，下一次 `list()` 重新探。
+pub fn invalidate_list_cache() {
+    if let Ok(mut guard) = LIST_CACHE.lock() {
+        *guard = None;
+    }
+}
+
+/// 列出工具及其本地安装状态。**不打 registry**，纯本地查询；结果按 TTL 缓存。
 pub fn list() -> ToolList {
+    if let Ok(guard) = LIST_CACHE.lock() {
+        if let Some((at, cached)) = guard.as_ref() {
+            if at.elapsed() < LIST_TTL {
+                return cached.clone();
+            }
+        }
+    }
+    let fresh = list_uncached();
+    if let Ok(mut guard) = LIST_CACHE.lock() {
+        *guard = Some((std::time::Instant::now(), fresh.clone()));
+    }
+    fresh
+}
+
+fn list_uncached() -> ToolList {
     let mut out = match installed_packages() {
         Ok(inst) => ToolList {
             tools: TOOLS
@@ -358,6 +392,8 @@ pub fn update(ids: &[String]) -> Vec<UpdateOutcome> {
             }),
         }
     }
+    // 装/更新完了，别让下一次 list() 还回缓存里的旧版本
+    invalidate_list_cache();
     out
 }
 

@@ -7,6 +7,7 @@ import { HarnessIcon } from "@/ahub/components/HarnessIcon";
 import { Button } from "@/ahub/components/ui/button";
 import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/ahub/components/ui/dialog";
 import { api, copyText } from "@/ahub/lib/api";
+import { loadHarnessReports, writeHarnessScan } from "@/ahub/lib/harnessScan";
 import type { HarnessReport, ToolVersion } from "@/ahub/lib/types";
 
 /** 官方支持用它把整个配置/数据根目录搬到别的盘；没有的只能用目录联接。 */
@@ -32,35 +33,6 @@ function configPaths(report: HarnessReport): string[] {
   return report.configPath ? report.configPath.split(" · ").filter(Boolean) : [];
 }
 
-/** 扫描结果按天缓存：Harness 目录不会每分钟变，没必要每次进页面都全盘扫。 */
-const SCAN_CACHE_KEY = "nimbusdesk.harnessScan.v1";
-
-function dayKey(): string {
-  const d = new Date();
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-}
-
-function readScanCache(): HarnessReport[] | null {
-  try {
-    const raw = localStorage.getItem(SCAN_CACHE_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as { day?: string; reports?: HarnessReport[] };
-    if (parsed.day !== dayKey() || !Array.isArray(parsed.reports)) return null;
-    return parsed.reports;
-  } catch {
-    return null;
-  }
-}
-
-function writeScanCache(reports: HarnessReport[]): void {
-  try {
-    localStorage.setItem(SCAN_CACHE_KEY, JSON.stringify({ day: dayKey(), reports }));
-  } catch {
-    /* 隐私模式/配额满：缓存失败不影响功能 */
-  }
-}
-
 /**
  * 每个 harness 一张小卡：CLI 状态、配置文件、技能目录、备份与迁移入口都在这里。
  *
@@ -82,16 +54,8 @@ export function HarnessToolsSection() {
     try {
       const list = await api.toolList();
       setTools(list?.tools ?? []);
-      // 当天已扫过就直接用缓存；次日首次进入或用户点单卡刷新才重新扫目录。
-      const cached = readScanCache();
-      if (cached) {
-        setReports(cached);
-        return;
-      }
-      const nextReports = await api.scanHarnesses();
-      const next = nextReports ?? [];
-      setReports(next);
-      writeScanCache(next);
+      // 当天已扫过就直接用缓存（共用那一份）；次日首次进入或用户点单卡刷新才重新扫目录。
+      setReports(await loadHarnessReports());
     } catch (e) {
       toast.error(String(e));
     } finally {
@@ -106,7 +70,7 @@ export function HarnessToolsSection() {
       const next = await api.scanHarness(report.id);
       setReports((prev) => {
         const list = (prev ?? []).map((item) => (item.id === next.id ? next : item));
-        writeScanCache(list);
+        writeHarnessScan(list);
         return list;
       });
       if (announce) toast.success(t("harnessTools.refreshOneDone", { name: report.name }));

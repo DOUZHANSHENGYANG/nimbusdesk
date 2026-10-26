@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { HarnessIcon } from "@/ahub/components/HarnessIcon";
 import { Button } from "@/ahub/components/ui/button";
-import { api } from "@/ahub/lib/api";
+import { loadHarnessReports } from "@/ahub/lib/harnessScan";
 import type { HarnessReport } from "@/ahub/lib/types";
 import { cn } from "@/ahub/lib/utils";
 import { useSettings } from "@/ahub/stores/settings";
@@ -21,7 +21,7 @@ export function HarnessOrderSection() {
   const [overId, setOverId] = useState<string | null>(null);
 
   useEffect(() => {
-    void api.scanHarnesses().then(setReports).catch(() => setReports([]));
+    void loadHarnessReports().then(setReports).catch(() => setReports([]));
   }, []);
 
   const savedOrder = info?.settings.harnessOrder ?? [];

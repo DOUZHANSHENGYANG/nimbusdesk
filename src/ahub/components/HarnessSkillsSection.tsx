@@ -6,6 +6,7 @@ import { ConfirmDialog } from "@/ahub/components/ConfirmDialog";
 import { HarnessIcon } from "@/ahub/components/HarnessIcon";
 import { Button } from "@/ahub/components/ui/button";
 import { api } from "@/ahub/lib/api";
+import { loadHarnessReports } from "@/ahub/lib/harnessScan";
 import { dirBase } from "@/ahub/lib/skillHarness";
 import type { HarnessReport } from "@/ahub/lib/types";
 import { cn } from "@/ahub/lib/utils";
@@ -30,7 +31,7 @@ export function HarnessSkillsSection() {
   const load = async () => {
     setBusy(true);
     try {
-      setReports(await api.scanHarnesses());
+      setReports(await loadHarnessReports());
     } catch (e) {
       toast.error(String(e));
     } finally {

@@ -14,6 +14,7 @@ import {
 } from "@/ahub/components/ui/dialog";
 import { HarnessIcon } from "@/ahub/components/HarnessIcon";
 import { api } from "@/ahub/lib/api";
+import { loadHarnessReports } from "@/ahub/lib/harnessScan";
 import { Input } from "@/ahub/components/ui/input";
 import type { HarnessReport, ImportSelection } from "@/ahub/lib/types";
 import { cn } from "@/ahub/lib/utils";
@@ -153,7 +154,7 @@ export function HarnessDialog({
   const scan = useCallback(async () => {
     setScanning(true);
     try {
-      const rs = await api.scanHarnesses();
+      const rs = await loadHarnessReports(true);
       setReports(rs);
       /*
        * 默认全选扫描到的全部条目 —— MCP 与 skills 一视同仁。

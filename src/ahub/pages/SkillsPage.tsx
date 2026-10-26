@@ -37,6 +37,7 @@ import { Field, Input, Textarea } from "@/ahub/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/ahub/components/ui/select";
 import { Switch } from "@/ahub/components/motion/switch";
 import { api, copyText } from "@/ahub/lib/api";
+import { loadHarnessReports } from "@/ahub/lib/harnessScan";
 import { open as openDialog } from "@tauri-apps/plugin-dialog";
 import { AddSkillDialog } from "@/ahub/components/AddSkillDialog";
 import { PresetDialog } from "@/ahub/components/PresetDialog";
@@ -436,7 +437,7 @@ export function SkillsPage() {
    */
   const loadHarnesses = async () => {
     try {
-      setHarnessReports(await api.scanHarnesses());
+      setHarnessReports(await loadHarnessReports());
     } catch {
       setHarnessReports([]);
     }
