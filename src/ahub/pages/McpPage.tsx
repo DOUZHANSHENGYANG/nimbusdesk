@@ -93,12 +93,11 @@ export function McpPage() {
   const [selectedPresetId, setSelectedPresetId] = useState<string | null>(null);
   const [presetManagerOpen, setPresetManagerOpen] = useState(false);
   const [presetSaveOpen, setPresetSaveOpen] = useState(false);
-  // 连通性测试：进行中的服务 id + 每个服务最近一次的结果
-  const [testing, setTesting] = useState<string | null>(null);
+  // 连通性测试：进行中的批量标记 + 每个服务最近一次的结果
   const [testResults, setTestResults] = useState<Record<string, McpTestResult>>({});
   const [batchTesting, setBatchTesting] = useState(false);
   // AI 打标签弹框
-  const [tagTarget, setTagTarget] = useState<McpServer | null>(null);
+  const [tagTargets, setTagTargets] = useState<McpServer[]>([]);
   const [suggested, setSuggested] = useState<string[]>([]);
   const [tagLoading, setTagLoading] = useState(false);
   const [newTag, setNewTag] = useState("");
@@ -358,26 +357,19 @@ export function McpPage() {
       .finally(() => setScanning(false));
   };
 
-  /** 连通性测试：stdio 跑 --help / http·sse GET，结果显示在卡片上 */
-  const runTest = (s: McpServer) => {
-    setTesting(s.id);
-    api
-      .testMcpConnectivity(s)
-      .then((r) => setTestResults((prev) => ({ ...prev, [s.id]: r })))
-      .catch((e) => toast.error(`${t("mcp.testConnectivity")}: ${String(e)}`))
-      .finally(() => setTesting(null));
-  };
-
-  /** 批量测试：并发测全部服务，结果写入同一个 testResults，由各卡片自行展示 */
-  const runBatchTest = async () => {
+  /** 连通性测试：stdio 跑 --help / http·sse GET，结果显示在卡片上。
+      工具栏那枚按钮测的是「已选」，所以这里收一个列表。 */
+  const runTestSelected = async () => {
+    const targets = mcp.filter((x) => batchSel.has(x.id));
+    if (!targets.length) return;
     setBatchTesting(true);
-    const settled = await Promise.allSettled(mcp.map((m) => api.testMcpConnectivity(m)));
+    const settled = await Promise.allSettled(targets.map((s) => api.testMcpConnectivity(s)));
     setTestResults((prev) => {
       const next = { ...prev };
-      mcp.forEach((m, i) => {
+      targets.forEach((s, i) => {
         const r = settled[i];
         // 失败的也落一条 ❌，卡片上能看到原因，而不是静默没有结果
-        next[m.id] =
+        next[s.id] =
           r.status === "fulfilled"
             ? r.value
             : { ok: false, message: String(r.reason), elapsedMs: 0, timedOut: false };
@@ -387,28 +379,42 @@ export function McpPage() {
     setBatchTesting(false);
   };
 
-  /** AI 打标签：拿建议 → 弹框人工增删 → 确认才写入 */
-  const openAiTags = (s: McpServer) => {
-    setTagTarget(s);
+  /** AI 打标签：拿建议 → 弹框人工增删 → 确认才写入。
+      多个服务一起选时，各家的建议取并集，确认后合并进每一家的标签（不覆盖已有）。 */
+  const openAiTags = (targets: McpServer[]) => {
+    if (!targets.length) return;
+    setTagTargets(targets);
     setSuggested([]);
     setNewTag("");
     setTagLoading(true);
-    api
-      .aiSuggestTags(s.name, s.description)
-      .then(setSuggested)
+    Promise.allSettled(targets.map((s) => api.aiSuggestTags(s.name, s.description)))
+      .then((rs) => {
+        const ok = rs.filter((r): r is PromiseFulfilledResult<string[]> => r.status === "fulfilled");
+        const merged: string[] = [];
+        for (const r of ok) for (const tag of r.value) if (!merged.includes(tag)) merged.push(tag);
+        if (!ok.length) {
+          toast.error(String((rs[0] as PromiseRejectedResult)?.reason ?? ""));
+          setTagTargets([]);
+          return;
+        }
+        if (ok.length < rs.length) toast.warning(t("mcp.tagPartial", { ok: ok.length, n: rs.length }));
+        setSuggested(merged);
+      })
       .catch((e) => {
         toast.error(String(e));
-        setTagTarget(null);
+        setTagTargets([]);
       })
       .finally(() => setTagLoading(false));
   };
 
   const confirmAiTags = async () => {
-    if (!tagTarget) return;
+    if (!tagTargets.length) return;
     // 与现有标签合并去重：弹框只决定「新增哪些」，不覆盖已有标签
-    await saveMcp({ ...tagTarget, tags: [...new Set([...tagTarget.tags, ...suggested])] });
+    for (const target of tagTargets) {
+      await saveMcp({ ...target, tags: [...new Set([...target.tags, ...suggested])] });
+    }
     toast.success(t("mcp.saved"));
-    setTagTarget(null);
+    setTagTargets([]);
   };
 
   const addTagManually = () => {
@@ -566,16 +572,27 @@ export function McpPage() {
 
       {filtered.length > 0 ? (
         <div data-anim className="mb-3 flex flex-wrap items-center gap-2">
-          {/* 批量测试是全局动作，放工具栏只出现一次；每张卡片的「测试连通性」仍测单个 */}
+          {/* 测试连通性 / AI 打标签 都收在工具栏：测的和标的都是「已选」，
+              卡片上不再各挂一份 —— 卡片只留「编辑 / 复制 / 删除」这类单条动作。 */}
           <Button
             size="sm"
             variant="secondary"
             className="h-8"
-            disabled={batchTesting || filtered.length === 0}
-            onClick={() => void runBatchTest()}
+            disabled={batchTesting || batchSel.size === 0}
+            onClick={() => void runTestSelected()}
           >
             <PlugZap />
-            {t("mcp.batchTest")}
+            {t("mcp.testConnectivity")}
+          </Button>
+          <Button
+            size="sm"
+            variant="secondary"
+            className="h-8"
+            disabled={tagLoading || batchSel.size === 0}
+            onClick={() => openAiTags(mcp.filter((x) => batchSel.has(x.id)))}
+          >
+            <Sparkles className="size-3.5" />
+            {t("mcp.aiTags")}
           </Button>
           {/* 选中后才用得到的动作：常显但禁用，不再靠「批量选择」整块藏起来。
               卡片单击 = 选中、双击 = 打开编辑，所以没有批量模式开关。 */}
@@ -766,25 +783,6 @@ export function McpPage() {
                 </div>
               ) : null}
               <div className="mt-auto flex flex-wrap items-center justify-end gap-0.5 pt-3">
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  className="h-7 px-2.5 text-[11px]"
-                  disabled={testing === s.id || batchTesting}
-                  onClick={() => runTest(s)}
-                >
-                  <PlugZap className="size-3.5" />
-                  {t("mcp.testConnectivity")}
-                </Button>
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  className="h-7 px-2.5 text-[11px]"
-                  onClick={() => openAiTags(s)}
-                >
-                  <Sparkles className="size-3.5" />
-                  {t("mcp.aiTags")}
-                </Button>
                 <Button size="sm" variant="secondary" className="h-7 px-2.5 text-[11px]" onClick={() => openEdit(s)}>
                   {t("common.edit")}
                 </Button>
@@ -974,12 +972,15 @@ export function McpPage() {
       </Dialog>
 
       {/* AI 打标签：建议标签可点击移除，输入框可手动补充，确认才写入 */}
-      <Dialog open={!!tagTarget} onOpenChange={(v) => !v && setTagTarget(null)}>
+      <Dialog open={tagTargets.length > 0} onOpenChange={(v) => !v && setTagTargets([])}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{t("mcp.tagDialogTitle")}</DialogTitle>
           </DialogHeader>
           <DialogBody className="flex flex-col gap-4">
+            {tagTargets.length > 1 ? (
+              <p className="text-[11px] text-ink-3">{t("mcp.tagDialogScope", { n: tagTargets.length })}</p>
+            ) : null}
             {tagLoading ? (
               <p className="text-xs text-ink-3">{t("mcp.tagLoading")}</p>
             ) : suggested.length ? (
@@ -1010,7 +1011,7 @@ export function McpPage() {
             />
           </DialogBody>
           <DialogFooter>
-            <Button variant="secondary" onClick={() => setTagTarget(null)}>
+            <Button variant="secondary" onClick={() => setTagTargets([])}>
               {t("mcp.tagCancel")}
             </Button>
             <Button disabled={tagLoading} onClick={() => void confirmAiTags()}>
