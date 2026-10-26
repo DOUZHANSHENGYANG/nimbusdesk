@@ -1,35 +1,33 @@
 import { useMemo, useState } from "react";
-import { ArrowDown, ArrowUp, Check, ChevronRight, FolderPlus, Pencil, Search, Trash2, X } from "lucide-react";
+import { ArrowDown, ArrowUp, Check, ChevronRight, FolderPlus, Pencil, Plus, Search, Trash2, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/ahub/lib/utils";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/ahub/components/ui/select";
 import { useTagGroups } from "@/ahub/stores/tag-groups";
 
 /**
- * 标签页（C 底座）：左侧分组、中间按分区分组的标签表、右侧命中。
+ * 标签页（C 底座）：左侧分组、中间按分区分组的标签表。
+ *
+ * 右侧原来还有一栏「当前命中 + 统计」，已删：那个数字左栏（每个分组的条数）
+ * 和列表本身都有，统计里的「N 个标签 · M 组」也在左栏能读出来 —— 白占一列宽。
  *
  * 标签**不可编辑**：它来自技能 / MCP / 提示词里用户自己写的那串字符串，
  * 在这里改名会静默改掉一堆条目的标签，用户根本不知道发生了什么。
  * 所以这里只做两件事：给标签**归组**、管理**分组**本身（增 / 改 / 删 / 排序）。
  *
  * 建组有三个入口，走的都是同一套「建完立刻归位」的流程：
- *   1. 左栏底部「＋ 新建分组」—— 先建一个空组（组本身也是可排序的一等对象）；
+ *   1. 左栏底部「新建分组」—— 先建一个空组（组本身也是可排序的一等对象）；
  *   2. 批量栏「新建分组并移入」—— 选中若干标签后一步建组 + 归组；
- *   3. 行内下拉最后一项「＋ 新建分组…」—— 这一条直接进新组。
+ *   3. 行内下拉最后一项「新建分组…」—— 这一条直接进新组。
  * 参考的是 Linear 的 label groups（在使用处建组）、Gmail 的 Create new label、
  * TagSpaces 的分组可排序，以及 Reduct 用折叠分区把「组间搬运」变简单。
  */
 export function TagManagerView({
   allTags,
   counts,
-  resultCount,
 }: {
   allTags: string[];
   counts?: Record<string, number>;
-  resultCount?: number;
-  /** 兼容旧调用：标签不可编辑，这两个回调不再使用 */
-  onRenameTag?: (from: string, to: string) => Promise<void> | void;
-  onDeleteTag?: (tag: string) => Promise<void> | void;
 }) {
   const { t } = useTranslation();
   const groups = useTagGroups((s) => s.groups);
@@ -50,7 +48,6 @@ export function TagManagerView({
   const [batchGroup, setBatchGroup] = useState("");
 
   const groupOf = (tag: string) => groups.find((group) => group.tags.includes(tag)) ?? null;
-  const totalUses = useMemo(() => allTags.reduce((sum, tag) => sum + (counts?.[tag] ?? 0), 0), [allTags, counts]);
 
   /** 分区：按分组顺序排（最后永远是「未分组」）；筛选只影响每个分区里的标签，不隐藏分区本身 */
   const sections = useMemo(() => {
@@ -216,7 +213,7 @@ export function TagManagerView({
   };
 
   return (
-    <div className="grid min-h-0 flex-1 grid-cols-[176px_minmax(0,1fr)_212px] gap-3">
+    <div className="grid min-h-0 flex-1 grid-cols-[176px_minmax(0,1fr)] gap-3">
       <nav className="flex flex-col gap-0.5">
         <p className="px-2 pb-1 text-[10.5px] uppercase tracking-wider text-ink-3">{t("tagManager.groups")}</p>
 
@@ -386,7 +383,10 @@ export function TagManagerView({
                               ))}
                               {/* 最后一项现场建组：这一条直接进新组 */}
                               <SelectItem value="__new" className="text-primary">
-                                {t("tagManager.newGroupInline")}
+                                <span className="inline-flex items-center gap-1.5">
+                                  <Plus className="size-3" />
+                                  {t("tagManager.newGroupInline")}
+                                </span>
                               </SelectItem>
                             </SelectContent>
                           </Select>
@@ -407,14 +407,6 @@ export function TagManagerView({
           ) : null}
         </div>
       </section>
-
-      <aside className="rounded-lg border border-border bg-surface/60 p-2.5">
-        <p className="text-[11px] text-ink-3">{t("tagManager.sideTitle")}</p>
-        <p className="mt-1 font-mono text-[22px] text-foreground">{resultCount ?? 0}</p>
-        <div className="mt-3 border-t border-border/60 pt-2 text-[10.5px] leading-5 text-ink-3">
-          <p>{t("tagManager.sideStats", { tags: allTags.length, groups: groups.length, uses: totalUses })}</p>
-        </div>
-      </aside>
     </div>
   );
 }

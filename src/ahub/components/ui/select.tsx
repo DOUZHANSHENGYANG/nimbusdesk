@@ -36,7 +36,7 @@ export const SelectContent = forwardRef<
       position={position}
       sideOffset={6}
       className={cn(
-        "z-[60] max-h-72 min-w-[8rem] overflow-hidden rounded-lg border border-border bg-popover text-popover-foreground shadow-lg",
+        "z-[60] max-h-72 min-w-[8rem] min-w-[var(--radix-select-trigger-width)] overflow-hidden rounded-lg border border-border bg-popover text-popover-foreground shadow-lg",
         "data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out-0",
         className,
       )}

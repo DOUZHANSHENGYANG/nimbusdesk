@@ -293,7 +293,7 @@ export function PromptsPage() {
       </div>
 
       {pageTab === "tags" ? (
-        <TagManagerView allTags={allTags} counts={tagCounts} resultCount={filtered.length} />
+        <TagManagerView allTags={allTags} counts={tagCounts} />
       ) : (
         <>
           <div className="flex min-h-0 flex-1 items-start gap-3">

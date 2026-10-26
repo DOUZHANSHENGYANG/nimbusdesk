@@ -535,7 +535,7 @@ export function McpPage() {
       </div>
 
       {pageTab === "tags" ? (
-        <TagManagerView allTags={allTags} counts={tagCounts} resultCount={filtered.length} />
+        <TagManagerView allTags={allTags} counts={tagCounts} />
       ) : (
         <>
       {/* 标签筛选常驻：即便当前没有标签也保留入口，否则用户不知道有这个能力，
