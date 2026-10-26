@@ -42,6 +42,12 @@ export const en: AppMessages = {
   },
   dockFloat: {
     title: "Cloud",
+    "tab.home": "Activity",
+    homeTodo: "Todos",
+    homeTodoValue: "{{todo}} to do · {{late}} late",
+    homeFavs: "Favorites",
+    homeFavsValue: "{{n}} saved",
+    homeCal: "Calendar",
     todoUnit: "open",
     lateUnit: "late",
     doneUnit: "done",

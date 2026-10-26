@@ -1144,3 +1144,18 @@
 .df-dots { display:inline-flex; gap:3px; flex:0 0 auto; }
 .df-dots i { width:4px; height:4px; border-radius:50%; background:oklch(1 0 0 / .16); }
 .df-dots i.on { background:oklch(1 0 0 / .45); }
+
+/* ── 动作行 + 活动页（P0 定稿）：入口只住在展开卡里，图标带文字 ── */
+.df-actrow { display:flex; gap:2px; border-top:1px solid var(--hairline, oklch(1 0 0 / .1)); padding:5px 2px 2px; }
+.df-act { flex:1; display:flex; flex-direction:column; align-items:center; gap:3px; padding:5px 0 3px; border-radius:var(--pr-radius-md, 10px); color:var(--dock-text, var(--foreground)); }
+.df-act:hover { background:var(--dock-face, oklch(1 0 0 / .08)); }
+.df-act.is-on { background:var(--dock-face2, oklch(1 0 0 / .14)); }
+.df-act.is-on .df-icon, .df-act.is-on span { color:var(--brand); }
+.df-act span { font-size:10px; letter-spacing:.02em; color:var(--foreground-muted, var(--muted-foreground)); }
+.df-act .df-icon { width:16px; height:16px; }
+.df-home { display:grid; grid-template-columns:repeat(3, 1fr); gap:10px; padding:6px 2px 2px; }
+.df-home-card { display:flex; flex-direction:column; gap:4px; align-items:flex-start; padding:12px; border-radius:var(--pr-radius-lg, 14px); border:1px solid var(--hairline, oklch(1 0 0 / .1)); background:var(--dock-face, oklch(1 0 0 / .08)); color:var(--foreground); text-align:left; cursor:pointer; }
+.df-home-card:hover { background:var(--dock-face2, oklch(1 0 0 / .14)); }
+.df-home-card b { font-size:13px; font-weight:640; }
+.df-home-card span { font-size:11.5px; color:var(--foreground-muted, var(--muted-foreground)); }
+.df-home-card.is-warn span { color:var(--warning, oklch(0.75 0.12 80)); }

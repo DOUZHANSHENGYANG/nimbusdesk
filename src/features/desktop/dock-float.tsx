@@ -5,8 +5,9 @@ import { listen } from "@tauri-apps/api/event";
 import { useTranslation } from "react-i18next";
 import {
   AppWindow, ArrowLeft, BookOpen, Bookmark, CalendarCheck, Camera, ChevronDown, ExternalLink, FileText, Folder,
-  Bell, CalendarDays, CloudSun, FolderKanban, SquareTerminal, RefreshCw, Rss, Search, Send, Settings2, Sparkles, Star, Trash2,
+  Bell, CalendarDays, CloudSun, FolderKanban, Inbox, LayoutGrid, Newspaper, SquareTerminal, RefreshCw, Rss, Search, Send, Settings2, Sparkles, Star, Trash2,
 } from "lucide-react";
+import { useFavorites } from "@/stores/favorites";
 import { usePlans } from "@/features/plans/store";
 import { todayStr, type PlanTask } from "@/features/plans/types";
 import { openSearchResult, searchQuery } from "@/features/search/api";
@@ -14,7 +15,6 @@ import type { SearchHit } from "@/features/search/types";
 import { mergedSources } from "@/sources/custom";
 import type { SourceEntry } from "@/sources/types";
 import { useFeeds } from "@/stores/feeds";
-import { useFavorites } from "@/stores/favorites";
 import { ArticleReader } from "@/features/feeds/article-reader";
 import {
   openUrl,
@@ -34,7 +34,7 @@ import "./dock-float.css";
  * 收纳盒 / 计划 / 项目 是侧栏形态里那三个飞出面板**本体**，由 dock.tsx 注入 ——
  * 卡片不重写它们，否则同一功能会出现两套实现、两套密度、两套交互。
  */
-type DockTab = "search" | "fences" | "plans" | "projects" | "collect" | "news" | "cal" | "chat" | "weather" | "notice" | "term";
+type DockTab = "home" | "search" | "fences" | "plans" | "projects" | "collect" | "news" | "cal" | "chat" | "weather" | "notice" | "term";
 
 /**
  * 表面形态。窗口只切换一次尺寸，视觉由 CSS clip-path 负责：
@@ -50,6 +50,45 @@ const TOOL_TABS: { key: DockTab; icon: typeof Search }[] = [
   { key: "notice", icon: Bell },
   { key: "term", icon: SquareTerminal },
 ];
+
+/**
+ * 展开卡底部的**动作行**（P0 定稿）：图标 + 文字，点哪儿去哪儿。
+ * 取代了旧版「胶囊里摆 11 颗图标」—— 入口只住在展开的卡片里。
+ */
+const ACT_ROW: { key: DockTab; icon: typeof Search }[] = [
+  { key: "home", icon: Sparkles },
+  { key: "search", icon: Search },
+  { key: "fences", icon: LayoutGrid },
+  { key: "plans", icon: CalendarCheck },
+  { key: "projects", icon: FolderKanban },
+  { key: "collect", icon: Inbox },
+  { key: "news", icon: Newspaper },
+];
+
+/** 活动页（P0 定稿的队列卡）：一张卡 = 一个「有东西等你的地方」，点卡片就是去那里。 */
+function HomePanel({ onOpen }: { onOpen: (tab: DockTab) => void }) {
+  const { t } = useTranslation();
+  const today = todayStr();
+  const tasks = usePlans((state) => state.days[today]) ?? [];
+  const summary = summarizeDay(tasks);
+  const favs = useFavorites((state) => state.items.length);
+  const cards: { key: string; title: string; value: string; tab: DockTab; warn?: boolean }[] = [
+    { key: "todo", title: t("dockFloat.homeTodo"), value: t("dockFloat.homeTodoValue", { todo: summary.todo, late: summary.late }), tab: "plans", warn: summary.todo > 0 || summary.late > 0 },
+    { key: "favs", title: t("dockFloat.homeFavs"), value: t("dockFloat.homeFavsValue", { n: favs }), tab: "search" },
+    { key: "cal", title: t("dockFloat.homeCal"), value: today, tab: "cal" },
+  ];
+  return (
+    <div className="df-home">
+      {cards.map((card) => (
+        <button key={card.key} type="button" className={card.warn ? "df-home-card is-warn" : "df-home-card"}
+          onClick={() => onOpen(card.tab)}>
+          <b>{card.title}</b>
+          <span>{card.value}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
 
 const report = (error: unknown) => console.error("[dock-float]", error);
 
@@ -76,7 +115,7 @@ export function DockFloat({ onExpand, onHide, panels }: {
   const today = todayStr();
   const tasks = usePlans((state) => state.days[today]) ?? [];
   const [phase, setPhase] = useState<SurfacePhase>("compact");
-  const [tab, setTab] = useState<DockTab>("search");
+  const [tab, setTab] = useState<DockTab>("home");
   /** 对话是「副页」而不是第七个 tab：标签已经六个，再多就挤成图标了 */
   const [chatOpen, setChatOpen] = useState(false);
   const summary = useMemo(() => summarizeDay(tasks), [tasks]);
@@ -339,6 +378,7 @@ export function DockFloat({ onExpand, onHide, panels }: {
               <div className="df-body"><ChatPanel onClose={() => setChatOpen(false)} /></div>
             ) : (
               <div className="df-body">
+                {tab === "home" && <HomePanel onOpen={setTab} />}
                 {tab === "search" && <SearchPanel />}
                 {tab === "fences" && <div className="df-host">{panels.fences}</div>}
                 {tab === "plans" && <div className="df-host">{panels.plans}</div>}
@@ -354,6 +394,18 @@ export function DockFloat({ onExpand, onHide, panels }: {
                 {tab === "term" && <TerminalPanel />}
               </div>
             )}
+
+            {/* 动作行（P0 定稿）：图标 + 文字，当前页高亮 —— 岛的入口只住在这里 */}
+            <nav className="df-actrow" role="tablist" aria-label={t("dockFloat.title")}>
+              {ACT_ROW.map(({ key, icon: Icon }) => (
+                <button key={key} type="button" role="tab" aria-selected={tab === key}
+                  className={tab === key ? "df-act is-on" : "df-act"}
+                  onClick={() => { setTab(key); setChatOpen(false); }}>
+                  <Icon className="df-icon" aria-hidden="true" />
+                  <span>{t(`dockFloat.tab.${key}`)}</span>
+                </button>
+              ))}
+            </nav>
 
             <div className="df-foot">
               <span>{t("dockFloat.footSummary", { todo: summary.todo, late: summary.late })}</span>

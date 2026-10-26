@@ -39,6 +39,12 @@ export const zh = {
   },
   dockFloat: {
     title: "云台",
+    "tab.home": "活动",
+    homeTodo: "待办",
+    homeTodoValue: "{{todo}} 项待处理 · 逾期 {{late}}",
+    homeFavs: "收藏",
+    homeFavsValue: "{{n}} 条",
+    homeCal: "日历",
     todoUnit: "项待办",
     lateUnit: "逾期",
     doneUnit: "已完成",
