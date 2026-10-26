@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Badge } from "@/ahub/components/ui/badge";
+import { ConfirmDialog } from "@/ahub/components/ConfirmDialog";
 import { ConfigEditorPanel } from "@/ahub/components/ConfigEditorPanel";
 import { HarnessIcon } from "@/ahub/components/HarnessIcon";
 import { Button } from "@/ahub/components/ui/button";
@@ -58,6 +59,9 @@ export function HarnessToolsSection() {
   const [migration, setMigration] = useState<HarnessReport | null>(null);
   /** 展开版本列表的那张卡（一次只展开一个） */
   const [openVersions, setOpenVersions] = useState<string | null>(null);
+  /** 批量更新 CLI：确认框 + 进行中 */
+  const [confirmBatch, setConfirmBatch] = useState(false);
+  const [batchBusy, setBatchBusy] = useState(false);
   // 配置版本库：状态与动作都在 store 里，工具卡和「全局」区块共用同一份
   const vault = useVault();
   const vaultStatus = useVault((s) => s.status);
@@ -105,6 +109,8 @@ export function HarnessToolsSection() {
   }, [load]);
 
   const toolMap = useMemo(() => new Map(tools.map((tool) => [tool.id, tool])), [tools]);
+  /** 已安装且有新版本的 CLI：页头「批量更新」按它计数 */
+  const updatable = useMemo(() => tools.filter((tool) => tool.installed && tool.hasUpdate), [tools]);
   // 卡片顺序跟着用户在「设置 → 工具顺序」里拖出来的那份；没配过就用后端给的默认顺序
   // （opencode / dsh / codex / claude code / codebuddy / pi 在前）。
   const harnessOrder = useSettings((s) => s.info?.settings.harnessOrder ?? NO_ORDER);
@@ -122,8 +128,7 @@ export function HarnessToolsSection() {
    * 高亮跟着滚动走 —— 用 IntersectionObserver 盯住靠上的一条带，谁落在带里谁亮，
    * 比监听 scroll 再逐个量位置省事，也不会在读的时候抖。
    */
-  const [activeTool, setActiveTool] = useState("");
-  useEffect(() => {
+  const [activeTool, setActiveTool] = useState("");  useEffect(() => {
     if (typeof IntersectionObserver === "undefined") return;
     const nodes = toolsToShow
       .map((report) => document.getElementById(`harness-tool-${report.id}`))
@@ -179,6 +184,25 @@ export function HarnessToolsSection() {
     }
   };
 
+  /** 一次更一批：把「已安装且有更新」的全更了，确认框里先摆清包名。 */
+  const batchUpdate = async () => {
+    const ids = updatable.map((tool) => tool.id);
+    if (!ids.length) return;
+    setBatchBusy(true);
+    try {
+      const outcome = await api.toolUpdate(ids);
+      const ok = outcome.filter((item) => item.ok).length;
+      if (ok) toast.success(t("tools.updateDone", { ok, total: outcome.length }));
+      outcome.filter((item) => !item.ok).forEach((item) => toast.error(`${item.name}: ${item.message}`));
+      // 版本变了：重取一遍工具列表，卡上的版本号与「可更新」标立刻跟上
+      setTools((await api.toolList())?.tools ?? []);
+    } catch (e) {
+      toast.error(String(e));
+    } finally {
+      setBatchBusy(false);
+    }
+  };
+
   const checkCli = async () => {
     setChecking(true);
     try {
@@ -205,16 +229,31 @@ export function HarnessToolsSection() {
     <div className="flex flex-col gap-2">
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-xs text-ink-3">{t("harnessTools.hint")}</span>
-        <Button
-          size="sm"
-          variant="secondary"
-          className="ml-auto h-7 text-[11px]"
-          disabled={busy || checking}
-          onClick={() => void checkCli()}
-        >
-          {checking ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
-          {t("harnessTools.checkCli")}
-        </Button>
+        <div className="ml-auto flex items-center gap-2">
+          {/* 批量更新：一次更一批才用得上的动作，所以留在页头；单个工具的更新在各张卡上 */}
+          {updatable.length ? (
+            <Button
+              size="sm"
+              variant="secondary"
+              className="h-7 text-[11px]"
+              disabled={batchBusy}
+              onClick={() => setConfirmBatch(true)}
+            >
+              {batchBusy ? <Loader2 className="size-3.5 animate-spin" /> : <Terminal className="size-3.5" />}
+              {t("tools.update", { n: updatable.length })}
+            </Button>
+          ) : null}
+          <Button
+            size="sm"
+            variant="secondary"
+            className="h-7 text-[11px]"
+            disabled={busy || checking}
+            onClick={() => void checkCli()}
+          >
+            {checking ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
+            {t("harnessTools.checkCli")}
+          </Button>
+        </div>
       </div>
 
       {reports === null ? (
@@ -558,6 +597,14 @@ export function HarnessToolsSection() {
           </nav>
         </div>
       )}
+
+      <ConfirmDialog
+        open={confirmBatch}
+        onOpenChange={setConfirmBatch}
+        title={t("tools.confirmTitle", { n: updatable.length })}
+        message={`${t("tools.confirmBody")} ${updatable.map((tool) => `${tool.name}（${tool.pkg}）`).join("、")}。${t("tools.confirmNote")}`}
+        onConfirm={() => void batchUpdate()}
+      />
 
       <ConfigEditorPanel
         open={!!editing}

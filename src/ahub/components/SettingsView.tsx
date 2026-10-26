@@ -7,6 +7,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { toast, Toaster } from "sonner";
 import { open } from "@tauri-apps/plugin-dialog";
 import { HarnessOrderSection } from "@/ahub/components/HarnessOrderSection";
+import { ConfigVaultSection } from "@/ahub/components/ConfigVaultSection";
 import { AiProviderSettings } from "@/ahub/components/AiProviderSettings";
 import { Switch } from "@/ahub/components/motion/switch";
 import { ThemeToggle } from "@/ahub/components/ThemeToggle";
@@ -419,6 +420,10 @@ function SettingsBody({ tab }: { tab: SettingsTab }) {
         </div>
 
         <HarnessOrderSection />
+
+        {/* 配置版本库的全局部分（每日自动备份 / 全选纳入 / 给全部打一份快照）：
+            每个工具自己的版本在 Harness 页的工具卡上，那三件事跨工具，所以放设置里 */}
+        <ConfigVaultSection />
 
         {/* AI 配置已迁到独立的「AI 提供商」页（ai-provider）：这里只留摘要开关 */}
         <div>
