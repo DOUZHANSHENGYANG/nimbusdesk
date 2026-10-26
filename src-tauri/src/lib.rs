@@ -334,6 +334,8 @@ pub fn run() {
             // 多屏热插拔监听：显示器接拔/改分辨率时广播 display://changed，
             // 桌面挂件（dock/fence/快速收集）据此重算自己的位置
             display::start_watch(app.handle().clone());
+            // 顶置自愈（P4）：被任务栏/开始菜单压住时把 dock 抬回最上层
+            commands::dock::start_topmost_watch(app.handle().clone(), "desktop-dock");
             // AgentHub 原版启动清理：把 ZIP 的 DOS 纪元哨兵时间戳（1980-01-01）改写为
             // 可信时间。与源侧同一段代码、同样放后台线程、同样幂等。
             {

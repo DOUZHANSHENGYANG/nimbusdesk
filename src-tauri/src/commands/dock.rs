@@ -5,13 +5,13 @@
 
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use tauri::{AppHandle, Emitter, Manager};
-use windows::Win32::Foundation::{HWND, RECT};
+use windows::Win32::Foundation::{HWND, POINT, RECT};
 use windows::Win32::Graphics::Gdi::{
-    GetMonitorInfoW, MonitorFromWindow, MONITOR_DEFAULTTONEAREST, MONITORINFO,
+    CreateRoundRectRgn, GetMonitorInfoW, MonitorFromWindow, SetWindowRgn, MONITOR_DEFAULTTONEAREST, MONITORINFO,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
-    GetForegroundWindow, GetWindowLongPtrW, IsZoomed, WS_EX_LAYERED, WS_EX_TRANSPARENT, GetWindowRect, SetWindowLongPtrW, SetWindowPos,
-    SetForegroundWindow, ShowWindow, GWL_EXSTYLE, HWND_TOPMOST, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER,
+    GetAncestor, GetForegroundWindow, GetWindowLongPtrW, IsZoomed, WS_EX_LAYERED, WS_EX_TRANSPARENT, GetWindowRect, SetWindowLongPtrW, SetWindowPos,
+    SetForegroundWindow, ShowWindow, WindowFromPoint, GA_ROOT, GWL_EXSTYLE, HWND_TOPMOST, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER,
     SW_SHOWNOACTIVATE, WS_EX_NOACTIVATE,
 };
 
@@ -81,10 +81,31 @@ pub async fn window_set_bounds(
 ) -> Result<(), String> {
     let hwnd = hwnd_of(&app, &label)?;
     unsafe {
-        SetWindowPos(hwnd, None, x, y, width, height, SWP_NOACTIVATE | SWP_NOZORDER)
-            .map_err(|e| e.to_string())?;
+        SetWindowPos(
+            hwnd,
+            None,
+            x, y, width, height,
+            SWP_NOACTIVATE | SWP_NOZORDER,
+        )
+        .map_err(|e| e.to_string())?;
+        // 形状跟着尺寸走：胶囊裁成整圆，卡片/侧栏用 20px 圆角（P4 点击穿透）
+        apply_shape_rgn(hwnd, width, height);
     }
     Ok(())
+}
+
+/// 按当前形状裁系统窗口（WinIsland 的点击穿透做法）：矮窗（胶囊 ≤50px）裁成整圆，
+/// 高窗（卡片 / 侧栏）用 20px 圆角。圆角外的透明像素不再属于窗口 —— 鼠标直接落到桌面。
+/// 每次尺寸变化都要重裁，所以挂在 `window_set_bounds` / `dock_spring_to` 的尾部。
+fn apply_shape_rgn(hwnd: HWND, w: i32, h: i32) {
+    if w <= 0 || h <= 0 { return; }
+    let r = if h <= 50 { h / 2 } else { 20 };
+    unsafe {
+        let rgn = CreateRoundRectRgn(0, 0, w + 1, h + 1, r * 2, r * 2);
+        if !rgn.is_invalid() {
+            let _ = SetWindowRgn(hwnd, Some(rgn), true);
+        }
+    }
 }
 
 /// 切换窗口的 WS_EX_NOACTIVATE 扩展样式：开启后点击窗口不会激活它，
@@ -133,6 +154,34 @@ pub async fn input_session_end(app: AppHandle, label: String) -> Result<(), Stri
         SetWindowLongPtrW(hwnd, GWL_EXSTYLE, style | WS_EX_NOACTIVATE.0 as isize);
     }
     Ok(())
+}
+
+/// 顶置自愈（P4）：任务栏 / 开始菜单 / 通知中心随时会把自己抬到最上层，
+/// 常驻挂件被盖住一次就「消失」了。每 2 秒采样一次窗口中心点：
+/// 压在上面的不是我们 → 重新 `SetWindowPos(HWND_TOPMOST)`
+/// （SWP_NOACTIVATE，自愈过程不抢焦点）。透明穿透的窗口 `WindowFromPoint`
+/// 天然跳过，不会被误判成「盖住」。
+pub fn start_topmost_watch(app: AppHandle, label: &'static str) {
+    std::thread::spawn(move || {
+        loop {
+            std::thread::sleep(std::time::Duration::from_secs(2));
+            let Some(window) = app.get_webview_window(label) else { continue };
+            if !window.is_visible().unwrap_or(false) { continue; }
+            let Ok(raw) = window.hwnd() else { continue };
+            let hwnd = HWND(raw.0);
+            unsafe {
+                let mut rect = RECT::default();
+                if GetWindowRect(hwnd, &mut rect).is_err() { continue; }
+                if rect.right - rect.left <= 0 { continue; }
+                let point = POINT { x: (rect.left + rect.right) / 2, y: (rect.top + rect.bottom) / 2 };
+                let hit = WindowFromPoint(point);
+                if hit.is_invalid() { continue; }
+                if GetAncestor(hit, GA_ROOT) == hwnd { continue; }
+                let _ = SetWindowPos(hwnd, Some(HWND_TOPMOST), 0, 0, 0, 0,
+                    SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);
+            }
+        }
+    });
 }
 
 /// 在指定目录拉起一个终端窗口（Windows Terminal 优先，没有就退回 PowerShell）。
@@ -359,6 +408,12 @@ pub async fn dock_spring_to(
             SWP_NOACTIVATE | SWP_NOZORDER,
         )
         .map_err(|e| e.to_string())?;
+        // 弹簧落点即最终形状：裁剪跟随（P4 点击穿透）
+        apply_shape_rgn(
+            hwnd,
+            (to_w * scale).round().max(1.0) as i32,
+            (to_h * scale).round().max(1.0) as i32,
+        );
     }
     Ok(())
 }
