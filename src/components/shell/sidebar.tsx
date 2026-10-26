@@ -80,12 +80,37 @@ export function Sidebar() {
   const reduce = useReducedMotion();
   const listRef = useRef<HTMLDivElement>(null);
 
-  // 折叠态没有文字也没有角标，组头就没有意义了：各组各自摊成图标列
-  const groupState: Record<string, { open: boolean; toggle: () => void }> = {
-    "nav.workbench": { open: workbenchOpen, toggle: () => setWorkbenchOpen(!workbenchOpen) },
-    "nav.ai": { open: aiOpen, toggle: () => setAiOpen(!aiOpen) },
-    "nav.library": { open: libraryOpen, toggle: () => setLibraryOpen(!libraryOpen) },
+  /**
+   * 一级分区是**手风琴**：展开一个就收起其它。
+   *
+   * 收起侧栏（collapsed）时不再「各组各自摊成图标列」——
+   * 那会一次列出所有子项图标，看着像一堵图标墙。现在的规则是：
+   * - 一个都没展开 → 只剩三个一级图标（一眼看清有哪几摊事）；
+   * - 展开了某一个 → 只显示它下面的子图标（其余一级图标让位，点它有得选）。
+   * 所以折叠态下 `open` 也跟随真实状态，不再被 `collapsed` 强行打开。
+   */
+  const setGroupOpen = (key: string) => {
+    setWorkbenchOpen(key === "nav.workbench" ? !workbenchOpen : false);
+    setAiOpen(key === "nav.ai" ? !aiOpen : false);
+    setLibraryOpen(key === "nav.library" ? !libraryOpen : false);
   };
+
+  const groupState: Record<string, { open: boolean; toggle: () => void }> = {
+    "nav.workbench": { open: workbenchOpen, toggle: () => setGroupOpen("nav.workbench") },
+    "nav.ai": { open: aiOpen, toggle: () => setGroupOpen("nav.ai") },
+    "nav.library": { open: libraryOpen, toggle: () => setGroupOpen("nav.library") },
+  };
+
+  // 手风琴要求「同时只开一个」：挂载时按当前路由对齐一次（老用户的持久化状态可能是三个都开）。
+  // 之后不再自动改 —— 用户手动开哪个就留哪个。
+  useEffect(() => {
+    const current = NAV_GROUPS.find((group) => group.items.some((entry) => entry.to === location.pathname));
+    if (!current) return;
+    setWorkbenchOpen(current.key === "nav.workbench");
+    setAiOpen(current.key === "nav.ai");
+    setLibraryOpen(current.key === "nav.library");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const item = ({ to, key, icon: Icon }: NavItem) => {
     const active = location.pathname === to;
@@ -135,7 +160,7 @@ export function Sidebar() {
       <motion.div ref={listRef} layoutRoot className="relative flex min-h-0 flex-col overflow-y-auto px-2 pt-3 pb-2">
         {NAV_GROUPS.map((group, index) => {
           const state = groupState[group.key];
-          const open = collapsed || state.open;
+          const open = state.open;
           // 功能开关：被关掉的条目直接不渲染；一组全关掉，整组连标题一起消失
           const items = group.items.filter((entry) => !navDisabled.includes(entry.to));
           if (!items.length) return null;
@@ -159,7 +184,7 @@ export function Sidebar() {
                 {!collapsed && <span className="truncate">{t(group.key)}</span>}
                 {!collapsed && (
                   <ChevronRight
-                    className={cn("ml-auto size-3.5 shrink-0 opacity-45 transition-transform duration-300", state.open && "rotate-90")}
+                    className={cn("ml-auto size-3.5 shrink-0 opacity-45 transition-transform duration-300", state.open && "-rotate-90")}
                     strokeWidth={2.2}
                   />
                 )}
