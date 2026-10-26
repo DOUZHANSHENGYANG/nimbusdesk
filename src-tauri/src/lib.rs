@@ -63,6 +63,8 @@ pub fn run() {
             commands::dock::window_show_no_activate,
             commands::dock::window_set_bounds,
             commands::dock::window_set_no_activate,
+            commands::dock::input_session_begin,
+            commands::dock::input_session_end,
             commands::dock::set_dock_shortcut,
             commands::dock::dock_set_autohide,
             commands::zentao::zentao_secret_status,

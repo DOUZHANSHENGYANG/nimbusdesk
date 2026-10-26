@@ -11,7 +11,7 @@ use windows::Win32::Graphics::Gdi::{
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     GetForegroundWindow, GetWindowLongPtrW, IsZoomed, WS_EX_LAYERED, WS_EX_TRANSPARENT, GetWindowRect, SetWindowLongPtrW, SetWindowPos,
-    ShowWindow, GWL_EXSTYLE, HWND_TOPMOST, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER,
+    SetForegroundWindow, ShowWindow, GWL_EXSTYLE, HWND_TOPMOST, SWP_NOACTIVATE, SWP_NOMOVE, SWP_NOSIZE, SWP_NOZORDER,
     SW_SHOWNOACTIVATE, WS_EX_NOACTIVATE,
 };
 
@@ -104,6 +104,33 @@ pub async fn window_set_no_activate(
             style & !(WS_EX_NOACTIVATE.0 as isize)
         };
         SetWindowLongPtrW(hwnd, GWL_EXSTYLE, next);
+    }
+    Ok(())
+}
+
+/// 输入会话 · 开始：清掉 WS_EX_NOACTIVATE 并把自己带到前台。
+///
+/// 抄 WinIsland 的 `InputSession`：岛体平时 NOACTIVATE（点它不抢前台），
+/// 但文本框要打字就得有键盘焦点 —— 这里临时放行，让这一次点击的焦点落进输入框。
+/// `end` 负责把样式还原，用户的写作/IDE 窗口不会被一块桌面挂件顶掉。
+#[tauri::command]
+pub async fn input_session_begin(app: AppHandle, label: String) -> Result<(), String> {
+    let hwnd = hwnd_of(&app, &label)?;
+    unsafe {
+        let style = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+        SetWindowLongPtrW(hwnd, GWL_EXSTYLE, style & !(WS_EX_NOACTIVATE.0 as isize));
+        let _ = SetForegroundWindow(hwnd);
+    }
+    Ok(())
+}
+
+/// 输入会话 · 结束：还原 NOACTIVATE。焦点交还给用户下一个点击的地方。
+#[tauri::command]
+pub async fn input_session_end(app: AppHandle, label: String) -> Result<(), String> {
+    let hwnd = hwnd_of(&app, &label)?;
+    unsafe {
+        let style = GetWindowLongPtrW(hwnd, GWL_EXSTYLE);
+        SetWindowLongPtrW(hwnd, GWL_EXSTYLE, style | WS_EX_NOACTIVATE.0 as isize);
     }
     Ok(())
 }

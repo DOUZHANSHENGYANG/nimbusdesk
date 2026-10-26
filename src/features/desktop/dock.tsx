@@ -210,6 +210,39 @@ export function DockWindow() {
     })().catch((error) => { dragging.current = false; report(error); });
   }, [applyFloat, applyMode, setPanel]);
 
+  // 输入会话（P2）：岛平时 NOACTIVATE —— 点它、拖它都不抢前台；
+  // 文本框要打字时临时放行（pointerdown / focusin 双通道，focusout 延迟还原，
+  // 同面板换输入框时不来回切样式）。样式一还原，写作/IDE 仍是前台。
+  const sessionTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => {
+    if (!inTauri) return;
+    void invoke("window_set_no_activate", { label: LABEL, enabled: true }).catch(report);
+    const isText = (el: EventTarget | null) =>
+      el instanceof HTMLElement && el.matches("input, textarea, [contenteditable='true'], [contenteditable='']");
+    const begin = (event: Event) => {
+      if (!isText(event.target)) return;
+      clearTimeout(sessionTimer.current);
+      void invoke("input_session_begin", { label: LABEL }).catch(report);
+    };
+    const end = (event: Event) => {
+      if (!isText(event.target)) return;
+      clearTimeout(sessionTimer.current);
+      sessionTimer.current = setTimeout(() => {
+        void invoke("input_session_end", { label: LABEL }).catch(() => undefined);
+      }, 140);
+    };
+    const opts: AddEventListenerOptions = { capture: true };
+    document.addEventListener("pointerdown", begin, opts);
+    document.addEventListener("focusin", begin, opts);
+    document.addEventListener("focusout", end, opts);
+    return () => {
+      document.removeEventListener("pointerdown", begin, opts);
+      document.removeEventListener("focusin", begin, opts);
+      document.removeEventListener("focusout", end, opts);
+      clearTimeout(sessionTimer.current);
+    };
+  }, [report]);
+
   // 显示器接拔 / 改分辨率（Rust display.rs 广播 display://changed）：清掉缓存并重摆一次。
   // 收起态也要摆 —— 胶囊得跟着换屏。
   useEffect(() => {
