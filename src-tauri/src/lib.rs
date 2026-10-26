@@ -14,6 +14,7 @@ mod organization_clock;
 mod search;
 mod quick_tools;
 mod schedule;
+mod display;
 // AgentHub（源侧工具箱后端）原样搬进来的模块，独立在 ahub/ 下。
 mod ahub;
 
@@ -153,6 +154,8 @@ pub fn run() {
             commands::task_attachments::task_attachments_import,
             commands::data::write_json,
             commands::sys::window_ready,
+            display::display_list,
+            display::display_resolve,
             commands::sys::set_main_always_on_top,
             commands::sys::set_developer_mode,
             commands::sys::open_fence,
@@ -326,6 +329,9 @@ pub fn run() {
             schedule::engine::start(app.handle().clone());
             commands::search::start(app.handle().clone());
             commands::quick_tools::start(app.handle().clone());
+            // 多屏热插拔监听：显示器接拔/改分辨率时广播 display://changed，
+            // 桌面挂件（dock/fence/快速收集）据此重算自己的位置
+            display::start_watch(app.handle().clone());
             // AgentHub 原版启动清理：把 ZIP 的 DOS 纪元哨兵时间戳（1980-01-01）改写为
             // 可信时间。与源侧同一段代码、同样放后台线程、同样幂等。
             {
