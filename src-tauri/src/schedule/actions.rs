@@ -4,7 +4,7 @@
 //! 执行函数。前端按 `fields` 声明渲染参数表单，所以**加动作不必改界面**。
 //!
 //! 两类动作：
-//! - `Kind::Local`：在 Rust 侧直接执行（`ai_prompt`）。凭据、知识库写入都在这一侧。
+//! - `Kind::Local`：在 Rust 侧直接执行（`ai_prompt`）。凭据在这一侧。
 //! - `Kind::Delegated`：真正实现在前端（`refresh_feeds` / `backup`）。引擎发一条
 //!   `schedule://action` 事件、等前端回调 `schedule_action_result`。
 //!   为什么不是「在 Rust 里重写一遍 RSS 抓取和备份打包」：那两条链路的实现
@@ -16,7 +16,6 @@ use crate::ahub::items;
 use crate::ahub::prompt_vars::{self, PromptVariable};
 use crate::ahub::store::AppH;
 use crate::commands::{ai, data};
-use crate::knowledge::CaptureInput;
 use chrono::{DateTime, Datelike, Local};
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
@@ -32,7 +31,7 @@ pub const DEFAULT_TIMEOUT_MS: u64 = 60_000;
 
 #[derive(Debug, Clone)]
 pub struct Outcome {
-    /// 产出，写进历史供用户直接定位（知识库笔记路径 / 备份文件路径 / 刷新条数）
+    /// 产出，写进历史供用户直接定位（备份文件路径 / 刷新条数 / AI 的整段回答）
     pub note: Option<String>,
 }
 
@@ -75,8 +74,7 @@ pub static ACTIONS: &[ActionDef] = &[
         kind: Kind::Local,
         fields: r#"[
             {"name":"promptId","type":"prompt","label":"schedule.field.promptId","hint":"schedule.field.promptIdHint"},
-            {"name":"instruction","type":"textarea","label":"schedule.field.instruction","hint":"schedule.field.instructionHint"},
-            {"name":"title","type":"text","label":"schedule.field.title","hint":"schedule.field.titleHint"}
+            {"name":"instruction","type":"textarea","label":"schedule.field.instruction","hint":"schedule.field.instructionHint"}
         ]"#,
         run: Some(ai_prompt),
     },
@@ -225,33 +223,21 @@ fn resolve_provider() -> Result<Value, String> {
     Ok(out)
 }
 
-fn knowledge_root() -> Result<String, String> {
-    let stored = data::read_current("knowledge-settings")?.ok_or("SCHEDULE_KNOWLEDGE_UNBOUND")?;
-    let state = stored.get("state").unwrap_or(&stored);
-    state
-        .get("vaultRoot")
-        .and_then(Value::as_str)
-        .map(str::trim)
-        .filter(|root| !root.is_empty())
-        .map(str::to_string)
-        .ok_or_else(|| "SCHEDULE_KNOWLEDGE_UNBOUND".to_string())
-}
-
-/// 跑一条提示词，把回答写进知识库收件箱。
+/// 跑一条提示词，把回答作为这次运行的产出。**不再写进知识库**：
+/// 「到点跑一段 AI」和「把产出归档进笔记库」是两件事，后者该由用户自己做主，
+/// 之前是动作里硬编码写进知识库收件箱（还得先绑好知识库目录，否则整条任务失败）。
 fn ai_prompt(ctx: &Ctx) -> RunResult {
     let now = Local::now();
     let prompt_id = str_param(ctx.params, "promptId");
     let instruction = str_param(ctx.params, "instruction");
 
     let mut body = String::new();
-    let mut prompt_title = String::new();
     if !prompt_id.is_empty() {
         let prompts = items::list_prompts(ctx.app)?;
         let prompt = prompts
             .iter()
             .find(|item| item.id == prompt_id)
             .ok_or_else(|| format!("SCHEDULE_PROMPT_NOT_FOUND: {prompt_id}"))?;
-        prompt_title = prompt.title.clone();
         body = render_prompt(prompt, now)?;
     }
     if !instruction.is_empty() {
@@ -265,51 +251,9 @@ fn ai_prompt(ctx: &Ctx) -> RunResult {
     }
 
     let answer = ai::chat_once(resolve_provider()?, body)?;
-    let root = knowledge_root()?;
-
-    // 收件箱的条目 id 就是目录名 —— 时间戳放在 id 里，落盘的文件名自然带时间戳。
-    let stamp_id = now.format("%Y%m%d%H%M%S").to_string();
-    let suffix: String = ctx
-        .task_id
-        .chars()
-        .filter(char::is_ascii_alphanumeric)
-        .take(8)
-        .collect();
-    let id = format!("sched-{stamp_id}-{suffix}");
-    if suffix.is_empty() {
-        return Err("SCHEDULE_TASK_ID_INVALID".into());
-    }
-
-    let requested = str_param(ctx.params, "title");
-    let base = if !requested.is_empty() {
-        requested
-    } else if !prompt_title.trim().is_empty() {
-        prompt_title
-    } else {
-        ctx.task_name.to_string()
-    };
-    let base: String = base.chars().take(200).collect();
-    let title = format!("{} · {}", base.trim(), now.format("%Y-%m-%d %H:%M"));
-
-    let record = crate::knowledge::capture(
-        &root,
-        CaptureInput {
-            id,
-            title,
-            content: answer,
-            project: String::new(),
-            source: ctx.task_name.to_string(),
-            attachments: Vec::new(),
-        },
-    )?;
     Ok(Outcome {
-        // 给绝对路径：界面直接拿去「在资源管理器里显示」，不必知道知识库根在哪
-        note: Some(
-            std::path::Path::new(&root)
-                .join(&record.note_path)
-                .to_string_lossy()
-                .into_owned(),
-        ),
+        // 整段回答就是产出：历史里看得到（单行截断 + 悬停全文），点一下能复制走。
+        note: Some(answer.trim().to_string()),
     })
 }
 

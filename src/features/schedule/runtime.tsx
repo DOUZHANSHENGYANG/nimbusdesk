@@ -17,7 +17,7 @@ import { mergedSources } from "@/sources/custom";
 import { useFeeds } from "@/stores/feeds";
 import { buildBackup, joinPath } from "@/features/settings/backup";
 import { reportActionResult } from "./api";
-import { errorLabel, type HistoryEntry, type Translate } from "./core";
+import { errorLabel, noteBrief, type HistoryEntry, type Translate } from "./core";
 
 interface ActionRequest {
     runId: string;
@@ -79,7 +79,7 @@ export function ScheduleRuntime() {
                 const text = translate.current;
                 const code = payload.error ? errorLabel(payload.error).code : "";
                 if (payload.status === "success") {
-                    toast.success(text("schedule.toast.success", { name: payload.taskName, note: payload.note ?? "" }));
+                    toast.success(text("schedule.toast.success", { name: payload.taskName, note: noteBrief(payload.note) }));
                 } else if (payload.status === "failed") {
                     toast.error(text("schedule.toast.failed", { name: payload.taskName, code }));
                 } else {

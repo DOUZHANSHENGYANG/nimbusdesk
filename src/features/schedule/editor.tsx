@@ -351,7 +351,7 @@ export function ScheduleEditor({
                         "你是「云台」的定时任务配置助手。把用户的一句话变成 JSON，只输出 JSON，不要解释。",
                         "可用动作 id：ai_prompt（让 AI 执行提示词或指令）、refresh_feeds（刷新资讯源）、backup（备份）。",
                         "频率 kind 与字段：once{at:\"YYYY-MM-DDTHH:mm\"}、daily{time:\"HH:mm\"}、weekly{weekdays:[1-7],time}、monthly{day:1-31,time}、yearly{month:1-12,day,time}、interval{minutes}。",
-                        "输出形状：{\"name\":\"任务名\",\"frequency\":{\"kind\":\"daily\",\"time\":\"09:00\"},\"action\":{\"id\":\"ai_prompt\",\"params\":{\"promptId\":\"\",\"instruction\":\"给 AI 的完整指令\",\"title\":\"笔记标题前缀\"}}}",
+                        "输出形状：{\"name\":\"任务名\",\"frequency\":{\"kind\":\"daily\",\"time\":\"09:00\"},\"action\":{\"id\":\"ai_prompt\",\"params\":{\"promptId\":\"\",\"instruction\":\"给 AI 的完整指令\"}}}",
                         "规则：没提时间用 09:00；每周一用 weekly [1]；每 30 分钟用 interval 30；动作默认 ai_prompt，instruction 要把用户的意思写完整。",
                         `当前本地时间：${stamp}。`,
                     ].join("\n"),
@@ -419,7 +419,6 @@ export function ScheduleEditor({
             if (actionId === "ai_prompt") {
                 if (typeof params.instruction !== "string" || !params.instruction.trim()) params.instruction = brief;
                 if (typeof params.promptId !== "string") params.promptId = "";
-                if (typeof params.title !== "string" || !params.title.trim()) params.title = parsed.name?.trim() || brief.slice(0, 20);
             }
             const name = typeof parsed.name === "string" && parsed.name.trim() ? parsed.name.trim().slice(0, 100) : draft.name || brief.slice(0, 30);
             setDraft({ ...draft, name, frequency, action: { id: actionId, params } });

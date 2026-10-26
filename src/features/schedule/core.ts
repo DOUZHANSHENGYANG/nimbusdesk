@@ -223,7 +223,6 @@ export function errorLabel(error: string): { code: string; key: string | null } 
     const code = (error ?? "").split(":")[0].trim();
     const known = new Set([
         "AI_NO_PROVIDER",
-        "SCHEDULE_KNOWLEDGE_UNBOUND",
         "SCHEDULE_TIMEOUT",
         "SCHEDULE_TASK_RUNNING",
         "SCHEDULE_PROMPT_NOT_FOUND",
@@ -239,12 +238,24 @@ export function errorLabel(error: string): { code: string; key: string | null } 
     return { code, key: known.has(code) ? `schedule.errCode.${code}` : null };
 }
 
+/** 产出可能是路径（备份文件）也可能是一整段回答；只有前者能在资源管理器里定位。 */
+export function isPath(note: string | null | undefined): boolean {
+    const text = (note ?? "").trim();
+    return /^[A-Za-z]:[\\/]/.test(text) || text.startsWith("/") || text.startsWith("\\\\");
+}
+
+/** 产出可能是一整段 AI 回答：提示条与单行展示都用它压成一行摘要。 */
+export function noteBrief(note: string | null | undefined, max = 80): string {
+    const text = (note ?? "").replace(/\s+/g, " ").trim();
+    return text.length > max ? `${text.slice(0, max)}…` : text;
+}
+
 /** 新建任务的空白草稿。 */
 export function blankTask(now = new Date()): TaskInput {
     return {
         name: "",
         frequency: defaultFrequency("daily", now),
-        action: { id: "ai_prompt", params: { promptId: "", instruction: "", title: "" } },
+        action: { id: "ai_prompt", params: { promptId: "", instruction: "" } },
         enabled: true,
         runIfMissed: false,
     };

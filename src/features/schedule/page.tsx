@@ -14,9 +14,10 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Switch } from "@/components/motion/switch";
 import { inTauri, revealInExplorer } from "@/lib/tauri";
+import { copyText } from "@/lib/clipboard";
 import { cn } from "@/lib/utils";
 import { clearHistory, deleteTask, loadSnapshot, runTaskNow, setTaskEnabled } from "./api";
-import { describeFrequency, errorLabel, formatStamp, statusLabel, type Snapshot, type Task, type Translate } from "./core";
+import { describeFrequency, errorLabel, formatStamp, isPath, noteBrief, statusLabel, type Snapshot, type Task, type Translate } from "./core";
 import { ScheduleEditor } from "./editor";
 import "./schedule.css";
 
@@ -75,7 +76,7 @@ export function SchedulePage() {
         setBusy(task.id);
         try {
             const entry = await runTaskNow(task.id);
-            if (entry.status === "success") toast.success(t("schedule.toast.success", { name: task.name, note: entry.note ?? "" }));
+            if (entry.status === "success") toast.success(t("schedule.toast.success", { name: task.name, note: noteBrief(entry.note) }));
             else toast.error(t("schedule.toast.failed", { name: task.name, code: entry.error ? errorLabel(entry.error).code : "" }));
         } catch (cause) {
             const message = cause instanceof Error ? cause.message : String(cause);
@@ -224,10 +225,18 @@ export function SchedulePage() {
                                 ) : null}
                                 {entry.note ? (
                                     <span className="flex min-w-0 items-center gap-2">
-                                        <span className="min-w-0 truncate text-muted-foreground" title={entry.note}>{entry.note}</span>
-                                        <Button variant="ghost" size="xs" onClick={() => { void revealInExplorer(entry.note!).catch(() => undefined); }}>
-                                            {t("schedule.history.open")}
-                                        </Button>
+                                        {/* AI 动作的产出是一整段回答（单行截断、悬停看全，点一下复制走）；
+                                            备份那类产出是绝对路径，仍然走「在资源管理器里显示」。 */}
+                                        <span className="min-w-0 truncate text-muted-foreground" title={entry.note}>{noteBrief(entry.note, 120)}</span>
+                                        {isPath(entry.note) ? (
+                                            <Button variant="ghost" size="xs" onClick={() => { void revealInExplorer(entry.note!).catch(() => undefined); }}>
+                                                {t("schedule.history.open")}
+                                            </Button>
+                                        ) : (
+                                            <Button variant="ghost" size="xs" onClick={() => { void copyText(entry.note!).then((ok) => ok && toast.success(t("common.copied"))); }}>
+                                                {t("schedule.history.copy")}
+                                            </Button>
+                                        )}
                                     </span>
                                 ) : null}
                             </span>

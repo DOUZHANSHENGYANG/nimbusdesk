@@ -1027,8 +1027,6 @@ export const zh = {
       promptIdHint: "可选",
       instruction: "自定义指令",
       instructionHint: "可选；支持 {{date}}、{{time}}、{{weekday}}",
-      title: "笔记标题",
-      titleHint: "可选",
       sourceId: "信息源",
       sourceIdHint: "可选；不选就是全部源",
     },
@@ -1065,6 +1063,7 @@ export const zh = {
       reason: "原因",
       reasonAppNotRunning: "应用当时没有运行",
       open: "查看",
+      copy: "复制",
       status: {
         success: "成功",
         failed: "失败",
@@ -1087,7 +1086,6 @@ export const zh = {
     },
     errCode: {
       AI_NO_PROVIDER: "AI 提供商未配置，请先到「AI」里配置",
-      SCHEDULE_KNOWLEDGE_UNBOUND: "知识库未绑定目录，请先到「开发知识」里设置",
       SCHEDULE_TIMEOUT: "执行超时",
       SCHEDULE_TASK_RUNNING: "上一次还在运行，本次没有并发执行",
       SCHEDULE_PROMPT_NOT_FOUND: "提示词不存在（可能已被删除）",

@@ -198,5 +198,5 @@ test("localDateTime and blankTask shape the editor's draft", () => {
     assert.equal(draft.action.id, "ai_prompt");
     assert.equal(draft.enabled, true);
     assert.equal(draft.runIfMissed, false);
-    assert.deepEqual(draft.action.params, { promptId: "", instruction: "", title: "" });
+    assert.deepEqual(draft.action.params, { promptId: "", instruction: "" });
 });

@@ -1041,8 +1041,6 @@ export const en: AppMessages = {
       promptIdHint: "Optional",
       instruction: "Custom instruction",
       instructionHint: "Optional; supports {{date}}, {{time}}, {{weekday}}",
-      title: "Note title",
-      titleHint: "Optional",
       sourceId: "Source",
       sourceIdHint: "Optional; all sources when empty",
     },
@@ -1079,6 +1077,7 @@ export const en: AppMessages = {
       reason: "Reason",
       reasonAppNotRunning: "The app was not running",
       open: "Open",
+      copy: "Copy",
       status: {
         success: "Success",
         failed: "Failed",
@@ -1101,7 +1100,6 @@ export const en: AppMessages = {
     },
     errCode: {
       AI_NO_PROVIDER: "No AI provider configured yet — set one up in AI",
-      SCHEDULE_KNOWLEDGE_UNBOUND: "Knowledge base has no vault folder — set one in Knowledge",
       SCHEDULE_TIMEOUT: "Timed out",
       SCHEDULE_TASK_RUNNING: "The previous run was still going; this trigger did not run concurrently",
       SCHEDULE_PROMPT_NOT_FOUND: "The prompt is gone (it may have been deleted)",
