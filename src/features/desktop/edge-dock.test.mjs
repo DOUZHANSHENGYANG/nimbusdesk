@@ -94,7 +94,7 @@ async function fixture({ collapsed = true, active = true } = {}) {
     './edge-core': edgeCore, '@/lib/tauri': { inTauri: true }, '@/lib/storage': storage,
     './sticky-presentation': load('./sticky-presentation.ts'), './sticky-settings': { StickySettings: () => null },
     './registry': registry, './edge-workspace': { useEdgeWorkspace: workspace },
-    './monitors': { readMonitors: async () => [area], monitorArea: value => value },
+    './monitors': { readMonitors: async () => [area], monitorArea: value => value, resolveMonitor: async () => area },
     './queue-core': core, './queue-registry': queue,
     './visibility': { isDesktopVisible: () => desktopVisible, setDesktopVisibility: (_label, value) => { desktopVisible = value; } },
   }, { document: { activeElement: null }, HTMLElement: class {} });

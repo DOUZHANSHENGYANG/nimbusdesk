@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { availableMonitors, currentMonitor, cursorPosition, type Monitor } from "@tauri-apps/api/window";
+import { currentMonitor } from "@tauri-apps/api/window";
+import { listen } from "@tauri-apps/api/event";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { BookOpen, CalendarCheck, FolderKanban, GripHorizontal, GripVertical, LayoutGrid, List, Search, Settings2, X } from "lucide-react";
 import { Trash2 } from "lucide-react";
@@ -20,7 +21,7 @@ import { addTaskAttachment, attachmentSize, openTaskAttachment, unlinkTaskAttach
 import { useProjects } from "@/features/projects/store";
 import { CaptureForm } from "@/features/knowledge/capture";
 import { beginMenu, closeMenu, emitMenuRequest, ensurePopupReady, ownerLabel, revealMenu, subscribeMenuSize, useMenuActions, type MenuAction } from "@/features/files/popup";
-import type { MenuIconKey, MenuNode } from "@/features/files/menu-model";import { monitorArea } from "./monitors";
+import type { MenuIconKey, MenuNode } from "@/features/files/menu-model";import { monitorArea, resolveMonitor } from "./monitors";
 import { DOCK_CAPTURE_H, dockBounds, dockFloatBounds, type DockArea, type DockMode, type DockPanel } from "./dock-core";
 import { DockFloat } from "./dock-float";
 import { nearestDockEdge } from "./edge-core";
@@ -66,29 +67,14 @@ export function DockWindow() {
 
   const resolveArea = useCallback(async (): Promise<{ area: DockArea; scale: number } | null> => {
     if (!inTauri) return null;
-    const [cursor, monitors, current] = await Promise.all([
-      cursorPosition().catch(() => null),
-      availableMonitors().catch(() => [] as Monitor[]),
-      currentMonitor().catch(() => null),
-    ]);
     /*
-     * 选屏优先级：设置里指定的那块 → 主屏 → 鼠标所在屏。
-     *
-     * **找不到指定屏时不覆盖设置**：副屏拔掉只是「这次不生效」，插回来以后
-     * 同一个 id 又能命中，于是自动移回原副屏 —— 这正是要的行为。
+     * 选屏走多屏解析层（Rust，src-tauri/src/display.rs）：
+     * 设置里钉了哪块就钉哪块（那块屏拔掉了也不换屏，插回来同一 id 又命中），
+     * 没钉就跟随鼠标 —— 不再回退主屏。
      */
     const preferred = useSettings.getState().dockMonitorId;
-    const monitor =
-      (preferred ? monitors.find((m) => m.name === preferred) : null) ??
-      monitors.find((m) => m.position.x === 0 && m.position.y === 0) ??
-      (cursor && monitors.find((m) => {
-        const p = m.position;
-        const s = m.size;
-        return cursor.x >= p.x && cursor.x < p.x + s.width && cursor.y >= p.y && cursor.y < p.y + s.height;
-      })) ??
-      current;
-    if (!monitor) return null;
-    const raw = monitorArea(monitor);
+    const raw = await resolveMonitor(preferred || null).catch(() => null);
+    if (!raw) return null;
     const scale = raw.scale || 1;
     // MonitorArea 是物理像素；dock-core 的口径是逻辑像素。
     return { area: { x: raw.x / scale, y: raw.y / scale, w: raw.w / scale, h: raw.h / scale }, scale };
@@ -223,6 +209,18 @@ export function DockWindow() {
       else void applyMode(modeRef.current).catch(report);
     })().catch((error) => { dragging.current = false; report(error); });
   }, [applyFloat, applyMode, setPanel]);
+
+  // 显示器接拔 / 改分辨率（Rust display.rs 广播 display://changed）：清掉缓存并重摆一次。
+  // 收起态也要摆 —— 胶囊得跟着换屏。
+  useEffect(() => {
+    if (!inTauri) return;
+    const un = listen("display://changed", () => {
+      areaRef.current = null;
+      if (useSettings.getState().dockStyle === "capsule") void applyFloat(openRef.current).catch(report);
+      else void applyMode(modeRef.current).catch(report);
+    });
+    return () => { void un.then((off) => off()); };
+  }, [applyFloat, applyMode, report]);
 
   useEffect(() => {
     if (!inTauri) return;

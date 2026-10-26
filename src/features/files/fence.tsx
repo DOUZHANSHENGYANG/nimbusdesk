@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getCurrentWebviewWindow, getAllWebviewWindows } from "@tauri-apps/api/webviewWindow";
-import { cursorPosition, monitorFromPoint, currentMonitor } from "@tauri-apps/api/window";
+import { resolveMonitor } from "@/features/desktop/monitors";
 import { PhysicalPosition } from "@tauri-apps/api/dpi";
 import { Eye, EyeOff, X, Pin, PinOff, PanelRightClose, ArrowLeftRight, Expand, List, LayoutGrid, LockKeyhole, UnlockKeyhole, MoreHorizontal, Palette } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -278,20 +278,18 @@ function FencePanel({ categoryId }: { categoryId: string }) {
         win.scaleFactor(),
       ]);
       if (cancelled || modeRef.current || closeBusy.current || useFences.getState().fences[categoryId]?.locked) return;
-      const cursor = await cursorPosition().catch(() => null);
-      const monitor = cursor
-        ? await monitorFromPoint(cursor.x, cursor.y).catch(() => null)
-        : await currentMonitor().catch(() => null);
-      if (!monitor) return;
+      // 多屏解析层（Rust）：auto = 跟随鼠标所在屏（拖到哪块屏，贴的就是哪块屏的边）
+      const area = await resolveMonitor(null).catch(() => null);
+      if (!area) return;
       if (cancelled || modeRef.current) return;
       const normal = logicalFenceGeometry(self, size, scale);
-      const logicalArea = logicalFenceGeometry(monitor.workArea.position, monitor.workArea.size, scale);
+      const logicalArea = logicalFenceGeometry({ x: area.x, y: area.y }, { width: area.w, height: area.h }, scale);
       const edge = dragDockEdge(normal, logicalArea, userTitleDrag.current);
       userTitleDrag.current = false;
       if (edge) {
-        const offset = Math.max(0, (edge === "top" ? self.x - monitor.workArea.position.x : self.y - monitor.workArea.position.y) / scale);
+        const offset = Math.max(0, (edge === "top" ? self.x - area.x : self.y - area.y) / scale);
         setGeometry(categoryId, normal);
-        useFences.getState().setDockPosition(categoryId, { edge, edgeY: offset, dockOffset: offset, edgeMonitor: `${monitor.name ?? "display"}@${monitor.position.x},${monitor.position.y}` });
+        useFences.getState().setDockPosition(categoryId, { edge, edgeY: offset, dockOffset: offset, edgeMonitor: area.id });
         modeRef.current = true;
         setForm(categoryId, "capsule");
         return;
@@ -299,10 +297,10 @@ function FencePanel({ categoryId }: { categoryId: string }) {
 
       // 显示器工作区（物理像素，已排除任务栏）
       const wa = {
-        left: monitor.workArea.position.x,
-        top: monitor.workArea.position.y,
-        right: monitor.workArea.position.x + monitor.workArea.size.width,
-        bottom: monitor.workArea.position.y + monitor.workArea.size.height,
+        left: area.x,
+        top: area.y,
+        right: area.x + area.w,
+        bottom: area.y + area.h,
       };
       const w = size.width;
       const h = size.height;

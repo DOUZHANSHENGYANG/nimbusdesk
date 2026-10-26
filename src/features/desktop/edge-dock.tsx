@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type PointerEvent, type ReactNode } from "react";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { invoke } from "@tauri-apps/api/core";
-import { currentMonitor } from "@tauri-apps/api/window";
 import { emit, listen } from "@tauri-apps/api/event";
 import { PhysicalPosition, PhysicalSize } from "@tauri-apps/api/dpi";
 import { ChevronLeft, ChevronRight, ChevronDown, Expand, ArrowLeftRight, ArrowUp, ArrowDown, EyeOff, Minimize2, LockKeyhole, UnlockKeyhole, Palette, Grip, X } from "lucide-react";
@@ -10,7 +9,7 @@ import { inTauri } from "@/lib/tauri";
 import { onStorageSynced } from "@/lib/storage";
 import { desktopEntries, useDesktopEntries, setDesktopForm } from "./registry";
 import { useEdgeWorkspace } from "./edge-workspace";
-import { readMonitors, monitorArea } from "./monitors";
+import { readMonitors, resolveMonitor } from "./monitors";
 import { monitorAt, type MonitorArea } from "./queue-core";
 import { moveDockItem, queueSnapshot, reserveQueue } from "./queue-registry";
 import { isDesktopVisible, setDesktopVisibility } from "./visibility";
@@ -45,10 +44,9 @@ export function useEdgeDock(options: DockOptions) {
   const report = useCallback((cause: unknown) => { setError(String(cause)); latest.current.onError?.(cause); }, []);
 
   const resolveArea = useCallback(async () => {
-    const available = await readMonitors();
+    // 多屏解析层（Rust）：钉住的屏找不到 → 跟随鼠标；再不行就报错，调用方保持原位
     const preferred = desktopEntries().find(entry => entry.id === label)?.edgeMonitor ?? monitorRef.current?.id;
-    const current = preferred ? null : await currentMonitor();
-    const area = available.find(area => area.id === preferred) ?? (current ? monitorArea(current) : available[0]);
+    const area = await resolveMonitor(preferred).catch(() => resolveMonitor(null).catch(() => null));
     if (!area) throw new Error("Cannot locate the screen work area");
     monitorRef.current = area;
     setMonitor(previous => JSON.stringify(previous) === JSON.stringify(area) ? previous : area);
