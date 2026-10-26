@@ -541,7 +541,7 @@ export function McpPage() {
       {/* 标签筛选常驻：即便当前没有标签也保留入口，否则用户不知道有这个能力，
           与 Skills 页保持一致（那边是无条件显示的） */}
           <div className="flex min-h-0 flex-1 items-start gap-3">
-            <aside className="w-[196px] shrink-0">
+            <aside className="flex w-[212px] shrink-0 flex-col gap-2">
               <PresetRail
                 items={presetRailItems}
                 selectedId={selectedPresetId}
@@ -553,7 +553,6 @@ export function McpPage() {
                 total={mcp.length}
               />
               <TagShelf
-                variant="rail"
                         allTags={allTags}
                         selected={activeTags}
                         onChange={setActiveTags}

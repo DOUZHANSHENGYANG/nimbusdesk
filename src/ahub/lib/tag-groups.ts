@@ -46,6 +46,20 @@ export function addGroup(groups: readonly TagGroup[], id: string, name: string):
   return [...groups, { id, name, tags: [] }];
 }
 
+/**
+ * 上移 / 下移一个分组。顺序就是左栏与分区的显示顺序；越界与未知 id 原样返回。
+ * 用两个按钮而不是拖拽：分组数量个位数，拖拽省下的那点操作抵不上它带来的可达性问题。
+ */
+export function moveGroup(groups: readonly TagGroup[], id: string, delta: -1 | 1): TagGroup[] {
+  const index = groups.findIndex((group) => group.id === id);
+  const target = index + delta;
+  if (index < 0 || target < 0 || target >= groups.length) return [...groups];
+  const next = [...groups];
+  const [moved] = next.splice(index, 1);
+  next.splice(target, 0, moved);
+  return next;
+}
+
 /** 删除分组：组里的标签自动回到「未分组」，不会跟着消失。 */
 export function removeGroup(groups: readonly TagGroup[], id: string): TagGroup[] {
   return groups.filter((group) => group.id !== id);

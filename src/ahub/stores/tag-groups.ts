@@ -4,6 +4,7 @@ import { tauriJsonStorage } from "@/lib/storage";
 import {
   addGroup as addGroupTo,
   assignTag,
+  moveGroup as moveGroupIn,
   pruneGroups,
   removeGroup as removeGroupFrom,
   renameGroup as renameGroupIn,
@@ -17,6 +18,8 @@ interface TagGroupsState {
   remove: (id: string) => void;
   /** 给标签换组；传 null = 挪回「未分组」 */
   assign: (tag: string, groupId: string | null) => void;
+  /** 上移 / 下移分组（顺序即界面顺序） */
+  move: (id: string, delta: -1 | 1) => void;
   /** 数据变化后自愈：抹掉已经不存在的标签 */
   prune: (allTags: string[]) => void;
 }
@@ -39,6 +42,7 @@ export const useTagGroups = create<TagGroupsState>()(
       rename: (id, name) => set((state) => ({ groups: renameGroupIn(state.groups, id, name) })),
       remove: (id) => set((state) => ({ groups: removeGroupFrom(state.groups, id) })),
       assign: (tag, groupId) => set((state) => ({ groups: assignTag(state.groups, tag, groupId) })),
+      move: (id, delta) => set((state) => ({ groups: moveGroupIn(state.groups, id, delta) })),
       prune: (allTags) => set((state) => ({ groups: pruneGroups(state.groups, allTags) })),
     }),
     { name: "tag-groups", storage: createJSONStorage(() => tauriJsonStorage), version: 1 },

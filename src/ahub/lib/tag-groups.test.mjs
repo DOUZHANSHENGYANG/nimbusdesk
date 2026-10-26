@@ -21,6 +21,15 @@ const groups = [
   { id: 'g2', name: '阶段', tags: ['审查'] },
 ];
 
+test('moving a group reorders it and clamps at the edges', () => {
+  assert.deepEqual(tags.moveGroup(groups, 'g2', -1).map((g) => g.id), ['g2', 'g1']);
+  assert.deepEqual(tags.moveGroup(groups, 'g1', 1).map((g) => g.id), ['g2', 'g1']);
+  assert.deepEqual(tags.moveGroup(groups, 'g1', -1).map((g) => g.id), ['g1', 'g2'], '已经在最上面 → 不动');
+  assert.deepEqual(tags.moveGroup(groups, 'g2', 1).map((g) => g.id), ['g1', 'g2'], '已经在最下面 → 不动');
+  assert.deepEqual(tags.moveGroup(groups, 'nope', 1).map((g) => g.id), ['g1', 'g2'], '未知 id → 原样');
+  assert.deepEqual(groups.map((g) => g.id), ['g1', 'g2'], '不原地修改入参');
+});
+
 test('tags split into their groups, leftovers go to ungrouped', () => {
   const out = tags.groupTags(['代码', '设计', '审查', '运维'], groups);
   assert.deepEqual(out.groups.map((g) => g.tags), [['代码', '设计'], ['审查']]);

@@ -297,9 +297,8 @@ export function PromptsPage() {
       ) : (
         <>
           <div className="flex min-h-0 flex-1 items-start gap-3">
-            <aside className="w-[196px] shrink-0">
+            <aside className="flex w-[212px] shrink-0 flex-col gap-2">
               <TagShelf
-                variant="rail"
                         allTags={allTags}
                         selected={activeTags}
                         onChange={setActiveTags}
