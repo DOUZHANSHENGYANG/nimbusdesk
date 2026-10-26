@@ -34,6 +34,7 @@ png = "0.17"
 base64 = "0.22"
 tauri-plugin-notification = "2.7.0"
 tauri-plugin-global-shortcut = "2"
+tauri-plugin-single-instance = "2"
 
 # ── AgentHub（原样搬进来的工具箱后端）所需依赖 ──────────────────
 # 锁精确版本（与云台既有的 pinyin/lopdf/zip/quick-xml/rusqlite 同一习惯），

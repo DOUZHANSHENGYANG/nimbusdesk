@@ -26,7 +26,7 @@ import { PageShell } from "@/ahub/components/PageShell";
 import { PromptFillDialog, PromptVarsPanel } from "@/ahub/components/PromptVars";
 import { TagInput } from "@/ahub/components/TagInput";
 import { Markdown } from "@/ahub/components/Markdown";
-import { VersionList } from "@/ahub/components/VersionList";
+import { VersionHistoryDialog } from "@/ahub/components/VersionHistoryDialog";
 import { Badge } from "@/ahub/components/ui/badge";
 import { Button } from "@/ahub/components/ui/button";
 import {
@@ -100,6 +100,8 @@ export function PromptsPage() {
   const [busy, setBusy] = useState(false);
   /** 有未暂存改动时，关闭前先确认 */
   const [discardOpen, setDiscardOpen] = useState(false);
+  /** 版本时间轴弹框（与技能详情共用同一个组件） */
+  const [versionsOpen, setVersionsOpen] = useState(false);
 
   /** 标签 → 数量（与 MCP / Skills 同一套语义） */
   const tagCounts = useMemo(() => {
@@ -486,7 +488,7 @@ export function PromptsPage() {
           </div>
         </div>
       ) : (
-        <div className="grid grid-cols-[repeat(auto-fill,minmax(230px,1fr))] gap-2">
+        <div className="grid grid-cols-3 gap-2">
           {filtered.map((p) => (
             <div
               key={p.id}
@@ -578,23 +580,24 @@ export function PromptsPage() {
           </DialogHeader>
           <div className="flex min-h-0 flex-1 flex-col">
             <DialogBody className="flex min-h-0 flex-1 flex-col gap-3">
-              {/* 元信息：两列并排，避免占掉正文的纵向空间 */}
-              <div className="grid shrink-0 gap-3 sm:grid-cols-2">
-                <Field label={t("prompts.fieldTitle")}>
-                  <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder={t("prompts.titlePlaceholder")} autoFocus />
-                </Field>
-                <Field label={t("common.tags")} hint={t("common.tagPlaceholder")}>
-                  <TagInput value={tags} onChange={setTags} />
-                </Field>
-              </div>
-              <Field label={t("prompts.fieldDescription")} className="shrink-0">
-                <Input value={description} onChange={(e) => setDescription(e.target.value)} placeholder={t("prompts.descriptionPlaceholder")} />
-              </Field>
-
-              {/* 主体：左正文（占满剩余高度） / 右侧栏（变量 + 版本，独立滚动） */}
+              {/* 主体：左「元信息 + 正文」 / 右侧栏（变量，独立滚动）。
+                  和技能详情同一套排法：元信息跟着正文走，右栏只留「这一份自己的东西」。 */}
               <div className="flex min-h-0 flex-1 gap-3">
                 <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-1.5">
-                  {/* 工具栏：左侧三态切换，右侧暂存 / 发布 */}
+                  {/* 元信息：标题与标签并排，描述独占一行 */}
+                  <div className="grid shrink-0 gap-3 sm:grid-cols-2">
+                    <Field label={t("prompts.fieldTitle")}>
+                      <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder={t("prompts.titlePlaceholder")} autoFocus />
+                    </Field>
+                    <Field label={t("common.tags")} hint={t("common.tagPlaceholder")}>
+                      <TagInput value={tags} onChange={setTags} />
+                    </Field>
+                  </div>
+                  <Field label={t("prompts.fieldDescription")} className="shrink-0">
+                    <Input value={description} onChange={(e) => setDescription(e.target.value)} placeholder={t("prompts.descriptionPlaceholder")} />
+                  </Field>
+
+                  {/* 工具栏：左侧三态切换，右侧暂存 / 发布 / 查看版本记录 */}
                   <div className="flex shrink-0 items-center gap-2">
                     <div className="flex items-center gap-0.5 rounded-lg border border-border bg-surface p-0.5">
                       {CONTENT_MODES.map(({ id, icon: Icon, key }) => (
@@ -630,6 +633,11 @@ export function PromptsPage() {
                         <CloudUpload className="size-3.5" />
                         {t("prompts.publish")}
                       </Button>
+                      {/* 版本时间轴收进弹框（与技能详情共用），主界面只留这个入口 */}
+                      <Button type="button" size="sm" variant="outline" onClick={() => setVersionsOpen(true)}>
+                        <History className="size-3.5" />
+                        {t("common.versionHistory")}
+                      </Button>
                     </div>
                   </div>
 
@@ -662,8 +670,8 @@ export function PromptsPage() {
                 </div>
                 <aside className="flex w-[340px] shrink-0 flex-col gap-2">
                   {/* 变量定义：正文里的 {{name}} 是唯一事实来源，这里只做元数据编辑。
-                      变量折叠/展开会改变自身高度，所以给它一个上限，超出后自己滚。 */}
-                  <div className="flex max-h-[45%] min-h-0 shrink-0 flex-col overflow-y-auto">
+                      版本时间轴搬进「查看版本记录」弹框后，这里就只剩变量了。 */}
+                  <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
                     <PromptVarsPanel
                       content={content}
                       variables={variables}
@@ -671,17 +679,6 @@ export function PromptsPage() {
                       onChangeVariables={setVariables}
                     />
                   </div>
-                  {/* 版本时间轴：只记已发布的版本（暂存不写）。占满右侧剩余高度，
-                      新建提示词时同样显示——否则用户以为这块以后也不会出现。 */}
-                  <VersionList
-                    fill
-                    versions={editing?.versions ?? []}
-                    current={content}
-                    onRestore={(c) => {
-                      setContent(c);
-                      toast.info(t("prompts.versionRestored"));
-                    }}
-                  />
                 </aside>
               </div>
             </DialogBody>
@@ -699,6 +696,20 @@ export function PromptsPage() {
       </Dialog>
 
       <PromptFillDialog prompt={filling} open={!!filling} onOpenChange={(v) => !v && setFilling(null)} />
+
+      {/* 版本时间轴：主界面不再常驻展示，只在这个弹框里出现 */}
+      <VersionHistoryDialog
+        open={versionsOpen}
+        onOpenChange={setVersionsOpen}
+        label={title}
+        versions={editing?.versions ?? []}
+        current={content}
+        onRestore={(c) => {
+          setContent(c);
+          setVersionsOpen(false);
+          toast.info(t("prompts.versionRestored"));
+        }}
+      />
 
       <ConfirmDialog
         open={discardOpen}

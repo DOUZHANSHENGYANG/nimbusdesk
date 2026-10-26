@@ -17,7 +17,7 @@ import { SkillsConfigDialog } from "@/ahub/components/SkillsConfigDialog";
 import { Markdown } from "@/ahub/components/Markdown";
 import { PageShell } from "@/ahub/components/PageShell";
 import { SkillPicker } from "@/ahub/components/SkillPicker";
-import { VersionList } from "@/ahub/components/VersionList";
+import { VersionHistoryDialog } from "@/ahub/components/VersionHistoryDialog";
 import { VetReviewPanel } from "@/ahub/components/VetReviewPanel";
 import { SkillFileBrowser } from "@/ahub/components/SkillFileBrowser";
 import { SkillSummaryPanel } from "@/ahub/components/SkillSummary";
@@ -1589,7 +1589,7 @@ export function SkillsPage() {
                                 onClick={() => setVersionsOpen(true)}
                               >
                                 <History className="size-3.5" />
-                                {t("skills.viewVersions")}
+                                {t("common.versionHistory")}
                               </Button>
                             </div>
                           </div>
@@ -2008,50 +2008,35 @@ export function SkillsPage() {
         </DialogContent>
       </Dialog>
 
-      {/* 版本时间轴：主界面不再常驻展示，只在这个弹框里出现 */}
-      <Dialog open={versionsOpen} onOpenChange={setVersionsOpen}>
-        <DialogContent className="sm:max-w-3xl">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <History className="size-4 text-primary" />
-              {t("skills.viewVersions")}
-            </DialogTitle>
-            <DialogDescription className="font-mono" dir="ltr">
-              {detail?.meta.dirName}
-            </DialogDescription>
-          </DialogHeader>
-          <DialogBody className="min-h-0">
-            <div className="h-[58vh]">
-              {detail ? (
-                <VersionList
-                  fill
-                  versions={detail.versions}
-                  current={editBody}
-                  onSeed={() =>
-                    void api
-                      .seedSkillVersion(detail.meta.dirName, t("skills.seedVersionNote"))
-                      .then((created) => {
-                        toast[created ? "success" : "info"](t(created ? "skills.seedVersionDone" : "skills.seedVersionSkip"));
-                        return api.readSkill(detail.meta.dirName);
-                      })
-                      .then((doc) => setDetail(doc))
-                      .catch((e) => toast.error(String(e)))
-                  }
-                  onClear={() => setClearVerOpen(true)}
-                  onRestore={(content) => {
-                    // 版本快照是整份 SKILL.md；去掉 frontmatter 后填回正文
-                    setEditBody(bodyOfDoc(content));
-                    setTab("content");
-                    setContentMode("edit");
-                    setVersionsOpen(false);
-                    toast.info(t("skills.versionRestored"));
-                  }}
-                />
-              ) : null}
-            </div>
-          </DialogBody>
-        </DialogContent>
-      </Dialog>
+      {/* 版本时间轴：主界面不再常驻展示，只在这个弹框里出现（与提示词页共用同一个组件） */}
+      {detail ? (
+        <VersionHistoryDialog
+          open={versionsOpen}
+          onOpenChange={setVersionsOpen}
+          label={detail.meta.dirName}
+          versions={detail.versions}
+          current={editBody}
+          onSeed={() =>
+            void api
+              .seedSkillVersion(detail.meta.dirName, t("skills.seedVersionNote"))
+              .then((created) => {
+                toast[created ? "success" : "info"](t(created ? "skills.seedVersionDone" : "skills.seedVersionSkip"));
+                return api.readSkill(detail.meta.dirName);
+              })
+              .then((doc) => setDetail(doc))
+              .catch((e) => toast.error(String(e)))
+          }
+          onClear={() => setClearVerOpen(true)}
+          onRestore={(content) => {
+            // 版本快照是整份 SKILL.md；去掉 frontmatter 后填回正文
+            setEditBody(bodyOfDoc(content));
+            setTab("content");
+            setContentMode("edit");
+            setVersionsOpen(false);
+            toast.info(t("skills.versionRestored"));
+          }}
+        />
+      ) : null}
 
       <HarnessDialog open={scanOpen} onOpenChange={setScanOpen} kind="skills" />
 

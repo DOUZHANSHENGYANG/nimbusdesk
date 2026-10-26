@@ -25,6 +25,13 @@ pub fn run_search_extract_worker() -> bool { search::extract_worker::run_if_work
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        // 单实例必须第一个注册：第二次双击图标时不再开一个「窗口藏着」的新进程，
+        // 而是把已有主窗口亮出来 —— 否则用户点图标既看不到窗口也看不到任务栏按钮。
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            if let Some(win) = app.get_webview_window("main") {
+                let _ = crate::commands::sys::reveal(&win);
+            }
+        }))
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_dialog::init())
