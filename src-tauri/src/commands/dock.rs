@@ -7,7 +7,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use tauri::{AppHandle, Emitter, Manager};
 use windows::Win32::Foundation::{HWND, POINT, RECT};
 use windows::Win32::Graphics::Gdi::{
-    CreateRoundRectRgn, GetMonitorInfoW, MonitorFromWindow, SetWindowRgn, MONITOR_DEFAULTTONEAREST, MONITORINFO,
+    GetMonitorInfoW, MonitorFromWindow, MONITOR_DEFAULTTONEAREST, MONITORINFO,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     GetAncestor, GetForegroundWindow, GetWindowLongPtrW, IsZoomed, WS_EX_LAYERED, WS_EX_TRANSPARENT, GetWindowRect, SetWindowLongPtrW, SetWindowPos,
@@ -88,24 +88,8 @@ pub async fn window_set_bounds(
             SWP_NOACTIVATE | SWP_NOZORDER,
         )
         .map_err(|e| e.to_string())?;
-        // 形状跟着尺寸走：胶囊裁成整圆，卡片/侧栏用 20px 圆角（P4 点击穿透）
-        apply_shape_rgn(hwnd, width, height);
     }
     Ok(())
-}
-
-/// 按当前形状裁系统窗口（WinIsland 的点击穿透做法）：矮窗（胶囊 ≤50px）裁成整圆，
-/// 高窗（卡片 / 侧栏）用 20px 圆角。圆角外的透明像素不再属于窗口 —— 鼠标直接落到桌面。
-/// 每次尺寸变化都要重裁，所以挂在 `window_set_bounds` / `dock_spring_to` 的尾部。
-fn apply_shape_rgn(hwnd: HWND, w: i32, h: i32) {
-    if w <= 0 || h <= 0 { return; }
-    let r = if h <= 50 { h / 2 } else { 20 };
-    unsafe {
-        let rgn = CreateRoundRectRgn(0, 0, w + 1, h + 1, r * 2, r * 2);
-        if !rgn.is_invalid() {
-            let _ = SetWindowRgn(hwnd, Some(rgn), true);
-        }
-    }
 }
 
 /// 切换窗口的 WS_EX_NOACTIVATE 扩展样式：开启后点击窗口不会激活它，
@@ -408,12 +392,6 @@ pub async fn dock_spring_to(
             SWP_NOACTIVATE | SWP_NOZORDER,
         )
         .map_err(|e| e.to_string())?;
-        // 弹簧落点即最终形状：裁剪跟随（P4 点击穿透）
-        apply_shape_rgn(
-            hwnd,
-            (to_w * scale).round().max(1.0) as i32,
-            (to_h * scale).round().max(1.0) as i32,
-        );
     }
     Ok(())
 }

@@ -24,9 +24,11 @@
    临时放行，失焦 140ms 后 `end` 还原。
 3. **顶置自愈**：`start_topmost_watch` 每 2 秒采样窗口中心点，被盖住就重申
    `HWND_TOPMOST`（不抢焦点）。
-4. **形状裁剪**：尺寸一动（`window_set_bounds` / `dock_spring_to` 尾部）就按
-   `apply_shape_rgn` 重裁 —— 胶囊（高 ≤50px）整圆、其余 20px 圆角，
-   圆角外的透明像素不属于窗口。
+4. **点击穿透的边界**：曾试过 `SetWindowRgn` 把窗口裁成圆角形状
+   （WinIsland 的做法）—— 撤了：GDI 区域没有抗锯齿，胶囊圆边起锯齿，
+   且每次尺寸落定重裁会强制重绘，收拢时肉眼可见地卡一下。
+   现状 = 矩形命中（圆角外的透明像素仍吃点击），真穿透等以后按
+   分层窗口的 alpha 做再说。
 5. **作用域设置与日志**：功能自带 `scopes/<id>.json` 与 `logs/<id>.log`
    （`ahub/scoped.rs`，id 规矩 = WinIsland manifest 的 `[a-z0-9-]`）；
    `scope_get` / `scope_set` / `log_append` / `log_tail` 四个命令，
