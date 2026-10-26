@@ -9,6 +9,7 @@ import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader, DialogTi
 import { api, copyText } from "@/ahub/lib/api";
 import { loadHarnessReports, writeHarnessScan } from "@/ahub/lib/harnessScan";
 import { sortByOrder } from "@/ahub/lib/harnessOrder";
+import { cn } from "@/ahub/lib/utils";
 import { useSettings } from "@/ahub/stores/settings";
 
 /** 稳定的空数组引用：没配过顺序时给 selector 用，避免每次返回新数组 */
@@ -103,6 +104,31 @@ export function HarnessToolsSection() {
     [reports, toolMap, harnessOrder],
   );
 
+  /**
+   * 右侧小导航（文档目录那味儿）：工具多了以后不用在长列表里翻，点一下就跳过去。
+   * 高亮跟着滚动走 —— 用 IntersectionObserver 盯住靠上的一条带，谁落在带里谁亮，
+   * 比监听 scroll 再逐个量位置省事，也不会在读的时候抖。
+   */
+  const [activeTool, setActiveTool] = useState("");
+  useEffect(() => {
+    if (typeof IntersectionObserver === "undefined") return;
+    const nodes = toolsToShow
+      .map((report) => document.getElementById(`harness-tool-${report.id}`))
+      .filter((node): node is HTMLElement => node !== null);
+    if (!nodes.length) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const visible = entries.filter((entry) => entry.isIntersecting);
+        if (!visible.length) return;
+        const top = visible.reduce((a, b) => (a.boundingClientRect.top <= b.boundingClientRect.top ? a : b));
+        setActiveTool((top.target as HTMLElement).dataset.toolId ?? "");
+      },
+      { rootMargin: "-8% 0px -72% 0px" },
+    );
+    for (const node of nodes) observer.observe(node);
+    return () => observer.disconnect();
+  }, [toolsToShow]);
+
   const copy = (text: string) => {
     void copyText(text).then((ok) => ok && toast.success(t("common.copied")));
   };
@@ -183,15 +209,21 @@ export function HarnessToolsSection() {
       ) : toolsToShow.length === 0 ? (
         <div className="py-6 text-center text-xs text-ink-3">{t("harnessTools.empty")}</div>
       ) : (
-        <div className="flex flex-col gap-2">
-          {toolsToShow.map((report) => {
+        <div className="flex items-start gap-4">
+          <div className="flex min-w-0 flex-1 flex-col gap-2">
+            {toolsToShow.map((report) => {
             const tool = toolMap.get(report.id);
             const paths = configPaths(report);
             const root = migrationRoot(report);
             const dirs = report.skillsDirs ?? [];
             const working = (prefix: string) => acting === `${prefix}:${report.id}`;
             return (
-              <section key={report.id} className="rounded-xl border border-border bg-surface/40 p-3">
+              <section
+                key={report.id}
+                id={`harness-tool-${report.id}`}
+                data-tool-id={report.id}
+                className="scroll-mt-4 rounded-xl border border-border bg-surface/40 p-3"
+              >
                 <header className="flex flex-wrap items-start gap-2">
                   <HarnessIcon id={report.id} className="mt-0.5 size-4 shrink-0" />
                   <div className="min-w-0 flex-1">
@@ -387,6 +419,34 @@ export function HarnessToolsSection() {
               </section>
             );
           })}
+          </div>
+
+          {/* 右侧目录：工具名 + 跳转，高亮跟着滚动走。窄屏藏起来（卡片本来就能整列读）。 */}
+          <nav
+            aria-label={t("harnessTools.title")}
+            className="sticky top-4 hidden w-32 shrink-0 flex-col gap-0.5 lg:flex"
+          >
+            {toolsToShow.map((report) => (
+              <button
+                key={report.id}
+                type="button"
+                aria-current={activeTool === report.id ? "true" : undefined}
+                onClick={() =>
+                  document
+                    .getElementById(`harness-tool-${report.id}`)
+                    ?.scrollIntoView({ behavior: "smooth", block: "start" })
+                }
+                className={cn(
+                  "truncate rounded-md px-2 py-1 text-left text-[11px] outline-none transition-colors",
+                  activeTool === report.id
+                    ? "bg-primary-soft font-medium text-primary"
+                    : "text-ink-3 hover:bg-surface-2 hover:text-foreground",
+                )}
+              >
+                {report.name}
+              </button>
+            ))}
+          </nav>
         </div>
       )}
 
