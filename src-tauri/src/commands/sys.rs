@@ -42,6 +42,20 @@ pub fn window_ready(window: tauri::Window) -> Result<(), String> {
     Ok(())
 }
 
+/// 把窗口交到用户面前：**先 `unminimize`，再 `show` + `set_focus`**，三步缺一不可。
+///
+/// Windows 上「点了托盘 / Dock 主界面还是不出来」就是因为漏了第一步：
+/// tao 0.37.1 的 `set_focus()` 在窗口处于最小化状态时直接返回
+/// （`windows/window.rs:147` 的 `!is_minimized` 前置条件），而
+/// `set_visible(true)` 走的是 `SW_SHOW`（`windows/window_state.rs:464`），
+/// 对已最小化的窗口不生效；只有清掉 MINIMIZED 标志才会触发 `SW_RESTORE`
+/// （`windows/window_state.rs:380-385`）。所以只 show + set_focus 等于什么都没做。
+pub fn reveal(window: &tauri::WebviewWindow) -> Result<(), String> {
+    window.unminimize().map_err(|error| error.to_string())?;
+    window.show().map_err(|error| error.to_string())?;
+    window.set_focus().map_err(|error| error.to_string())
+}
+
 /// 主窗口置顶开关。
 ///
 /// 默认**不**置顶：窗口层级只在用户显式要求时才改。之前主窗口被固定成

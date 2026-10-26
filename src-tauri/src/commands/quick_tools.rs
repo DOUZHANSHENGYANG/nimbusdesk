@@ -219,8 +219,7 @@ pub async fn quick_tools_open_main(app: AppHandle, route: String) -> Result<(), 
         return Err("无效快捷工具位置".into());
     }
     let main = app.get_webview_window("main").ok_or("主窗口不可用")?;
-    main.show().map_err(|e| e.to_string())?;
-    main.set_focus().map_err(|e| e.to_string())?;
+    super::sys::reveal(&main)?;
     main.emit("search://navigate", route)
         .map_err(|e| e.to_string())?;
     if let Some(window) = app.get_webview_window("quick-tools") {

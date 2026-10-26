@@ -127,8 +127,7 @@ pub async fn desktop_open_main(app: AppHandle, route: String) -> Result<(), Stri
     let main = app
         .get_webview_window("main")
         .ok_or("Main window is unavailable")?;
-    main.show().map_err(|error| error.to_string())?;
-    main.set_focus().map_err(|error| error.to_string())?;
+    super::sys::reveal(&main)?;
     if route != "/" {
         main.emit("search://navigate", route)
             .map_err(|error| error.to_string())?;

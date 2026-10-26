@@ -82,14 +82,37 @@ pub fn create(app: &tauri::App) -> tauri::Result<()> {
     Ok(())
 }
 
+/// 托盘点击该收起还是该亮出主窗口。
+///
+/// 最小化的窗口 `is_visible()` 仍然返回 true —— 按「可见」处理会把窗口直接
+/// `hide()`，用户看到的是窗口从任务栏消失（「打不开主界面」）；而且被隐藏时
+/// 最小化状态还留着，下一次 `show()` 又只能回到最小化。所以最小化一律按
+/// 「不在用户面前」处理。
+fn should_hide(visible: bool, minimized: bool) -> bool {
+    visible && !minimized
+}
+
 fn toggle_main(app: &tauri::AppHandle) {
     if let Some(win) = app.get_webview_window("main") {
         let visible = win.is_visible().unwrap_or(false);
-        if visible {
+        let minimized = win.is_minimized().unwrap_or(false);
+        if should_hide(visible, minimized) {
             let _ = win.hide();
         } else {
-            let _ = win.show();
-            let _ = win.set_focus();
+            let _ = crate::commands::sys::reveal(&win);
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::should_hide;
+
+    #[test]
+    fn minimized_main_window_is_revealed_not_hidden() {
+        assert!(should_hide(true, false), "可见且未最小化 → 收起");
+        assert!(!should_hide(true, true), "最小化的窗口必须亮出来，不能 hide");
+        assert!(!should_hide(false, true), "隐藏且最小化 → 亮出来");
+        assert!(!should_hide(false, false), "不可见 → 亮出来");
     }
 }
