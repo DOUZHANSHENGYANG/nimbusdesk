@@ -1288,15 +1288,25 @@ export function SkillsPage() {
                 )}
               >
                 <div className="flex items-start justify-between gap-2">
-                  {batchMode ? (
-                    <span
+                  {/* 选中标识只有一个：勾选框。只要「在批量模式」或「已经有选中」就整排显示出来
+                      （不再出现「用全选所有选中的卡片只有边框、进批量模式才有勾选框」这种两套标识）。
+                      卡片边框高亮只是同一状态的加强，永远和勾选框同时出现。 */}
+                  {batchMode || batchSel.size > 0 ? (
+                    <button
+                      type="button"
+                      aria-pressed={picked}
+                      aria-label={t("common.selectCard", { name: s.name })}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        toggleBatch(s.dirName);
+                      }}
                       className={cn(
                         "mt-0.5 grid size-5 shrink-0 place-items-center rounded border transition-colors",
-                        picked ? "border-primary bg-primary text-white" : "border-border-strong",
+                        picked ? "border-primary bg-primary text-white" : "border-border-strong hover:border-primary/60",
                       )}
                     >
                       {picked ? <Check className="size-3.5" strokeWidth={3} /> : null}
-                    </span>
+                    </button>
                   ) : null}
                   <h3 className="min-w-0 flex-1 truncate font-mono text-[12.5px] font-semibold text-foreground">{s.name}</h3>
                 </div>

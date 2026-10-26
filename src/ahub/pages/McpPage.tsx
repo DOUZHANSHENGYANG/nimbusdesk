@@ -714,20 +714,32 @@ export function McpPage() {
                 "group flex flex-col rounded-xl border border-border bg-card p-2.5 shadow-sm transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md",
                 !s.enabled && "opacity-60",
                 batchMode && "cursor-pointer",
-                batchMode && batchSel.has(s.id) && "border-primary shadow-[0_0_0_3px_var(--ah-primary-soft)]",
+                batchSel.has(s.id) && "border-primary shadow-[0_0_0_3px_var(--ah-primary-soft)]",
               )}
             >
               <div className="flex items-start justify-between gap-2">
                 <h3 className="min-w-0 flex-1 truncate font-mono text-[12.5px] font-semibold text-foreground">{s.name}</h3>
-                {batchMode ? (
-                  <span
+                {batchMode || batchSel.size > 0 ? (
+                  <button
+                    type="button"
+                    aria-pressed={batchSel.has(s.id)}
+                    aria-label={t("common.selectCard", { name: s.name })}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setBatchSel((prev) => {
+                        const next = new Set(prev);
+                        if (next.has(s.id)) next.delete(s.id);
+                        else next.add(s.id);
+                        return next;
+                      });
+                    }}
                     className={cn(
-                      "grid size-5 shrink-0 place-items-center rounded border",
-                      batchSel.has(s.id) ? "border-primary bg-primary text-white" : "border-border-strong",
+                      "grid size-5 shrink-0 place-items-center rounded border transition-colors",
+                      batchSel.has(s.id) ? "border-primary bg-primary text-white" : "border-border-strong hover:border-primary/60",
                     )}
                   >
                     {batchSel.has(s.id) ? <Check className="size-3.5" strokeWidth={3} /> : null}
-                  </span>
+                  </button>
                 ) : (s.targets ?? []).length ? (
                   <span className="shrink-0 rounded-full bg-primary-soft px-2 py-0.5 text-[11px] font-medium text-primary">
                     {t("mcp.applyCount", { n: (s.targets ?? []).length })}
