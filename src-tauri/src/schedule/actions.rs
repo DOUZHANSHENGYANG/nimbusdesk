@@ -250,7 +250,29 @@ fn ai_prompt(ctx: &Ctx) -> RunResult {
         return Err("SCHEDULE_ACTION_NO_PROMPT".into());
     }
 
-    let answer = ai::chat_once(resolve_provider()?, body)?;
+    // 无人值守的动作必须有迹可查：成败都落到 logs/schedule-ai.log（P5-B 的每功能日志）
+    let answer = match ai::chat_once(resolve_provider()?, body) {
+        Ok(answer) => {
+            let root = crate::ahub::store::data_root(ctx.app);
+            let _ = crate::ahub::scoped::log_append(
+                &root,
+                "schedule-ai",
+                "info",
+                &format!("{} · 成功，产出 {} 字符", ctx.task_name, answer.chars().count()),
+            );
+            answer
+        }
+        Err(error) => {
+            let root = crate::ahub::store::data_root(ctx.app);
+            let _ = crate::ahub::scoped::log_append(
+                &root,
+                "schedule-ai",
+                "error",
+                &format!("{} · 失败：{error}", ctx.task_name),
+            );
+            return Err(error);
+        }
+    };
     Ok(Outcome {
         // 整段回答就是产出：历史里看得到（单行截断 + 悬停全文），点一下能复制走。
         note: Some(answer.trim().to_string()),

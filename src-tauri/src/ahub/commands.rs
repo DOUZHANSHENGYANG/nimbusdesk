@@ -603,6 +603,40 @@ pub async fn skillhub_categories() -> Result<Vec<crate::ahub::skillhub::MarketCa
         .map_err(|e| format!("任务失败: {e}"))?
 }
 
+// ── 作用域设置 + 每功能日志（P5-B）：功能自带 settings 与 logs ──
+
+#[tauri::command]
+pub async fn scope_get(app: AppH, id: String) -> Result<serde_json::Map<String, Value>, String> {
+    let root = store::data_root(&app);
+    tauri::async_runtime::spawn_blocking(move || crate::ahub::scoped::scope_read(&root, &id))
+        .await
+        .map_err(|e| format!("任务失败: {e}"))?
+}
+
+#[tauri::command]
+pub async fn scope_set(app: AppH, id: String, patch: serde_json::Map<String, Value>) -> Result<serde_json::Map<String, Value>, String> {
+    let root = store::data_root(&app);
+    tauri::async_runtime::spawn_blocking(move || crate::ahub::scoped::scope_write(&root, &id, patch))
+        .await
+        .map_err(|e| format!("任务失败: {e}"))?
+}
+
+#[tauri::command]
+pub async fn log_append(app: AppH, id: String, level: String, message: String) -> Result<(), String> {
+    let root = store::data_root(&app);
+    tauri::async_runtime::spawn_blocking(move || crate::ahub::scoped::log_append(&root, &id, &level, &message))
+        .await
+        .map_err(|e| format!("任务失败: {e}"))?
+}
+
+#[tauri::command]
+pub async fn log_tail(app: AppH, id: String, limit: Option<usize>) -> Result<Vec<String>, String> {
+    let root = store::data_root(&app);
+    tauri::async_runtime::spawn_blocking(move || crate::ahub::scoped::log_tail(&root, &id, limit.unwrap_or(50)))
+        .await
+        .map_err(|e| format!("任务失败: {e}"))?
+}
+
 /// 批量安装所选技能：逐个下载 ZIP → 复用 `import_skill_zip`（同一套 zip-slip / zip-bomb 防护）
 #[tauri::command]
 pub async fn skillhub_install(

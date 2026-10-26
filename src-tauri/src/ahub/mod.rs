@@ -24,6 +24,7 @@ pub mod skillhub;
 pub mod skillimport;
 pub mod skills;
 pub mod skillsummary;
+pub mod scoped;
 pub mod store;
 pub mod toolmgr;
 pub mod upstream;
