@@ -567,6 +567,7 @@ export const zh = {
     hint: "回车发送 · Shift+回车换行 · Esc 停止 · Ctrl+Shift+O 新会话",
     placeholder: "问点什么，或者让它查本机数据…",
     leaderboard: "查看 AI 排行榜",
+    relayCheck: "中转站检测",
     send: "发送",
     stop: "停止",
     stopHint: "停止生成（Esc）",

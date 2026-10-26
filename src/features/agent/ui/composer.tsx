@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { ExternalLink, Maximize2, Mic, Plus, SendHorizontal, Square, X } from "lucide-react";
+import { ExternalLink, Maximize2, Mic, Plus, ScanSearch, SendHorizontal, Square, X } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { openExternal } from "@/lib/open";
 import { MAX_ATTACHMENTS, readAttachment, type Pending } from "../attachments";
@@ -157,6 +157,13 @@ export function Composer() {
           title={t("agent.leaderboard")}
           aria-label={t("agent.leaderboard")}
           onClick={() => void openExternal("https://modelsage.cn/leaderboards").catch(() => undefined)}
+        />
+        <ToolButton
+          icon={<ScanSearch />}
+          label={t("agent.relayCheck")}
+          title={t("agent.relayCheck")}
+          aria-label={t("agent.relayCheck")}
+          onClick={() => void openExternal("https://bazaarlink.ai/probe").catch(() => undefined)}
         />
       </div>
       <div className="agent-composer-box" data-disabled={guide || undefined} title={t("agent.hint")}>

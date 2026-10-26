@@ -576,6 +576,7 @@ export const en: AppMessages = {
     hint: "Enter to send · Shift+Enter for a new line · Esc to stop · Ctrl+Shift+O for a new chat",
     placeholder: "Ask something, or have it look up local data…",
     leaderboard: "AI model leaderboard",
+    relayCheck: "Relay endpoint check",
     send: "Send",
     stop: "Stop",
     stopHint: "Stop generating (Esc)",
