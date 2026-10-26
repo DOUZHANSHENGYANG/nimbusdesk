@@ -1,4 +1,4 @@
-import { Braces, Boxes, Check, ClipboardPaste, Copy, FolderOpen, Layers, ListChecks, Plus, PlugZap, Save, ScanSearch, Server, Sparkles, Trash2, Wrench } from "lucide-react";
+import { Braces, Boxes, Check, ClipboardPaste, Copy, FolderOpen, Layers, Plus, PlugZap, Save, ScanSearch, Server, Sparkles, Trash2, Wrench } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
@@ -79,7 +79,6 @@ export function McpPage() {
   const [importJsonText, setImportJsonText] = useState("");
   const [importJsonName, setImportJsonName] = useState("");
   const [newMode, setNewMode] = useState<"manual" | "json">("manual");
-  const [batchMode, setBatchMode] = useState(false);
   const [batchSel, setBatchSel] = useState<Set<string>>(new Set());
   const [reports, setReports] = useState<HarnessReport[] | null>(null);
   const [harnessBatchOpen, setHarnessBatchOpen] = useState(false);
@@ -567,18 +566,6 @@ export function McpPage() {
 
       {filtered.length > 0 ? (
         <div data-anim className="mb-3 flex flex-wrap items-center gap-2">
-          <Button
-            size="sm"
-            variant={batchMode ? "default" : "secondary"}
-            className="h-8"
-            onClick={() => {
-              setBatchMode((v) => !v);
-              setBatchSel(new Set());
-            }}
-          >
-            <ListChecks />
-            {batchMode ? t("mcp.batchExit") : t("mcp.batchEnter")}
-          </Button>
           {/* 批量测试是全局动作，放工具栏只出现一次；每张卡片的「测试连通性」仍测单个 */}
           <Button
             size="sm"
@@ -590,84 +577,87 @@ export function McpPage() {
             <PlugZap />
             {t("mcp.batchTest")}
           </Button>
-          {batchMode ? (
-            <>
-              <span className="text-[11px] text-ink-3">{t("mcp.batchHint")}</span>
-              <div className="ml-auto flex items-center gap-2">
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  className="h-8"
-                  disabled={batchSel.size === 0}
-                  onClick={() => {
-                    const list = filtered.filter((x) => batchSel.has(x.id));
-                    void copyText(JSON.stringify(exportServers(list), null, 2)).then((ok) =>
-                      ok ? toast.success(t("mcp.batchCopied", { n: batchSel.size })) : toast.error(t("common.copy")),
-                    );
-                  }}
-                >
-                  <Copy />
-                  {t("mcp.batchCopyJson")}
-                </Button>
-                {selectedPreset ? (
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    className="h-8"
-                    disabled={batchSel.size === 0}
-                    onClick={() => void saveChangesToPreset()}
-                  >
-                    <Save className="size-3.5" />
-                    {t("preset.saveChanges")}
-                  </Button>
-                ) : null}
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  className="h-8"
-                  disabled={batchSel.size === 0}
-                  onClick={() => setPresetSaveOpen(true)}
-                >
-                  <Layers className="size-3.5" />
-                  {t("preset.saveAs")}
-                </Button>
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  className="h-8"
-                  onClick={() =>
-                    setBatchSel((prev) =>
-                      filtered.length > 0 && prev.size === filtered.length
-                        ? new Set()
-                        : new Set(filtered.map((x) => x.id)),
-                    )
-                  }
-                >
-                  {filtered.length > 0 && batchSel.size === filtered.length ? t("mcp.unselectAll") : t("harness.selectAll")}
-                </Button>
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  className="h-8"
-                  disabled={batchSel.size === 0}
-                  onClick={() => setHarnessBatchOpen(true)}
-                >
-                  <Boxes className="size-3.5" />
-                  {t("mcp.harnessApplyBtn")}
-                </Button>
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  className="h-8 text-danger hover:bg-danger/10 hover:text-danger"
-                  onClick={() => setBatchDeleteOpen(true)}
-                  disabled={batchSel.size === 0}
-                >
-                  <Trash2 className="size-3.5" />
-                  {t("mcp.batchDelete")}
-                </Button>
-              </div>
-            </>
+          {/* 选中后才用得到的动作：常显但禁用，不再靠「批量选择」整块藏起来。
+              卡片单击 = 选中、双击 = 打开编辑，所以没有批量模式开关。 */}
+          <Button
+            size="sm"
+            variant="secondary"
+            className="h-8"
+            disabled={batchSel.size === 0}
+            onClick={() => {
+              const list = filtered.filter((x) => batchSel.has(x.id));
+              void copyText(JSON.stringify(exportServers(list), null, 2)).then((ok) =>
+                ok ? toast.success(t("mcp.batchCopied", { n: batchSel.size })) : toast.error(t("common.copy")),
+              );
+            }}
+          >
+            <Copy />
+            {t("mcp.batchCopyJson")}
+          </Button>
+          {selectedPreset ? (
+            <Button
+              size="sm"
+              variant="secondary"
+              className="h-8"
+              disabled={batchSel.size === 0}
+              onClick={() => void saveChangesToPreset()}
+            >
+              <Save className="size-3.5" />
+              {t("preset.saveChanges")}
+            </Button>
           ) : null}
+          <Button
+            size="sm"
+            variant="secondary"
+            className="h-8"
+            disabled={batchSel.size === 0}
+            onClick={() => setPresetSaveOpen(true)}
+          >
+            <Layers className="size-3.5" />
+            {t("preset.saveAs")}
+          </Button>
+          <Button
+            size="sm"
+            variant="secondary"
+            className="h-8"
+            disabled={batchSel.size === 0}
+            onClick={() => setHarnessBatchOpen(true)}
+          >
+            <Boxes className="size-3.5" />
+            {t("mcp.harnessApplyBtn")}
+          </Button>
+          <Button
+            size="sm"
+            variant="secondary"
+            className="h-8 text-danger hover:bg-danger/10 hover:text-danger"
+            onClick={() => setBatchDeleteOpen(true)}
+            disabled={batchSel.size === 0}
+          >
+            <Trash2 className="size-3.5" />
+            {t("mcp.batchDelete")}
+          </Button>
+
+          {/* 右侧：选中状态 + 全选（小一号、靠右） */}
+          <span className="ml-auto flex shrink-0 items-center gap-2">
+            <span className="tabular-nums text-[10.5px] text-ink-3">
+              {t("mcp.batchSelected", { n: batchSel.size, m: mcp.length })}
+            </span>
+            <Button
+              size="sm"
+              variant="secondary"
+              className="h-6 px-2 text-[10.5px]"
+              disabled={mcp.length === 0}
+              onClick={() =>
+                setBatchSel(
+                  mcp.length > 0 && mcp.every((x) => batchSel.has(x.id))
+                    ? new Set()
+                    : new Set(mcp.map((x) => x.id)),
+                )
+              }
+            >
+              {mcp.length > 0 && mcp.every((x) => batchSel.has(x.id)) ? t("mcp.unselectAll") : t("harness.selectAll")}
+            </Button>
+          </span>
         </div>
       ) : null}
 
@@ -700,20 +690,19 @@ export function McpPage() {
             <div
               key={s.id}
               data-anim
-              onClick={() => {
-                if (!batchMode) return;
+              onClick={() =>
                 setBatchSel((prev) => {
                   const next = new Set(prev);
                   if (next.has(s.id)) next.delete(s.id);
                   else next.add(s.id);
                   return next;
-                });
-              }}
+                })
+              }
               onDoubleClick={() => openEdit(s)}
               className={cn(
                 "group flex flex-col rounded-xl border border-border bg-card p-2.5 shadow-sm transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md",
                 !s.enabled && "opacity-60",
-                batchMode && "cursor-pointer",
+                "cursor-pointer",
                 batchSel.has(s.id) && "border-primary shadow-[0_0_0_3px_var(--ah-primary-soft)]",
               )}
             >
@@ -724,7 +713,7 @@ export function McpPage() {
                   <h3 className="min-w-0 truncate font-mono text-[12.5px] font-semibold text-foreground">{s.name}</h3>
                   <Badge variant="outline" className="shrink-0 font-mono">{s.transport}</Badge>
                 </div>
-                {batchMode || batchSel.size > 0 ? (
+                {batchSel.size > 0 ? (
                   <button
                     type="button"
                     aria-pressed={batchSel.has(s.id)}

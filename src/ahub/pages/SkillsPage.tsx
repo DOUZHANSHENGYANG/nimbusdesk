@@ -1,4 +1,4 @@
-import { Archive, ArrowRight, Boxes, Check, ChevronDown, CircleAlert, Clock, CloudUpload, Columns2, Copy, Eye, FolderOpen, GitCompare, History, Layers, ListChecks, Loader2, Package, Pencil, Plus, RefreshCw, RotateCw, Save, ScanSearch, Settings2, ShieldAlert, ShieldCheck, Sparkles, Tag, Trash2, Wand2, Wrench, X, Zap } from "lucide-react";
+import { Archive, ArrowRight, Boxes, Check, ChevronDown, CircleAlert, Clock, CloudUpload, Columns2, Copy, Eye, FolderOpen, GitCompare, History, Layers, Loader2, Package, Pencil, Plus, RefreshCw, RotateCw, Save, ScanSearch, Settings2, ShieldAlert, ShieldCheck, Sparkles, Tag, Trash2, Wand2, Wrench, X, Zap } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { i18n } from "@/lib/i18n";
@@ -178,7 +178,6 @@ export function SkillsPage() {
   const [harnessReports, setHarnessReports] = useState<HarnessReport[] | null>(null);
   const [addOpen, setAddOpen] = useState(false);
   const [addMode, setAddMode] = useState<"create" | "file" | "git">("file");
-  const [batchMode, setBatchMode] = useState(false);
   const [batchSel, setBatchSel] = useState<Set<string>>(new Set());
   const [batchDeleteOpen, setBatchDeleteOpen] = useState(false);
   const [onboardBusy, setOnboardBusy] = useState(false);
@@ -522,7 +521,6 @@ export function SkillsPage() {
         toast.info(t("skills.onboardVerdicts", { install: r.install, review: r.review, rejected: r.rejected }));
       }
       setBatchSel(new Set());
-      setBatchMode(false);
       await loadSkills();
       if (detail) {
         const meta = skills.find((s) => s.dirName === detail.meta.dirName);
@@ -1072,7 +1070,8 @@ export function SkillsPage() {
               按钮位置固定，不可用的动作是禁用，不是消失。 */}
           <div className="mt-2 flex flex-wrap items-start gap-2 border-t border-border/60 pt-2">
             <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-              {/* 第一行：内容操作四项 + AI 操作两项（竖线分开）；常显，没选中时禁用而不是消失 */}
+              {/* 动作区就这一行：左侧是动作（没选中时禁用而不是消失），右侧是选中状态 + 全选。
+                  卡片单击 = 选中 / 取消、双击 = 打开详情，所以不再需要「批量模式」开关。 */}
               <div className="flex min-w-0 flex-wrap items-center gap-2">
                 {/* 纳入技能管理：生成 SKILL.toml（已纳入自动跳过）+ 安全审查 */}
                 <Button
@@ -1162,47 +1161,30 @@ export function SkillsPage() {
                   <Tag className="size-3.5" />
                   {t("skills.batchTagBtn")}
                 </Button>
-              </div>
 
-              {/* 第二行：选择状态在左，进入 / 退出批量与全选所有在右 ——
-                  右手侧操作更顺手，也离第一行的「批量删除」远一点，连点不会误伤。 */}
-              <div className="flex min-w-0 flex-wrap items-center gap-2">
-                <span className="mr-auto shrink-0 tabular-nums text-[11px] text-ink-3">
-                  {t("skills.batchSelectedShort", { n: batchSel.size })}
+                {/* 右侧：选中状态 + 全选（小一号、靠右）。单击卡片就是选中，没有批量模式开关了 */}
+                <span className="ml-auto flex shrink-0 items-center gap-2">
+                  <span className="tabular-nums text-[11px] text-ink-3">
+                    {t("skills.batchSelectedShort", { n: batchSel.size })}
+                  </span>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    className="h-6 px-2 text-[10.5px]"
+                    disabled={skills.length === 0}
+                    onClick={() =>
+                      setBatchSel(
+                        skills.length > 0 && skills.every((x) => batchSel.has(x.dirName))
+                          ? new Set()
+                          : new Set(skills.map((x) => x.dirName)),
+                      )
+                    }
+                  >
+                    {skills.length > 0 && skills.every((x) => batchSel.has(x.dirName))
+                      ? t("skills.batchUnselectAll")
+                      : t("skills.batchSelectAll")}
+                  </Button>
                 </span>
-
-                <Button
-                  size="sm"
-                  variant={batchMode ? "default" : "secondary"}
-                  className="h-7 w-[104px] justify-center text-[11px]"
-                  onClick={() => {
-                    setBatchMode((prev) => !prev);
-                    setBatchSel(new Set());
-                  }}
-                >
-                  <ListChecks className="size-3.5" />
-                  {batchMode ? t("skills.batchExit") : t("skills.batchEnter")}
-                </Button>
-
-                <span className="h-5 w-px shrink-0 bg-border" aria-hidden />
-
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  className="h-7 w-[104px] justify-center text-[11px]"
-                  disabled={skills.length === 0}
-                  onClick={() =>
-                    setBatchSel(
-                      skills.length > 0 && skills.every((x) => batchSel.has(x.dirName))
-                        ? new Set()
-                        : new Set(skills.map((x) => x.dirName)),
-                    )
-                  }
-                >
-                  {skills.length > 0 && skills.every((x) => batchSel.has(x.dirName))
-                    ? t("skills.batchUnselectAll")
-                    : t("skills.batchSelectAll")}
-                </Button>
               </div>
             </div>
           </div>
@@ -1277,17 +1259,17 @@ export function SkillsPage() {
               <div
                 key={s.dirName}
                 data-anim
-                onClick={() => (batchMode ? toggleBatch(s.dirName) : void openDetail(s))}
+                onClick={() => toggleBatch(s.dirName)}
+                onDoubleClick={() => void openDetail(s)}
                 className={cn(
                   "group flex cursor-pointer flex-col gap-2 rounded-xl border border-border bg-card p-2.5 shadow-sm outline-none transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md",
                   picked && "border-primary shadow-[0_0_0_3px_var(--ah-primary-soft)]",
                 )}
               >
                 <div className="flex items-start justify-between gap-2">
-                  {/* 选中标识只有一个：勾选框。只要「在批量模式」或「已经有选中」就整排显示出来
-                      （不再出现「用全选所有选中的卡片只有边框、进批量模式才有勾选框」这种两套标识）。
-                      卡片边框高亮只是同一状态的加强，永远和勾选框同时出现。 */}
-                  {batchMode || batchSel.size > 0 ? (
+                  {/* 选中标识只有一个：勾选框。有选中就整排显示出来（卡片边框高亮与它同时出现）。
+                      单击卡片 = 选中 / 取消，双击才打开详情 —— 所以不再有「批量模式」这个状态。 */}
+                  {batchSel.size > 0 ? (
                     <button
                       type="button"
                       aria-pressed={picked}
@@ -1316,13 +1298,12 @@ export function SkillsPage() {
                     {s.vetPending > 0 ? (
                       <Badge
                         variant="warning"
-                        title={batchMode ? t("skills.reviewPendingHint") : t("skills.gotoReviewHint")}
+                        title={t("skills.gotoReviewHint")}
                         onClick={(e) => {
-                          if (batchMode) return;
                           e.stopPropagation();
                           void openDetail(s, "review");
                         }}
-                        className={batchMode ? undefined : "cursor-pointer hover:ring-1 hover:ring-warning/40"}
+                        className="cursor-pointer hover:ring-1 hover:ring-warning/40"
                       >
                         <ShieldAlert />
                         {t("skills.reviewBadge")}
@@ -1354,13 +1335,12 @@ export function SkillsPage() {
                         <button
                           key={tg}
                           type="button"
-                          disabled={batchMode}
-                          title={batchMode ? undefined : t("skills.tagDrillHint")}
+                          title={t("skills.tagDrillHint")}
                           onClick={(e) => {
                             e.stopPropagation();
                             drillTag(tg);
                           }}
-                          className={cn("rounded-full outline-none transition-colors", !batchMode && "hover:-translate-y-px")}
+                          className="rounded-full outline-none transition-colors hover:-translate-y-px"
                         >
                           {/* 标签统一蓝色（和 MCP 页一致）；「正在筛选」用一圈 ring 表示 ——
                               蓝色是标签的专属色，状态徽标不许用它 */}
@@ -1383,8 +1363,7 @@ export function SkillsPage() {
                     s.version !== "0.0.0" ? (
                       <button
                         type="button"
-                        disabled={batchMode}
-                        title={batchMode ? t("skills.protoVersionHint") : t("skills.gotoVersionsHint")}
+                        title={t("skills.gotoVersionsHint")}
                         onClick={(e) => {
                           e.stopPropagation();
                           void openDetail(s, "proto");
@@ -1401,8 +1380,7 @@ export function SkillsPage() {
                       {t("skills.noProto")}
                     </Badge>
                   )}
-                  {batchMode ? null : (
-                    <span className="flex shrink-0 items-center gap-0.5">
+                  <span className="flex shrink-0 items-center gap-0.5">
                       <Button
                         size="iconSm"
                         variant="ghost"
@@ -1442,7 +1420,6 @@ export function SkillsPage() {
                         <Trash2 />
                       </Button>
                     </span>
-                  )}
                 </div>
               </div>
             );
