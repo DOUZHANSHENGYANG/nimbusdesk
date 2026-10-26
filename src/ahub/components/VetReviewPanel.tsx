@@ -22,10 +22,15 @@ const RULE_KEY: Record<string, string> = {
   "SSEP-STALE": "vetRuleStale",
 };
 
+/**
+ * 严重程度 → 徽标配色。四档都上色，别让人靠读字分辨：
+ * 严重=红、高危=琥珀、中危=蓝、低危=灰。配色走 Badge 的 variant，颜色仍只由 token 决定。
+ */
 function sevMeta(sev: string) {
-  if (sev === "critical") return { tone: "text-danger", bg: "bg-danger/10 border-danger/30", key: "sevCritical" };
-  if (sev === "high") return { tone: "text-warning", bg: "bg-warning/10 border-warning/30", key: "sevHigh" };
-  return { tone: "text-ink-2", bg: "bg-bg-subtle border-border", key: "sevMedium" };
+  if (sev === "critical") return { variant: "danger" as const, key: "sevCritical" };
+  if (sev === "high") return { variant: "warning" as const, key: "sevHigh" };
+  if (sev === "low") return { variant: "muted" as const, key: "sevLow" };
+  return { variant: "info" as const, key: "sevMedium" };
 }
 
 /**
@@ -232,9 +237,9 @@ export function VetReviewPanel({
               return (
                 <div key={key} className={cn("px-4 py-3", f.ignored && "opacity-55")}>
                   <div className="flex items-start gap-2.5">
-                    <span className={cn("mt-0.5 shrink-0 rounded-md border px-1.5 py-0.5 text-[10px] font-medium", meta.bg, meta.tone)}>
+                    <Badge variant={meta.variant} className="mt-0.5 shrink-0">
                       {t(`skills.${meta.key}`)}
-                    </span>
+                    </Badge>
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                         <span className="text-xs font-medium text-foreground">
@@ -285,7 +290,9 @@ export function VetReviewPanel({
           placeholder={t("skills.reviewNotePh")}
           className="mt-2 min-h-16 resize-y text-xs"
         />
+        {/* 结论按钮走右边（习惯性位置），左边留给「还差什么才能批准」的提示 */}
         <div className="mt-3 flex flex-wrap items-center gap-2">
+          <span className="me-auto text-[11px] text-ink-3">{canApprove ? "" : t("skills.reviewApproveBlocked")}</span>
           <Button
             size="sm"
             className="h-8"
@@ -311,9 +318,6 @@ export function VetReviewPanel({
               <Undo2 className="size-3.5" />
               {t("skills.reviewClear")}
             </Button>
-          ) : null}
-          {!canApprove ? (
-            <span className="text-[11px] text-ink-3">{t("skills.reviewApproveBlocked")}</span>
           ) : null}
         </div>
       </div>

@@ -1,8 +1,7 @@
-import { ChevronDown, Loader2, Sparkles, Wand2 } from "lucide-react";
+import { ChevronDown, Sparkles } from "lucide-react";
 import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Badge } from "@/ahub/components/ui/badge";
-import { Button } from "@/ahub/components/ui/button";
 import type { SkillSummary } from "@/ahub/lib/types";
 import { cn } from "@/ahub/lib/utils";
 
@@ -23,18 +22,13 @@ function fmtTime(iso: string): string {
 /**
  * 技能 AI 摘要区（skills-summary）：
  * 默认折叠，只显示一行「领域 · 定性 · 一句话描述」；点击展开显示完整信息与规模统计。
- * 尚无摘要时显示空态与「生成摘要」入口，不显示空的领域/定性字段。
+ * 只负责展示 —— 「生成摘要」入口在管理页签的工具栏（暂存左侧），不在这个面板上。
  */
 export function SkillSummaryPanel({
   summary,
-  busy,
-  onGenerate,
   className,
 }: {
   summary: SkillSummary | null | undefined;
-  /** 生成中：按钮显示进行中且不可重复点击 */
-  busy?: boolean;
-  onGenerate: () => void;
   className?: string;
 }) {
   const { t } = useTranslation();
@@ -49,20 +43,6 @@ export function SkillSummaryPanel({
         <span className="min-w-0 flex-1 truncate text-[11px] font-semibold uppercase tracking-wider text-ink-3">
           {t("skillSummary.title")}
         </span>
-        <Button
-          size="sm"
-          variant="secondary"
-          className="h-7 shrink-0 px-2.5 text-[11px]"
-          disabled={busy}
-          onClick={onGenerate}
-        >
-          {busy ? <Loader2 className="size-3 animate-spin" /> : <Wand2 className="size-3" />}
-          {busy
-            ? t("skillSummary.generating")
-            : summary
-              ? t("skillSummary.regenerate")
-              : t("skillSummary.generate")}
-        </Button>
       </div>
 
       {summary ? (

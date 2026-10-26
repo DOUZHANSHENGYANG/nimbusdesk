@@ -159,10 +159,9 @@ pub fn clear_skill_versions(app: AppH, dir_name: String) -> Result<u32, String> 
 pub fn release_skill_version(
     app: AppH,
     dir_name: String,
-    level: String,
     note: String,
 ) -> Result<serde_json::Value, String> {
-    let (version, snapshot) = skills::release_version(&app, &dir_name, &level, &note)?;
+    let (version, snapshot) = skills::release_version(&app, &dir_name, &note)?;
     Ok(serde_json::json!({ "version": version, "snapshot": snapshot }))
 }
 

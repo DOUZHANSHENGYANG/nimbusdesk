@@ -104,8 +104,8 @@ export const api = {
   deleteSkill: (dirName: string) => invoke<void>("delete_skill", { dirName }),
   clearSkillVersions: (dirName: string) => invoke<number>("clear_skill_versions", { dirName }),
   ensureSkillProtocol: (dirName: string) => invoke<{ created: boolean; version: string }>("ensure_skill_protocol", { dirName }),
-  releaseSkillVersion: (dirName: string, level: string, note: string) =>
-    invoke<{ version: string; snapshot: number }>("release_skill_version", { dirName, level, note }),
+  releaseSkillVersion: (dirName: string, note: string) =>
+    invoke<{ version: string; snapshot: number }>("release_skill_version", { dirName, note }),
   importSkillFolder: (path: string, overwrite: boolean) =>
     invoke<SkillMeta>("import_skill_folder", { path, overwrite }),
   importSkillZip: (path: string, overwrite: boolean) =>

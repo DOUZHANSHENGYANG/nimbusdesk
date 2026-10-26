@@ -318,8 +318,6 @@ pub struct SkillSavePayload {
     pub body: String,
     #[serde(default)]
     pub frontmatter: BTreeMap<String, serde_json::Value>,
-    #[serde(default)]
-    pub level: Option<String>,
     /// true = 保存并发布：把落盘后的内容记一条版本快照。
     /// false（缺省）= 仅暂存：只写文件，时间轴不动。
     /// 与提示词 save_prompt 的 publish 同语义，避免「保存」与「发布」两套含义。

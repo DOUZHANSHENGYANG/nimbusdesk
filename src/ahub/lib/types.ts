@@ -357,8 +357,8 @@ export interface SkillSavePayload {
   tags: string[];
   body: string;
   frontmatter: Record<string, unknown>;
-  level?: string;
   /** true = 保存并发布（写一条版本快照）；缺省 = 仅暂存 */
+
   publish?: boolean;
   /** 发布备注，写入版本节点 */
   note?: string;

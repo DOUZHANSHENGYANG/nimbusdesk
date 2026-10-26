@@ -615,21 +615,17 @@ pub fn save_skill_at(root: &Path, payload: SkillSavePayload) -> Result<SkillMeta
         }
     }
     if changed {
-        // 版本号递增只属于「发布」与普通编辑保存的既有行为，级别由前端传入
-        let level = payload.level.clone().unwrap_or_else(|| "L1".into());
+        // 版本号一律补丁递增。SSEP 的 L1~L4「变更级别」机制已删除：
+        // 让用户在保存时猜「这次算微调还是结构调整」，既没人猜得准，
+        // 又让版本号的大小取决于当时点了哪个选项。
         let cur = crate::ahub::skill_toml::load(&dir)
             .and_then(|d| crate::ahub::skill_toml::get_str(&d, "meta.version"))
             .unwrap_or_else(|| "0.0.0".into());
-        let nv = match level.as_str() {
-            "L3" => crate::ahub::skill_toml::bump_minor(&cur),
-            "L4" | "L5" => crate::ahub::skill_toml::bump_major(&cur),
-            _ => crate::ahub::skill_toml::bump_patch(&cur),
-        };
-        let _ = crate::ahub::skill_toml::set_version(&dir, &nv);
+        let _ = crate::ahub::skill_toml::set_version(&dir, &crate::ahub::skill_toml::bump_patch(&cur));
         if let Ok(h) = crate::ahub::skill_toml::tree_hash(&dir) {
             let action = if payload.publish { "release" } else { "update" };
             let note = if payload.note.trim().is_empty() { "保存于 AgentHub" } else { payload.note.trim() };
-            let _ = crate::ahub::skill_toml::append_event(&dir, action, &level, note, &h);
+            let _ = crate::ahub::skill_toml::append_event(&dir, action, "", note, &h);
         }
     }
     if published.is_some() {
@@ -669,7 +665,7 @@ pub fn ensure_protocol(app: &AppH, dir_name: &str) -> Result<(bool, String), Str
 /// 注意：这个入口不会带上编辑器里尚未保存的草稿。界面上「发布」走的是
 /// `save_skill(publish=true)`——先落盘再按新内容记版本，避免快照到旧内容。
 /// 这个方法保留给不需要携带草稿的场景（脚本、批量操作）。
-pub fn release_version(app: &AppH, dir_name: &str, level: &str, note: &str) -> Result<(String, u32), String> {
+pub fn release_version(app: &AppH, dir_name: &str, note: &str) -> Result<(String, u32), String> {
     let dir = skills_root(app).join(dir_name);
     if !dir.is_dir() {
         return Err(format!("技能不存在: {dir_name}"));
@@ -696,20 +692,16 @@ pub fn release_version(app: &AppH, dir_name: &str, level: &str, note: &str) -> R
     }
     store::write_json(&hub_path(&dir), &hub)?;
 
-    // 2) 按级别递增协议版本号
+    // 2) 版本号一律补丁递增（L1~L4 变更级别机制已删除）
     let cur = crate::ahub::skill_toml::load(&dir)
         .and_then(|d| crate::ahub::skill_toml::get_str(&d, "meta.version"))
         .unwrap_or_else(|| "0.0.0".into());
-    let nv = match level {
-        "L3" => crate::ahub::skill_toml::bump_minor(&cur),
-        "L4" | "L5" => crate::ahub::skill_toml::bump_major(&cur),
-        _ => crate::ahub::skill_toml::bump_patch(&cur),
-    };
+    let nv = crate::ahub::skill_toml::bump_patch(&cur);
     crate::ahub::skill_toml::set_version(&dir, &nv)?;
 
     // 3) 事件
     let h = crate::ahub::skill_toml::tree_hash(&dir).unwrap_or_default();
-    let _ = crate::ahub::skill_toml::append_event(&dir, "release", level, note, &h);
+    let _ = crate::ahub::skill_toml::append_event(&dir, "release", "", note, &h);
 
     Ok((nv, v))
 }
@@ -2427,7 +2419,6 @@ mod publish_tests {
             tags: Vec::new(),
             body: body.to_string(),
             frontmatter: Default::default(),
-            level: None,
             publish,
             note: String::new(),
         }

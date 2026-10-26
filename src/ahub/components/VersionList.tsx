@@ -7,6 +7,7 @@ import "react-vertical-timeline-component/style.min.css";
 import "@/ahub/styles/version-timeline.css";
 import { Badge } from "@/ahub/components/ui/badge";
 import { Button } from "@/ahub/components/ui/button";
+import { Markdown } from "@/ahub/components/Markdown";
 import type { VersionEntry } from "@/ahub/lib/types";
 import { cn } from "@/ahub/lib/utils";
 
@@ -133,6 +134,8 @@ export function VersionList({
   const { t } = useTranslation();
   const [open, setOpen] = useState<number | null>(null);
   const [base, setBase] = useState<"current" | "prev">("current");
+  /** 展开某一版先给「预览」（渲染后的正文），要比对才切「差异」 */
+  const [mode, setMode] = useState<"preview" | "diff">("preview");
 
   // 时间轴：新 → 旧
   const list = useMemo(() => [...versions].sort((a, b) => b.v - a.v), [versions]);
@@ -261,29 +264,55 @@ export function VersionList({
 
                   {expanded ? (
                     <div className="mt-1.5">
-                      {/* 对比基准切换 */}
-                      <div className="flex items-center gap-1.5">
+                      {/* 默认看「预览」：渲染后的 Markdown。要比对再切「差异」——
+                          差异视图那两列行号在窄栏里挤成一团，读起来很累。 */}
+                      <div className="flex flex-wrap items-center gap-1.5">
                         <div className="flex items-center gap-0.5 rounded-md border border-border bg-surface p-0.5">
                           {(
                             [
-                              { v: "current", key: "skills.verDiffVsCurrent" },
-                              { v: "prev", key: "skills.verDiffVsPrev" },
+                              { v: "preview", key: "skills.modePreview" },
+                              { v: "diff", key: "skills.verDiff" },
                             ] as const
-                          ).map(({ v: bv, key }) => (
+                          ).map(({ v: mv, key }) => (
                             <button
-                              key={bv}
+                              key={mv}
                               type="button"
-                              disabled={bv === "prev" && !prev}
-                              onClick={() => setBase(bv)}
+                              onClick={() => setMode(mv)}
                               className={cn(
-                                "rounded px-1.5 py-0.5 text-[10.5px] font-medium outline-none transition-colors disabled:opacity-40",
-                                base === bv ? "bg-primary-soft text-primary" : "text-ink-3 hover:text-foreground",
+                                "rounded px-1.5 py-0.5 text-[10.5px] font-medium outline-none transition-colors",
+                                mode === mv ? "bg-primary-soft text-primary" : "text-ink-3 hover:text-foreground",
                               )}
                             >
                               {t(key)}
                             </button>
                           ))}
                         </div>
+
+                        {/* 对比基准：只在差异模式下有意义 */}
+                        {mode === "diff" ? (
+                          <div className="flex items-center gap-0.5 rounded-md border border-border bg-surface p-0.5">
+                            {(
+                              [
+                                { v: "current", key: "skills.verDiffVsCurrent" },
+                                { v: "prev", key: "skills.verDiffVsPrev" },
+                              ] as const
+                            ).map(({ v: bv, key }) => (
+                              <button
+                                key={bv}
+                                type="button"
+                                disabled={bv === "prev" && !prev}
+                                onClick={() => setBase(bv)}
+                                className={cn(
+                                  "rounded px-1.5 py-0.5 text-[10.5px] font-medium outline-none transition-colors disabled:opacity-40",
+                                  base === bv ? "bg-primary-soft text-primary" : "text-ink-3 hover:text-foreground",
+                                )}
+                              >
+                                {t(key)}
+                              </button>
+                            ))}
+                          </div>
+                        ) : null}
+
                         <Button
                           size="sm"
                           variant="secondary"
@@ -295,7 +324,13 @@ export function VersionList({
                         </Button>
                       </div>
 
-                      <DiffView from={bodyOf(baseContent)} to={bodyOf(v.content)} title={`${t("skills.verDiffTitle")} · ${baseLabel}`} />
+                      {mode === "preview" ? (
+                        <div className="mt-2 max-h-64 overflow-auto rounded-lg border border-border bg-bg-subtle p-3">
+                          <Markdown source={bodyOf(v.content)} />
+                        </div>
+                      ) : (
+                        <DiffView from={bodyOf(baseContent)} to={bodyOf(v.content)} title={`${t("skills.verDiffTitle")} · ${baseLabel}`} />
+                      )}
                     </div>
                   ) : null}
                 </VerticalTimelineElement>
