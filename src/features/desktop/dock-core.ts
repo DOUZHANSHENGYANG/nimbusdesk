@@ -68,7 +68,7 @@ export function dockBounds(area: DockArea, edge: DockEdge, mode: DockMode, ancho
 /** 距工作区顶边的距离（逻辑像素）。 */
 export const DOCK_FLOAT_GAP = 12;
 /** 胶囊态：窗口不能按内容自适应宽度，给一个放得下「云台 · 3 项待办 · 17:15」的保守值。 */
-export const DOCK_CAPSULE_W = 464;
+export const DOCK_CAPSULE_W = 244;
 export const DOCK_CAPSULE_H = 44;
 /** 卡片态：五页共用一个矩形，切页不跳窗（视觉稿实测 660 × 591）。 */
 export const DOCK_CARD_W = 660;

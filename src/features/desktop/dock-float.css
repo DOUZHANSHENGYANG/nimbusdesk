@@ -1137,3 +1137,10 @@
 
 /* 胶囊模式下卡片外壳在 compact 也留着：它和中心栏同色，收起结束时不闪一下白/透明 */
 .df-root[data-compact-style="capsule"][data-phase="compact"] .df-card { opacity: 1; }
+
+/* ── 状态轮播（P0 定稿）：胶囊里一次只读一条状态 ────────────────── */
+.df-carousel { display:flex; align-items:center; gap:8px; min-width:0; flex:1; overflow:hidden; }
+.df-slide { display:inline-flex; align-items:center; gap:6px; min-width:0; }
+.df-dots { display:inline-flex; gap:3px; flex:0 0 auto; }
+.df-dots i { width:4px; height:4px; border-radius:50%; background:oklch(1 0 0 / .16); }
+.df-dots i.on { background:oklch(1 0 0 / .45); }

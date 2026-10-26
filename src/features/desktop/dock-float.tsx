@@ -5,7 +5,7 @@ import { listen } from "@tauri-apps/api/event";
 import { useTranslation } from "react-i18next";
 import {
   AppWindow, ArrowLeft, BookOpen, Bookmark, CalendarCheck, Camera, ChevronDown, ExternalLink, FileText, Folder,
-  Bell, CalendarDays, CloudSun, FolderKanban, SquareTerminal, Inbox, LayoutGrid, Newspaper, RefreshCw, Rss, Search, Send, Settings2, Sparkles, Star, Trash2,
+  Bell, CalendarDays, CloudSun, FolderKanban, SquareTerminal, RefreshCw, Rss, Search, Send, Settings2, Sparkles, Star, Trash2,
 } from "lucide-react";
 import { usePlans } from "@/features/plans/store";
 import { todayStr, type PlanTask } from "@/features/plans/types";
@@ -43,22 +43,6 @@ type DockTab = "search" | "fences" | "plans" | "projects" | "collect" | "news" |
  */
 type SurfacePhase = "compact" | "resizing" | "expanding" | "expanded" | "collapsing";
 
-/** 胶囊里的快捷图标：六个入口全在（和标签栏是两份职责，分开命名免得改错） */
-const QUICK_TABS: { key: DockTab; icon: typeof Search }[] = [
-  { key: "search", icon: Search },
-  { key: "fences", icon: LayoutGrid },
-  { key: "plans", icon: CalendarCheck },
-  { key: "projects", icon: FolderKanban },
-  { key: "collect", icon: Inbox },
-  { key: "news", icon: Newspaper },
-  { key: "cal", icon: CalendarDays },
-  { key: "chat", icon: Sparkles },
-  { key: "weather", icon: CloudSun },
-  { key: "notice", icon: Bell },
-  { key: "term", icon: SquareTerminal },
-];
-/** 主标签：日均用得多，图标 + 文字 */
-const PRIMARY_TABS: DockTab[] = ["search", "fences", "plans", "projects", "news"];
 /** 二级功能：日历 / 天气 / 通知 / 终端 —— 只出现在卡片头部的图标区 */
 const TOOL_TABS: { key: DockTab; icon: typeof Search }[] = [
   { key: "cal", icon: CalendarDays },
@@ -97,6 +81,12 @@ export function DockFloat({ onExpand, onHide, panels }: {
   const [chatOpen, setChatOpen] = useState(false);
   const summary = useMemo(() => summarizeDay(tasks), [tasks]);
   const [clock, setClock] = useState(() => new Date().toTimeString().slice(0, 5));
+  /** 状态轮播（P0 定稿）：胶囊里一次只读一条 —— 0=时间，1=待办。5 秒一换。 */
+  const [slide, setSlide] = useState(0);
+  useEffect(() => {
+    const timer = setInterval(() => setSlide((value) => value + 1), 5000);
+    return () => clearInterval(timer);
+  }, []);
   /** 收起形态的提醒：出现 5 秒就收（对应灵动岛的配额预警） */
   const [alertOn, setAlertOn] = useState(false);
   /** 收起形态：胶囊（信息全）/ 指示条（只剩一条线，最大化窗口时最不碍事） */
@@ -275,38 +265,35 @@ export function DockFloat({ onExpand, onHide, panels }: {
           <span className="df-orb" aria-hidden="true" />
           <span className="df-name">{t("dockFloat.title")}</span>
           <span className="df-sep" aria-hidden="true" />
-          {(() => {
-            const total = summary.todo + summary.done;
-            const pct = total ? summary.done / total : 0;
-            const c = 2 * Math.PI * 6;
-            return (
-              <span className="df-ring" title={t("dockFloat.ringTitle", { done: summary.done, total })}
-                aria-label={t("dockFloat.ringTitle", { done: summary.done, total })}>
-                <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
-                  <circle cx="8" cy="8" r="6" className="df-ring-bg" />
-                  <circle cx="8" cy="8" r="6" className="df-ring-fg"
-                    strokeDasharray={`${c * pct} ${c}`} transform="rotate(-90 8 8)" />
-                </svg>
+          {/* 状态轮播（P0 定稿）：一次只读一条 —— 时间 / 待办，小圆点提示还有下一条。
+              胶囊不再摆功能图标：想做什么就悬停或点箭头展开，展开的卡片里才有入口。 */}
+          <span className="df-carousel" aria-live="polite">
+            {slide % 2 === 0 ? (
+              <span className="df-slide"><span className="df-clock">{clock}</span></span>
+            ) : (
+              <span className="df-slide">
+                <span className="df-ring" title={t("dockFloat.ringTitle", { done: summary.done, total: summary.todo + summary.done })}>
+                  <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+                    <circle cx="8" cy="8" r="6" className="df-ring-bg" />
+                    <circle cx="8" cy="8" r="6" className="df-ring-fg"
+                      strokeDasharray={`${2 * Math.PI * 6 * (summary.todo + summary.done ? summary.done / (summary.todo + summary.done) : 0)} ${2 * Math.PI * 6}`}
+                      transform="rotate(-90 8 8)" />
+                  </svg>
+                </span>
+                <span className="df-stat">
+                  <b>{summary.todo}</b> {t("dockFloat.todoUnit")}
+                  {summary.late > 0 && <> · <b className="is-warn">{summary.late}</b> {t("dockFloat.lateUnit")}</>}
+                </span>
               </span>
-            );
-          })()}
-          <span className="df-stat">
-            <b>{summary.todo}</b> {t("dockFloat.todoUnit")}
-            {summary.late > 0 && <> · <b className="is-warn">{summary.late}</b> {t("dockFloat.lateUnit")}</>}
+            )}
+            <span className="df-dots" aria-hidden="true">
+              <i className={slide % 2 === 0 ? "on" : ""} />
+              <i className={slide % 2 === 1 ? "on" : ""} />
+            </span>
           </span>
-          <span className="df-clock">{clock}</span>
           {alertOn && summary.late > 0 && (
             <span className="df-alert" role="status">{t("dockFloat.lateAlert", { count: summary.late })}</span>
           )}
-          <span className="df-quick">
-            {QUICK_TABS.filter(({ key }) => PRIMARY_TABS.includes(key)).map(({ key, icon: Icon }) => (
-              <button key={key} type="button" className="df-quick-btn" title={t(`dockFloat.tab.${key}`)}
-                aria-label={t(`dockFloat.tab.${key}`)} aria-pressed={tab === key}
-                onClick={() => { setTab(key); if (!open) setExpanded(true); }}>
-                <Icon className="df-icon" aria-hidden="true" />
-              </button>
-            ))}
-          </span>
           <button type="button" className="df-expand"
             title={open ? t("dockFloat.collapse") : t("dockFloat.expand")}
             aria-label={open ? t("dockFloat.collapse") : t("dockFloat.expand")}
