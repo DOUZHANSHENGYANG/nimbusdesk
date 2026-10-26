@@ -949,7 +949,7 @@ export function SkillsPage() {
           <div className="flex flex-wrap items-center gap-1">
             {editTags.length ? (
               editTags.map((tag) => (
-                <Badge key={tag} variant="muted">
+                <Badge key={tag} variant="default">
                   {tag}
                 </Badge>
               ))
@@ -1312,7 +1312,7 @@ export function SkillsPage() {
                   {s.hasToml ? (
                     s.version !== "0.0.0" ? (
                       <Badge
-                        variant="info"
+                        variant="muted"
                         title={batchMode ? t("skills.protoVersionHint") : t("skills.gotoVersionsHint")}
                         onClick={(e) => {
                           if (batchMode) return;
@@ -1380,7 +1380,9 @@ export function SkillsPage() {
                           }}
                           className={cn("rounded-full outline-none transition-colors", !batchMode && "hover:-translate-y-px")}
                         >
-                          <Badge variant={on ? "default" : "muted"} className={cn(on && "ring-1 ring-primary/40")}>
+                          {/* 标签统一蓝色（和 MCP 页一致）；「正在筛选」用一圈 ring 表示 ——
+                              蓝色是标签的专属色，状态徽标不许用它 */}
+                          <Badge variant="default" className={cn("transition-shadow", on && "ring-1 ring-primary/60")}>
                             {tg}
                           </Badge>
                         </button>
@@ -1713,7 +1715,7 @@ export function SkillsPage() {
                                         ) : null}
                                       </div>
                                       <div className="mt-1.5">
-                                        <Badge variant="muted">{t("skills.protoManaged")}</Badge>
+                                        <Badge variant="outline">{t("skills.protoManaged")}</Badge>
                                       </div>
                                     </div>
                                   </div>

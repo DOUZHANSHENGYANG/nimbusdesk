@@ -718,7 +718,12 @@ export function McpPage() {
               )}
             >
               <div className="flex items-start justify-between gap-2">
-                <h3 className="min-w-0 flex-1 truncate font-mono text-[12.5px] font-semibold text-foreground">{s.name}</h3>
+                {/* 传输类型跟在名字后面，「已应用 N 个工具 / 仅池中」删掉 ——
+                    接没接进工具是「批量配置」的事，卡片上每张都挂一个数字只是噪音 */}
+                <div className="flex min-w-0 flex-1 items-center gap-1.5">
+                  <h3 className="min-w-0 truncate font-mono text-[12.5px] font-semibold text-foreground">{s.name}</h3>
+                  <Badge variant="outline" className="shrink-0 font-mono">{s.transport}</Badge>
+                </div>
                 {batchMode || batchSel.size > 0 ? (
                   <button
                     type="button"
@@ -740,15 +745,7 @@ export function McpPage() {
                   >
                     {batchSel.has(s.id) ? <Check className="size-3.5" strokeWidth={3} /> : null}
                   </button>
-                ) : (s.targets ?? []).length ? (
-                  <span className="shrink-0 rounded-full bg-primary-soft px-2 py-0.5 text-[11px] font-medium text-primary">
-                    {t("mcp.applyCount", { n: (s.targets ?? []).length })}
-                  </span>
-                ) : (
-                  <span className="shrink-0 rounded-full bg-surface-2 px-2 py-0.5 text-[11px] font-medium text-ink-3">
-                    {t("mcp.poolOnly")}
-                  </span>
-                )}
+                ) : null}
               </div>
               {s.description ? <p className="mt-1 line-clamp-1 text-xs text-ink-2">{s.description}</p> : null}
               <div className="mt-2 truncate rounded-md bg-bg-subtle px-2 py-1.5 font-mono text-[11px] text-ink-2" dir="ltr">
@@ -770,14 +767,15 @@ export function McpPage() {
                   );
                 })()
               ) : null}
-              <div className="mt-3 flex flex-wrap items-center gap-1">
-                <Badge variant={s.transport === "stdio" ? "info" : "warning"}>{s.transport}</Badge>
-                {s.tags.map((tg) => (
-                  <Badge key={tg} variant="default">
-                    {tg}
-                  </Badge>
-                ))}
-              </div>
+              {s.tags.length ? (
+                <div className="mt-3 flex flex-wrap items-center gap-1">
+                  {s.tags.map((tg) => (
+                    <Badge key={tg} variant="default">
+                      {tg}
+                    </Badge>
+                  ))}
+                </div>
+              ) : null}
               <div className="mt-auto flex flex-wrap items-center justify-end gap-0.5 pt-3">
                 <Button
                   size="sm"
@@ -798,6 +796,9 @@ export function McpPage() {
                   <Sparkles className="size-3.5" />
                   {t("mcp.aiTags")}
                 </Button>
+                <Button size="sm" variant="secondary" className="h-7 px-2.5 text-[11px]" onClick={() => openEdit(s)}>
+                  {t("common.edit")}
+                </Button>
                 <Button
                   size="iconSm"
                   variant="ghost"
@@ -805,9 +806,6 @@ export function McpPage() {
                   onClick={() => void copyText(singleJson(s)).then((ok) => ok && toast.success(t("common.copied")))}
                 >
                   <Copy />
-                </Button>
-                <Button size="sm" variant="secondary" className="h-7 px-2.5 text-[11px]" onClick={() => openEdit(s)}>
-                  {t("common.edit")}
                 </Button>
                 <Button size="iconSm" variant="ghost" title={t("common.delete")} onClick={() => setDeleting(s)}>
                   <Trash2 />
