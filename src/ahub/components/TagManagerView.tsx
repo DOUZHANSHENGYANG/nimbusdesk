@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { ArrowDown, ArrowUp, Check, ChevronRight, FolderPlus, Pencil, Search, Trash2, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/ahub/lib/utils";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/ahub/components/ui/select";
 import { useTagGroups } from "@/ahub/stores/tag-groups";
 
 /**
@@ -267,18 +268,22 @@ export function TagManagerView({
                 >
                   {t("tagManager.newGroupWithSelection")}
                 </button>
-                <select
-                  value={batchGroup}
-                  onChange={(event) => setBatchGroup(event.target.value)}
-                  className="h-6 rounded border border-border bg-surface px-1 text-[10.5px] text-ink-2 outline-none"
+                <Select
+                  value={batchGroup || "__none"}
+                  onValueChange={(value) => setBatchGroup(value === "__none" ? "" : value)}
                 >
-                  <option value="">{t("tagShelf.ungrouped")}</option>
-                  {groups.map((group) => (
-                    <option key={group.id} value={group.id}>
-                      {group.name}
-                    </option>
-                  ))}
-                </select>
+                  <SelectTrigger className="h-6 w-[112px] text-[10.5px]" aria-label={t("tagManager.columnGroup")}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none">{t("tagShelf.ungrouped")}</SelectItem>
+                    {groups.map((group) => (
+                      <SelectItem key={group.id} value={group.id}>
+                        {group.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 <button
                   type="button"
                   className="h-6 rounded border border-primary/40 bg-primary px-2 text-[10.5px] text-primary-foreground"
@@ -362,22 +367,29 @@ export function TagManagerView({
                         {draft?.target === tag ? (
                           draftInput(tag, "max-w-full")
                         ) : (
-                          <select
-                            value={groupOf(tag)?.id ?? ""}
-                            onChange={(event) => {
-                              if (event.target.value === "__new") setDraft({ target: tag, name: "" });
-                              else assignTag(tag, event.target.value || null);
+                          <Select
+                            value={groupOf(tag)?.id ?? "__none"}
+                            onValueChange={(value) => {
+                              if (value === "__new") setDraft({ target: tag, name: "" });
+                              else assignTag(tag, value === "__none" ? null : value);
                             }}
-                            className="h-6 max-w-full rounded border border-border bg-transparent px-1 text-[10.5px] text-ink-2 outline-none"
                           >
-                            <option value="">{t("tagShelf.ungrouped")}</option>
-                            {groups.map((group) => (
-                              <option key={group.id} value={group.id}>
-                                {group.name}
-                              </option>
-                            ))}
-                            <option value="__new">{t("tagManager.newGroupInline")}</option>
-                          </select>
+                            <SelectTrigger className="h-6 w-full text-[10.5px]" aria-label={t("tagManager.columnGroup")}>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="__none">{t("tagShelf.ungrouped")}</SelectItem>
+                              {groups.map((group) => (
+                                <SelectItem key={group.id} value={group.id}>
+                                  {group.name}
+                                </SelectItem>
+                              ))}
+                              {/* 最后一项现场建组：这一条直接进新组 */}
+                              <SelectItem value="__new" className="text-primary">
+                                {t("tagManager.newGroupInline")}
+                              </SelectItem>
+                            </SelectContent>
+                          </Select>
                         )}
                         <span className="text-right font-mono text-[10.5px] text-ink-3">{counts?.[tag] ?? 0}</span>
                       </div>

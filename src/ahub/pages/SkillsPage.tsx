@@ -1076,47 +1076,7 @@ export function SkillsPage() {
               按钮位置固定，不可用的动作是禁用，不是消失。 */}
           <div className="mt-2 flex flex-wrap items-start gap-2 border-t border-border/60 pt-2">
             <div className="flex min-w-0 flex-1 flex-col gap-1.5">
-              {/* 第一行：进入 / 退出批量 + 全选所有（按技能总数，不随筛选结果变） */}
-              <div className="flex min-w-0 flex-wrap items-center gap-2">
-                <Button
-                  size="sm"
-                  variant={batchMode ? "default" : "secondary"}
-                  className="h-7 w-[104px] justify-center text-[11px]"
-                  onClick={() => {
-                    setBatchMode((prev) => !prev);
-                    setBatchSel(new Set());
-                  }}
-                >
-                  <ListChecks className="size-3.5" />
-                  {batchMode ? t("skills.batchExit") : t("skills.batchEnter")}
-                </Button>
-
-                <span className="h-5 w-px shrink-0 bg-border" aria-hidden />
-
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  className="h-7 w-[104px] justify-center text-[11px]"
-                  disabled={skills.length === 0}
-                  onClick={() =>
-                    setBatchSel(
-                      skills.length > 0 && skills.every((x) => batchSel.has(x.dirName))
-                        ? new Set()
-                        : new Set(skills.map((x) => x.dirName)),
-                    )
-                  }
-                >
-                  {skills.length > 0 && skills.every((x) => batchSel.has(x.dirName))
-                    ? t("skills.batchUnselectAll")
-                    : t("skills.batchSelectAll")}
-                </Button>
-
-                <span className="ml-auto shrink-0 tabular-nums text-[11px] text-ink-3">
-                  {t("skills.batchSelectedShort", { n: batchSel.size })}
-                </span>
-              </div>
-
-              {/* 第二行：内容操作四项 + AI 操作两项（竖线分开）；没选中时禁用而不是隐藏 */}
+              {/* 第一行：内容操作四项 + AI 操作两项（竖线分开）；常显，没选中时禁用而不是消失 */}
               <div className="flex min-w-0 flex-wrap items-center gap-2">
                 {/* 纳入技能管理：生成 SKILL.toml（已纳入自动跳过）+ 安全审查 */}
                 <Button
@@ -1205,6 +1165,47 @@ export function SkillsPage() {
                 >
                   <Tag className="size-3.5" />
                   {t("skills.batchTagBtn")}
+                </Button>
+              </div>
+
+              {/* 第二行：选择状态在左，进入 / 退出批量与全选所有在右 ——
+                  右手侧操作更顺手，也离第一行的「批量删除」远一点，连点不会误伤。 */}
+              <div className="flex min-w-0 flex-wrap items-center gap-2">
+                <span className="mr-auto shrink-0 tabular-nums text-[11px] text-ink-3">
+                  {t("skills.batchSelectedShort", { n: batchSel.size })}
+                </span>
+
+                <Button
+                  size="sm"
+                  variant={batchMode ? "default" : "secondary"}
+                  className="h-7 w-[104px] justify-center text-[11px]"
+                  onClick={() => {
+                    setBatchMode((prev) => !prev);
+                    setBatchSel(new Set());
+                  }}
+                >
+                  <ListChecks className="size-3.5" />
+                  {batchMode ? t("skills.batchExit") : t("skills.batchEnter")}
+                </Button>
+
+                <span className="h-5 w-px shrink-0 bg-border" aria-hidden />
+
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  className="h-7 w-[104px] justify-center text-[11px]"
+                  disabled={skills.length === 0}
+                  onClick={() =>
+                    setBatchSel(
+                      skills.length > 0 && skills.every((x) => batchSel.has(x.dirName))
+                        ? new Set()
+                        : new Set(skills.map((x) => x.dirName)),
+                    )
+                  }
+                >
+                  {skills.length > 0 && skills.every((x) => batchSel.has(x.dirName))
+                    ? t("skills.batchUnselectAll")
+                    : t("skills.batchSelectAll")}
                 </Button>
               </div>
             </div>
