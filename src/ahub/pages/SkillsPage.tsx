@@ -1043,12 +1043,9 @@ export function SkillsPage() {
               />
             </aside>
             <div className="min-w-0 flex-1">
-      {/* ── 吸顶筛选台：来源工具 · 标签 · 视图 · 批量 ── */}
+      {/* ── 筛选台：结果计数 · 批量动作（与 MCP 页一样只是一行，不吸顶、不加底色） ── */}
       {skills.length > 0 ? (
-        <div
-          data-anim
-          className="sticky top-0 z-20 mb-4 py-1.5 backdrop-blur bg-background/85"
-        >
+        <div data-anim className="mb-4 flex flex-col gap-2">
           {/* 第一行：结果计数（视图只留网格，与 MCP 页一致，不再切换） */}
           <div className="flex flex-wrap items-center gap-1.5">
 
@@ -1122,18 +1119,6 @@ export function SkillsPage() {
                   {t("skills.packExportBtn")}
                 </Button>
 
-                {/* 批量删除：唯一的破坏性动作，红色常显（二次确认后逐个删除） */}
-                <Button
-                  size="sm"
-                  variant="secondary"
-                  className="h-7 justify-center border-danger/40 text-[11px] text-danger hover:bg-danger/10 hover:text-danger"
-                  disabled={batchSel.size === 0}
-                  onClick={() => setBatchDeleteOpen(true)}
-                >
-                  <Trash2 className="size-3.5" />
-                  {t("skills.batchDelete")}
-                </Button>
-
                 <span className="h-5 w-px shrink-0 bg-border" aria-hidden />
 
                 {/* 智能摘要：选中的技能逐个生成（未选中时禁用） */}
@@ -1161,6 +1146,20 @@ export function SkillsPage() {
                 >
                   <Tag className="size-3.5" />
                   {t("skills.batchTagBtn")}
+                </Button>
+
+                {/* 批量删除：唯一的破坏性动作，红色常显；放到最末并用竖线隔开，
+                    免得手点在它旁边（二次确认后逐个删除） */}
+                <span className="h-5 w-px shrink-0 bg-border" aria-hidden />
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  className="h-7 justify-center border-danger/40 text-[11px] text-danger hover:bg-danger/10 hover:text-danger"
+                  disabled={batchSel.size === 0}
+                  onClick={() => setBatchDeleteOpen(true)}
+                >
+                  <Trash2 className="size-3.5" />
+                  {t("skills.batchDelete")}
                 </Button>
 
                 {/* 右侧：选中状态 + 全选（小一号、靠右）。单击卡片就是选中，没有批量模式开关了 */}
