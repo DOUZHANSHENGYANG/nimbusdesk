@@ -315,6 +315,12 @@ pub fn run() {
             ahub::commands::write_harness_config,
         ])
         .setup(|app| {
+            // 主窗口必须有图标，否则任务栏按钮上是一块空白：窗口是隐藏创建、稍后 show 的，
+            // 不显式 set_icon 就没人给它 WM_SETICON（托盘那份是单独设的，所以托盘一直好看）。
+            // dev 下也能拿到 —— default_window_icon() 来自 tauri.conf.json 的 bundle.icon。
+            if let (Some(icon), Some(win)) = (app.default_window_icon().cloned(), app.get_webview_window("main")) {
+                let _ = win.set_icon(icon);
+            }
             tray::create(app)?;
             organization_clock::start(app.handle().clone())?;
             schedule::engine::start(app.handle().clone());
