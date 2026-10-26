@@ -3,6 +3,20 @@
 「Harness 工具」页现在按工具分行管理：CLI 状态、配置文件、技能目录、备份和迁移入口都在同一条目里。
 MCP / Skills 仍走各自页面；这里管的是**工具本身**。
 
+页面是**一页到底**，不再切页签（原来是「Harness 工具 / 本机技能 / CLI 版本 / 配置备份」四个）：
+「本机技能」只是技能页的只读副本（重复，已删），另外三个是同一批工具的不同侧面。
+现在从上到下：**工具卡片**（含 CLI 版本与更新状态）→ **CLI 批量更新** → **配置文件的版本历史**。
+
+**工具的展示顺序**在「设置 → 工具顺序」里拖（`HarnessOrderSection`，存 `settings.harnessOrder`），
+工具卡片会跟着这份顺序排；没配过就用后端默认顺序，默认把常用的排前面：
+
+```
+opencode · dsh(deepseek) · codex · claude code · codebuddy · pi
+```
+
+其余工具（claude desktop / cursor / windsurf / gemini cli / vscode / cline / workbuddy / 自定义目录）
+按静态表顺序排在后面（`harness.rs` 的 `DEFAULT_ORDER` + 稳定排序）。
+
 ## 已接入工具的目录结构（调研结果）
 
 | 工具 | 配置文件 | 用户目录 / 技能目录 | 官方迁移变量 |

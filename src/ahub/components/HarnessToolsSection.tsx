@@ -8,6 +8,11 @@ import { Button } from "@/ahub/components/ui/button";
 import { Dialog, DialogBody, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/ahub/components/ui/dialog";
 import { api, copyText } from "@/ahub/lib/api";
 import { loadHarnessReports, writeHarnessScan } from "@/ahub/lib/harnessScan";
+import { sortByOrder } from "@/ahub/lib/harnessOrder";
+import { useSettings } from "@/ahub/stores/settings";
+
+/** 稳定的空数组引用：没配过顺序时给 selector 用，避免每次返回新数组 */
+const NO_ORDER: string[] = [];
 import type { HarnessReport, ToolVersion } from "@/ahub/lib/types";
 
 /** 官方支持用它把整个配置/数据根目录搬到别的盘；没有的只能用目录联接。 */
@@ -86,9 +91,16 @@ export function HarnessToolsSection() {
   }, [load]);
 
   const toolMap = useMemo(() => new Map(tools.map((tool) => [tool.id, tool])), [tools]);
+  // 卡片顺序跟着用户在「设置 → 工具顺序」里拖出来的那份；没配过就用后端给的默认顺序
+  // （opencode / dsh / codex / claude code / codebuddy / pi 在前）。
+  const harnessOrder = useSettings((s) => s.info?.settings.harnessOrder ?? NO_ORDER);
   const toolsToShow = useMemo(
-    () => (reports ?? []).filter((report) => report.id !== "custom-dirs" && (report.exists || toolMap.get(report.id)?.installed)),
-    [reports, toolMap],
+    () =>
+      sortByOrder(
+        (reports ?? []).filter((report) => report.id !== "custom-dirs" && (report.exists || toolMap.get(report.id)?.installed)),
+        harnessOrder,
+      ) ?? [],
+    [reports, toolMap, harnessOrder],
   );
 
   const copy = (text: string) => {

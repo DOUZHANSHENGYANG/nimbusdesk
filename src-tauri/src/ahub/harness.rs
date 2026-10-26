@@ -124,6 +124,10 @@ fn flat(path: PathBuf) -> McpSource {
     McpSource { path, format: Format::JsonFlat, key: "mcpServers" }
 }
 
+/// 默认展示顺序：常用的几个排前面（用户可以在「设置 → 工具顺序」里拖出自己的一份，
+/// 那份存在 settings 的 `harnessOrder` 里，由前端覆盖这里的顺序）。
+const DEFAULT_ORDER: &[&str] = &["opencode", "deepseek", "codex", "claude-code", "codebuddy", "pi-agent"];
+
 fn defs(app: &AppH) -> Vec<HarnessDef> {
     let settings = store::load_settings(app);
     let mut list = vec![
@@ -281,6 +285,9 @@ fn defs(app: &AppH) -> Vec<HarnessDef> {
             skills_dirs: custom,
         });
     }
+    // 默认顺序：DEFAULT_ORDER 里的排前面，其余保持静态表顺序（稳定排序）——
+    // 前端拿到后还会按用户自己拖的那份再排一次。
+    list.sort_by_key(|def| DEFAULT_ORDER.iter().position(|id| *id == def.id).unwrap_or(usize::MAX));
     list
 }
 
