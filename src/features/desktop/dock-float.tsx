@@ -26,6 +26,8 @@ import { useSettings } from "@/stores/settings";
 import { DayPicker, type DayProps } from "react-day-picker";
 import { chatWithProvider, type ChatMessage } from "@/features/ai/client";
 import { ageBucket, dateKey, summarizeDay } from "./dock-float-core";
+import { nearestFloatEdge } from "./dock-core";
+import { monitorArea } from "./monitors";
 import "./dock-float.css";
 
 /**
@@ -290,15 +292,28 @@ export function DockFloat({ onExpand, onHide, panels }: {
       <div className="df-capsule" data-open={open}
           data-drag
           onPointerDown={(event) => {
-            // 空白处/文字上按住就拖走；图标按钮照常点击
+            // 空白处/文字上按住就拖走；图标按钮照常点击。
+            // 松手后**吸附到最近的屏幕边**（上 / 左 / 右，用户定的规矩不含下），
+            // 并立即按吸附结果落位 —— 胶囊不会悬在屏幕中间。
             if (event.button !== 0 || (event.target as HTMLElement).closest("button")) return;
             const win = getCurrentWebviewWindow();
             void (async () => {
               await win.startDragging();
-              const pos = await win.outerPosition();
-              const monitor = await import("@tauri-apps/api/window").then((m) => m.currentMonitor());
-              const scale = monitor?.scaleFactor ?? 1;
-              useSettings.getState().setDockFloatX(pos.x / scale);
+              const [pos, size, monitor] = await Promise.all([
+                win.outerPosition(),
+                win.outerSize(),
+                import("@tauri-apps/api/window").then((m) => m.currentMonitor()),
+              ]);
+              if (!monitor) return;
+              const scale = monitor.scaleFactor ?? 1;
+              const area = monitorArea(monitor);
+              const rect = { x: pos.x / scale, y: pos.y / scale, w: size.width / scale, h: size.height / scale };
+              const store = useSettings.getState();
+              const edge = nearestFloatEdge(rect, area);
+              store.setDockFloatEdge(edge);
+              if (edge === "top") store.setDockFloatX(rect.x);
+              else store.setDockFloatY(rect.y);
+              void onExpand(open).catch(() => undefined);
             })().catch(() => undefined);
           }}>
           <span className="df-orb" aria-hidden="true" />

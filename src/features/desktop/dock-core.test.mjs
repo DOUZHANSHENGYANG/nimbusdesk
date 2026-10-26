@@ -11,7 +11,7 @@ function load(file) {
 }
 
 const { dockBounds, dockSpringPair, DOCK_RAIL_W, DOCK_RAIL_H, DOCK_FLYOUT_W, DOCK_PANEL_H } = load("./dock-core.ts");
-const { dockFloatBounds, dockFloatSpringPair, DOCK_FLOAT_GAP, DOCK_CAPSULE_W, DOCK_CAPSULE_H, DOCK_CARD_W, DOCK_CARD_H } = load("./dock-core.ts");
+const { dockFloatBounds, dockFloatSpringPair, dockFloatEdgeBounds, nearestFloatEdge, DOCK_FLOAT_GAP, DOCK_CAPSULE_W, DOCK_CAPSULE_H, DOCK_CARD_W, DOCK_CARD_H } = load("./dock-core.ts");
 const area = { x: -1920, y: 0, w: 1920, h: 1080 };
 /** 侧栏在垂直方向居中时的 y */
 const railY = area.y + Math.round((area.h - DOCK_RAIL_H) / 2);
@@ -109,6 +109,40 @@ test("float anchor centers both forms and keeps a fixed gap from the top", () =>
   });
   assert.equal(capsule.x + capsule.w / 2, card.x + card.w / 2, "两种形态共用一条中心线，切换时只变宽高");
   assert.equal(dockBounds(area, "left", "strip").y, railY, "侧栏几何不受悬浮锚点影响");
+});
+
+/* ── 悬浮吸附：上 / 左 / 右（用户定的规矩，下不算） ───────────────── */
+
+test("nearestFloatEdge picks the closest of the three allowed edges", () => {
+  const workarea = { x: 0, y: 0, w: 2000, h: 1000 };
+  assert.equal(nearestFloatEdge({ x: 900, y: 8, w: 244, h: 44 }, workarea), "top", "贴顶");
+  assert.equal(nearestFloatEdge({ x: 6, y: 400, w: 244, h: 44 }, workarea), "left", "贴左");
+  assert.equal(nearestFloatEdge({ x: 1740, y: 500, w: 244, h: 44 }, workarea), "right", "贴右");
+  // 拖到正中：三条边里最最近的一条赢（这里左与右等距时取先判的左）
+  assert.equal(nearestFloatEdge({ x: 878, y: 480, w: 244, h: 44 }, workarea), "left");
+});
+
+test("dockFloatEdgeBounds pins left/right to the edge and centers vertically by default", () => {
+  const workarea = { x: 0, y: 0, w: 2000, h: 1000 };
+  const left = dockFloatEdgeBounds(workarea, "strip", "left", null, null);
+  assert.equal(left.x, DOCK_FLOAT_GAP, "左缘留一条呼吸缝");
+  assert.equal(left.y, Math.round((workarea.h - DOCK_CAPSULE_H) / 2), "没拖过就垂直居中");
+  const right = dockFloatEdgeBounds(workarea, "flyout", "right", null, 300);
+  assert.equal(right.x, workarea.w - DOCK_CARD_W - DOCK_FLOAT_GAP, "卡片从右缘向屏幕内长");
+  assert.equal(right.y, 300, "纵向用拖拽保存的 floatY");
+});
+
+test("dockFloatEdgeBounds clamps the side Y into the work area", () => {
+  const workarea = { x: 0, y: 0, w: 2000, h: 600 };
+  const placed = dockFloatEdgeBounds(workarea, "strip", "left", null, 9999);
+  assert.ok(placed.y + placed.h <= workarea.h, "纵向位置不许越出工作区");
+});
+
+test("top edge keeps the legacy capsule-center behavior", () => {
+  const workarea = { x: 0, y: 0, w: 2000, h: 1000 };
+  const placed = dockFloatEdgeBounds(workarea, "strip", "top", 600, null);
+  assert.equal(placed.x, 600, "floatX 就是胶囊的左缘候选位（strip 模式宽 = 胶囊宽）");
+  assert.equal(placed.y, DOCK_FLOAT_GAP);
 });
 
 test("float anchor never leaves the work area", () => {

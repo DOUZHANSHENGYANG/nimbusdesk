@@ -57,6 +57,10 @@ interface SettingsState {
   dockStyle: "rail" | "capsule";
   /** 胶囊被拖到的工作区左边（逻辑像素）；null = 水平居中 */
   dockFloatX: number | null;
+  /** 悬浮胶囊吸附的屏幕边（只支持 上 / 左 / 右） */
+  dockFloatEdge: "top" | "left" | "right";
+  /** 贴左右缘时的纵向位置（null = 垂直居中） */
+  dockFloatY: number | null;
   /** 展开方向：居中向两边 / 钉住左缘向右 */
   dockExpandAnchor: "center" | "left";
   /** 收起形态：胶囊 / 指示条（对齐 BrimDeck 的两种紧凑形态） */
@@ -115,6 +119,8 @@ interface SettingsState {
   setDockEdge: (edge: "left" | "right" | "top") => void;
   setDockStyle: (style: "rail" | "capsule") => void;
   setDockFloatX: (x: number | null) => void;
+  setDockFloatEdge: (edge: "top" | "left" | "right") => void;
+  setDockFloatY: (y: number | null) => void;
   setDockExpandAnchor: (anchor: "center" | "left") => void;
   setDockCompactStyle: (style: "capsule" | "line") => void;
   setAccentPreset: (preset: "sky" | "ocean" | "graphite" | "warm") => void;
@@ -173,6 +179,8 @@ export const useSettings = create<SettingsState>()(
       dockEdge: "right",
       dockStyle: "rail",
       dockFloatX: null,
+      dockFloatEdge: "top",
+      dockFloatY: null,
       dockExpandAnchor: "center",
       dockCompactStyle: "capsule",
       accentPreset: "sky",
@@ -212,6 +220,8 @@ export const useSettings = create<SettingsState>()(
       setDockEdge: (dockEdge) => set({ dockEdge }),
       setDockStyle: (dockStyle) => set({ dockStyle }),
       setDockFloatX: (dockFloatX) => set({ dockFloatX }),
+      setDockFloatEdge: (dockFloatEdge) => set({ dockFloatEdge }),
+      setDockFloatY: (dockFloatY) => set({ dockFloatY }),
       setDockExpandAnchor: (dockExpandAnchor) => set({ dockExpandAnchor }),
       setDockCompactStyle: (dockCompactStyle) => set({ dockCompactStyle }),
       setAccentPreset: (accentPreset) => set({ accentPreset }),

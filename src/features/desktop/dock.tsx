@@ -22,7 +22,7 @@ import { useProjects } from "@/features/projects/store";
 import { CaptureForm } from "@/features/knowledge/capture";
 import { beginMenu, closeMenu, emitMenuRequest, ensurePopupReady, ownerLabel, revealMenu, subscribeMenuSize, useMenuActions, type MenuAction } from "@/features/files/popup";
 import type { MenuIconKey, MenuNode } from "@/features/files/menu-model";import { monitorArea, resolveMonitor } from "./monitors";
-import { DOCK_CAPTURE_H, dockBounds, dockFloatBounds, type DockArea, type DockMode, type DockPanel } from "./dock-core";
+import { DOCK_CAPTURE_H, dockBounds, dockFloatEdgeBounds, type DockArea, type DockMode, type DockPanel } from "./dock-core";
 import { DockFloat } from "./dock-float";
 import { nearestDockEdge } from "./edge-core";
 import { ItemIcon } from "@/features/files/icons";
@@ -119,22 +119,20 @@ export function DockWindow() {
     // 左缘锚定做成过一版，实测观感是「从左边拉出来」，反而丢了灵动岛那种
     // 居中呼吸的感觉，所以不再作为选项暴露。
     const cardHeight = heightOverride ?? useSettings.getState().dockCardHeight;
-    const base = dockFloatBounds(area, open ? "flyout" : "strip", "center", cardHeight);
+    const state = useSettings.getState();
     /*
-     * 横向一律以**胶囊的中心**为轴展开。
-     *
-     * 之前是展开时直接取「居中位置」，胶囊被拖过的话两个原点不一致 ——
-     * 窗口一边长大一边平移，看着就是「从右边往左边长、位置还跟着动」。
-     * 现在先算出胶囊现在的中心，卡片围绕它左右对称撑开，胶囊本身一动不动。
+     * 落位走 dock-core 的纯函数（可单测）：top 以胶囊中心为轴（沿用旧规矩），
+     * 左 / 右钉在缘上（纵向用拖拽保存的 floatY，没拖过就垂直居中），
+     * 展开卡片与胶囊共用同一条边距 —— 贴左右缘时卡片向屏幕内长。
      */
-    const saved = useSettings.getState().dockFloatX;
-    const capsule = dockFloatBounds(area, "strip", "center");
-    const capsuleX = saved === null ? capsule.x : Math.min(Math.max(saved, area.x), area.x + area.w - capsule.w);
-    const center = capsuleX + capsule.w / 2;
-    const target = {
-      ...base,
-      x: Math.round(Math.min(Math.max(center - base.w / 2, area.x), area.x + area.w - base.w)),
-    };
+    const target = dockFloatEdgeBounds(
+      area,
+      open ? "flyout" : "strip",
+      state.dockFloatEdge,
+      state.dockFloatX,
+      state.dockFloatY,
+      cardHeight,
+    );
     // 起点由 Rust 用 GetWindowRect 自己读：前端那次异步读矩形是竞态来源
     await invoke("dock_spring_to", {
       label: LABEL,
@@ -271,9 +269,16 @@ export function DockWindow() {
          */
         await applyFloat(false);
         const area = areaRef.current;
-        if (area && useSettings.getState().dockFloatX === null) {
-          const strip = dockFloatBounds(area, "strip", "center");
-          useSettings.getState().setDockFloatX(strip.x);
+        // 首帧落位写回保存值：之后每次展开走同一条路径（上面的注释）。
+        // 按吸附边分别写 —— 贴左右缘时「纵向位置」才是轴，top 时横向才是。
+        if (area) {
+          const state = useSettings.getState();
+          const placed = dockFloatEdgeBounds(area, "strip", state.dockFloatEdge, state.dockFloatX, state.dockFloatY);
+          if (state.dockFloatEdge === "top") {
+            if (state.dockFloatX === null) state.setDockFloatX(placed.x);
+          } else if (state.dockFloatY === null) {
+            state.setDockFloatY(placed.y);
+          }
         }
       } else await applyMode("strip");
       await invoke("window_show_no_activate", { label: LABEL });

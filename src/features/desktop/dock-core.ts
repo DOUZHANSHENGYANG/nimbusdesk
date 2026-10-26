@@ -114,6 +114,48 @@ export function dockFloatSpringPair(area: DockArea, from: DockMode, to: DockMode
   return { from: dockFloatBounds(area, from), to: dockFloatBounds(area, to) };
 }
 
+/** 悬浮胶囊允许吸附的边（用户定的规矩：上 / 左 / 右，下不算）。 */
+export type FloatEdge = "top" | "left" | "right";
+
+/** 拖松手后吸附到最近的边（在允许的三条里挑距离最近的）。 */
+export function nearestFloatEdge(rect: { x: number; y: number; w: number; h: number }, area: DockArea): FloatEdge {
+  const dTop = Math.max(0, rect.y - area.y);
+  const dLeft = Math.max(0, rect.x - area.x);
+  const dRight = Math.max(0, area.x + area.w - (rect.x + rect.w));
+  const min = Math.min(dTop, dLeft, dRight);
+  return min === dLeft ? "left" : min === dRight ? "right" : "top";
+}
+
+/**
+ * 悬浮胶囊按「吸附边」落位（P4 用户要求）：
+ * - top（默认）：纵向钉顶，横向以拖拽保存的 floatX 为胶囊中心（沿用旧规矩）；
+ * - left / right：横向钉在缘上（留 DOCK_FLOAT_GAP），纵向用 floatY
+ *   （没拖过就垂直居中）。展开卡片走同一落点 —— 贴左右缘时卡片向屏幕内长。
+ */
+export function dockFloatEdgeBounds(
+  area: DockArea,
+  mode: DockMode,
+  edge: FloatEdge,
+  floatX: number | null,
+  floatY: number | null,
+  cardHeight: number = DOCK_CARD_H,
+): DockBounds {
+  const base = dockFloatBounds(area, mode, "center", cardHeight);
+  const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(v, hi));
+  if (edge === "left" || edge === "right") {
+    const x = edge === "left"
+      ? area.x + DOCK_FLOAT_GAP
+      : area.x + area.w - base.w - DOCK_FLOAT_GAP;
+    const wantedY = floatY ?? area.y + Math.round((area.h - base.h) / 2);
+    const maxY = Math.max(area.y + DOCK_FLOAT_GAP, area.y + area.h - base.h - DOCK_FLOAT_GAP);
+    return { ...base, x, y: Math.round(clamp(wantedY, area.y + DOCK_FLOAT_GAP, maxY)) };
+  }
+  const capsuleW = Math.min(area.w, DOCK_CAPSULE_W);
+  const capsuleX = floatX ?? area.x + Math.round((area.w - capsuleW) / 2);
+  const center = capsuleX + capsuleW / 2;
+  return { ...base, x: Math.round(clamp(center - base.w / 2, area.x, area.x + area.w - base.w)) };
+}
+
 export function dockSpringPair(area: DockArea, edge: DockEdge, from: DockMode, to: DockMode, anchor?: number, height?: number): { from: DockBounds; to: DockBounds } {
   return { from: dockBounds(area, edge, from, anchor, height), to: dockBounds(area, edge, to, anchor, height) };
 }
