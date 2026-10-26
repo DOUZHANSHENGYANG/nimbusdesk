@@ -148,6 +148,17 @@ export function Composer() {
           <button type="button" onClick={() => setNotice(null)}>{t("agent.cancel")}</button>
         </p>
       )}
+      {/* 输入框上方的小动作条：这里放「跳出去看」这类不属于本轮对话的动作，
+          有图标也有文字，不跟下面那排对话控件混在一起 */}
+      <div className="agent-composer-bar">
+        <ToolButton
+          icon={<ExternalLink />}
+          label={t("agent.leaderboard")}
+          title={t("agent.leaderboard")}
+          aria-label={t("agent.leaderboard")}
+          onClick={() => void openExternal("https://modelsage.cn/leaderboards").catch(() => undefined)}
+        />
+      </div>
       <div className="agent-composer-box" data-disabled={guide || undefined} title={t("agent.hint")}>
         <textarea
           ref={area}
@@ -201,13 +212,6 @@ export function Composer() {
           <div className="agent-tools-group agent-tools-end">
             <ThinkingPicker />
             <ModelPicker variant="composer" />
-            {/* 选模型时顺手查一眼排行榜（modelsage 的榜单）：换个模型要先去别处翻榜太绕 */}
-            <ToolButton
-              icon={<ExternalLink />}
-              title={t("agent.leaderboard")}
-              aria-label={t("agent.leaderboard")}
-              onClick={() => void openExternal("https://modelsage.cn/leaderboards").catch(() => undefined)}
-            />
             <PresetPicker />
             {/* 语音：按钮先在这里，但**没有接任何东西** —— 见 tooltip 与交付说明。
                 刻意不接 Web Speech API：WebView2 里它依赖外部服务，本机网络下不可用。 */}
