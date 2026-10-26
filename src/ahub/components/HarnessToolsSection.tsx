@@ -229,7 +229,8 @@ export function HarnessToolsSection() {
     <div className="flex flex-col gap-2">
       <div className="flex flex-wrap items-center gap-2">
         <span className="text-xs text-ink-3">{t("harnessTools.hint")}</span>
-        <div className="ml-auto flex items-center gap-2">
+        {/* 对齐工具卡的右缘：窄屏没有右侧目录，宽屏（lg）才需要让出它的宽度（w-32 + gap-4） */}
+        <div className="ml-auto flex items-center gap-2 lg:mr-36">
           {/* 批量更新：一次更一批才用得上的动作，所以留在页头；单个工具的更新在各张卡上 */}
           {updatable.length ? (
             <Button
@@ -336,14 +337,12 @@ export function HarnessToolsSection() {
                   </div>
                   <div className="flex shrink-0 items-center gap-1">
                     <Button
-                      size="iconSm"
+                      size="sm"
                       variant="ghost"
-                      title={t("harnessTools.refreshOne")}
-                      aria-label={t("harnessTools.refreshOne")}
-                      disabled={refreshing === report.id}
-                      onClick={() => void refreshOne(report)}
+                      className="h-7 text-[11px]"
+                      onClick={() => setMigration(report)}
                     >
-                      <RefreshCw className={refreshing === report.id ? "animate-spin" : undefined} />
+                      {t("harnessTools.migrate")}
                     </Button>
                     {tool && (!tool.installed || tool.hasUpdate || tool.broken) ? (
                       <Button
@@ -364,12 +363,14 @@ export function HarnessToolsSection() {
                       </Button>
                     ) : null}
                     <Button
-                      size="sm"
+                      size="iconSm"
                       variant="ghost"
-                      className="h-7 text-[11px]"
-                      onClick={() => setMigration(report)}
+                      title={t("harnessTools.refreshOne")}
+                      aria-label={t("harnessTools.refreshOne")}
+                      disabled={refreshing === report.id}
+                      onClick={() => void refreshOne(report)}
                     >
-                      {t("harnessTools.migrate")}
+                      <RefreshCw className={refreshing === report.id ? "animate-spin" : undefined} />
                     </Button>
                   </div>
                 </header>
