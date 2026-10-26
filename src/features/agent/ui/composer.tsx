@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Maximize2, Mic, Plus, SendHorizontal, Square, X } from "lucide-react";
+import { ExternalLink, Maximize2, Mic, Plus, SendHorizontal, Square, X } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { openExternal } from "@/lib/open";
 import { MAX_ATTACHMENTS, readAttachment, type Pending } from "../attachments";
 import { COMPOSER_MAX_HEIGHT, draftAfterExpand, draftForExpand } from "../composer-core";
 import { useAgent } from "../store";
@@ -200,6 +201,13 @@ export function Composer() {
           <div className="agent-tools-group agent-tools-end">
             <ThinkingPicker />
             <ModelPicker variant="composer" />
+            {/* 选模型时顺手查一眼排行榜（modelsage 的榜单）：换个模型要先去别处翻榜太绕 */}
+            <ToolButton
+              icon={<ExternalLink />}
+              title={t("agent.leaderboard")}
+              aria-label={t("agent.leaderboard")}
+              onClick={() => void openExternal("https://modelsage.cn/leaderboards").catch(() => undefined)}
+            />
             <PresetPicker />
             {/* 语音：按钮先在这里，但**没有接任何东西** —— 见 tooltip 与交付说明。
                 刻意不接 Web Speech API：WebView2 里它依赖外部服务，本机网络下不可用。 */}

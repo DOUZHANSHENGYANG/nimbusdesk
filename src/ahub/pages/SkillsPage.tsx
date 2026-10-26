@@ -1047,7 +1047,7 @@ export function SkillsPage() {
       {skills.length > 0 ? (
         <div
           data-anim
-          className="ah-material sticky top-0 z-20 mb-4 rounded-xl border border-border px-3 py-2.5"
+          className="sticky top-0 z-20 mb-4 py-1.5 backdrop-blur bg-background/85"
         >
           {/* 第一行：结果计数（视图只留网格，与 MCP 页一致，不再切换） */}
           <div className="flex flex-wrap items-center gap-1.5">
