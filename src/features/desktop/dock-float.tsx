@@ -356,6 +356,8 @@ export function DockFloat({ onExpand, onHide, panels }: {
               store.setDockFloatEdge(settle.edge);
               store.setDockFloatX(settle.x);
               store.setDockFloatY(settle.y);
+              // TODO(调试)：拖动落位诊断，问题定位后删除
+              toast.info(`[调试] edge=${settle.edge} x=${Math.round(settle.x)} y=${Math.round(settle.y)} scale=${scale}`);
               void onExpand(open).catch(() => undefined);
             })().catch(() => undefined);
           }}>
