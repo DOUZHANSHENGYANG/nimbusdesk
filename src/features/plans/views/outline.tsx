@@ -350,8 +350,8 @@ function NoteColumn({ date, task, onClose }: { date: string; task: PlanTask; onC
     if (next !== (task.note ?? "")) usePlans.getState().updateTask(date, task.id, { note: next || undefined });
   };
   return (
-    <aside className="flex h-full min-h-0 w-72 shrink-0 flex-col rounded-[var(--pr-radius-xl)] border border-border bg-card p-3">
-      <div className="mb-2 flex items-center gap-2">
+    <aside className="flex h-full min-h-0 w-72 shrink-0 flex-col">
+      <div className="flex items-center gap-2 px-3 pb-1 pt-2">
         <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-muted-foreground">{task.title}</span>
         <button
           type="button"
@@ -368,7 +368,7 @@ function NoteColumn({ date, task, onClose }: { date: string; task: PlanTask; onC
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
         onBlur={commit}
-        className="min-h-40 w-full flex-1 resize-y rounded-lg border border-border bg-background px-2.5 py-2 text-[12px] leading-5 outline-none focus:border-brand/50"
+        className="min-h-0 w-full flex-1 resize-none border-0 bg-transparent px-3 pb-2 text-[12px] leading-5 outline-none"
       />
     </aside>
   );
