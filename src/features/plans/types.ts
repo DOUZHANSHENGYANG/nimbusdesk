@@ -159,6 +159,37 @@ export function statusOf(
   return cur >= s && cur < e ? "doing" : "todo";
 }
 
+/* ── 事件颜色 ─────────────────────────────────────────── */
+
+/**
+ * 日历事件色的数量，与 tokens.css 的 `--event-1..N` 一一对应。
+ * 增删颜色时要同时改这三处：tokens.css 的 primitive/semantic 两层、index.css 的 @theme、
+ * 以及 views/shared.tsx 里的事件色类名表（Tailwind 靠源码里的字面类名生成样式）。
+ */
+export const EVENT_COLORS = 5;
+
+/**
+ * 任务在日历里用哪个颜色。
+ *
+ * 取键顺序是刻意的：**绑了工作项就按工作项**，同一条线的事在日历上连成一片
+ * （这才是颜色能回答的问题）；没绑就退回任务自身，至少每条有颜色、不至于一片灰。
+ *
+ * 用哈希而不是「第几个出现的」：后者在滚动/换视图时会改色，颜色一变就再也认不出。
+ * 纯函数，同样的输入永远同一个颜色（可断言）。
+ *
+ * 注意 `workItemId` 的「缺省继承祖先」是在 `resolvePlanWorkItem()` 里做的，
+ * 日历只拿得到当天的扁平任务列表，所以这里按任务自身身上写的值取。
+ */
+export function eventColorIndex(task: Pick<PlanTask, "id" | "workItemId">): number {
+  const key = task.workItemId ?? task.id;
+  let hash = 2166136261; // FNV-1a，够短且分布均匀
+  for (let i = 0; i < key.length; i++) {
+    hash ^= key.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0) % EVENT_COLORS;
+}
+
 /* ── 树工具 ───────────────────────────────────────────── */
 
 /** 某日直接子任务（保持数组顺序） */

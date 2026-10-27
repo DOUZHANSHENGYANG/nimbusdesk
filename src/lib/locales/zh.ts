@@ -333,6 +333,7 @@ export const zh = {
     minutesShort: "{{n}} 分",
     hoursShort: "{{n}} 小时",
     railTodo: "今天还没做",
+    railClose: "收起今天还没做",
     railAllDone: "今天已经全部完成",
     railWeek: "本周已排 {{hours}} 小时，还有 {{count}} 条未定时",
     moreTasks: "+{{count}} 项",

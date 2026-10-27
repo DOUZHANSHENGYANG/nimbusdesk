@@ -48,6 +48,11 @@
   --color-success: var(--success);
   --color-warning: var(--warning);
   --color-info: var(--info);
+  --color-event-1: var(--event-1);
+  --color-event-2: var(--event-2);
+  --color-event-3: var(--event-3);
+  --color-event-4: var(--event-4);
+  --color-event-5: var(--event-5);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);

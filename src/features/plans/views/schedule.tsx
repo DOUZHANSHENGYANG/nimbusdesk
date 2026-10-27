@@ -19,6 +19,7 @@ import {
 import { useNow, usePlans, usePlansArchive } from "@/features/plans/store";
 import { cn } from "@/lib/utils";
 import { capturePointer, releasePointer } from "@/lib/touch";
+import { eventTint, LunarText } from "./shared";
 
 /**
  * 日程视图：日 / 周 / 年三档（月档由 CalendarView 负责）。
@@ -257,13 +258,14 @@ function TimeGrid({ date, mode, onPick }: { date: string; mode: "day" | "week"; 
             const status = statusOf(task, cell, now);
             return (
               <span key={`${cell}-${task.id}`}
+                data-chip
                 title={`${task.start ?? ""}${task.end ? `–${task.end}` : ""} ${task.title}（可拖动改期）`}
                 onPointerDown={(event) => beginDrag(event, cell, task.id)}
                 className={cn(
                   "absolute cursor-grab touch-none select-none truncate rounded px-1.5 text-[10px] leading-4 active:cursor-grabbing",
                   status === "done" ? "bg-muted text-muted-foreground line-through"
                     : status === "doing" ? "bg-brand text-white"
-                      : "bg-brand/12 text-foreground ring-1 ring-inset ring-brand/25",
+                      : eventTint(task),
                   isDragging(task.id) && "opacity-70 ring-2 ring-brand",
                 )}
                 style={blockStyle(cell, task.id, span)}>
@@ -349,13 +351,16 @@ function YearView({ date, onPick }: { date: string; onPick: (date: string) => vo
                     cell.date === today ? "border-brand" : "hover:border-muted-foreground/40 hover:bg-surface-hover",
                   )}
                 >
-                  <span
-                    className={cn(
-                      "self-start text-[9px] font-semibold leading-3 tabular-nums",
-                      cell.date === today ? "text-brand" : "text-muted-foreground",
-                    )}
-                  >
-                    {parseDate(cell.date).getDate()}
+                  <span className="flex min-w-0 items-baseline gap-1">
+                    <span
+                      className={cn(
+                        "text-[9px] font-semibold leading-3 tabular-nums",
+                        cell.date === today ? "text-brand" : "text-muted-foreground",
+                      )}
+                    >
+                      {parseDate(cell.date).getDate()}
+                    </span>
+                    <LunarText date={cell.date} className="text-[9px]" />
                   </span>
                   {/* 只列标题：62px 的格子里再加时间前缀，标题就一个字都看不见了 */}
                   {shown.map((task) => {
@@ -363,6 +368,7 @@ function YearView({ date, onPick }: { date: string; onPick: (date: string) => vo
                     return (
                       <span
                         key={task.id}
+                        data-chip
                         title={task.title}
                         className={cn(
                           "block w-full truncate rounded px-0.5 text-[9px] leading-3",
@@ -370,7 +376,7 @@ function YearView({ date, onPick }: { date: string; onPick: (date: string) => vo
                             ? "bg-muted/60 text-muted-foreground line-through"
                             : status === "doing"
                               ? "bg-brand text-white"
-                              : "bg-muted text-foreground/80",
+                              : eventTint(task),
                         )}
                       >
                         {task.title}

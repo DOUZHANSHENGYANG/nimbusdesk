@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import {
@@ -13,6 +13,7 @@ import {
 } from "@/features/plans/types";
 import { useNow, usePlans, usePlansArchive } from "@/features/plans/store";
 import { cn } from "@/lib/utils";
+import { eventTint, LunarText } from "./shared";
 import { ScheduleView } from "./schedule";
 import { PlansRail } from "./plans-rail";
 
@@ -27,6 +28,20 @@ export function CalendarView({ date, onPick }: { date: string; onPick: (date: st
   const { t, i18n } = useTranslation();
   const [scale, setScale] = useState<CalendarScale>("month");
   const [anchor, setAnchor] = useState(date);
+  const [railOpen, setRailOpen] = useState(false);
+  // 浮层开着时接一下 Esc：背板只能挡鼠标，键盘得有路可退
+  useEffect(() => {
+    if (!railOpen) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setRailOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [railOpen]);
+  // 按钮上那个计数：今天还没做的顶层任务
+  const todayOpen = usePlans(
+    (state) => (state.days[todayStr()] ?? []).filter((task) => task.parentId === null && !task.done).length,
+  );
 
   const shift = (delta: number) => {
     const d = parseDate(anchor);
@@ -56,8 +71,8 @@ export function CalendarView({ date, onPick }: { date: string; onPick: (date: st
   ];
 
   return (
-    <div className="w-full">
-      {/* 导航：上一页 / 标题 / 下一页 / 今天 + 档位切换 */}
+    <div className="relative w-full">
+      {/* 导航：上一页 / 标题 / 下一页 / 今天 + 档位切换；右上角是「今天还没做」的入口 */}
       <div className="mb-3 flex flex-wrap items-center justify-center gap-2">
         <button type="button" onClick={() => shift(-1)}
           aria-label={t("plans.prevPage")}
@@ -87,15 +102,43 @@ export function CalendarView({ date, onPick }: { date: string; onPick: (date: st
         </span>
       </div>
 
-      {/* 栅格铺满（不再夹在 1024px 里），右侧一列玻璃栏 */}
-      <div className="flex gap-5">
-        <div className="min-w-0 flex-1">
-          {scale === "month"
-            ? <MonthGrid date={anchor} onPick={onPick} />
-            : <ScheduleView date={anchor} mode={scale} onPick={(cell) => { setAnchor(cell); onPick(cell); }} />}
-        </div>
-        <PlansRail />
+      <button
+        type="button"
+        aria-expanded={railOpen}
+        onClick={() => setRailOpen((open) => !open)}
+        className={cn(
+          "absolute right-0 top-0 inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[12px] transition-colors",
+          railOpen
+            ? "border-brand/40 bg-brand/10 text-brand"
+            : "border-border bg-card text-muted-foreground hover:border-brand/40 hover:text-brand",
+        )}
+      >
+        {t("plans.railTodo")}
+        {todayOpen > 0 && (
+          <span className="rounded-full bg-brand/10 px-1.5 tabular-nums text-brand">{todayOpen}</span>
+        )}
+      </button>
+
+      <div>
+        {scale === "month"
+          ? <MonthGrid date={anchor} onPick={onPick} />
+          : <ScheduleView date={anchor} mode={scale} onPick={(cell) => { setAnchor(cell); onPick(cell); }} />}
       </div>
+
+      {railOpen && (
+        <>
+          {/* 点别处收起。放在浮层下面铺满整屏，比给每个可能的目标都挂监听省事也更可靠 */}
+          <button
+            type="button"
+            aria-label={t("plans.railClose")}
+            onClick={() => setRailOpen(false)}
+            className="fixed inset-0 z-30 cursor-default"
+          />
+          <div className="absolute right-0 top-9 z-40">
+            <PlansRail onClose={() => setRailOpen(false)} />
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -157,6 +200,7 @@ function MonthGrid({ date, onPick }: { date: string; onPick: (date: string) => v
             <button
               key={cell}
               type="button"
+              data-day={cell}
               onClick={() => onPick(cell)}
               className={cn(
                 "flex min-h-24 flex-col items-stretch gap-1 rounded-xl border p-1.5 text-left transition-colors duration-150",
@@ -166,16 +210,19 @@ function MonthGrid({ date, onPick }: { date: string; onPick: (date: string) => v
                   : "hover:border-muted-foreground/40 hover:bg-surface-hover",
               )}
             >
-              {/* 日期 + 进度 */}
+              {/* 日期 + 农历 + 进度 */}
               <div className="flex items-center justify-between gap-1">
-                <span
-                  className={cn(
-                    "text-[12px] font-semibold",
-                    isToday && "grid size-5 place-items-center rounded-full bg-brand text-white",
-                    !isToday && !inMonth && "text-muted-foreground",
-                  )}
-                >
-                  {parseDate(cell).getDate()}
+                <span className="flex min-w-0 items-center gap-1">
+                  <span
+                    className={cn(
+                      "text-[12px] font-semibold",
+                      isToday && "grid size-5 place-items-center rounded-full bg-brand text-white",
+                      !isToday && !inMonth && "text-muted-foreground",
+                    )}
+                  >
+                    {parseDate(cell).getDate()}
+                  </span>
+                  <LunarText date={cell} className="text-[9px]" />
                 </span>
                 {progress && progress.total > 0 && (
                   <span
@@ -200,6 +247,7 @@ function MonthGrid({ date, onPick }: { date: string; onPick: (date: string) => v
                   return (
                     <span
                       key={task.id}
+                      data-chip
                       title={task.title}
                       className={cn(
                         "block w-full truncate rounded px-1 py-px text-[10px] leading-4",
@@ -207,7 +255,7 @@ function MonthGrid({ date, onPick }: { date: string; onPick: (date: string) => v
                           ? "bg-muted/60 text-muted-foreground line-through"
                           : status === "doing"
                             ? "bg-brand text-white"
-                            : "bg-muted text-foreground/80",
+                            : eventTint(task),
                       )}
                     >
                       {task.title}

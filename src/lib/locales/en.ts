@@ -337,6 +337,7 @@ export const en: AppMessages = {
     minutesShort: "{{n}} min",
     hoursShort: "{{n}} h",
     railTodo: "Not done today",
+    railClose: "Collapse today's list",
     railAllDone: "Everything done today",
     railWeek: "{{hours}} h scheduled this week · {{count}} still unscheduled",
     moreTasks: "+{{count}} more",

@@ -325,6 +325,69 @@ for (const scope of ["light", "dark"]) {
   }
 }
 
+console.log("\n════ 事件色（日历）对比度与色相几何 ══════");
+{
+  const keys = [1, 2, 3, 4, 5].map((i) => `--pr-event-${i}`);
+  const brandHue = (scope) => {
+    const p = parseOklch(resolve(scope === "light" ? "--pr-brand-600" : "--pr-brand-400", scope));
+    return renderedHue(p.L, p.C, p.H);
+  };
+  // 事件色既是底色也是**文字色**（`bg-event-N/15 text-event-N`），所以按正文口径要 4.5:1
+  for (const key of keys) {
+    for (const scope of ["light", "dark"]) {
+      const label = scope === "light" ? "浅色" : "深色";
+      const c = contrast(resolve(key, scope), resolve("--card", scope));
+      const okFlag = c >= 4.5;
+      okFlag ? pass++ : fail++;
+      console.log(`${okFlag ? "OK  " : "FAIL"} ${c.toFixed(2).padStart(5)}/4.5  ${label}·${key.replace("--pr-", "")}`);
+    }
+  }
+
+  // 靠色相两两区分才有用：约束与文件类型色同一口径。深浅两档明度不同、渲染后色相也会动，各自都要满足。
+  const rows = keys.map((key) => {
+    const l = parseOklch(resolve(key, "light"));
+    const d = parseOklch(resolve(key, "dark"));
+    return {
+      key,
+      lightHue: renderedHue(l.L, l.C, l.H),
+      darkHue: renderedHue(d.L, d.C, d.H),
+      lightHex: toHex(l.L, l.C, l.H),
+      darkHex: toHex(d.L, d.C, d.H),
+    };
+  });
+  let worstL = { gap: 999, pair: "" };
+  let worstD = { gap: 999, pair: "" };
+  for (let i = 0; i < rows.length; i++) {
+    for (let j = i + 1; j < rows.length; j++) {
+      const gl = hueGap(rows[i].lightHue, rows[j].lightHue);
+      const gd = hueGap(rows[i].darkHue, rows[j].darkHue);
+      if (gl < worstL.gap) worstL = { gap: gl, pair: `${i + 1}×${j + 1}` };
+      if (gd < worstD.gap) worstD = { gap: gd, pair: `${i + 1}×${j + 1}` };
+    }
+  }
+  // 与品牌蓝留 ≥20°：蓝色块会被读成品牌强调（「进行中」就是品牌蓝实心）
+  const nearBrandL = rows.filter((r) => hueGap(r.lightHue, brandHue("light")) < MIN_BRAND);
+  const nearBrandD = rows.filter((r) => hueGap(r.darkHue, brandHue("dark")) < MIN_BRAND);
+  const results = [
+    [worstL.gap >= MIN_SEP, `浅色两两 ≥${MIN_SEP}°：最小 ${worstL.gap.toFixed(1)}°（${worstL.pair}）`],
+    [worstD.gap >= MIN_SEP, `深色两两 ≥${MIN_SEP}°：最小 ${worstD.gap.toFixed(1)}°（${worstD.pair}）`],
+    [nearBrandL.length === 0, `浅色距品牌 ≥${MIN_BRAND}°：越界 ${nearBrandL.length} 项`],
+    [nearBrandD.length === 0, `深色距品牌 ≥${MIN_BRAND}°：越界 ${nearBrandD.length} 项`],
+  ];
+  for (const [okFlag, msg] of results) {
+    okFlag ? pass++ : fail++;
+    console.log(`${okFlag ? "OK  " : "FAIL"} ${msg}`);
+  }
+  console.log("  序号   浅色(渲染H)          深色(渲染H)");
+  for (const r of rows) {
+    console.log(
+      `  e${r.key.replace("--pr-event-", "")}     ${r.lightHex} ${r.lightHue.toFixed(1).padStart(6)}°   ${r.darkHex} ${r.darkHue
+        .toFixed(1)
+        .padStart(6)}°`,
+    );
+  }
+}
+
 console.log("\n════ 语义色对比度（正文，需 ≥4.5:1）══════");
 for (const [desc, fg, bg, need] of CASES) {
   const scope = desc.startsWith("深色") ? "dark" : "light";

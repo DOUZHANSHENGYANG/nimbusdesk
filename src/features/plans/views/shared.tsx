@@ -1,6 +1,9 @@
 import { Check, Circle, CircleDot } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import { lunarLabel } from "@/lib/lunar";
 import {
   childrenOf,
+  eventColorIndex,
   rangeLabel,
   statusOf,
   type PlanTask,
@@ -70,8 +73,60 @@ export function doneTitleStyle(done: boolean): React.CSSProperties | undefined {
 }
 
 /**
- * 只读树（归档浏览/预览用）。
- * - date 用于推导「进行中」
+ * 日历事件色的类名表。
+ *
+ * Tailwind 只认源码里**字面出现**的类名，所以这里必须是写死的字符串，
+ * 不能拼 `bg-event-${n}`。顺序与 types.ts 的 `EVENT_COLORS` 一一对应。
+ *
+ * 淡底 + 同色文字（与「已完成/总数」那个 `bg-success/15 text-success` 徽章同一套写法）。
+ * 不要描边 —— 一排带框的小药丸读起来又碎又廉价；淡底加同色字已经够分得清是哪一条线。
+ * 「进行中」不在这里：它固定用品牌蓝实心，那是「现在」的强信号，不该被身份色顶掉。
+ */
+const EVENT_TINT = [
+  "bg-event-1/15 text-event-1",
+  "bg-event-2/15 text-event-2",
+  "bg-event-3/15 text-event-3",
+  "bg-event-4/15 text-event-4",
+  "bg-event-5/15 text-event-5",
+];
+
+/** 任务在日历里的事件色类名（底色 + 描边）。颜色由 `eventColorIndex` 决定 */
+export function eventTint(task: Pick<PlanTask, "id" | "workItemId">): string {
+  return EVENT_TINT[eventColorIndex(task)];
+}
+
+/**
+ * 农历 / 节气 / 节日的小标签，没到日子或不是中文界面就返回 null（调用方不占位）。
+ *
+ * 英文界面不渲染：这套名字（廿三、立春、中元节）是中文的，翻过去没有意义。
+ * 三档深浅都取自对比度闸门覆盖过的 token：节日用红（中文日历惯例）、节气用正文色、
+ * 普通农历日最弱 —— 于是「这天为什么特殊」不用读字也能看出来。
+ */
+export function LunarText({ date, className }: { date: string; className?: string }) {
+  const { i18n } = useTranslation();
+  if (!i18n.language.startsWith("zh")) return null;
+  const label = lunarLabel(date);
+  if (!label) return null;
+  return (
+    <span
+      data-lunar
+      className={cn(
+        "truncate leading-none",
+        label.kind === "festival"
+          ? "text-destructive"
+          : label.kind === "term"
+            ? "text-foreground"
+            : "text-muted-foreground",
+        className,
+      )}
+    >
+      {label.text}
+    </span>
+  );
+}
+
+/**
+ * 只读树（归档浏览/预览用）。 * - date 用于推导「进行中」
  * - only 给定时只渲染这些 id 的子树（归档关键词筛选用），
  *   未给定则渲染整棵树
  */

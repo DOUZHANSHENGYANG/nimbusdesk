@@ -41,6 +41,8 @@ for(let month=0;month<12;month++){
     start:`${String(h).padStart(2,'0')}:00`,
     end:`${String(Math.min(h+1,23)).padStart(2,'0')}:00`,
     done:r()<0.35,createdAt:seq,updatedAt:seq,
+    // 三条线 + 一批不绑的：日历上同一条线应该是一个颜色，不绑的各按自身
+    workItemId:r()<0.75?`proj-${1+Math.floor(r()*3)}`:null,
    });
   }
   days[date]=tasks;
@@ -52,10 +54,18 @@ await import('/src/index.css');
 const {i18n,I18nextProvider}=await import('/src/lib/i18n.ts');
 const {ModalProvider}=await import('/src/components/shell/modal-host.tsx');
 const {ScheduleView}=await import('/src/features/plans/views/schedule.tsx');
+const {CalendarView}=await import('/src/features/plans/views/calendar.tsx');
+const {eventColorIndex,EVENT_COLORS}=await import('/src/features/plans/types.ts');
 window.calendarReview.days=days;window.calendarReview.year=year;window.calendarReview.today=today;
+window.calendarReview.eventColorIndex=eventColorIndex;window.calendarReview.EVENT_COLORS=EVENT_COLORS;
+// ?view=month 挂月视图（CalendarView 的默认档），否则挂年视图
+const view=new URLSearchParams(location.search).get('view')??'year';
+window.calendarReview.view=view;
+const node=view==='month'
+ ? React.createElement(CalendarView,{date:today,onPick:()=>{}})
+ : React.createElement(ScheduleView,{date:today,mode:'year',onPick:()=>{}});
 document.documentElement.classList.add('dark');
 createRoot(document.getElementById('root')).render(
  React.createElement(I18nextProvider,{i18n},
-  React.createElement(ModalProvider,null,
-   React.createElement(ScheduleView,{date:today,mode:'year',onPick:()=>{}}))));
+  React.createElement(ModalProvider,null,node)));
 </script></body></html>

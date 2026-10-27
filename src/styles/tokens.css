@@ -131,6 +131,26 @@
   --pr-file-audio: oklch(0.52 0.13 167); /* #007f59  H=162° */
   --pr-file-misc: oklch(0.47 0 0); /* 无彩：没有类型就没有色相 */
 
+  /*
+   * Event · 日历事件色（5 色）
+   *
+   * 「这是哪条线的事」的视觉编码：日历里同一条工作项的事连成一片。
+   *
+   * 只要**好看的**五个色相：玫红 / 珊瑚橙 / 翠绿 / 青碧 / 紫罗兰。
+   * 刻意不要黄与黄绿 —— 在 L≈0.5 的中明度上，那两档渲染出来是橄榄与土黄，
+   * 混在一排里就是「脏」，加饱和度也救不回来（黄色要亮才像黄色）。
+   *
+   * 与品牌蓝（渲染 ≈216°）留 ≥20°：不然蓝色块会被读成品牌强调（「进行中」就是品牌蓝实心）。
+   * 深色档不是简单提亮（明度一变渲染色相也会动），两组是各自定的，见 check-contrast。
+   *
+   * 作为**文字色 + 底色**使用（`bg-event-N/15 text-event-N`），所以两档都要满足正文 4.5:1。
+   */
+  --pr-event-1: oklch(0.5 0.14 14.2); /* 玫红 */
+  --pr-event-2: oklch(0.5 0.14 50); /* 珊瑚橙 */
+  --pr-event-3: oklch(0.5 0.14 155); /* 翠绿 */
+  --pr-event-4: oklch(0.5 0.14 190); /* 青碧 */
+  --pr-event-5: oklch(0.5 0.14 310); /* 紫罗兰 */
+
   /* ── 1b. Primitive · 几何 / 字阶 / 间距 / 动效 ─────────── */
 
   /*
@@ -254,6 +274,13 @@
   --success: var(--pr-green-600);
   --warning: var(--pr-amber-600);
   --info: var(--pr-blue-600);
+
+  /* 日历事件色：作为文字色 + 底色用，两档都要满足正文 4.5:1（见 primitive 的 Event 段） */
+  --event-1: var(--pr-event-1);
+  --event-2: var(--pr-event-2);
+  --event-3: var(--pr-event-3);
+  --event-4: var(--pr-event-4);
+  --event-5: var(--pr-event-5);
   --border: var(--pr-mat-hairline);
   --input: var(--pr-gray-200);
   --ring: oklch(0.552 0.194 256 / 0.4);
@@ -403,6 +430,15 @@
   --pr-file-image: oklch(0.7 0.135 149.65);
   --pr-file-audio: oklch(0.7 0.135 167);
   --pr-file-misc: oklch(0.7 0 0);
+}
+
+/* Event · 深色模式重取明度。同 FileType：L=0.50 的色在深色卡上只有 ~2.6:1，提到 0.70 才够 */
+.dark {
+  --pr-event-1: oklch(0.7 0.14 14.2);
+  --pr-event-2: oklch(0.7 0.14 50);
+  --pr-event-3: oklch(0.7 0.14 155);
+  --pr-event-4: oklch(0.7 0.14 190);
+  --pr-event-5: oklch(0.7 0.14 310);
 }
 
 /* ── 3. Component · 组件层 ────────────────────────────── */
