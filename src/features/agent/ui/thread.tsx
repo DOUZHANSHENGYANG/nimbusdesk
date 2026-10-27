@@ -460,6 +460,8 @@ export function Thread({ model }: { model: string }) {
   const newSession = useAgent((state) => state.newSession);
   const busy = status === "submitted" || status === "streaming";
   const last = messages[messages.length - 1];
+  /** 最后一条用户消息：未完成的提示要挂在它的那一行（右侧），而不是飘在会话末尾 */
+  const lastUserId = [...messages].reverse().find((message) => message.role === "user")?.id;
   const partial = error !== null && last?.role === "assistant"
     && last.parts.some((part) => part.type === "text" && part.text);
   /** 每条助手消息都把「模型 · 耗时 · token」摆在下面；只有最后一条缺数据时用运行态兜底。 */
@@ -500,7 +502,16 @@ export function Thread({ model }: { model: string }) {
               return (
                 <MessageScrollerItem key={message.id} messageId={message.id}>
                   {message.role === "user" ? (
-                    <UserMessage message={message} />
+                    <>
+                      <UserMessage message={message} />
+                      {/* 未完成的提示挂在**被打断的那条用户消息**下面（右侧对齐），
+                          不再飘在会话末尾 */}
+                      {incomplete && !busy && !error && !stopped && message.id === lastUserId && (
+                        <div className="agent-user-resume">
+                          <ResumeRow kind="incomplete" messageId={last?.role === "assistant" ? last.id : undefined} />
+                        </div>
+                      )}
+                    </>
                   ) : (
                     <Message align="start">
                       <MessageContent>
@@ -537,11 +548,6 @@ export function Thread({ model }: { model: string }) {
             {stopped && !busy && !error && (
               <MessageScrollerItem>
                 <ResumeRow kind="stopped" />
-              </MessageScrollerItem>
-            )}
-            {incomplete && !busy && !error && !stopped && (
-              <MessageScrollerItem>
-                <ResumeRow kind="incomplete" messageId={last?.role === "assistant" ? last.id : undefined} />
               </MessageScrollerItem>
             )}
             {partial && (

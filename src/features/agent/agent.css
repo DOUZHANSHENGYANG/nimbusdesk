@@ -60,6 +60,11 @@
 .agent-composer-box { display:flex; flex-direction:column; gap:4px; padding:8px 8px 6px 14px; border:0; border-radius:var(--pr-radius-lg); background:var(--workbench-raised); }
 .agent-composer-box textarea { flex:1; min-height:24px; max-height:166px; padding:6px 0 2px; border:0; background:transparent; box-shadow:none; outline:0; resize:none; overflow-y:auto; font-size:13px; line-height:1.6; }
 .agent-composer-box[data-disabled="true"] { opacity:.6; }
+/* 输入区自带「浮起」容器样式，不要系统蓝色焦点环（按钮的 box-shadow 焦点样式不受影响） */
+.agent-composer :focus-visible { outline: none; }
+/* 未完成提示挂在被打断的用户消息那一行：右侧对齐（跟用户气泡同侧） */
+.agent-user-resume { display:flex; justify-content:flex-end; }
+.agent-user-resume .agent-stopped { flex-wrap:wrap; gap:6px; }
 
 /* ── 工具行：左边「往里加东西」，右边「这一轮怎么跑」 ──────────── */
 .agent-composer-tools { display:flex; align-items:center; justify-content:space-between; gap:8px; min-width:0; }
