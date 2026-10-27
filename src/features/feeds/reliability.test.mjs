@@ -222,8 +222,16 @@ test('Bing search supports RSS results when its HTML result list is unavailable'
 
 test('search waits for saved search settings and uses the configured backend', async () => {
   let ready=false;const calls=[];
-  const {searchWeb}=await load('../../search/index.ts',{aiSettingsReady:async()=>{ready=true;},useAiSettings:{getState:()=>({searchProvider:ready?'tavily':'bing'})},searchBing:async()=>{calls.push('bing');return [];},searchTavily:async()=>{calls.push('tavily');return [];}});
+  const {searchWeb}=await load('../../search/index.ts',{aiSettingsReady:async()=>{ready=true;},useAiSettings:{getState:()=>({searchProvider:ready?'tavily':'bing'})},searchBing:async()=>{calls.push('bing');return [];},searchTavily:async()=>{calls.push('tavily');return [];},searchEos:async()=>{calls.push('eos');return {results:[],attempted:0,available:0};}});
   await searchWeb('SQLite');assert.deepEqual(calls,['tavily']);
+});
+
+test('the EOS backend is selectable and returns only its extracted results', async () => {
+  const calls=[];
+  const {searchWeb}=await load('../../search/index.ts',{aiSettingsReady:async()=>{},useAiSettings:{getState:()=>({searchProvider:'eos'})},searchBing:async()=>{calls.push('bing');return [];},searchTavily:async()=>{calls.push('tavily');return [];},searchEos:async(_q,options)=>{calls.push(`eos:${options.maxResults}`);return {results:[{title:'三体',url:'https://site.test/p/1',content:'测试站（测试）'}],attempted:3,available:207};}});
+  const results=await searchWeb('三体',4);
+  assert.deepEqual(calls,['eos:4']);
+  assert.deepEqual(results.map(r=>r.url),['https://site.test/p/1']);
 });
 
 test('AI search synthesizes retrieved sources through the shared model and returns references', async () => {

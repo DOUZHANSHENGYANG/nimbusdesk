@@ -32,6 +32,8 @@ import { KnowledgeSettings } from "@/features/knowledge/settings";
 import { ShortcutRecorder } from "@/features/knowledge/shortcut-recorder";
 import { ProviderSettings } from "@/features/ai/provider-settings";
 import { FeedNetworkSettings } from "@/features/feeds/network-settings";
+import { eosHealthSummary } from "@/search/eos";
+import { useEosHealth } from "@/search/eos/health";
 import { HomeFeedSection } from "./home-feed-section";
 import { useProviderCopy } from "@/features/ai/provider-copy";
 import { SearchSettings } from "@/features/search";
@@ -784,7 +786,26 @@ function BackupCard() {
   );
 }
 
-/* ── 全局 AI 提供商与资讯联网搜索 ───────────────────────── */
+/* ── 奇妙搜索源状态：告诉用户这批规则现在有多少能用 ───────── */
+
+function EosSourceStatus() {
+  const { t } = useTranslation();
+  // 订阅 store，规则健康度一变就重算（eosHealthSummary 读的是快照，不订阅就不会刷新）
+  useEosHealth((s) => s.rules);
+  const reset = useEosHealth((s) => s.reset);
+  const summary = eosHealthSummary();
+
+  return (
+    <div className="rounded-md border border-input bg-muted/30 px-3 py-2 text-[11px] leading-5 text-muted-foreground">
+      <p>{t("feeds.eosHint", { usable: summary.usable, total: summary.total })}</p>
+      {summary.cooling > 0 ? (
+        <button type="button" onClick={reset} className="mt-1 underline underline-offset-2 hover:text-foreground">
+          {t("feeds.eosReset")}
+        </button>
+      ) : null}
+    </div>
+  );
+}
 
 function AiSection({ onDirtyChange }: { onDirtyChange: (dirty: boolean) => void }) {
   const { t } = useTranslation();
@@ -829,8 +850,10 @@ function AiSection({ onDirtyChange }: { onDirtyChange: (dirty: boolean) => void 
             <option value="auto">{t("feeds.auto")}</option>
             <option value="bing">{t("feeds.bing")}</option>
             <option value="tavily">{t("feeds.tavily")}</option>
+            <option value="eos">{t("feeds.eos")}</option>
           </select>
         </div>
+        {aiCurrent.searchProvider === "eos" ? <EosSourceStatus /> : null}
         <div className="space-y-1.5">
           <Label className="text-xs">{t("feeds.tavilyKey")}</Label>
           <Input type="password" value={aiCurrent.tavilyApiKey} onChange={(e) => updateAi({ tavilyApiKey: e.target.value })} placeholder="tvly-…" />

@@ -1,0 +1,1467 @@
+{
+ "source": "https://github.com/OrO-c/EveOneSearch",
+ "upstreamVersion": 21,
+ "upstreamUpdatedAt": 1745842491393,
+ "bundledAt": 1793111486557,
+ "rules": [
+  {
+   "id": "1737794504461",
+   "title": "F-droid",
+   "group": "软件",
+   "url": "https://search.f-droid.org/?q={keyword}&lang=zh_Hans",
+   "yield": 0
+  },
+  {
+   "id": "1739853845487",
+   "title": "历趣",
+   "group": "软件",
+   "url": "https://m.liqucn.com/search/s.php?words={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1739536573864",
+   "title": "果核剥壳",
+   "group": "软件",
+   "url": "https://www.ghxi.com/?s={keyword}",
+   "yield": 10
+  },
+  {
+   "id": "1739422507795",
+   "title": "奇妙应用",
+   "group": "软件",
+   "url": "https://www.magicalapk.com/store/applist?keyword={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1739058381813",
+   "title": "火哥分享",
+   "group": "软件",
+   "url": "https://www.firepx.com/?s={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1739019558608",
+   "title": "APKMirror",
+   "group": "软件",
+   "url": "https://www.apkmirror.com/?post_type=app_release&searchtype=apk&s={keyword}",
+   "yield": 7
+  },
+  {
+   "id": "1739019671779",
+   "title": "PP助手",
+   "group": "软件",
+   "url": "https://wap.pp.cn/s/?key={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1738995413807",
+   "title": "酷安",
+   "group": "软件",
+   "url": "https://www.coolapk.com/apk/search?q={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1737794708601",
+   "title": "ApkPure",
+   "group": "软件",
+   "url": "https://apkpure.net/search?q={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1737794838394",
+   "title": "异星软件空间",
+   "group": "软件",
+   "url": "https://www.yxssp.com/?s={keyword}",
+   "yield": 1
+  },
+  {
+   "id": "1737794918634",
+   "title": "百素资源网",
+   "group": "软件",
+   "url": "https://www.baisu.cc/index.php?keyword={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1737795553445",
+   "title": "蓝鲨",
+   "group": "软件",
+   "url": "https://www.lsapk.com/?s={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1737796172821",
+   "title": "应用宝",
+   "group": "软件",
+   "url": "https://sj.qq.com/search?q={keyword}",
+   "yield": 2
+  },
+  {
+   "id": "1737810946714",
+   "title": "LiteAPPS",
+   "group": "软件",
+   "url": "https://liteapks.com/?s={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1737811337275",
+   "title": "豌豆荚",
+   "group": "软件",
+   "url": "https://m.wandoujia.com/search?key={keyword}&source=index",
+   "yield": 0
+  },
+  {
+   "id": "1737814977108",
+   "title": "黑域基地",
+   "group": "软件",
+   "url": "https://m.hybase.com/search.asp?m=2&word={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1737900144972",
+   "title": "挖掘软件资源网",
+   "group": "软件",
+   "url": "https://www.kxwjj.cn/index.php?keyword={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1737973543631",
+   "title": "ApkCombo",
+   "group": "软件",
+   "url": "https://apkcombo.app/zh/search/{keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1741388157716",
+   "title": "Game宝藏库",
+   "group": "游戏",
+   "url": "https://gamebzk.us/?s={keyword}&type=post",
+   "yield": 0
+  },
+  {
+   "id": "1741388318313",
+   "title": "GoGo",
+   "group": "游戏",
+   "url": "https://www.gogoyouxi.com/?cat=&s={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1739022395003",
+   "title": "Steam",
+   "group": "游戏",
+   "url": "https://store.steampowered.com/search/?term={keyword}",
+   "yield": 1
+  },
+  {
+   "id": "1739000094871",
+   "title": "5play(俄罗斯)",
+   "group": "游戏",
+   "url": "https://5play.org/?do=search&subaction=search&search_start=0&full_search=0&story={keyword}",
+   "yield": 1
+  },
+  {
+   "id": "1739003790770",
+   "title": "3DMGame",
+   "group": "游戏",
+   "url": "https://so.3dmgame.com/?keyword={keyword}&type=2",
+   "yield": 29
+  },
+  {
+   "id": "1740212873010",
+   "title": "橘子下载",
+   "group": "游戏",
+   "url": "https://www.juzixiazai.com/search.php?q={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1740212222553",
+   "title": "小鱼资源库",
+   "group": "游戏",
+   "url": "https://www.yzyk.xyz/?s={keyword}&type=post",
+   "yield": 1
+  },
+  {
+   "id": "1740212742088",
+   "title": "Switch520",
+   "group": "游戏",
+   "url": "https://www.gamer520.com/?s={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1740396723415",
+   "title": "奥德彪计划",
+   "group": "游戏",
+   "url": "https://2468c.com/?s={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1739422763594",
+   "title": "老游戏在线玩",
+   "group": "游戏",
+   "url": "https://zaixianwan.app/search?q={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1739422810721",
+   "title": "午后少年(老游戏)",
+   "group": "游戏",
+   "url": "https://9ioldgame.com/search/{keyword}/",
+   "yield": 0
+  },
+  {
+   "id": "1737899872107",
+   "title": "7723",
+   "group": "游戏",
+   "url": "https://3g.7723.cn/search/{keyword}",
+   "yield": 13
+  },
+  {
+   "id": "1739000178417",
+   "title": "GamesToday",
+   "group": "游戏",
+   "url": "http://www.gamesontoday.com/search/?val={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1737796118761",
+   "title": "百分网",
+   "group": "游戏",
+   "url": "https://android.100520.com/search.html?query={keyword}",
+   "yield": 3,
+   "ua": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36"
+  },
+  {
+   "id": "1739003651431",
+   "title": "游侠网",
+   "group": "游戏",
+   "url": "https://3g.ali213.net/search.html?keyword={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1739180403296",
+   "title": "爱夏二次元壁纸网",
+   "group": "图片",
+   "url": "http://aibizhi.me/?s={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1739885623603",
+   "title": "全景视觉",
+   "group": "图片",
+   "url": "https://www.quanjing.com/tupian/{keyword}.html",
+   "yield": 0
+  },
+  {
+   "id": "1739885703551",
+   "title": "中新社图片网",
+   "group": "图片",
+   "url": "https://www.cnsphoto.com/fullTextSearch/{keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1739262944071",
+   "title": "奇漫壁纸",
+   "group": "图片",
+   "url": "https://www.qimanbz.com/?s={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1739263179013",
+   "title": "堆糖",
+   "group": "图片",
+   "url": "https://www.duitang.com/search/?kw={keyword}&type=feed",
+   "yield": 2,
+   "ua": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36"
+  },
+  {
+   "id": "1739263441440",
+   "title": "3G壁纸",
+   "group": "图片",
+   "url": "https://m.3gbizhi.com/search/0-0-5-0/{keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1739198430029",
+   "title": "哲风壁纸",
+   "group": "图片",
+   "url": "https://haowallpaper.com/?search={keyword}",
+   "yield": 1
+  },
+  {
+   "id": "1739198745543",
+   "title": "壁纸汇",
+   "group": "图片",
+   "url": "https://www.bizhihui.com/search.php?q={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1739198819414",
+   "title": "高清壁纸网",
+   "group": "图片",
+   "url": "https://m.hdbz.net/plus/search.php?kwtype=0&q={keyword}",
+   "yield": 2
+  },
+  {
+   "id": "1739199170416",
+   "title": "壁纸星球",
+   "group": "图片",
+   "url": "https://www.tuimg.cn/?s={keyword}&type=post",
+   "yield": 0
+  },
+  {
+   "id": "1739252108990",
+   "title": "52壁纸",
+   "group": "图片",
+   "url": "https://www.52wallpapers.com/search/index.html?tag={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1739252224760",
+   "title": "全面屏手机壁纸",
+   "group": "图片",
+   "url": "https://m.bcoderss.com/?s={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1739252660170",
+   "title": "花瓣网",
+   "group": "图片",
+   "url": "https://m.huaban.com/search/?q={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1739184225079",
+   "title": "次元壁纸之家",
+   "group": "图片",
+   "url": "https://www.cosplayx.cn/search/?keyword={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1738995014113",
+   "title": "百度搜图",
+   "group": "图片",
+   "url": "https://m.baidu.com/sf/vsearch?pd=image_content&word={keyword}&tn=vsearch&atn=page",
+   "yield": 0
+  },
+  {
+   "id": "1738995056268",
+   "title": "必应搜图",
+   "group": "图片",
+   "url": "https://www.bing.com/images/search?q={keyword}",
+   "yield": 1
+  },
+  {
+   "id": "1737814730779",
+   "title": "绘壁纸",
+   "group": "图片",
+   "url": "https://www.yaash.cn/?cat=&s={keyword}",
+   "yield": 7
+  },
+  {
+   "id": "1737899581116",
+   "title": "米卡插画",
+   "group": "图片",
+   "url": "https://mikagogo.com/?s={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1737957369127",
+   "title": "次元小镇",
+   "group": "图片",
+   "url": "https://dimtown.com/?s={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1737811071612",
+   "title": "MX动漫",
+   "group": "动漫",
+   "url": "https://www.mxdm9.cc/search/-------------.html?wd={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1740216920041",
+   "title": "樱花动漫",
+   "group": "动漫",
+   "url": "https://www.yinghua8.net/lookfor.html?wd={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1739187721539",
+   "title": "AniBase(查动漫声优)",
+   "group": "动漫",
+   "url": "https://anibase.net/zh-hans/search?kw={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1739003212804",
+   "title": "AGE动漫",
+   "group": "动漫",
+   "url": "https://m.agedm.org/#/search?page=1&query={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1737811139591",
+   "title": "GirlGirlLove",
+   "group": "动漫",
+   "url": "https://anime.girigirilove.com/search/-------------/?wd={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1737811202238",
+   "title": "异次元动漫",
+   "group": "动漫",
+   "url": "https://www.dmmiku.com/index.php/vod/search.html?wd={keyword}&submit=",
+   "yield": 7
+  },
+  {
+   "id": "1737811268472",
+   "title": "AnFuns",
+   "group": "动漫",
+   "url": "https://www.anfuns.org/search.html?wd={keyword}&submit=",
+   "yield": 0
+  },
+  {
+   "id": "1737899328455",
+   "title": "盘搜搜(百度网盘)",
+   "group": "网盘",
+   "url": "https://pansou.cc/s/{keyword}-1.html",
+   "yield": 0
+  },
+  {
+   "id": "1745581201031",
+   "title": "皮卡搜索",
+   "group": "网盘",
+   "url": "https://www.pikasoo.top/search/?pan=all&q={keyword}",
+   "yield": 11
+  },
+  {
+   "id": "1740212669423",
+   "title": "kkkob影视网盘",
+   "group": "网盘",
+   "url": "http://m.kkkob.com/apps/?name={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1739854161690",
+   "title": "咔帕搜索",
+   "group": "网盘",
+   "url": "https://www.cuppaso.com/search?keyword={keyword}",
+   "yield": 7
+  },
+  {
+   "id": "1739854644689",
+   "title": "云盘吧",
+   "group": "网盘",
+   "url": "https://yunpan8.net/?sort=latest&q={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1739854822009",
+   "title": "奇乐搜",
+   "group": "网盘",
+   "url": "https://www.qileso.com/?s={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1739854870926",
+   "title": "毕方铺",
+   "group": "网盘",
+   "url": "https://www.iizhi.cn/resource/search/{keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1739518410888",
+   "title": "肉不要钱",
+   "group": "网盘",
+   "url": "https://roubuyaoqian.com/search?q={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1739518578335",
+   "title": "UP云搜",
+   "group": "网盘",
+   "url": "https://www.upyunso.com/search.html?page=1&keyword={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1739605045568",
+   "title": "阿里搜",
+   "group": "网盘",
+   "url": "https://aliso.cc/s/{keyword}-1-0.html",
+   "yield": 0
+  },
+  {
+   "id": "1739263842647",
+   "title": "口袋云",
+   "group": "网盘",
+   "url": "https://www.woqusou.com/home?keyword={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1739267599911",
+   "title": "爱搜",
+   "group": "网盘",
+   "url": "https://www.esoua.com/search?q={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1739267760151",
+   "title": "学搜搜",
+   "group": "网盘",
+   "url": "https://www.xuesousou.net/search?q={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1737899504115",
+   "title": "混合盘",
+   "group": "网盘",
+   "url": "https://hunhepan.com/search?q={keyword}",
+   "yield": 4
+  },
+  {
+   "id": "1737981691047",
+   "title": "千帆搜索",
+   "group": "网盘",
+   "url": "https://pan.qianfan.app/search/?pan=all&type=all&q={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1739511409721",
+   "title": "中国学术文献数据库",
+   "group": "学术",
+   "url": "https://www.xueshuwenxian.com/e/wap/list.php?classid=1&title={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1739853825419",
+   "title": "Scirp",
+   "group": "学术",
+   "url": "https://scirp.org/journal/articles?searchcode={keyword}",
+   "yield": 3
+  },
+  {
+   "id": "1739511422106",
+   "title": "OaLib",
+   "group": "学术",
+   "url": "https://www.oalib.com/search?kw={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1739511592270",
+   "title": "BASE",
+   "group": "学术",
+   "url": "https://www.base-search.net/Search/Results?lookfor={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1739511638280",
+   "title": "Bing学术",
+   "group": "学术",
+   "url": "https://www.bing.com/academic/search?q={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1739511778647",
+   "title": "百度学术",
+   "group": "学术",
+   "url": "https://xueshu.baidu.com/s?wd={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1739511831804",
+   "title": "Google学术",
+   "group": "学术",
+   "url": "https://scholar.google.com/scholar?hl=zh-CN&q={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1739512015553",
+   "title": "Library Genesis",
+   "group": "学术",
+   "url": "https://libgen.gs/index.php?req={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1739517378139",
+   "title": "NSTL开放学术资源系统",
+   "group": "学术",
+   "url": "http://oar.nstl.gov.cn/Paper/Search?searchKey={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1739517827576",
+   "title": "IEEE Xplore",
+   "group": "学术",
+   "url": "https://ieeexplore.ieee.org/search/searchresult.jsp?queryText={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1739618375536",
+   "title": "阿里云万网",
+   "group": "域名",
+   "url": "https://domain.aliyun.com/check?keyword={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1739618491915",
+   "title": "Namesilo",
+   "group": "域名",
+   "url": "https://www.namesilo.com/domain/search-domains/?query={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1739618583013",
+   "title": "Gandi",
+   "group": "域名",
+   "url": "https://shop.gandi.net/zh-hans/domain/suggest?search={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1739618770497",
+   "title": "SpaceShip",
+   "group": "域名",
+   "url": "https://www.spaceship.com/zh/domain-search/?query={keyword}&beast=false&tab=domains",
+   "yield": 0
+  },
+  {
+   "id": "1739619184689",
+   "title": "NameCheap",
+   "group": "域名",
+   "url": "https://www.namecheap.com/domains/registration/results/?domain={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1739619415627",
+   "title": "TrueHost",
+   "group": "域名",
+   "url": "https://truehost.com/cloud//cart.php?a=add&domain=register&query={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1739619480326",
+   "title": "Sav",
+   "group": "域名",
+   "url": "https://www.sav.com/domain_search?q={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1739620000170",
+   "title": "Godaddy",
+   "group": "域名",
+   "url": "https://www.godaddy.com/zh-sg/domainsearch/find?domainToCheck={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1739620052246",
+   "title": "Dynadot",
+   "group": "域名",
+   "url": "https://www.dynadot.com/zh/?domain={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1739620309839",
+   "title": "name.com",
+   "group": "域名",
+   "url": "https://www.name.com/domain/search/{keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1739540240068",
+   "title": "百度知道",
+   "group": "问答",
+   "url": "https://zhidao.baidu.com/index/?fr=&word={keyword}",
+   "yield": 4
+  },
+  {
+   "id": "1739540323781",
+   "title": "搜狗问问",
+   "group": "问答",
+   "url": "https://m.sogou.com/web/searchList.jsp?keyword={keyword}",
+   "yield": 6
+  },
+  {
+   "id": "1739540472358",
+   "title": "知乎",
+   "group": "问答",
+   "url": "https://bing.com/search?q=site%3Azhihu.com+{keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1737807992375",
+   "title": "百度翻译",
+   "group": "翻译(整活)",
+   "url": "https://fanyi.baidu.com/#auto/zh/{keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1739004688338",
+   "title": "有道翻译",
+   "group": "翻译(整活)",
+   "url": "https://m.youdao.com/m/result?word={keyword}&lang=en",
+   "yield": 0
+  },
+  {
+   "id": "1739004755167",
+   "title": "DeepL翻译",
+   "group": "翻译(整活)",
+   "url": "https://www.deepl.com/zh/translator#en/zh-hans/{keyword}",
+   "yield": 1
+  },
+  {
+   "id": "1737899697762",
+   "title": "Google翻译",
+   "group": "翻译(整活)",
+   "url": "https://translate.google.com/?op=translate&sl=auto&tl=zh-CN&text={keyword}",
+   "yield": 3
+  },
+  {
+   "id": "1737899756491",
+   "title": "必应翻译",
+   "group": "翻译(整活)",
+   "url": "https://cn.bing.com/translator/?text={keyword}&to=zh-CN",
+   "yield": 0
+  },
+  {
+   "id": "1737811936670",
+   "title": "单田芳评书网",
+   "group": "听书",
+   "url": "http://www.pingshu5.net/plus/search.php?kwtype=0&q={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1737815809607",
+   "title": "幻听网",
+   "group": "听书",
+   "url": "https://m.huanting.cc/Ms.php?q={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1737899234382",
+   "title": "悦听吧",
+   "group": "听书",
+   "url": "http://www.yuetingba.cn/Search?type=1&name={keyword}",
+   "yield": 1
+  },
+  {
+   "id": "1737812021752",
+   "title": "搜番",
+   "group": "磁力",
+   "url": "https://mo.sefan.pw/s?word={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1740216831394",
+   "title": "SeedHub(影视&动漫)",
+   "group": "磁力",
+   "url": "https://www.seedhub.cc/s/{keyword}/",
+   "yield": 0
+  },
+  {
+   "id": "1738994096144",
+   "title": "Anime Garden 动漫花园(搜番)",
+   "group": "磁力",
+   "url": "https://garden.breadio.wiki/resources/1?search=[\"{keyword}\"]",
+   "yield": 93
+  },
+  {
+   "id": "1739198927121",
+   "title": "CCTV",
+   "group": "视频",
+   "url": "https://search.cctv.com/m/search.php?type=video&qtext={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1744511086918",
+   "title": "快手",
+   "group": "视频",
+   "url": "https://www.kuaishou.com/search/video?searchKey={keyword}",
+   "yield": 0,
+   "ua": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36"
+  },
+  {
+   "id": "1744511688891",
+   "title": "AcFun",
+   "group": "视频",
+   "url": "https://www.acfun.cn/search?keyword={keyword}",
+   "yield": 1,
+   "ua": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36"
+  },
+  {
+   "id": "1740312225547",
+   "title": "Youtube",
+   "group": "视频",
+   "url": "https://m.youtube.com/results?search_query={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1739198947974",
+   "title": "哔哩哔哩",
+   "group": "视频",
+   "url": "https://m.bilibili.com/search?keyword={keyword}",
+   "yield": 41
+  },
+  {
+   "id": "1738994558618",
+   "title": "Github",
+   "group": "开源项目",
+   "url": "https://github.com/search?q={keyword}&type=repositories",
+   "yield": 4
+  },
+  {
+   "id": "1739497386153",
+   "title": "Gitea",
+   "group": "开源项目",
+   "url": "https://gitea.com/explore/repos?only_show_relevant=false&q={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1739497403312",
+   "title": "Gitnet",
+   "group": "开源项目",
+   "url": "https://gitnet.fr/explore/repos?q={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1739497422891",
+   "title": "NotABug",
+   "group": "开源项目",
+   "url": "https://notabug.org/explore/repos?q={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1739497439685",
+   "title": "Frog Git",
+   "group": "开源项目",
+   "url": "https://git.froggi.es/explore/repos?sort=recentupdate&language=&q={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1739497462164",
+   "title": "tildegit",
+   "group": "开源项目",
+   "url": "https://tildegit.org/explore/repos?q={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1739497488974",
+   "title": "Codeberg",
+   "group": "开源项目",
+   "url": "https://codeberg.org/explore/repos?q={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1739497735420",
+   "title": "GitLab",
+   "group": "开源项目",
+   "url": "https://gitlab.com/explore?name={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1739456244362",
+   "title": "Gitdab",
+   "group": "开源项目",
+   "url": "https://gitdab.com/explore/repos?q={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1738994720080",
+   "title": "Gitee",
+   "group": "开源项目",
+   "url": "https://so.gitee.com/?q={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1738994778181",
+   "title": "GitCode",
+   "group": "开源项目",
+   "url": "https://gitcode.com/search?q={keyword}&type=repo",
+   "yield": 0
+  },
+  {
+   "id": "1739002861463",
+   "title": "OSCHINA",
+   "group": "开源项目",
+   "url": "https://www.oschina.net/search/?scope=project&q={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1738997018781",
+   "title": "网易云音乐",
+   "group": "音乐",
+   "url": "https://music.163.com/#/search/m/?s={keyword}&type=1",
+   "yield": 2
+  },
+  {
+   "id": "1745268142194",
+   "title": "歌曲宝",
+   "group": "音乐",
+   "url": "https://www.gequbao.com/s/{keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1739058829394",
+   "title": "歌曲海",
+   "group": "音乐",
+   "url": "https://www.gequhai.com/s/{keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1738997095466",
+   "title": "QQ音乐",
+   "group": "音乐",
+   "url": "https://y.qq.com/n/ryqq/search?w={keyword}&t=song",
+   "yield": 0,
+   "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Safari/537.36"
+  },
+  {
+   "id": "1738997141262",
+   "title": "酷狗音乐",
+   "group": "音乐",
+   "url": "https://www.kugou.com/yy/html/search.html#searchType=song&searchKeyWord={keyword}",
+   "yield": 2,
+   "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Safari/537.36"
+  },
+  {
+   "id": "1738997194895",
+   "title": "酷我音乐",
+   "group": "音乐",
+   "url": "https://kuwo.cn/search/list?key={keyword}",
+   "yield": 0,
+   "ua": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/116.0.0.0 Safari/537.36"
+  },
+  {
+   "id": "1738997684546",
+   "title": "一听音乐",
+   "group": "音乐",
+   "url": "https://h5.1ting.com/#/search/{keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1738997757007",
+   "title": "Apple Music",
+   "group": "音乐",
+   "url": "https://music.apple.com/cn/search?term={keyword}",
+   "yield": 31
+  },
+  {
+   "id": "1738998575743",
+   "title": "Spotify",
+   "group": "音乐",
+   "url": "https://open.spotify.com/search/results/{keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1739004000535",
+   "title": "起点读书",
+   "group": "阅读",
+   "url": "https://m.qidian.com/so/{keyword}.html",
+   "yield": 1
+  },
+  {
+   "id": "1740216326518",
+   "title": "读者阁(杂志)",
+   "group": "阅读",
+   "url": "https://duzhege.cn/search/{keyword}",
+   "yield": 14
+  },
+  {
+   "id": "1740313489683",
+   "title": "汇书网",
+   "group": "阅读",
+   "url": "https://www.huibooks.com/?s={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1740397041175",
+   "title": "mobi图书网",
+   "group": "阅读",
+   "url": "https://mobitushu.cn/search.php?q={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1739004041434",
+   "title": "笔趣阁",
+   "group": "阅读",
+   "url": "https://m.bqg128.com/s?q={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1739004084256",
+   "title": "飞卢小说",
+   "group": "阅读",
+   "url": "https://wap.faloo.com/search_1_1.html?k={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1739004160142",
+   "title": "纵横中文网",
+   "group": "阅读",
+   "url": "https://m.zongheng.com/search?keywords={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1739004294576",
+   "title": "17K小说网",
+   "group": "阅读",
+   "url": "https://h5.17k.com/search.html?key={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1739004488119",
+   "title": "阅书小说网",
+   "group": "阅读",
+   "url": "https://m.ysbook.cc/s?q={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1739004578300",
+   "title": "全书小说网",
+   "group": "阅读",
+   "url": "https://www.rrssk.com/keywords-{keyword}.html",
+   "yield": 0
+  },
+  {
+   "id": "1741388751411",
+   "title": "轨道交通网",
+   "group": "资讯",
+   "url": "http://www.rail-transit.com/xinwen/search.php?tmid=30&kw={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1745017238577",
+   "title": "新华社",
+   "group": "资讯",
+   "url": "https://so.news.cn/#search/0/{keyword}/",
+   "yield": 0
+  },
+  {
+   "id": "1745581715555",
+   "title": "中国搜索",
+   "group": "资讯",
+   "url": "https://m.chinaso.com/newssearch/news/results?q={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1739486242108",
+   "title": "中国新闻网",
+   "group": "资讯",
+   "url": "https://sou.chinanews.com/search.do?q={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1740221841783",
+   "title": "IT之家",
+   "group": "资讯",
+   "url": "https://m.ithome.com/search/{keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1740311821171",
+   "title": "少数派",
+   "group": "资讯",
+   "url": "https://sspai.com/search/post/{keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1740312021876",
+   "title": "36氪",
+   "group": "资讯",
+   "url": "https://www.36kr.com/search/articles/{keyword}",
+   "yield": 0,
+   "ua": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36"
+  },
+  {
+   "id": "1740312538745",
+   "title": "虎嗅",
+   "group": "资讯",
+   "url": "https://m.huxiu.com/search?s={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1739518824233",
+   "title": "中国日报",
+   "group": "资讯",
+   "url": "https://newssearch.chinadaily.com.cn/cn/search?query={keyword}",
+   "yield": 1
+  },
+  {
+   "id": "1739025850716",
+   "title": "人民日报",
+   "group": "资讯",
+   "url": "https://data.people.com.cn/rmrb/s?type=1&qs=%7B\"cds\"%3A%5B%7B\"cdr\"%3A\"AND\"%2C\"cds\"%3A%5B%7B\"fld\"%3A\"authors\"%2C\"cdr\"%3A\"OR\"%2C\"hlt\"%3A\"true\"%2C\"vlr\"%3A\"OR\"%2C\"val\"%3A\"{keyword}\"%7D%2C%7B\"fld\"%3A\"title\"%2C\"cdr\"%3A\"OR\"%2C\"hlt\"%3A\"true\"%2C\"vlr\"%3A\"OR\"%2C\"val\"%3A\"{keyword}\"%7D%2C%7B\"fld\"%3A\"subTitle\"%2C\"cdr\"%3A\"OR\"%2C\"hlt\"%3A\"true\"%2C\"vlr\"%3A\"OR\"%2C\"val\"%3A\"{keyword}\"%7D%2C%7B\"fld\"%3A\"introTitle\"%2C\"cdr\"%3A\"OR\"%2C\"hlt\"%3A\"true\"%2C\"vlr\"%3A\"OR\"%2C\"val\"%3A\"{keyword}\"%7D%2C%7B\"fld\"%3A\"contentText\"%2C\"cdr\"%3A\"OR\"%2C\"hlt\"%3A\"true\"%2C\"vlr\"%3A\"OR\"%2C\"val\"%3A\"{keyword}\"%7D%5D%7D%5D%2C\"obs\"%3A%5B%7B\"fld\"%3A\"dataTime\"%2C\"drt\"%3A\"DESC\"%7D%5D%7D&ss1",
+   "yield": 1
+  },
+  {
+   "id": "1739497520754",
+   "title": "手机新浪",
+   "group": "资讯",
+   "url": "https://so.sina.cn/search/list.d.html?keyword={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1739687839495",
+   "title": "XDA Forums",
+   "group": "论坛",
+   "url": "https://xdaforums.com/search/?q={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1745149496168",
+   "title": "QQ频道",
+   "group": "论坛",
+   "url": "https://pd.qq.com/g/search?keyword={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1744511452228",
+   "title": "OSCHINA",
+   "group": "论坛",
+   "url": "https://www.oschina.net/search/?q={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1744533444734",
+   "title": "ikun论坛",
+   "group": "论坛",
+   "url": "https://ikunshare.com/?q={keyword}%20is%3Asolved",
+   "yield": 0
+  },
+  {
+   "id": "1744534052837",
+   "title": "博客园",
+   "group": "论坛",
+   "url": "https://zzk.cnblogs.com/s?w={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1739025353493",
+   "title": "百度贴吧",
+   "group": "论坛",
+   "url": "https://tieba.baidu.com/mo/q/hybrid-usergrow-search/searchGlobal?pageType=result&keyword={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1739510870779",
+   "title": "思否",
+   "group": "论坛",
+   "url": "https://segmentfault.com/search?q={keyword}",
+   "yield": 18
+  },
+  {
+   "id": "1739446489462",
+   "title": "吾爱破解",
+   "group": "论坛",
+   "url": "https://bing.com/search?q=site%3A52pojie.cn%20{keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1739447740945",
+   "title": "MT论坛",
+   "group": "论坛",
+   "url": "https://bing.com/search?q=site%3Abbs.binmt.cc%20{keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1739448255700",
+   "title": "V2EX",
+   "group": "论坛",
+   "url": "https://www.google.com/search?q=site:v2ex.com/t%20{keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1739486102915",
+   "title": "NGA玩家论坛",
+   "group": "论坛",
+   "url": "https://www.bing.com/search?q=site%3Abbs.nga.cn%20{keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1739457789289",
+   "title": "Bing",
+   "group": "常规搜索",
+   "url": "https://bing.com/search?q={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1744649367535",
+   "title": "百度搜索",
+   "group": "常规搜索",
+   "url": "https://m.baidu.com/s?word={keyword}",
+   "yield": 2,
+   "ua": "Mozilla/5.0 (Linux; Android 11; Redmi K40 Pro Build/QKQ1.190825.002; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/84.0.4147.105 Mobile Safari/537.36 SearchCraft/2.8.2 baiduboxapp/3.2.5.10"
+  },
+  {
+   "id": "1745581537936",
+   "title": "神马搜索",
+   "group": "常规搜索",
+   "url": "https://m.sm.cn/s?q={keyword}",
+   "yield": 16
+  },
+  {
+   "id": "1744533734591",
+   "title": "抖音搜索",
+   "group": "常规搜索",
+   "url": "https://so.douyin.com/s?keyword={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1739457903216",
+   "title": "Yandex",
+   "group": "常规搜索",
+   "url": "https://yandex.com/search/touch/?text={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1739485399039",
+   "title": "Google",
+   "group": "常规搜索",
+   "url": "https://www.google.com/search?q={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1739485468797",
+   "title": "DuckDuckGo",
+   "group": "常规搜索",
+   "url": "https://duckduckgo.com/{keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1739485725373",
+   "title": "Yahoo",
+   "group": "常规搜索",
+   "url": "https://search.yahoo.com/search?p={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1739485849697",
+   "title": "Naver",
+   "group": "常规搜索",
+   "url": "https://m.search.naver.com/search.naver?query={keyword}",
+   "yield": 29
+  },
+  {
+   "id": "1739853771656",
+   "title": "纳米搜索",
+   "group": "AI搜索",
+   "url": "https://www.n.cn/?q={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1739853805175",
+   "title": "秘塔ai",
+   "group": "AI搜索",
+   "url": "https://metaso.cn/?q={keyword}",
+   "yield": 0,
+   "ua": "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Mobile Safari/537.36"
+  },
+  {
+   "id": "1739853871501",
+   "title": "ThinkAny",
+   "group": "AI搜索",
+   "url": "https://thinkany.so/search?q={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1737899092697",
+   "title": "追剧影视",
+   "group": "影视",
+   "url": "https://m.zjuys.com/vod/search/{keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1740200996731",
+   "title": "LIBVIO影视",
+   "group": "影视",
+   "url": "https://www.libvio.fun/search/-------------.html?wd={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1740201183776",
+   "title": "豌豆Pro",
+   "group": "影视",
+   "url": "https://www.wandou.la/search?query={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1740201257226",
+   "title": "奈落影视",
+   "group": "影视",
+   "url": "https://newfii.com/vodsearch/-------------.html?wd={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1740201297288",
+   "title": "音范丝影视",
+   "group": "影视",
+   "url": "https://www.yinfans.me/?s={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1740201318836",
+   "title": "韩饭网影视",
+   "group": "影视",
+   "url": "https://www.hanfan.cc/?s={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1739002312888",
+   "title": "CE影视",
+   "group": "影视",
+   "url": "https://ys.cebox.cn/search/index.html?keyword={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1737899149291",
+   "title": "桃桃影视",
+   "group": "影视",
+   "url": "https://51taotao.cc/search/index.html?keyword={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1740212974588",
+   "title": "字幕库",
+   "group": "字幕",
+   "url": "https://zimuku.org/search?q={keyword}&chost=zimuku.org",
+   "yield": 0
+  },
+  {
+   "id": "1740213018887",
+   "title": "SubHD",
+   "group": "字幕",
+   "url": "https://subhd.tv/search/{keyword}",
+   "yield": 79
+  },
+  {
+   "id": "1740213066732",
+   "title": "伪射手网",
+   "group": "字幕",
+   "url": "https://assrt.net/sub/?searchword={keyword}",
+   "yield": 15
+  },
+  {
+   "id": "1740216121275",
+   "title": "日夸网",
+   "group": "字幕",
+   "url": "https://www.rikua.com/zimu/?s={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1740216255888",
+   "title": "点点字幕",
+   "group": "字幕",
+   "url": "https://www.samfunny.com/download/xslist.php?key={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1740312832841",
+   "title": "包子漫画",
+   "group": "漫画",
+   "url": "https://cn.baozimhcn.com/search?q={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1740311505094",
+   "title": "中国大学MOOC",
+   "group": "学习",
+   "url": "https://www.icourse163.org/search.htm?search={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1745017639851",
+   "title": "Coursera",
+   "group": "学习",
+   "url": "https://www.coursera.org/search?query={keyword}",
+   "yield": 3
+  },
+  {
+   "id": "1745017794083",
+   "title": "edX",
+   "group": "学习",
+   "url": "https://www.edx.org/search?q={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1745018014109",
+   "title": "MIT OpenCourseWare",
+   "group": "学习",
+   "url": "https://ocw.mit.edu/search/?q={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1744510979277",
+   "title": "FutureLearn",
+   "group": "学习",
+   "url": "https://www.futurelearn.com/search?q={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1744512343531",
+   "title": "可汗学院",
+   "group": "学习",
+   "url": "https://zh.khanacademy.org/search?page_search_query={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1740311606005",
+   "title": "国家智慧教育公共服务平台",
+   "group": "学习",
+   "url": "https://web-bd.ykt.eduyun.cn/search?keyword={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1740311670388",
+   "title": "国家高等教育智慧教育平台",
+   "group": "学习",
+   "url": "https://www.chinaooc.com.cn/search?keyword={keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1745118100406",
+   "title": "Ping连通性检测",
+   "group": "站长工具",
+   "url": "https://www.itdog.cn/ping/{keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1745118130356",
+   "title": "TCP延迟测试",
+   "group": "站长工具",
+   "url": "https://www.itdog.cn/tcping/{keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1745149693735",
+   "title": "Whois",
+   "group": "站长工具",
+   "url": "https://who.cx/{keyword}",
+   "yield": 0
+  },
+  {
+   "id": "1745149753970",
+   "title": "微信拦截",
+   "group": "站长工具",
+   "url": "https://www.htool.com/domain/wechat/{keyword}",
+   "yield": 14
+  },
+  {
+   "id": "1745149792120",
+   "title": "QQ拦截检测",
+   "group": "站长工具",
+   "url": "https://www.htool.com/domain/qq/{keyword}",
+   "yield": 12
+  },
+  {
+   "id": "1745149828852",
+   "title": "ICP备案查询",
+   "group": "站长工具",
+   "url": "https://www.htool.com/domain/beian/{keyword}",
+   "yield": 13
+  },
+  {
+   "id": "1745149904659",
+   "title": "网安备案查询",
+   "group": "站长工具",
+   "url": "https://www.htool.com/domain/wanganbeian/{keyword}",
+   "yield": 12
+  }
+ ]
+}

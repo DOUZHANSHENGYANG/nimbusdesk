@@ -17,7 +17,13 @@ export function AiSearchView() {
   const error = useAiSearch((s) => s.error);
   const setQuery = useAiSearch((s) => s.setQuery);
   const run = useAiSearch((s) => s.run);
-  const provider = useAiSettings((s) => s.searchProvider === "tavily" || (s.searchProvider === "auto" && !!s.tavilyApiKey) ? "tavily" : "bing");
+  const provider = useAiSettings((s) =>
+    s.searchProvider === "eos"
+      ? "eos"
+      : s.searchProvider === "tavily" || (s.searchProvider === "auto" && !!s.tavilyApiKey)
+        ? "tavily"
+        : "bing",
+  );
 
   return (
     <div className="flex h-full min-w-0 flex-col">
@@ -42,7 +48,7 @@ export function AiSearchView() {
           </Button>
         </form>
         <p className="mt-1.5 text-[11px] text-muted-foreground">
-          {t("feeds.searchBackend")}: {provider === "tavily" ? t("feeds.tavily") : t("feeds.bing")}
+          {t("feeds.searchBackend")}: {provider === "eos" ? t("feeds.eos") : provider === "tavily" ? t("feeds.tavily") : t("feeds.bing")}
         </p>
       </header>
 
