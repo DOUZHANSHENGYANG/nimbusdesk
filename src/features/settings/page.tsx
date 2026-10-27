@@ -63,6 +63,16 @@ export function SettingsPage() {
     { key: "about", icon: Info, label: t("settings.tabs.about") },
   ];
 
+  /** 右侧 TOC：只给「一页里好几块卡片」的页面用（现在只有工作台），单节页面不摆 */
+  const toc =
+    tab === "plans"
+      ? [
+          { id: "set-plans", label: t("settings.tabs.plans") },
+          { id: "set-feeds", label: t("nav.feeds") },
+          { id: "set-features", label: t("settings.tabs.features") },
+        ]
+      : [];
+
   // 分类切换：内容淡入
   useGSAP(
     () => {
@@ -124,11 +134,17 @@ export function SettingsPage() {
           {/* 工作台：原来四个独立导航项（计划/搜索/资讯/功能）现在并成一页，各自一块卡片 */}
           {tab === "plans" && (
             <>
-              <PlansSection />
+              <div id="set-plans">
+                <PlansSection />
+              </div>
               <SearchSettings />
-              <HomeFeedSection />
-              <FeedNetworkSettings />
-              <FeaturesSection />
+              <div id="set-feeds">
+                <HomeFeedSection />
+                <FeedNetworkSettings />
+              </div>
+              <div id="set-features">
+                <FeaturesSection />
+              </div>
             </>
           )}
           {tab === "search" && <SearchSettings />}
@@ -139,6 +155,26 @@ export function SettingsPage() {
           {tab === "about" && <AboutSection />}
         </div>
       </div>
+
+      {toc.length > 0 && (
+        <nav aria-label={t("settings.tabs.plans")} className="hidden w-36 shrink-0 self-start py-6 pr-4 xl:block">
+          <ul className="flex flex-col gap-0.5 border-l border-border pl-2">
+            {toc.map((item) => (
+              <li key={item.id}>
+                <button
+                  type="button"
+                  onClick={() =>
+                    document.getElementById(item.id)?.scrollIntoView({ behavior: "smooth", block: "start" })
+                  }
+                  className="w-full rounded-md px-2 py-1 text-left text-[12px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                >
+                  {item.label}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </nav>
+      )}
     </div>
   );
 }
