@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { listen } from "@tauri-apps/api/event";
 import { useTranslation } from "react-i18next";
+import { toast } from "sonner";
 import {
   AppWindow, ArrowLeft, BookOpen, Bookmark, CalendarCheck, Camera, ChevronDown, ExternalLink, FileText, Folder,
   Bell, CalendarDays, CloudSun, FolderKanban, Inbox, LayoutGrid, Newspaper, SquareTerminal, RefreshCw, Rss, Search, Send, Settings2, Sparkles, Star, Trash2,
