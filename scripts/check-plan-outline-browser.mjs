@@ -46,23 +46,28 @@ try {
   assert.equal(await rowOf("task-1").locator('button[title="更多操作"]').count(), 0, "The ⋯ entry must be gone — the title itself opens the detail");
   assert.equal(await page.locator('[data-slot="popover-content"]').count(), 0, "Detail must be a column, not a floating layer");
 
-  // 详情栏是唯一的编辑场所：字段名就是词表里的标签，附件是内联列表
-  for (const label of ["日期", "时间", "关联", "项目", "备注"])
-    assert.equal(await panel().getByText(label, { exact: true }).count(), 1, `Panel must have exactly one ${label} field`);
-  assert.equal(await panel().getByRole("button", { name: "删除" }).count(), 1);
-  assert.equal(await panel().getByText("附件", { exact: true }).count(), 1);
-  assert.equal(await panel().getByRole("textbox", { name: "添加子任务" }).count(), 1, "Panel keeps its own subtask field");
+  // 右栏只剩备注：进来就能写；其它字段都搬进 ⋯ 浮层
   assert.equal(await panel().getByRole("textbox", { name: "备注" }).count(), 1, "Note must be a textarea");
+  for (const label of ["日期", "时间", "关联", "项目"])
+    assert.equal(await panel().getByText(label, { exact: true }).count(), 0, `Note column must not carry a ${label} field`);
 
-  // 标题下面那行备注也是入口：点它进来，光标直接落在备注里（点标题则落在标题）
+  // ⋯ 打开完整详情卡片（原来看板/大纲都靠它）
+  await rowOf("task-1").locator('button:has-text("⋯")').click();
+  for (const label of ["日期", "时间", "关联", "项目", "备注"])
+    assert.equal(await page.getByText(label, { exact: true }).count(), 1, `Detail card must have exactly one ${label} field`);
+  assert.equal(await page.getByRole("button", { name: "删除" }).count(), 1);
+  assert.equal(await page.getByText("附件", { exact: true }).count(), 1);
+  assert.equal(await page.getByRole("textbox", { name: "添加子任务" }).count(), 1, "Detail card keeps its own subtask field");
+
+  // 标题下面那行备注也是入口：点它进来，光标直接落在备注里
+  await page.keyboard.press("Escape");
   await page.getByRole("button", { name: "导出时右侧会溢出一列" }).click();
   const noteBox = panel().getByRole("textbox", { name: "备注" });
   assert.equal(await noteBox.evaluate(node => node === document.activeElement), true, "Clicking the note line must put the caret in the note");
-  await titleButton("task-1").click();
-  assert.equal(await panel().getByRole("textbox", { name: "标题" }).evaluate(node => node === document.activeElement), true, "Clicking the title must put the caret in the title");
 
-  // 标题：回车落地但不收栏（详情栏是常驻的，收它是另一个动作）
-  await panel().getByRole("textbox", { name: "标题" }).fill("对齐导出模板的三处列宽");
+  // 标题：回车落地但不收栏 —— 标题现在在 ⋯ 浮层里编辑
+  await rowOf("task-1").locator('button:has-text("⋯")').click();
+  await page.getByRole("textbox", { name: "标题" }).fill("对齐导出模板的三处列宽");
   await page.keyboard.press("Enter");
   assert.equal((await dayTasks(today)).find(task => task.id === "task-1").title, "对齐导出模板的三处列宽");
   assert.equal((await titleButton("task-1").innerText()).includes("三处列宽"), true, "Row must show the saved title");

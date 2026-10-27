@@ -247,7 +247,7 @@ export function OutlineView({ date, searchTaskId, searchToken }: { date: string;
               </div>
             </>
           ) : (
-            <NoteColumn date={date} task={selectedTask} onClose={() => setSelected(null)} />
+            <NoteColumn date={date} task={selectedTask} focus={selected!.focus} onClose={() => setSelected(null)} />
           )}
         </aside>
       )}
@@ -342,7 +342,7 @@ function RowIcon({ title, onClick, children }: { title: string; onClick: () => v
  * 写备注。进来即聚焦，离开焦点即存，没有保存按钮（和标题同一套写法：一次编辑一次提交，
  * 不是每敲一个字都进撤销栈）。完整卡片收在行上的 ⋯ 里。
  */
-function NoteColumn({ date, task, onClose }: { date: string; task: PlanTask; onClose: () => void }) {
+function NoteColumn({ date, task, focus, onClose }: { date: string; task: PlanTask; focus: Selection["focus"]; onClose: () => void }) {
   const { t } = useTranslation();
   const [draft, setDraft] = useState(task.note ?? "");
   const commit = () => {
@@ -363,6 +363,7 @@ function NoteColumn({ date, task, onClose }: { date: string; task: PlanTask; onC
         </button>
       </div>
       <textarea
+        key={`${task.id}:${focus}`}
         autoFocus
         aria-label={t("plans.noteLabel")}
         value={draft}
