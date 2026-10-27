@@ -6,9 +6,8 @@ const browser=await chromium.launch({headless:true,executablePath:process.env.SE
 try{
  const page=await browser.newPage({viewport:{width:1000,height:760}}),errors=[];page.on('pageerror',e=>errors.push(e.message));
  const base='http://127.0.0.1:17803/src/features/files/fixtures/page.html';await page.goto(base);
- const show=page.getByRole('button',{name:'全部显示到桌面',exact:true}),hide=page.getByRole('button',{name:'全部不显示到桌面',exact:true});
- try { await show.waitFor({timeout:12000}); }
- catch(error){console.error('Page errors:',errors,'Body:',await page.locator('body').innerText());throw error;}
+ // 「全部显示到桌面 / 全部不显示到桌面」这对按钮已经从文件页删掉了（现在只剩按分类的开关，
+ // library 层由 desktop-actions.test.mjs 覆盖）。这个浏览器用例不再断言批量开关。
  await page.getByPlaceholder('搜索名称或路径…').fill('does-not-match');
  await page.evaluate(()=>filesReview.fire('tauri://drag-enter',{paths:['E:/Downloads/example.txt'],position:{x:400,y:300}}));
  await page.getByRole('status').filter({hasText:'松开添加到默认分类'}).waitFor();
@@ -31,32 +30,10 @@ try{
  await page.evaluate(()=>filesReview.fire('tauri://drag-drop',{paths:['E:/Downloads/dialog-ignored.txt'],position:{x:400,y:300}}));
  assert.equal(await page.evaluate(()=>filesReview.calls.some(c=>c.cmd==='probe_paths'&&c.args.paths.includes('E:/Downloads/dialog-ignored.txt'))),false);
  await page.getByRole('button',{name:'取消',exact:true}).click();
- await show.click();await page.waitForFunction(()=>Object.values(filesReview.fixtures.fences.state.fences).filter(f=>f.open).length===3);
- assert.ok(await page.evaluate(()=>filesReview.windows.has('desktop-dock')));
- await hide.click();await page.waitForFunction(()=>[...filesReview.windows].filter(label=>label.startsWith('fence-')).length===0);
- await page.waitForFunction(()=>Object.values(filesReview.fixtures.fences.state.fences).every(f=>!f.open));
- assert.ok(await page.evaluate(()=>filesReview.windows.has('desktop-dock')));
- await page.evaluate(()=>{filesReview.failOpen='child';});await show.click();
- await page.waitForFunction(()=>filesReview.fixtures.fences.state.fences.work?.open&&!filesReview.fixtures.fences.state.fences.child?.open);
- await page.waitForTimeout(300);assert.equal(await page.evaluate(()=>filesReview.fixtures.fences.state.fences.child.open),false);
- assert.equal(await page.evaluate(()=>filesReview.calls.some(c=>c.cmd==='move_fence_entries'||c.cmd==='delete_entries')),false,'collection only registers references');
- await page.waitForFunction(()=>[...document.querySelectorAll('button')].find(button=>button.textContent.includes('全部显示到桌面'))?.disabled===false);
- const opensBefore=await page.evaluate(()=>filesReview.calls.filter(c=>c.cmd==='open_fence').length);
- await page.evaluate(()=>{
-   filesReview.failOpen=null;filesReview.openDelay=80;
-   const buttons=[...document.querySelectorAll('button')];
-   const show=buttons.find(button=>button.textContent.includes('全部显示到桌面'));
-   const hide=buttons.find(button=>button.textContent.includes('全部不显示到桌面'));
-   show.click();show.click();hide.click();
- });
- assert.equal(await show.isDisabled(),true);assert.equal(await hide.isDisabled(),true);
- await page.waitForFunction(()=>[...document.querySelectorAll('button')].find(button=>button.textContent.includes('全部显示到桌面'))?.disabled===false);
- assert.equal(await page.evaluate(()=>filesReview.calls.filter(c=>c.cmd==='open_fence').length)-opensBefore,3,'rapid clicks run one batch');
- assert.equal(await page.evaluate(()=>Object.values(filesReview.fixtures.fences.state.fences).every(f=>f.open)),true);
- await page.setViewportSize({width:760,height:680});assert.equal(await show.isVisible(),true);assert.equal(await hide.isVisible(),true);
+ await page.setViewportSize({width:760,height:680});
  assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),true,'no horizontal overflow at narrow width');
  await page.screenshot({path:'Temp/files-collection-dark.png'});
  await page.evaluate(async()=>{const{useSettings}=await import('/src/stores/settings.ts');useSettings.getState().setTheme('light');});
  await page.waitForTimeout(200);await page.screenshot({path:'Temp/files-collection-light.png'});
- assert.deepEqual(errors,[]);console.log('PASS Files: native mixed drops, default/duplicate/filter behavior, modal guard, cancelled reorder, persistent batch on/off, partial failure, rapid clicks, narrow controls, light/dark and todo isolation');
+ assert.deepEqual(errors,[]);console.log('PASS Files: native mixed drops, default/duplicate/filter behavior, modal guard, cancelled reorder, narrow width, light/dark');
 }finally{await browser.close();await server.close();}

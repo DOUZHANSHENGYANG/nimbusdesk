@@ -38,15 +38,14 @@ try {
   assert.equal(Math.round(capsule.height), 44, "胶囊必须 44 高");
   assert.equal(Math.round(capsule.width), 464, "胶囊铺满 464 宽的窗口");
   assert.ok(Math.abs(capsule.x) <= 1, "胶囊铺满窗口（窗口自己负责居中）");
-  assert.equal(await page.locator(".df-quick-btn").count(), 5, "胶囊只放主标签 5 个");
+  assert.equal(await page.locator(".df-capsule .df-name").count(), 1, "胶囊放主标签名");
+  assert.equal(await page.locator(".df-capsule .df-ring").count(), 1, "胶囊用一圈进度代替功能图标（P0 定稿：不再摆图标）");
   const startBounds = await lastBounds();
   assert.equal(startBounds.height, 44, "启动时窗口就该是胶囊高度");
 
   // ② 展开：卡片与窗口一起变成 660×591
   await page.getByRole("button", { name: "展开卡片" }).click();
   await page.locator(".df-card").waitFor();
-  // 主标签 5 个；胶囊快捷图标也必须是 5 个（防止再改错位置）
-  assert.equal(await page.locator(".df-quick-btn").count(), 5, "主标签 5 个");
     await page.setViewportSize({ width: 660, height: 591 });
   await page.waitForTimeout(80);
   // 量布局尺寸：撑开动画用 transform 缩放，boundingBox 会量到中间帧
