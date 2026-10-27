@@ -786,7 +786,7 @@ export const zh = {
       auto: "自动（第一个订阅）",
       custom: "自定义",
     },
-    tabs: { system: "系统", plans: "计划", ai: "AI", features: "功能", about: "关于" },
+    tabs: { system: "系统", plans: "计划", search: "搜索", ai: "AI", features: "功能", about: "关于" },
     appearance: "外观",
     theme: "主题模式",
     themeLight: "亮色",

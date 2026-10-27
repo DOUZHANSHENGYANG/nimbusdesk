@@ -795,7 +795,7 @@ export const en: AppMessages = {
       auto: "Automatic (first subscription)",
       custom: "custom",
     },
-    tabs: { system: "System", plans: "Plans", ai: "AI", features: "Features", about: "About" },
+    tabs: { system: "System", plans: "Plans", search: "Search", ai: "AI", features: "Features", about: "About" },
     appearance: "Appearance",
     theme: "Theme mode",
     themeLight: "Light",

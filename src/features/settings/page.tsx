@@ -68,6 +68,7 @@ export function SettingsPage() {
     tab === "plans"
       ? [
           { id: "set-plans", label: t("settings.tabs.plans") },
+          { id: "set-search", label: t("settings.tabs.search") },
           { id: "set-feeds", label: t("nav.feeds") },
           { id: "set-features", label: t("settings.tabs.features") },
         ]
@@ -137,7 +138,9 @@ export function SettingsPage() {
               <div id="set-plans">
                 <PlansSection />
               </div>
-              <SearchSettings />
+              <div id="set-search">
+                <SearchSettings />
+              </div>
               <div id="set-feeds">
                 <HomeFeedSection />
                 <FeedNetworkSettings />
