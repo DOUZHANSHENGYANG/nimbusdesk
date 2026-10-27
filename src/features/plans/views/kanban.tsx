@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
+import { usePointerDrag } from "@/features/plans/use-pointer-drag";
 import { Layers, Pencil, Trash2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import {
@@ -20,7 +21,6 @@ import { cn } from "@/lib/utils";
  * 进行中的任务在待办列里以高亮卡片呈现。
  */
 const COLUMNS = ["todo", "done"] as const;
-type Column = (typeof COLUMNS)[number];
 
 export function KanbanView({ date }: { date: string }) {
   const { t } = useTranslation();
@@ -30,23 +30,29 @@ export function KanbanView({ date }: { date: string }) {
   const removeTask = usePlans((s) => s.removeTask);
   const addTask = usePlans((s) => s.addTask);
   const { confirm } = useModal();
-  const [overCol, setOverCol] = useState<Column | null>(null);
   /** 正在编辑的任务 id（就地改名） */
   const [editingId, setEditingId] = useState<string | null>(null);
 
   const roots = childrenOf(tasks, null);
 
-  /** 拖到「已完成」= 勾选完成；拖回「待办」= 取消完成 */
-  const onDrop = (col: Column, e: React.DragEvent) => {
-    e.preventDefault();
-    setOverCol(null);
-    const id = e.dataTransfer.getData("text/plain");
-    if (!id) return;
-    const task = tasks.find((x) => x.id === id);
-    if (!task) return;
-    const shouldBeDone = col === "done";
-    if (task.done !== shouldBeDone) toggleDone(date, id);
-  };
+  /**
+   * 拖到「已完成」= 勾选完成；拖回「待办」= 取消完成。
+   *
+   * 走 pointer 事件而不是 HTML5 DnD：Tauri 的原生拖放会接管后者，浏览器里能拖、真机上不动。
+   */
+  const applyDrop = useCallback(
+    (id: string, col: string) => {
+      const task = tasks.find((x) => x.id === id);
+      if (!task) return;
+      if (task.done !== (col === "done")) toggleDone(date, id);
+    },
+    [tasks, toggleDone, date],
+  );
+  const hitTest = useCallback(
+    (element: HTMLElement | null) => element?.closest("[data-kanban-col]")?.getAttribute("data-kanban-col") ?? null,
+    [],
+  );
+  const drag = usePointerDrag<string>({ hitTest, onDrop: applyDrop });
 
   const onDelete = async (task: PlanTask) => {
     const ok = await confirm({
@@ -68,15 +74,10 @@ export function KanbanView({ date }: { date: string }) {
         return (
           <div
             key={col}
-            onDragOver={(e) => {
-              e.preventDefault();
-              setOverCol(col);
-            }}
-            onDragLeave={() => setOverCol((c) => (c === col ? null : c))}
-            onDrop={(e) => onDrop(col, e)}
+            data-kanban-col={col}
             className={cn(
               "flex min-h-72 flex-col gap-2.5 rounded-2xl border p-3 transition-colors duration-150",
-              overCol === col
+              drag.over === col
                 ? "border-brand/60 bg-brand/5"
                 : "border-border bg-muted/30",
             )}
@@ -103,11 +104,11 @@ export function KanbanView({ date }: { date: string }) {
               return (
                 <div
                   key={task.id}
-                  draggable={editingId !== task.id}
-                  onDragStart={(e) => e.dataTransfer.setData("text/plain", task.id)}
+                  onPointerDown={(e) => drag.start(e, task.id)}
                   className={cn(
-                    "group cursor-grab rounded-xl border bg-card p-3 shadow-[var(--pr-shadow-1)] transition-shadow hover:shadow-[var(--pr-shadow-2)] active:cursor-grabbing",
+                    "group cursor-grab touch-none rounded-xl border bg-card p-3 shadow-[var(--pr-shadow-1)] transition-shadow hover:shadow-[var(--pr-shadow-2)] active:cursor-grabbing",
                     status === "doing" ? "border-brand/50" : "border-border",
+                    drag.dragging === task.id && "opacity-60",
                   )}
                 >
                   <div className="flex items-start gap-2">
