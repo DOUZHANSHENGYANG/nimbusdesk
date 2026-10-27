@@ -89,7 +89,11 @@ try {
 
   // 拖动排序：抓住把手把第二条根任务拖到第一条上半边 = 插到它前面
   assert.deepEqual(await idsOf(today), ["task-1", "task-2", "task-3", childId]);
-  await grip("task-3").dragTo(rowOf("task-1"), { targetPosition: { x: 180, y: 4 } });
+  const gripBox = await grip("task-3").boundingBox(), targetBox = await rowOf("task-1").boundingBox();
+  await page.mouse.move(gripBox.x + gripBox.width / 2, gripBox.y + gripBox.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(targetBox.x + 180, targetBox.y + 4, { steps: 8 });
+  await page.mouse.up();
   await page.waitForFunction(() => window.outlineReview.stores.usePlans.getState().days[window.outlineReview.days.today][0].id === "task-3");
   assert.deepEqual(await idsOf(today), ["task-3", "task-1", "task-2", childId], "Drag must move the dragged row only");
   assert.deepEqual(await page.locator("[data-search-task-id]").evaluateAll(nodes => nodes.map(node => node.dataset.searchTaskId)),

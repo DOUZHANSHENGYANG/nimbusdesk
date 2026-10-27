@@ -46,7 +46,7 @@ type Selection = { id: string; focus: "title" | "note" };
 type DragState = { sourceId: string; targetId?: string; position?: "before" | "after" };
 type RowDrag = {
   state: DragState | null;
-  onStart: (event: React.DragEvent, id: string) => void;
+  onStart: (event: React.PointerEvent, id: string) => void;
   onOver: (event: React.DragEvent, id: string) => void;
   onDrop: (event: React.DragEvent) => void;
   onEnd: () => void;
@@ -89,13 +89,54 @@ export function OutlineView({ date, searchTaskId, searchToken }: { date: string;
     setDrag(next);
   };
 
-  const onDragStart = (event: React.DragEvent, id: string) => {
+  const onDragStart = (event: React.PointerEvent, id: string) => {
     event.stopPropagation();
-    event.dataTransfer.effectAllowed = "move";
-    // 有些浏览器不给 dragover 发自定义 MIME，带一份 text/plain 更稳
-    event.dataTransfer.setData("text/plain", id);
     applyDrag({ sourceId: id });
   };
+
+  /**
+   * 指针拖拽的跟手部分。
+   *
+   * 不用 HTML5 DnD：Tauri 的 WebView2 只要 dragDropEnabled 为真（默认），原生拖放就会把页面内
+   * 拖拽接管掉 —— 浏览器里能拖、真机上纹丝不动。落点算法（同父级 + 指针落在行的上/下半边）
+   * 原样搬过来，只换事件源。
+   */
+  useEffect(() => {
+    if (!drag) return;
+    const hit = (x: number, y: number) => {
+      const row = (document.elementFromPoint(x, y) as HTMLElement | null)?.closest("[data-search-task-id]");
+      const id = row?.getAttribute("data-search-task-id");
+      const session = dragRef.current;
+      if (!id || !row || !session || session.sourceId === id) return;
+      const day = usePlans.getState().days[date] ?? [];
+      const source = day.find((task) => task.id === session.sourceId);
+      const target = day.find((task) => task.id === id);
+      if (!source || !target || source.parentId !== target.parentId) {
+        if (session.targetId) applyDrag({ sourceId: session.sourceId });
+        return;
+      }
+      const rect = row.getBoundingClientRect();
+      const position = y < rect.top + rect.height / 2 ? "before" : "after";
+      if (session.targetId !== id || session.position !== position)
+        applyDrag({ sourceId: session.sourceId, targetId: id, position });
+    };
+    const move = (event: PointerEvent) => hit(event.clientX, event.clientY);
+    const up = () => {
+      const session = dragRef.current;
+      applyDrag(null);
+      if (session?.targetId && session.position)
+        reorderTask(date, session.sourceId, session.targetId, session.position);
+    };
+    const cancel = () => applyDrag(null);
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", cancel);
+    return () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", cancel);
+    };
+  }, [drag?.sourceId, date, reorderTask]);
 
   /**
    * 指针掠过某一行：算落点。
@@ -426,8 +467,6 @@ function TaskRow({ date, task, depth, drag, selectedId, onSelect, onDetail, sear
     <div data-row>
       <div
         data-search-task-id={task.id}
-        onDragOver={(e) => drag.onOver(e, task.id)}
-        onDrop={drag.onDrop}
         className={cn(
           "group flex min-h-10 items-center gap-2 rounded-lg py-1 pr-1 transition-colors hover:bg-surface-hover",
           // 进行中：左侧一条品牌色标记，扫一眼就能看到当前该做什么
@@ -444,10 +483,8 @@ function TaskRow({ date, task, depth, drag, selectedId, onSelect, onDetail, sear
         {/* 拖动把手：占位常驻、只在悬停时显形 —— 出现和消失都不挪动任何像素 */}
         <button
           type="button"
-          draggable
           onClick={(e) => e.preventDefault()}
-          onDragStart={(e) => drag.onStart(e, task.id)}
-          onDragEnd={drag.onEnd}
+          onPointerDown={(e) => drag.onStart(e, task.id)}
           onKeyDown={(e) => {
             if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
             e.preventDefault();
