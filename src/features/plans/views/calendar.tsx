@@ -175,7 +175,7 @@ function MonthGrid({ date, onPick }: { date: string; onPick: (date: string) => v
   return (
     <div>
       {/* 星期表头 */}
-      <div className="mb-1.5 grid grid-cols-7 gap-1.5">
+      <div className="mb-1.5 grid grid-cols-7">
         {weekdayLabels.map((w) => (
           <div key={w} className="py-1 text-center text-[11px] font-medium text-muted-foreground">
             {w}
@@ -183,8 +183,10 @@ function MonthGrid({ date, onPick }: { date: string; onPick: (date: string) => v
         ))}
       </div>
 
-      {/* 日期网格 */}
-      <div className="grid grid-cols-7 gap-1.5">
+      {/* 日期网格：整月是**一张日历**，不是 42 张卡片 —— 格子之间只留 1px 细线，
+          外框一圈圆角。原来每格自带一圈描边，42 圈描边叠起来比里面的内容还抢眼。
+          今天仍然是实心圆点，选中只换底色（不再叠第二层描边）。 */}
+      <div className="grid grid-cols-7 overflow-hidden rounded-xl border border-border">
         {grid.map(({ date: cell, inMonth }) => {
           const active = days[cell];
           const archived = archiveDays[cell];
@@ -203,11 +205,10 @@ function MonthGrid({ date, onPick }: { date: string; onPick: (date: string) => v
               data-day={cell}
               onClick={() => onPick(cell)}
               className={cn(
-                "flex min-h-24 flex-col items-stretch gap-1 rounded-xl border p-1.5 text-left transition-colors duration-150",
-                inMonth ? "border-border" : "border-transparent opacity-40",
-                isSelected
-                  ? "border-brand bg-brand/10"
-                  : "hover:border-muted-foreground/40 hover:bg-surface-hover",
+                "flex min-h-24 flex-col items-stretch gap-1 border-border p-1.5 text-left transition-colors duration-150",
+                // 只画内部线：每格右下两条，行末去掉右线、末行去掉下线，免得和外框叠成双线
+                "border-b border-r [&:nth-child(7n)]:border-r-0 [&:nth-last-child(-n+7)]:border-b-0",
+                isSelected ? "bg-brand/10" : "hover:bg-surface-hover",
               )}
             >
               {/* 日期 + 农历 + 进度 */}
@@ -217,12 +218,13 @@ function MonthGrid({ date, onPick }: { date: string; onPick: (date: string) => v
                     className={cn(
                       "text-[12px] font-semibold",
                       isToday && "grid size-5 place-items-center rounded-full bg-brand text-white",
-                      !isToday && !inMonth && "text-muted-foreground",
+                      // 非本月只淡文字，不再整格 opacity —— 否则把这一格的细线也一起淡掉，线就不齐了
+                      !isToday && !inMonth && "text-muted-foreground/60",
                     )}
                   >
                     {parseDate(cell).getDate()}
                   </span>
-                  <LunarText date={cell} className="text-[9px]" />
+                  <LunarText date={cell} className={cn("text-[9px]", !inMonth && "opacity-60")} />
                 </span>
                 {progress && progress.total > 0 && (
                   <span
@@ -241,7 +243,7 @@ function MonthGrid({ date, onPick }: { date: string; onPick: (date: string) => v
               </div>
 
               {/* 任务名：单行截断，不换行（格子高度固定，换行会撑破网格） */}
-              <div className="flex min-w-0 flex-col gap-0.5">
+              <div className={cn("flex min-w-0 flex-col gap-0.5", !inMonth && "opacity-60")}>
                 {shown.map((task) => {
                   const status = statusOf(task, cell, now);
                   return (
