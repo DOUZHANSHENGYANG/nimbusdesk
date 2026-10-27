@@ -120,7 +120,8 @@ try {
 
   // 改期：点「明天」把这一条（含子树）挪走，今天的行与详情栏一起消失
   await select("task-1", "对齐导出模板的三处列宽");
-  await panel().getByRole("button", { name: /^日期/ }).click();
+  await rowOf("task-1").locator('button:has-text("⋯")').click();
+  await page.getByRole("button", { name: /^日期/ }).click();
   await page.getByRole("button", { name: "明天", exact: true }).click();
   await panel().waitFor({ state: "hidden" });
   await page.waitForFunction(() => (window.outlineReview.stores.usePlans.getState().days[window.outlineReview.days.tomorrow] ?? []).length === 3);
@@ -129,7 +130,8 @@ try {
 
   // 最后一条也挪走：空状态本身就是入口，点提示词要把光标放回快速添加框
   await select("task-3", "导出后把表头和列宽拿真数据再核一遍");
-  await panel().getByRole("button", { name: /^日期/ }).click();
+  await rowOf("task-3").locator('button:has-text("⋯")').click();
+  await page.getByRole("button", { name: /^日期/ }).click();
   await page.getByRole("button", { name: "明天", exact: true }).click();
   await page.waitForFunction(() => (window.outlineReview.stores.usePlans.getState().days[window.outlineReview.days.today] ?? []).length === 0);
   const addBox = page.getByPlaceholder("输入后回车添加…").first();

@@ -77,8 +77,10 @@ export function OutlineView({ date, searchTaskId, searchToken }: { date: string;
   /* ── 选中：点标题或标题下那行备注 ── */
 
   /** 点同一条的同一处 = 收起；点它的备注行 = 换落点但不收起 */
-  const select = (id: string, focus: Selection["focus"]) =>
+  const select = (id: string, focus: Selection["focus"]) => {
+    setDetailOpen(false); // 点行只开备注栏；详情浮层由 ⋯ 单独开
     setSelected((prev) => (prev?.id === id && prev.focus === focus ? null : { id, focus }));
+  };
 
   /* ── 拖动排序 ── */
 
