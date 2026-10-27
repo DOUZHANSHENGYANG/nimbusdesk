@@ -143,6 +143,7 @@ test('extractHits drops site search widgets', async () => {
   const { extractHits } = await load('../../search/eos/extract.ts', {});
   const html = `
     <a href="https://cse.google.com/cse?cx=1&amp;q=react">使用“Google”搜本站</a>
+    <a href="https://cse.google.com/cse?cx=2&amp;q=react">从 Google 中搜索 »</a>
     <a href="https://site.test/p/1">React 18 的新特性</a>
   `;
   assert.deepEqual(extractHits(html, 'https://site.test/s?q=react', 'react', rule).map(h => h.url), [

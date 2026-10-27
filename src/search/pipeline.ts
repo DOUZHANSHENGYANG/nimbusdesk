@@ -40,11 +40,14 @@ export function aiAvailable(): boolean {
   }
 }
 
+/** 一次搜索最多展示多少条。奇妙搜索源按来源轮转，12 条大致覆盖 6 个站点 */
+export const RESULT_LIMIT = 12;
+
 export async function ask(
   query: string,
   onDelta: (chunk: string) => void,
 ): Promise<AskResult> {
-  const results = await searchWeb(query, 5);
+  const results = await searchWeb(query, RESULT_LIMIT);
   if (!results.length) throw new Error("搜索无结果，换个关键词试试");
 
   await providersReady();

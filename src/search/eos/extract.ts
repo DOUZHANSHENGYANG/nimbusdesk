@@ -19,7 +19,7 @@ export interface EosHit {
 /** 导航/页脚类锚文本，不是结果 */
 const NAV_TEXT = /^(首页|上一页|下一页|上一章|下一章|登录|注册|更多|关于|帮助|隐私|协议|反馈|返回|下载|客户端|APP|广告|搜索|全部|热门|推荐|English|中文|登录\/注册)$/i;
 /** 站内搜索框、外站搜索跳板：看起来像结果，点开还是搜索页 */
-const WIDGET_TEXT = /(搜本站|站内搜索|搜索此站|Google 搜索|Google搜|百度搜索|必应搜索)/i;
+const WIDGET_TEXT = /(搜本站|站内搜索|搜索此站|Google\s*(中)?搜|百度搜索|必应搜索)/i;
 /** 备案/法务/第三方跳板，一律丢弃 */
 const NAV_HOST = /(beian\.gov\.cn|beian\.mps\.gov\.cn|12377\.cn|miit\.gov\.cn|creativecommons\.org|go\.microsoft\.com|privacy\.qq\.com|shared\.ydstatic\.com|support\.qq\.com)/i;
 /** 详情页特征：命中则更像一条结果 */

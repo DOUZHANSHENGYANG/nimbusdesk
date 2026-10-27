@@ -26,10 +26,11 @@ export interface EosSearchOptions {
 }
 
 const DEFAULTS: Required<EosSearchOptions> = {
-  maxResults: 8,
-  budgetMs: 9000,
-  concurrency: 6,
-  perRuleMs: 7000,
+  maxResults: 12,
+  // 12 秒是为了冷启动能跑完两三轮规则；健康度排好序之后，凑够结果会提前返回。
+  budgetMs: 12000,
+  concurrency: 8,
+  perRuleMs: 6000,
 };
 
 export interface EosSearchResult {
@@ -61,15 +62,29 @@ async function runRule(rule: EosRule, keyword: string, perRuleMs: number): Promi
   return hits;
 }
 
-/** 结果去重：同一 URL 只留分数最高的一条 */
+/**
+ * 结果去重。
+ *
+ * 同一 URL 只留分数最高的一条；**同一标题也只留一条** —— 网盘站常用同一个标题
+ * 挂多个分享链接（实测「三体三体(1)」能重复四次），对用户是纯噪音。
+ */
 function dedupe(hits: EosHit[]): EosHit[] {
-  const best = new Map<string, EosHit>();
+  const bestUrl = new Map<string, EosHit>();
   for (const hit of hits) {
     const key = hit.url.replace(/[#?].*$/, "");
-    const prev = best.get(key);
-    if (!prev || hit.score > prev.score) best.set(key, hit);
+    const prev = bestUrl.get(key);
+    if (!prev || hit.score > prev.score) bestUrl.set(key, hit);
   }
-  return [...best.values()];
+
+  const seenTitle = new Set<string>();
+  const out: EosHit[] = [];
+  for (const hit of [...bestUrl.values()].sort((a, b) => b.score - a.score)) {
+    const title = hit.title.replace(/\s+/g, " ").trim().toLowerCase();
+    if (seenTitle.has(title)) continue;
+    seenTitle.add(title);
+    out.push(hit);
+  }
+  return out;
 }
 
 /**
@@ -120,10 +135,10 @@ export async function searchEos(keyword: string, options: EosSearchOptions = {})
   let attempted = 0;
   let stopped = false;
 
-  /** 够用即停：要求结果数量达标，且来自至少 3 个不同的站 */
+  /** 够用即停：结果数量达标，且来自至少 4 个不同的站（来源太少会显得结果很单薄） */
   const enough = () => {
     if (collected.length < maxResults) return false;
-    return new Set(collected.map((h) => h.ruleTitle)).size >= 3;
+    return new Set(collected.map((h) => h.ruleTitle)).size >= 4;
   };
 
   async function worker(): Promise<void> {
