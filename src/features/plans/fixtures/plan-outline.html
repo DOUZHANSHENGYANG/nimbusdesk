@@ -26,11 +26,14 @@ const {i18n,I18nextProvider}=await import('/src/lib/i18n.ts');
 const {usePlans}=await import('/src/features/plans/store.ts');
 const {ModalProvider}=await import('/src/components/shell/modal-host.tsx');
 const {OutlineView}=await import('/src/features/plans/views/outline.tsx');
+const {KanbanView}=await import('/src/features/plans/views/kanban.tsx');
+/** ?view=kanban 挂看板，默认挂大纲 —— 两个视图共用这一份夹具数据 */
+const kanbanView=new URLSearchParams(location.search).get('view')==='kanban';
 window.outlineReview.stores={usePlans};
 window.outlineReview.days={today,tomorrow};
 document.documentElement.classList.add('dark');
 createRoot(document.getElementById('root')).render(
  React.createElement(I18nextProvider,{i18n},
   React.createElement(ModalProvider,null,
-   React.createElement(OutlineView,{date:today}))));
+   React.createElement(kanbanView?KanbanView:OutlineView,{date:today}))));
 </script></body></html>

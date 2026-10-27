@@ -104,6 +104,7 @@ export function KanbanView({ date }: { date: string }) {
               return (
                 <div
                   key={task.id}
+                  data-kanban-card={task.id}
                   onPointerDown={(e) => drag.start(e, task.id)}
                   className={cn(
                     "group cursor-grab touch-none rounded-xl border bg-card p-3 shadow-[var(--pr-shadow-1)] transition-shadow hover:shadow-[var(--pr-shadow-2)] active:cursor-grabbing",
