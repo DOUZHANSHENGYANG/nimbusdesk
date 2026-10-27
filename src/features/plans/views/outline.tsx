@@ -22,10 +22,8 @@ import { useDayTasks, useNow, usePlans } from "@/features/plans/store";
 import { StatusButton } from "@/features/plans/views/shared";
 import { gsap, useGSAP } from "@/lib/gsap";
 import { cn } from "@/lib/utils";
-import { TaskLinkBadge } from "@/features/plans/views/task-link";
 import { toast } from "sonner";
 import { TaskAttachments } from "@/features/plans/attachments";
-import { PlanBinding } from "@/features/projects/plan-binding";
 import { TaskDetail } from "@/features/plans/views/task-detail";
 
 /** 每层缩进（树形引导线间距） */
@@ -319,7 +317,6 @@ function TaskRow({ date, task, depth, drag, selectedId, onSelect, searchTaskId, 
   const { t } = useTranslation();
   const tasks = useDayTasks(date);
   const now = useNow();
-  const updateTask = usePlans((s) => s.updateTask);
   const toggleDone = usePlans((s) => s.toggleDone);
   const addTask = usePlans((s) => s.addTask);
   const addTasks = usePlans((s) => s.addTasks);
@@ -456,13 +453,6 @@ function TaskRow({ date, task, depth, drag, selectedId, onSelect, searchTaskId, 
               <Plus className="size-4" />
             </RowIcon>
 
-            {task.link && (
-              <TaskLinkBadge
-                link={task.link}
-                onRemove={() => updateTask(date, task.id, { link: undefined })}
-              />
-            )}
-
             {range && (
               <span className="ml-auto shrink-0 font-mono text-[11px] leading-5 text-muted-foreground/80">
                 {range}
@@ -482,9 +472,9 @@ function TaskRow({ date, task, depth, drag, selectedId, onSelect, searchTaskId, 
           )}
         </div>
 
-        {/* 附件与项目关联留在行上：它们描述「这一条是什么」，不是动作 */}
+        {/* 附件留在行上：它描述「这一条是什么」，不是动作。项目关联与链接已经只在详情卡片里
+            出现，行上再摆一份就是重复（原来那块「未关联任务 ⌄ + 🔗」） */}
         <div className="flex shrink-0 items-center gap-0.5">
-          <PlanBinding date={date} task={task} />
           <TaskAttachments date={date} task={task} />
         </div>
       </div>
