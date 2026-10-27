@@ -152,14 +152,6 @@ export function DockFloat({ onExpand, onHide, panels }: {
   const [chatOpen, setChatOpen] = useState(false);
   const summary = useMemo(() => summarizeDay(tasks), [tasks]);
   const [clock, setClock] = useState(() => new Date().toTimeString().slice(0, 5));
-  /** 状态轮播（P0 定稿）：胶囊里一次只读一条 —— 0=时间，1=待办。5 秒一换。 */
-  const [slide, setSlide] = useState(0);
-  useEffect(() => {
-    const timer = setInterval(() => setSlide((value) => value + 1), 5000);
-    return () => clearInterval(timer);
-  }, []);
-  /** 收起形态的提醒：出现 5 秒就收（对应灵动岛的配额预警） */
-  const [alertOn, setAlertOn] = useState(false);
   /** 收起形态：胶囊（信息全）/ 指示条（只剩一条线，最大化窗口时最不碍事） */
   const compactStyleSetting = useSettings((state) => state.dockCompactStyle);
   /**
@@ -226,13 +218,6 @@ export function DockFloat({ onExpand, onHide, panels }: {
       if (phaseTimer.current !== null) window.clearTimeout(phaseTimer.current);
     };
   }, []);
-
-  useEffect(() => {
-    if (summary.late <= 0) { setAlertOn(false); return; }
-    setAlertOn(true);
-    const timer = setTimeout(() => setAlertOn(false), 5000);
-    return () => clearTimeout(timer);
-  }, [summary.late]);
 
   const runWindowTransition = useCallback((nextOpen: boolean, height?: number) => {
     const next = windowTransition.current.then(() => onExpand(nextOpen, height));
@@ -373,33 +358,19 @@ export function DockFloat({ onExpand, onHide, panels }: {
           <span className="df-sep" aria-hidden="true" />
           {/* 状态轮播（P0 定稿）：一次只读一条 —— 时间 / 待办，小圆点提示还有下一条。
               胶囊不再摆功能图标：想做什么就悬停或点箭头展开，展开的卡片里才有入口。 */}
-          <span className="df-carousel" aria-live="polite">
-            {slide % 2 === 0 ? (
-              <span className="df-slide"><span className="df-clock">{clock}</span></span>
-            ) : (
-              <span className="df-slide">
-                <span className="df-ring" title={t("dockFloat.ringTitle", { done: summary.done, total: summary.todo + summary.done })}>
-                  <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
-                    <circle cx="8" cy="8" r="6" className="df-ring-bg" />
-                    <circle cx="8" cy="8" r="6" className="df-ring-fg"
-                      strokeDasharray={`${2 * Math.PI * 6 * (summary.todo + summary.done ? summary.done / (summary.todo + summary.done) : 0)} ${2 * Math.PI * 6}`}
-                      transform="rotate(-90 8 8)" />
-                  </svg>
-                </span>
-                <span className="df-stat">
-                  <b>{summary.todo}</b> {t("dockFloat.todoUnit")}
-                  {summary.late > 0 && <> · <b className="is-warn">{summary.late}</b> {t("dockFloat.lateUnit")}</>}
-                </span>
-              </span>
-            )}
-            <span className="df-dots" aria-hidden="true">
-              <i className={slide % 2 === 0 ? "on" : ""} />
-              <i className={slide % 2 === 1 ? "on" : ""} />
-            </span>
+          <span className="df-ring" title={t("dockFloat.ringTitle", { done: summary.done, total: summary.todo + summary.done })}>
+            <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
+              <circle cx="8" cy="8" r="6" className="df-ring-bg" />
+              <circle cx="8" cy="8" r="6" className="df-ring-fg"
+                strokeDasharray={`${2 * Math.PI * 6 * (summary.todo + summary.done ? summary.done / (summary.todo + summary.done) : 0)} ${2 * Math.PI * 6}`}
+                transform="rotate(-90 8 8)" />
+            </svg>
           </span>
-          {alertOn && summary.late > 0 && (
-            <span className="df-alert" role="status">{t("dockFloat.lateAlert", { count: summary.late })}</span>
-          )}
+          <span className="df-stat">
+            <b>{summary.todo}</b> {t("dockFloat.todoUnit")}
+            {summary.late > 0 && <> · <b className="is-warn">{summary.late}</b> {t("dockFloat.lateUnit")}</>}
+          </span>
+          <span className="df-clock">{clock}</span>
           <button type="button" className="df-expand"
             title={open ? t("dockFloat.collapse") : t("dockFloat.expand")}
             aria-label={open ? t("dockFloat.collapse") : t("dockFloat.expand")}

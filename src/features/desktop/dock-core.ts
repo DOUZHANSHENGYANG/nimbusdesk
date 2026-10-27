@@ -74,7 +74,7 @@ export const DOCK_CAPSULE_H = 44;
 export const DOCK_CARD_W = 660;
 export const DOCK_CARD_H = 591;
 /** 卡片高度可拖范围：太矮放不下六页，太高会盖住整屏 */
-export const DOCK_CARD_MIN_H = 300;
+export const DOCK_CARD_MIN_H = 240;
 export const DOCK_CARD_MAX_H = 900;
 
 /** 展开方向：居中向两边撑开，还是钉住左缘向右拉出来。 */
