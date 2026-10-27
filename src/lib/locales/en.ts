@@ -268,7 +268,6 @@ export const en: AppMessages = {
     title: "Plans",
     addPlaceholder: "Type and press Enter…",
     addChild: "Add subtask",
-    moreActions: "More actions",
     closeDetail: "Close details",
     dragTask: "Drag to reorder siblings",
     editTip: "Click title to edit",

@@ -39,7 +39,8 @@ export function StatusButton({
         className={cn(
           "grid size-[18px] place-items-center rounded-full border-2 transition-colors duration-200",
           done
-            ? "border-brand bg-brand text-white"
+            ? // 完成态用中性灰：一整组完成项连成一片时，品牌蓝会把它们喊成「还要注意」
+              "border-muted-foreground/50 bg-muted-foreground/50 text-background"
             : status === "doing"
               ? "border-brand text-brand"
               : "border-muted-foreground/40 text-transparent hover:border-brand hover:text-brand/40",

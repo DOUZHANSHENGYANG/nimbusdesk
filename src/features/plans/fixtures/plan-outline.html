@@ -18,7 +18,7 @@ const {todayStr,addDays}=await import('/src/features/plans/types.ts');
 const today=todayStr(),tomorrow=addDays(today,1);
 fixtures.plans={version:4,state:{days:{[today]:[
  {id:'task-1',parentId:null,title:'对齐导出模板的两处列宽',note:'导出时右侧会溢出一列',done:false,createdAt:1,updatedAt:1},
- {id:'task-2',parentId:'task-1',title:'先量一遍现有列宽',done:false,createdAt:1,updatedAt:1},
+ {id:'task-2',parentId:'task-1',title:'先量一遍现有列宽',done:true,createdAt:1,updatedAt:1},
  {id:'task-3',parentId:null,title:'导出后把表头和列宽拿真数据再核一遍',done:false,createdAt:2,updatedAt:2}
 ]}}};
 await import('/src/index.css');

@@ -163,10 +163,13 @@ function shiftMonth(anchor: { y: number; m: number }, delta: number) {
 export function TaskDetail({
   date,
   task,
+  focus,
   onClose,
 }: {
   date: string;
   task: PlanTask;
+  /** 进来先看哪儿：点标题进来放标题，点标题下那行备注进来放备注 */
+  focus: "title" | "note";
   /** 详情是列表右边的一栏，不是一个浮层 —— 关掉它就是把这一栏收起来 */
   onClose: () => void;
 }) {
@@ -182,15 +185,19 @@ export function TaskDetail({
   const [note, setNote] = useState(task.note ?? "");
   const [child, setChild] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
+  const noteRef = useRef<HTMLTextAreaElement>(null);
   /** commit 要在关闭回调里读最新草稿；回调本身得稳定，所以草稿走 ref */
   const draft = useRef({ title, note });
   draft.current = { title, note };
   /** 删除之后不该再回写草稿：那时行已经没了，写进去只会多一条撤销记录 */
   const gone = useRef(false);
-  /** 换一条任务时把光标放到标题上：换之前「点标题就能改」的肌肉记忆不用重新学 */
+  /** 换一条任务、或换落点（标题 ↔ 备注）时把光标放过去；光标停在末尾，点开就是为了接着写 */
   useEffect(() => {
-    inputRef.current?.focus({ preventScroll: true });
-  }, [task.id]);
+    const target = focus === "note" ? noteRef.current : inputRef.current;
+    if (!target) return;
+    target.focus({ preventScroll: true });
+    target.setSelectionRange(target.value.length, target.value.length);
+  }, [task.id, focus]);
 
   const commit = () => {
     if (gone.current) return;
@@ -294,6 +301,7 @@ export function TaskDetail({
           <Field label={t("plans.noteLabel")}>
             {/* 文本域而不是单行输入：备注天然会写成几行，默认一行、往下自己拉 */}
             <textarea
+              ref={noteRef}
               rows={1}
               value={note}
               onChange={(e) => setNote(e.target.value)}

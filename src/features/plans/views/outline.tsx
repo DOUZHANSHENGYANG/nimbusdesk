@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronRight, GripVertical, MoreHorizontal, Plus } from "lucide-react";
+import { ChevronRight, GripVertical, Plus } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import {
   childrenOf,
@@ -32,6 +32,14 @@ import { TaskDetail } from "@/features/plans/views/task-detail";
 const INDENT = 20;
 
 /**
+ * 选中的是哪一条、进来先看哪儿。
+ *
+ * 点标题和点标题下那行备注都开右栏，但落点不同：点备注就是为了看/续写备注，
+ * 光标还塞回标题里就白点了。
+ */
+type Selection = { id: string; focus: "title" | "note" };
+
+/**
  * 拖动排序的状态与回调，由 OutlineView 持有、逐层传给任务行。
  *
  * 为什么状态放在树的根：一次拖动要同时改两行（拖起来的那行变淡、指针下那行露出落点线），
@@ -59,12 +67,18 @@ export function OutlineView({ date, searchTaskId, searchToken }: { date: string;
   const inputRef = useRef<HTMLInputElement>(null);
   const [input, setInput] = useState("");
   const reorderTask = usePlans((s) => s.reorderTask);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selected, setSelected] = useState<Selection | null>(null);
   /** 选中项要跟当天任务对得上：被删掉、被挪到别的日子之后，这一栏自己收起来 */
-  const selected = selectedId ? tasks.find((task) => task.id === selectedId) : undefined;
+  const selectedTask = selected ? tasks.find((task) => task.id === selected.id) : undefined;
   useEffect(() => {
-    if (selectedId && !selected) setSelectedId(null);
-  }, [selectedId, selected]);
+    if (selected && !selectedTask) setSelected(null);
+  }, [selected, selectedTask]);
+
+  /* ── 选中：点标题或标题下那行备注 ── */
+
+  /** 点同一条的同一处 = 收起；点它的备注行 = 换落点但不收起 */
+  const select = (id: string, focus: Selection["focus"]) =>
+    setSelected((prev) => (prev?.id === id && prev.focus === focus ? null : { id, focus }));
 
   /* ── 拖动排序 ── */
 
@@ -204,24 +218,29 @@ export function OutlineView({ date, searchTaskId, searchToken }: { date: string;
             list={roots}
             dividerIndent={4}
             label={t("plans.doneGroup")}
-            render={(task) => <TaskRow date={date} task={task} depth={0} drag={rowDrag} selectedId={selectedId} onSelect={setSelectedId} searchTaskId={searchTaskId} revealIds={revealIds} searchToken={searchToken} />}
+            render={(task) => <TaskRow date={date} task={task} depth={0} drag={rowDrag} selectedId={selected?.id ?? null} onSelect={select} searchTaskId={searchTaskId} revealIds={revealIds} searchToken={searchToken} />}
           />
         )}
       </div>
 
-      {selected && (
+      {selectedTask && (
         <aside
           aria-label={t("plans.detail")}
           className="w-80 shrink-0 rounded-xl border border-border bg-card/40"
         >
-          <TaskDetail date={date} task={selected} onClose={() => setSelectedId(null)} />
+          <TaskDetail date={date} task={selectedTask} focus={selected!.focus} onClose={() => setSelected(null)} />
         </aside>
       )}
     </div>
   );
 }
 
-/** 渲染一行列表（根级或子级），已完成后插入分组分隔线 */
+/**
+ * 渲染一行列表（根级或子级），完成项前插一个分组头。
+ *
+ * 头是可折叠的：一整组完成项是「回头看一眼」用的，平时该让位给还没做的；
+ * 计数跟头在一起，收起后也知道自己完成了几条。
+ */
 function RowsWithDoneDivider({
   list,
   render,
@@ -233,22 +252,29 @@ function RowsWithDoneDivider({
   dividerIndent: number;
   label: string;
 }) {
+  const [doneOpen, setDoneOpen] = useState(true);
   const activeCount = list.filter((t) => !t.done).length;
+  const doneCount = list.length - activeCount;
   return (
     <>
       {list.map((task, idx) => (
         <Fragment key={task.id}>
-          {idx === activeCount && activeCount > 0 && activeCount < list.length && (
-            <div
-              className="flex items-center gap-2 py-1.5 text-[10px] font-semibold tracking-wide text-muted-foreground/70"
-              style={{ paddingLeft: dividerIndent }}
+          {doneCount > 0 && idx === activeCount && (
+            <button
+              type="button"
+              onClick={() => setDoneOpen(!doneOpen)}
+              aria-expanded={doneOpen}
+              className="flex w-fit items-center gap-1 rounded-lg py-1.5 pr-2 text-[11px] font-semibold text-muted-foreground/80 transition-colors hover:bg-surface-hover hover:text-foreground"
+              style={{ paddingLeft: dividerIndent + 4 }}
             >
-              <span className="h-px flex-1 bg-border" />
+              <ChevronRight
+                className={cn("size-3.5 transition-transform duration-200", doneOpen && "rotate-90")}
+              />
               {label}
-              <span className="h-px flex-1 bg-border" />
-            </div>
+              <span className="font-medium tabular-nums text-muted-foreground/60">{doneCount}</span>
+            </button>
           )}
-          {render(task)}
+          {(idx < activeCount || doneOpen) && render(task)}
         </Fragment>
       ))}
     </>
@@ -289,7 +315,7 @@ function RowIcon({ title, onClick, children }: { title: string; onClick: () => v
  * 也不再需要在行里判断「点到行外算不算保存」。拖动把手、加子任务、更多
  * 挤在标题后面显形：动作都在一块，不用去行两端各找一遍。
  */
-function TaskRow({ date, task, depth, drag, selectedId, onSelect, searchTaskId, revealIds, searchToken }: { date: string; task: PlanTask; depth: number; drag: RowDrag; selectedId: string | null; onSelect: (id: string | null) => void; searchTaskId?: string; revealIds: Set<string>; searchToken?: string }) {
+function TaskRow({ date, task, depth, drag, selectedId, onSelect, searchTaskId, revealIds, searchToken }: { date: string; task: PlanTask; depth: number; drag: RowDrag; selectedId: string | null; onSelect: (id: string, focus: Selection["focus"]) => void; searchTaskId?: string; revealIds: Set<string>; searchToken?: string }) {
   const { t } = useTranslation();
   const tasks = useDayTasks(date);
   const now = useNow();
@@ -308,7 +334,7 @@ function TaskRow({ date, task, depth, drag, selectedId, onSelect, searchTaskId, 
   useEffect(() => { if (revealIds.has(task.id)) setOpen(true); }, [revealIds, task.id, searchToken]);
 
   /** 再点一次就收起详情栏：选中是一个开关，不用专门去找关闭按钮 */
-  const select = () => onSelect(selectedId === task.id ? null : task.id);
+  const selectTitle = () => onSelect(task.id, "title");
 
   const addChild = () => {
     const v = childInput.trim();
@@ -398,7 +424,7 @@ function TaskRow({ date, task, depth, drag, selectedId, onSelect, searchTaskId, 
           <div className="flex min-w-0 items-start gap-1.5">
             <button
               type="button"
-              onClick={select}
+              onClick={selectTitle}
               title={t("plans.openDetail")}
               className="min-w-0 text-left text-[13px] leading-5"
             >
@@ -425,12 +451,9 @@ function TaskRow({ date, task, depth, drag, selectedId, onSelect, searchTaskId, 
               )}
             </button>
 
-            {/* 动作块：加子任务 + 更多，紧挨标题、悬停一起显形 —— 散在行两端谁都要先找一遍 */}
+            {/* 动作块：只剩加子任务，紧挨标题、悬停显形 —— 详情由标题本身开，不需要第三个按钮 */}
             <RowIcon title={t("plans.addChild")} onClick={() => setAdding(!adding)}>
               <Plus className="size-4" />
-            </RowIcon>
-            <RowIcon title={t("plans.moreActions")} onClick={select}>
-              <MoreHorizontal className="size-4" />
             </RowIcon>
 
             {task.link && (
@@ -447,14 +470,15 @@ function TaskRow({ date, task, depth, drag, selectedId, onSelect, searchTaskId, 
             )}
           </div>
 
-          {/* 备注：独占一行 */}
+          {/* 备注：独占一行，点它直接进右栏的备注 —— 这一行本来就是「看备注」的入口 */}
           {task.note && (
-            <span
-              className="min-w-0 truncate text-[11px] text-muted-foreground/70"
-              title={task.note}
+            <button
+              type="button"
+              onClick={() => onSelect(task.id, "note")}
+              className="min-w-0 truncate text-left text-[11px] text-muted-foreground/70 transition-colors hover:text-foreground"
             >
               {task.note}
-            </span>
+            </button>
           )}
         </div>
 

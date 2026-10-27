@@ -38,11 +38,12 @@ try {
   const tomorrow = await page.evaluate(() => window.outlineReview.days.tomorrow);
   await page.waitForTimeout(400); // 让行入场动画跑完，后面才量得到稳定几何
 
-  // 详情栏：点行上的 ⋯ 出现，行的**纵向**几何不变（旧实现是就地展开，行会变高）
+  // 详情栏：点标题出现，行的**纵向**几何不变（旧实现是就地展开，行会变高）
   const before = await verticalBox("task-1");
-  await rowOf("task-1").locator('button[title="更多操作"]').click();
+  await titleButton("task-1").click();
   await panel().waitFor();
   assert.deepEqual(await verticalBox("task-1"), before, "Opening the detail column must not move or resize the row");
+  assert.equal(await rowOf("task-1").locator('button[title="更多操作"]').count(), 0, "The ⋯ entry must be gone — the title itself opens the detail");
   assert.equal(await page.locator('[data-slot="popover-content"]').count(), 0, "Detail must be a column, not a floating layer");
 
   // 详情栏是唯一的编辑场所：字段名就是词表里的标签，附件是内联列表
@@ -52,6 +53,13 @@ try {
   assert.equal(await panel().getByText("附件", { exact: true }).count(), 1);
   assert.equal(await panel().getByRole("textbox", { name: "添加子任务" }).count(), 1, "Panel keeps its own subtask field");
   assert.equal(await panel().getByRole("textbox", { name: "备注" }).count(), 1, "Note must be a textarea");
+
+  // 标题下面那行备注也是入口：点它进来，光标直接落在备注里（点标题则落在标题）
+  await page.getByRole("button", { name: "导出时右侧会溢出一列" }).click();
+  const noteBox = panel().getByRole("textbox", { name: "备注" });
+  assert.equal(await noteBox.evaluate(node => node === document.activeElement), true, "Clicking the note line must put the caret in the note");
+  await titleButton("task-1").click();
+  assert.equal(await panel().getByRole("textbox", { name: "标题" }).evaluate(node => node === document.activeElement), true, "Clicking the title must put the caret in the title");
 
   // 标题：回车落地但不收栏（详情栏是常驻的，收它是另一个动作）
   await panel().getByRole("textbox", { name: "标题" }).fill("对齐导出模板的三处列宽");
@@ -79,7 +87,19 @@ try {
   await page.waitForFunction(() => window.outlineReview.stores.usePlans.getState().days[window.outlineReview.days.today][0].id === "task-3");
   assert.deepEqual(await idsOf(today), ["task-3", "task-1", "task-2", childId], "Drag must move the dragged row only");
   assert.deepEqual(await page.locator("[data-search-task-id]").evaluateAll(nodes => nodes.map(node => node.dataset.searchTaskId)),
-    ["task-3", "task-1", "task-2", childId], "DOM order must match the stored order");
+    ["task-3", "task-1", childId, "task-2"], "DOM order must match the display order (done sinks)");
+
+  // 完成分组：头带计数、可折叠；收起只是不渲染，数据一条不少
+  const doneHeader = page.getByRole("button", { name: /^已完成/ });
+  await doneHeader.waitFor();
+  assert.equal(await doneHeader.getAttribute("aria-expanded"), "true", "Done group starts expanded");
+  await rowOf("task-2").waitFor();
+  await doneHeader.click();
+  assert.equal(await doneHeader.getAttribute("aria-expanded"), "false");
+  await rowOf("task-2").waitFor({ state: "hidden" });
+  assert.equal((await dayTasks(today)).some(task => task.id === "task-2"), true, "Collapsing must not drop the task");
+  await doneHeader.click();
+  await rowOf("task-2").waitFor();
 
   // 键盘路径：把手聚焦后 ↑↓ 换位（拖动不该是唯一的换位方式）。
   // 落点在整个子树之后：换位以「一条 + 它的子任务」为单位，插不进别人家子树中间

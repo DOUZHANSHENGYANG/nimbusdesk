@@ -265,7 +265,6 @@ export const zh = {
     title: "计划管理",
     addPlaceholder: "输入后回车添加…",
     addChild: "添加子任务",
-    moreActions: "更多操作",
     closeDetail: "关闭详情",
     dragTask: "拖动排序（同一层级）",
     editTip: "点击标题编辑",
