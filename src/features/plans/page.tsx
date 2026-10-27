@@ -296,6 +296,35 @@ export function PlansPage() {
             </div>
           )}
 
+          {/* ── 视图切换：滑动 pill（与条目属性选择器同一动效语言）──
+              放在同一行里：视图是这一页的身份，不是第二排工具栏 */}
+          <div className="flex w-fit items-center gap-0.5 rounded-xl border border-border bg-muted/40 p-1">
+            {VIEW_KEYS.map((key) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => switchView(key)}
+                className="relative rounded-lg px-3.5 py-1.5 text-[12px] font-medium"
+              >
+                {view === key && (
+                  <motion.span
+                    layoutId="plans-view-pill"
+                    className="absolute inset-0 rounded-lg bg-card shadow-[var(--pr-shadow-1)] ring-1 ring-border"
+                    transition={{ type: "spring", stiffness: 550, damping: 42 }}
+                  />
+                )}
+                <span
+                  className={cn(
+                    "relative z-10",
+                    view === key ? "text-foreground" : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  {t(`plans.views.${key}`)}
+                </span>
+              </button>
+            ))}
+          </div>
+
           <div className="flex-1" />
 
           {/* 撤销 / 重做：无历史时禁用而不是隐藏 —— 按钮位置固定，肌肉记忆才管用 */}
@@ -359,34 +388,6 @@ export function PlansPage() {
               {t("plans.archiveDay")}
             </button>
           )}
-        </div>
-
-        {/* ── 视图切换：滑动 pill（与条目属性选择器同一动效语言） ── */}
-        <div className="flex w-fit items-center gap-0.5 rounded-xl border border-border bg-muted/40 p-1">
-          {VIEW_KEYS.map((key) => (
-            <button
-              key={key}
-              type="button"
-              onClick={() => switchView(key)}
-              className="relative rounded-lg px-3.5 py-1.5 text-[12px] font-medium"
-            >
-              {view === key && (
-                <motion.span
-                  layoutId="plans-view-pill"
-                  className="absolute inset-0 rounded-lg bg-card shadow-[var(--pr-shadow-1)] ring-1 ring-border"
-                  transition={{ type: "spring", stiffness: 550, damping: 42 }}
-                />
-              )}
-              <span
-                className={cn(
-                  "relative z-10",
-                  view === key ? "text-foreground" : "text-muted-foreground hover:text-foreground",
-                )}
-              >
-                {t(`plans.views.${key}`)}
-              </span>
-            </button>
-          ))}
         </div>
 
         {/* ── 视图主体 ── */}

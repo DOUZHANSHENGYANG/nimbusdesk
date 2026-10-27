@@ -114,9 +114,11 @@ export function TaskLinkBadge({
 export function TaskLinkPicker({
   link,
   onChange,
+  className,
 }: {
   link?: TaskLink;
   onChange: (link: TaskLink | undefined) => void;
+  className?: string;
 }) {
   const { t } = useTranslation();
   const { prompt } = useModal();
@@ -169,6 +171,7 @@ export function TaskLinkPicker({
             link
               ? "text-brand hover:bg-brand/10"
               : "text-muted-foreground hover:bg-muted hover:text-foreground",
+            className,
           )}
         >
           <Link2 className="size-3.5" />
