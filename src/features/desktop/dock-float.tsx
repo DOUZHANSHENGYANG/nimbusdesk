@@ -277,21 +277,13 @@ export function DockFloat({ onExpand, onHide, panels }: {
   }, [runWindowTransition, setSurfacePhase]);
 
   /**
-   * 悬停展开、移开收起、Esc 收起 —— 这是「灵动岛」的手感来源。
-   *
-   * 两个细节：移入有 120ms 迟滞（路过不算），移出有 500ms 缓冲（去点面板
-   * 的路上不会自己关）；焦点还在卡片里（比如正在搜索框打字）时不移出收起。
+   * 收起：移开 500ms 后自动收（去点面板的路上不会自己关）；Esc 同效。
+   * 展开只由**点击**触发（chevron / 胶囊本体）—— 悬停展开已按用户要求移除。
    */
   const hoverTimer = useRef<number | null>(null);
-  /** 刚被显式收起时短暂忽略悬停：否则点「收起」那一刻指针还在卡片上，会立刻又展开 */
   const suppressHoverUntil = useRef(0);
   const clearHoverTimer = () => {
     if (hoverTimer.current !== null) { window.clearTimeout(hoverTimer.current); hoverTimer.current = null; }
-  };
-  const hoverExpand = () => {
-    if (Date.now() < suppressHoverUntil.current) return;
-    clearHoverTimer();
-    hoverTimer.current = window.setTimeout(() => setExpanded(true), 120);
   };
   const hoverCollapse = () => {
     clearHoverTimer();
@@ -318,7 +310,7 @@ export function DockFloat({ onExpand, onHide, panels }: {
 
   return (
     <div className="df-root" data-open={open} data-phase={phase} data-compact-style={compactStyle}
-      onPointerEnter={hoverExpand} onPointerLeave={hoverCollapse}>
+      onPointerLeave={hoverCollapse}>
       {compactStyle === "line" ? (
         <div className="df-line" data-open={open}
           onPointerDown={(event) => { if (event.button === 0) setExpanded(true); }}>
@@ -326,6 +318,7 @@ export function DockFloat({ onExpand, onHide, panels }: {
         </div>
       ) : (
       <div className="df-capsule" data-open={open}
+        onClick={() => { if (!open) setExpanded(true); }}
           data-drag
           onPointerDown={(event) => {
             // 空白处/文字上按住就拖走；图标按钮照常点击。
@@ -374,7 +367,7 @@ export function DockFloat({ onExpand, onHide, panels }: {
           <button type="button" className="df-expand"
             title={open ? t("dockFloat.collapse") : t("dockFloat.expand")}
             aria-label={open ? t("dockFloat.collapse") : t("dockFloat.expand")}
-            onClick={() => setExpanded(!open)}>
+            onClick={(event) => { event.stopPropagation(); setExpanded(!open); }}>
             <ChevronDown className={open ? "df-icon is-flip" : "df-icon"} aria-hidden="true" />
           </button>
         </div>
