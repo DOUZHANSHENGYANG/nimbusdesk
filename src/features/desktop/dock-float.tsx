@@ -255,7 +255,7 @@ export function DockFloat({ onExpand, onHide, panels }: {
       setMounted(true);
       setSurfacePhase("resizing");
       // 活动页内容矮（四张卡一行）：展开高度按页走
-      void runWindowTransition(true, tabRef.current === "home" ? 300 : undefined).then(() => {
+      void runWindowTransition(true, tabRef.current === "home" ? 252 : undefined).then(() => {
         if (generation !== transitionGeneration.current) return;
         // 等 WebView2 收到 WM_SIZE 再开始 clip，避免窗口还没到位、内容先展开。
         window.setTimeout(() => {
@@ -326,7 +326,7 @@ export function DockFloat({ onExpand, onHide, panels }: {
   // 展开中切页：活动页矮（四张卡一行），窗口高度平滑跟过去；其它页回默认卡高
   useEffect(() => {
     if (phase !== "expanded" && phase !== "expanding") return;
-    void onExpand(true, tab === "home" ? 300 : undefined).catch(report);
+    void onExpand(true, tab === "home" ? 252 : undefined).catch(report);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab]);
 
