@@ -11,7 +11,7 @@ const rowOf = id => page.locator(`[data-search-task-id="${id}"]`);
 const titleButton = id => rowOf(id).locator('button[title="打开任务详情"]');
 const grip = id => rowOf(id).locator('button[title="拖动排序（同一层级）"]');
 /** 详情是列表右边的一栏（aside → role=complementary），不是浮层 */
-const panel = () => page.getByRole("complementary", { name: "任务详情" });
+const panel = () => page.locator("[data-note-title]");
 const dayTasks = date => page.evaluate(date => (window.outlineReview.stores.usePlans.getState().days[date] ?? [])
   .map(task => ({ id: task.id, title: task.title, parentId: task.parentId })), date);
 const idsOf = date => dayTasks(date).then(tasks => tasks.map(task => task.id));
@@ -71,7 +71,7 @@ try {
   await page.keyboard.press("Enter");
   assert.equal((await dayTasks(today)).find(task => task.id === "task-1").title, "对齐导出模板的三处列宽");
   assert.equal((await titleButton("task-1").innerText()).includes("三处列宽"), true, "Row must show the saved title");
-  assert.equal(await panel().isVisible(), true, "Enter must keep the detail column open");
+  assert.equal(await page.getByRole("textbox", { name: "标题" }).count(), 1, "Enter must keep the detail card open");
   await page.keyboard.press("Escape"); // 关掉 ⋯ 浮层：背板会挡住后面的行点击
 
   // 选中是开关：再点标题就收起，点回来又有
