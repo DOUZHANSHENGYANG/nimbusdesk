@@ -23,7 +23,7 @@ const verticalBox = async id => {
 };
 /** 详情栏当前显示的是不是这一条（按标题输入框的值判断，不靠「点了几次」猜开关状态） */
 const detailShows = async title =>
-  (await panel().isVisible()) && (await panel().getByRole("textbox", { name: "标题" }).inputValue()) === title;
+  (await panel().isVisible()) && (await panel().getAttribute("data-note-title")) === title;
 /** 让详情栏停在某一条上：已经是它就不动，否则点标题选中它 */
 const select = async (id, title) => {
   if (await detailShows(title)) return;
@@ -72,6 +72,7 @@ try {
   assert.equal((await dayTasks(today)).find(task => task.id === "task-1").title, "对齐导出模板的三处列宽");
   assert.equal((await titleButton("task-1").innerText()).includes("三处列宽"), true, "Row must show the saved title");
   assert.equal(await panel().isVisible(), true, "Enter must keep the detail column open");
+  await page.keyboard.press("Escape"); // 关掉 ⋯ 浮层：背板会挡住后面的行点击
 
   // 选中是开关：再点标题就收起，点回来又有
   await titleButton("task-1").click();

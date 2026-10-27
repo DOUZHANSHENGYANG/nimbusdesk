@@ -350,7 +350,7 @@ function NoteColumn({ date, task, focus, onClose }: { date: string; task: PlanTa
     if (next !== (task.note ?? "")) usePlans.getState().updateTask(date, task.id, { note: next || undefined });
   };
   return (
-    <aside className="flex h-full min-h-0 w-72 shrink-0 flex-col">
+    <aside aria-label="任务详情" data-note-title={task.title} className="flex h-full min-h-0 w-72 shrink-0 flex-col">
       <div className="flex items-center gap-2 px-3 pb-1 pt-2">
         <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-muted-foreground">{task.title}</span>
         <button
