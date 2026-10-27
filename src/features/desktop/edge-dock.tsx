@@ -156,7 +156,7 @@ export function useEdgeDock(options: DockOptions) {
   // Retain subscriptions even for the ordinary fence form, where restore means show/recall.
   const methods = useRef({ undock, dismiss, place }); methods.current = { undock, dismiss, place };
   useEffect(() => onStorageSynced(key => {
-    if (!["edge-workspace", "todo-papers", "fences", "files"].includes(key) || !readyRef.current || !latest.current.active || !controller.current) return;
+    if (!["edge-workspace", "fences", "files"].includes(key) || !readyRef.current || !latest.current.active || !controller.current) return;
     if (desktopEntries().find(entry => entry.id === label)?.form !== "capsule") return;
     // Hidden WebView2 windows may defer React's post-paint effects indefinitely.
     // Storage listeners run independently; native show must wake the view first.
@@ -392,7 +392,7 @@ export function EdgeDockFrame({ dock, label, summary, en = false, children, lock
     </button>
     <div aria-hidden={!dock.opened} inert={!dock.opened} className="absolute inset-y-0 overflow-hidden rounded-xl border border-border bg-background text-foreground shadow-xl motion-safe:transition-opacity motion-safe:duration-150"
       style={{ top: top ? dock.tabHeight : 0, left: !top && left ? dock.tabWidth : 0, right: !top && !left ? dock.tabWidth : 0, visibility: dock.opened ? "visible" : "hidden", opacity: dock.opened ? 1 : 0 }}
-      onDoubleClick={event => { if (!(event.target as HTMLElement).closest("button,input,textarea,select,a,[role],.daily-paper-row,[data-item],[data-item-id]")) void dock.undock(); }}>{children}
+      onDoubleClick={event => { if (!(event.target as HTMLElement).closest("button,input,textarea,select,a,[role],[data-item],[data-item-id]")) void dock.undock(); }}>{children}
       {dock.canResize && <button type="button" aria-label={en ? "Resize preview" : "调整预览大小"} title={en ? "Drag to resize; arrow keys adjust by 10 px (Shift: 40)" : "拖动调整大小；方向键微调 10 像素，Shift 加速"}
         onPointerDown={dock.startResize} onKeyDown={event => {
           if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown"].includes(event.key)) return;

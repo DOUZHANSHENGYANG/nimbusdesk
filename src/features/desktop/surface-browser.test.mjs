@@ -37,7 +37,7 @@ try {
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
   const base = `${process.env.SEARCH_REVIEW_ORIGIN || 'http://127.0.0.1:17809'}/src/features/desktop/fixtures/edge.html`;
-  for (const [query, label] of [['?docked', '展开10月18日'], ['?fence&docked', '展开Owned fence']]) {
+  for (const [query, label] of [['?docked', '展开Owned fence']]) {
     await page.goto(base + query);
     const tab = page.getByRole('button', { name: label, exact: true });
     await tab.waitFor();
@@ -71,7 +71,7 @@ try {
   assert.equal(await surfaceAlpha(), 255, 'queue pressed state preserves opaque material');
   await page.mouse.up();
   assert.deepEqual(errors, []);
-  console.log('PASS paper/fence/queue transparent corners and both themes; opaque queue hover, focus and pressed states');
+  console.log('PASS fence/queue transparent corners and both themes; opaque queue hover, focus and pressed states');
 } finally {
   await browser.close();
   await server?.close();

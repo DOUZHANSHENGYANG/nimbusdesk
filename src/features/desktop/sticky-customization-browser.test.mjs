@@ -9,7 +9,7 @@ try {
  const base='http://127.0.0.1:17808/src/features/desktop/fixtures/edge.html';
  const syncViewport=async()=>{await page.waitForTimeout(80);const size=await page.evaluate(()=>edgeReview.size);await page.setViewportSize(size);};
  await page.goto(base+'?docked');
- const tab=page.getByRole('button',{name:'展开10月18日',exact:true});await tab.waitFor();
+ const tab=page.getByRole('button',{name:'展开Owned fence',exact:true});await tab.waitFor();
  await page.waitForFunction(()=>edgeReview.size.width===112);
  await tab.hover();await page.waitForTimeout(200);
  const solid=await tab.evaluate(e=>getComputedStyle(e).backgroundColor);
@@ -28,10 +28,9 @@ try {
  await page.waitForFunction(()=>edgeReview.size.width===644&&edgeReview.size.height===520);
  assert.equal(await tab.evaluate(e=>getComputedStyle(e).backgroundColor),'rgb(245, 215, 110)');
  await page.evaluate(async()=>{const {flushAllStorage}=await import('/src/lib/storage.ts');await flushAllStorage();});
- const stored=await page.evaluate(()=>edgeReview.fixtures['todo-papers'].state.papers['2099-10-18']);
+ const stored=await page.evaluate(()=>edgeReview.fixtures.fences.state.fences.fixture);
  assert.deepEqual([stored.w,stored.h],[300,380],'preview settings never overwrite ordinary geometry');
  assert.deepEqual([stored.tabWidth,stored.tabHeight,stored.previewWidth,stored.previewHeight],[184,72,460,520]);
- assert.equal(await page.evaluate(()=>edgeReview.fixtures.fences.state.fences.fixture.stickyColor),undefined);
  await page.setViewportSize({width:644,height:520});
  const grip=page.getByRole('button',{name:'调整预览大小',exact:true});await grip.focus();await page.keyboard.press('ArrowRight');await page.keyboard.press('ArrowDown');
  await page.waitForFunction(()=>edgeReview.size.width===654&&edgeReview.size.height===530);
@@ -39,7 +38,7 @@ try {
  await page.waitForFunction(()=>edgeReview.size.width===184&&edgeReview.size.height===72);
  console.log('PASS per-window palette, independent sticky/preview dimensions, keyboard resize and fold');
  await page.goto(base+'?docked&bottom');
- await page.getByRole('button',{name:'展开10月18日',exact:true}).click();await syncViewport();
+ await tab.click();await syncViewport();
  const bottomGrip=page.getByRole('button',{name:'调整预览大小',exact:true});
  let box=await bottomGrip.boundingBox();
  await page.mouse.move(box.x+box.width/2,box.y+box.height/2);await page.mouse.down();

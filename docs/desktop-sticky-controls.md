@@ -7,13 +7,12 @@
 - 数字小柄控制整组便签；其中有锁定栅格时，整组移动会禁用，但未锁定的便签仍能单独拖动。发生碰撞时优先保留锁定位置，并寻找最近空位。
 - 悬停、聚焦和按下时，便签保留不透明底色；箭头形状之外保持透明。队列按钮使用相同的高亮方式。
 - 右键便签，选择「便签外观与大小」，或展开后点击调色图标。可以使用系统调色盘或输入 `#RRGGBB`；「恢复默认」清除当前便签的自定义颜色。
-- 每个分类、每个日期分别保存颜色。文字会根据底色自动选择黑色或白色。
+- 每个分类分别保存颜色。文字会根据底色自动选择黑色或白色。
 - 「便签长度／高度」调整收起后的箭头；「展开宽度／高度」调整任务或文件预览。展开尺寸留空时使用原窗口大小。完整窗口的尺寸和位置单独保存。
 - 拖动预览外侧角上的点阵柄，查看尺寸提示，松开后应用。底部贴边时，拖柄位于上角，向上拖动可以增高。Esc、切换应用、隐藏或锁定窗口会取消未完成的拖动。
 - 聚焦拖柄后，用方向键按 10 像素微调，按住 Shift 按 40 像素调整。尺寸受当前屏幕工作区限制。
 - 锁定的栅格不能调整大小；仍可更换颜色。如果同一队列有已锁定栅格，其他便签沿边方向的尺寸编辑也会禁用（侧边为高度、顶部为长度），以免改变锁定位置。
-- 计划预览底部直接输入并回车，或点「添加任务」。支持多行粘贴并一次撤销。任务详情内可添加子任务、调整时间、上传附件；输入和编辑时保持展开。
 
-设置沿用 `fences` 和 `todo-papers` 模块的 SQLite 存储，保持旧格式版本兼容；附件继续沿用文件存储。
+设置沿用 `fences` 模块的 SQLite 存储，保持旧格式版本兼容；附件继续沿用文件存储。
 
-验证入口：`npm run verify`；桌面浏览器回归包括 `free-edge-browser.test.mjs`、`edge-hub-browser.test.mjs`、`paper-title-dock-browser.test.mjs`、`sticky-browser.test.mjs`、`sticky-plan-browser.test.mjs`、`sticky-customization-browser.test.mjs`、`edge-browser.test.mjs` 和 `surface-browser.test.mjs`。浏览器脚本使用环境变量 `SEARCH_PLAYWRIGHT_PATH` 和 `SEARCH_BROWSER_PATH` 指定本机已有的 Playwright 和 Edge。
+验证入口：`npm run verify`；桌面浏览器回归包括 `free-edge-browser.test.mjs`、`edge-hub-browser.test.mjs`、`sticky-browser.test.mjs`、`sticky-customization-browser.test.mjs`、`edge-browser.test.mjs` 和 `surface-browser.test.mjs`。浏览器脚本使用环境变量 `SEARCH_PLAYWRIGHT_PATH` 和 `SEARCH_BROWSER_PATH` 指定本机已有的 Playwright 和 Edge。

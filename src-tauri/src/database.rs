@@ -41,7 +41,6 @@ fn namespace(key: &str) -> (&str, &str) {
         "plans-archive" => ("plans", "archive"),
         "projects" => ("projects", "state"),
         "zentao" => ("projects", "zentao"),
-        "todo-papers" => ("plans", "papers"),
         "reminders" => ("plans", "reminders"),
         "fences" => ("files", "fences"),
         "favorites" => ("favorites", "items"),
@@ -1693,7 +1692,6 @@ mod tests {
         for key in [
             "plans",
             "plans-archive",
-            "todo-papers",
             "ai-providers",
             "custom-plugin",
         ] {
@@ -1712,7 +1710,7 @@ mod tests {
                 |r| r.get::<_, i64>(0)
             )
             .unwrap(),
-            3
+            2
         );
         assert_eq!(
             read_at(&root.0, "ai-providers").unwrap().unwrap()["version"],

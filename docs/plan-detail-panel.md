@@ -63,23 +63,26 @@
 
 勾选框的完成态也从品牌蓝改成**中性灰实心**：一整组连成一片时，
 品牌蓝会把它们喊成「还要注意」。改的是 `views/shared.tsx` 的 `StatusButton`，
-所以大纲、看板、归档只读树、桌面纸片四处一起变。
+所以大纲、看板、归档只读树三处一起变。
 
 （完成项标题仍带删除线 —— 那是本应用既有的约定，参考图里只是褪色。）
 
-## 纸片功能整体拆除（待办）
+## 桌面纸片功能已整体拆除
 
-计划页工具栏上的「放到桌面上」按钮已删除：此前开着的纸片仍随启动恢复，但界面里
-目前没有办法把新的一天放上桌面。整个纸片功能还没拆，它横跨前后端，得单独一次改：
+计划页工具栏上的「放到桌面上」按钮先删掉了，随后整个纸片功能一并拆除 —— 现在没有
+「把某一天送上桌面」这件事，桌面上的常驻窗口只剩文件栅栏。
 
-- 前端：`stores/papers.ts`、`views/paper.tsx`、`views/paper-row.tsx`、`views/capsule.tsx`、
-  `window-runtime.ts`、`capsule*.ts`、`main.tsx` 的 `todo-` 分支、`main-runtimes.tsx` 的启动恢复。
-- 桌面层：`desktop/registry.ts` 的 `todo-` 分支（桌边/泊岸/胶囊**与栅栏共用**，是剥开不是删除）。
-- Rust：`commands/sys.rs` 的建窗命令 + `lib.rs` 注册 + `state_merge.rs`/`database.rs` 里
-  「计划与纸片成对写库」的事务。
-- 备份：格式 2 写着「11 个模块状态」，删掉 papers 就是格式变更，要升版并保证旧备份仍可读。
-- 测试与文档：`sticky-plan-browser`、`paper-title-dock-browser`、`desktop-actions`、
-  `sticky-presentation`、`storage-and-daily-todo.md`、`dock-capsule.md` 等。
+拆掉的东西横跨前后端：`stores/papers.ts`、`views/paper.tsx` / `paper-row.tsx` / `capsule.tsx`、
+`capsule.ts`、`capsule-window.ts`、`paper-interactions.ts`、`window-runtime.ts`、`main.tsx` 的
+`todo-` 分支、`main-runtimes.tsx` 的启动恢复、`desktop/registry.ts` 的 `todo-` 条目、
+Rust 的 `open_todo_paper` / `close_todo_paper` / `list_todo_papers` 三个命令与 `todo-*` 能力、
+数据库 `module_state` 的 `plans/papers` 命名空间。
+
+**桌边 / 泊岸 / 胶囊那套机器没有删**：它由文件栅栏继续使用，`desktop/registry.ts` 现在
+只产出 `fence-*` 条目。
+
+备份格式升到 3（不再带 `todo-papers`）；恢复仍接受 1/2 的旧包，包里那份 `todo-papers`
+被安静忽略。存储与同步的细节见 `storage-and-daily-todo.md`。
 
 ## 验证
 

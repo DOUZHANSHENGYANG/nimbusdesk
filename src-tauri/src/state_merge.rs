@@ -1,4 +1,4 @@
-//! Three-way state merge for independent main/paper WebViews.
+//! Three-way state merge for independent main/desktop WebViews.
 use serde_json::Value;
 pub fn merge(base: &Value, local: &Value, remote: &Value) -> Result<Value, String> {
     merge_value(Some(base), Some(local), Some(remote), 0)?.ok_or_else(conflict)
@@ -31,7 +31,7 @@ fn merge_value(base: Option<&Value>, local: Option<&Value>, remote: Option<&Valu
     if let (Some(Value::Array(left)), Some(Value::Array(right))) = (local, remote) {
         let original = base.and_then(Value::as_array);
         if base.is_some() && original.is_none() { return Err(conflict()); }
-        // Ordered string sets (e.g. open paper dates) can change in two windows.
+        // Ordered string sets (e.g. a queue's window order) can change in two windows.
         let old_values = original.map(Vec::as_slice).unwrap_or_default();
         if left.iter().chain(right).chain(old_values).all(Value::is_string) {
             let mut result = Vec::new();

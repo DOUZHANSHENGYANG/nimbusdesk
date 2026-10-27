@@ -52,9 +52,9 @@ async function fixture({ collapsed = true, active = true } = {}) {
   const edgeCore = load('./edge-core.ts');
   const { useEdgeWorkspace: store } = load('./edge-workspace.ts', { '@/lib/storage': storage });
   const key = core.groupKey(area.id, 'right');
-  const initialGroup = { monitorId: area.id, edge: 'right', order: [owner, 'todo-b'], offset: 48, collapsed };
+  const initialGroup = { monitorId: area.id, edge: 'right', order: [owner, 'fence-b'], offset: 48, collapsed };
   store.setState({ groups: { [key]: initialGroup } });
-  const entries = [owner, 'todo-b'].map(id => ({ id, form: 'capsule', edge: 'right', edgeMonitor: area.id, normal: { ...normal } }));
+  const entries = [owner, 'fence-b'].map(id => ({ id, form: 'capsule', edge: 'right', edgeMonitor: area.id, normal: { ...normal } }));
   const registry = {
     desktopEntries: () => entries, useDesktopEntries: () => entries,
     saveDockPosition: (id, patch) => Object.assign(entries.find(entry => entry.id === id), patch),
@@ -125,7 +125,7 @@ test('a hidden dock wakes from remote queue expansion without a React rerender a
     assert.equal(h.visible, false, 'the collapsed queue initially hides its member window');
     assert.equal(h.dock.ready, false, 'the rendered closure deliberately never receives the ready state update');
     h.trace.length = 0;
-    h.sync({ collapsed: false, order: ['todo-b', owner], offset: 120 });
+    h.sync({ collapsed: false, order: ['fence-b', owner], offset: 120 });
     await h.settle();
     assert.equal(h.visible, true, 'the independent storage listener must call native.show before React can repaint');
     const position = h.trace.findLast(call => call.method === 'setPosition').value;

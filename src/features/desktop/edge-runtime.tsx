@@ -4,7 +4,6 @@ import { emit, emitTo, listen } from "@tauri-apps/api/event";
 import { getAllWebviewWindows, getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { inTauri } from "@/lib/tauri";
 import { useFiles, useFences } from "@/stores/files";
-import { usePapers } from "@/stores/papers";
 import { queueWindowOperation } from "./edge-core";
 import { useEdgeWorkspace } from "./edge-workspace";
 import { groupKey, type MonitorArea } from "./queue-core";
@@ -42,7 +41,7 @@ export function synchronizeDockMonitors(monitors: MonitorArea[]) {
 export function useDesktopHydrated() {
   const [ready, setReady] = useState(false);
   useEffect(() => {
-    const stores = [useFiles, useFences, usePapers, useEdgeWorkspace];
+    const stores = [useFiles, useFences, useEdgeWorkspace];
     const check = () => setReady(stores.every(store => store.persist.hasHydrated()));
     const stops = stores.map(store => store.persist.onFinishHydration(check));
     check();

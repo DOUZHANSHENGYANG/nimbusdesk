@@ -9,7 +9,7 @@ try {
  page.on('pageerror',error=>errors.push(error.message));
  const base='http://127.0.0.1:17804/src/features/desktop/fixtures/edge.html';
  await page.goto(base+'?docked&bottom');
- const tab=page.getByRole('button',{name:'展开10月18日',exact:true});await tab.waitFor();
+ const tab=page.getByRole('button',{name:'展开Owned fence',exact:true});await tab.waitFor();
  await page.waitForFunction(()=>edgeReview.size.width===112);
  const closed=await page.evaluate(()=>({...edgeReview.position}));
  const rect=await tab.boundingBox();assert.equal(rect.width,112);assert.ok(rect.height>=40);

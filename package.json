@@ -24,7 +24,7 @@
     "check:bundle": "node scripts/check-bundle.mjs",
     "check:split": "node scripts/check-split-browser.mjs",
     "measure:memory": "node scripts/measure-agent-memory.mjs",
-    "check:plans": "node --test src/features/plans/attachment-api.test.mjs src/features/settings/backup.test.mjs src/lib/storage.test.mjs src/features/plans/paper-window.test.mjs src/features/plans/paper-interactions.test.mjs src/features/plans/store-batch.test.mjs src/features/plans/paper-row.test.mjs",
+    "check:plans": "node --test src/features/plans/attachment-api.test.mjs src/features/settings/backup.test.mjs src/lib/storage.test.mjs src/features/plans/store-batch.test.mjs",
     "check:home": "node --test src/features/home/overview-core.test.mjs",
     "check:ahub": "node --test src/ahub/lib/skill-drop.test.mjs src/ahub/lib/tag-groups.test.mjs",
     "check:desktop": "node --test src/lib/files-diff.test.mjs src/features/files/desktop.test.mjs src/features/files/fence-edge.test.mjs src/features/desktop/edge-core.test.mjs src/features/desktop/dock-float-core.test.mjs src/features/files/fence-interaction.test.mjs src/features/files/menu-popup-interaction.test.mjs src/features/desktop/queue-core.test.mjs src/features/desktop/queue-registry.test.mjs src/features/desktop/edge-runtime-core.test.mjs src/features/desktop/edge-runtime.test.mjs src/features/desktop/edge-dock.test.mjs src/features/files/import-files.test.mjs src/features/files/use-file-drop.test.mjs src/features/files/desktop-actions.test.mjs src/features/files/fence-presentation.test.mjs src/features/desktop/sticky-presentation.test.mjs src/features/files/directory-mapping-core.test.mjs src/features/files/directory-mapping.test.mjs",

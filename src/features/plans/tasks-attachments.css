@@ -17,16 +17,5 @@
 .task-attachments-error { margin: 5px; overflow-wrap: anywhere; color: var(--destructive); }
 .task-attachments button:focus-visible, .task-attachments-panel button:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
 .task-attachments--compact .task-attachments-toggle { min-width: 20px; height: 20px; padding: 0 2px; }
-.daily-paper { font-family: var(--workbench-font); }
-.daily-paper-row { border-radius: 7px; margin: 1px 0; }
-.daily-paper-row:hover { background: var(--surface-hover); }
-.daily-paper-tree { margin-left: 11px; padding-left: 4px; border-left: 1px solid var(--workbench-line, var(--border)); }
-.daily-paper-input { min-width: 0; width: 100%; border: 1px solid var(--border); border-radius: 6px; background: var(--card); padding: 4px 6px; font-size: 12px; }
-.daily-paper-input:focus-visible { outline: 2px solid var(--ring); outline-offset: 1px; }
 
 .task-attachments-inline { width: 100%; max-height: none; overflow: visible; padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
-.paper-task-disclosure { display: inline-flex; align-items: center; justify-content: center; gap: 4px; min-width: 24px; min-height: 24px; flex-shrink: 0; margin-top: -2px; border-radius: 5px; color: var(--muted-foreground); }
-.paper-task-disclosure:hover, .paper-task-disclosure[aria-expanded="true"] { color: var(--foreground); background: var(--surface-hover); }
-.paper-task-disclosure:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; }
-.paper-task-details { flex-basis: calc(100% - 22px); min-width: 0; margin: 6px 0 3px 22px; padding: 8px 0 4px; display: flex; flex-direction: column; gap: 12px; border-top: 1px solid var(--workbench-line, var(--border)); }
-.paper-task-time { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; font-size: 11px; color: var(--muted-foreground); }

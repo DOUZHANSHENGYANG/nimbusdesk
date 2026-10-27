@@ -54,7 +54,6 @@ test('per-category and per-date settings preserve geometry, legacy fields and in
     '@/features/files/directory-mapping-core': load('../files/directory-mapping-core.ts') };
   for (const [file, storeName, mapName, defaults] of [
     ['../../stores/files.ts', 'useFences', 'fences', 'DEFAULT_FENCE'],
-    ['../../stores/papers.ts', 'usePapers', 'papers', 'DEFAULT_PAPER'],
   ]) {
     const module = load(file, dependencies), store = module[storeName];
     const a = { ...module[defaults], x: -900, w: 333, legacyExtra: 'keep', stickyColor: '#123456' }, b = { ...module[defaults], stickyColor: '#abcdef' };

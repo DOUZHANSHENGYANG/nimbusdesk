@@ -97,8 +97,18 @@ pub async fn open_fence(
         .decorations(false)
         .transparent(true)
         .shadow(false)
-        // The frontend sets bottom/top as a pair after state hydration, just as
-        // for todo papers. A builder-level bottom flag can override later pins.
+        /*
+         * 完全不在构建期设 always_on_bottom：层级由前端按形态显式决定
+         * （完整窗口压底、贴边胶囊置顶），构建期设了也只会被后续 pin 覆盖。
+         *
+         * 更深的原因是 tao 在 WM_WINDOWPOSCHANGING 里的这一段：
+         *     if window_flags.contains(ALWAYS_ON_BOTTOM) { pos.hwndInsertAfter = HWND_BOTTOM }
+         * 窗口只要还带着这个标记，**每次位置变化都会被强制塞回底部** ——
+         * 于是 setAlwaysOnTop(true) 只生效一瞬就被推翻；而滑出动画一秒要改十几次位置，
+         * 更是一路压到底。实测症状极具迷惑性：窗口能显示、能穿透、位置尺寸全对，
+         * 只是 z 序紧贴 Program Manager、ex 样式里永远没有 WS_EX_TOPMOST。
+         * 前端用 setAlwaysOnBottom(true/false) 显式设置同一标记则没有这个副作用。
+         */
         .skip_taskbar(true)
         .visible(false)
         .build()
@@ -114,74 +124,6 @@ pub async fn close_fence(app: AppHandle, category_id: String) -> Result<(), Stri
         let _ = win.close();
     }
     Ok(())
-}
-
-/// 打开某日的桌面待办纸片窗口；已存在则聚焦。
-///
-/// 与 open_fence 共用同一套窗口参数（无边框/透明/置底/不进任务栏）。
-/// 之所以是独立命令而不是给 open_fence 加参数：两者有各自的 label 前缀与
-/// 默认行为（纸片默认贴左、栅栏默认居中），把差异塞进一个命令会让
-/// 「栅栏」和「纸片」在类型上消失，调用方只能靠字符串区分。
-#[tauri::command]
-pub async fn open_todo_paper(
-    app: AppHandle,
-    date: String,
-    title: String,
-    x: i32,
-    y: i32,
-    w: i32,
-    h: i32,
-) -> Result<(), String> {
-    let label = format!("todo-{date}");
-    if let Some(win) = app.get_webview_window(&label) {
-        let _ = win.show();
-        let _ = win.set_focus();
-        return Ok(());
-    }
-    tauri::WebviewWindowBuilder::new(&app, &label, tauri::WebviewUrl::App("index.html".into()))
-        .title(title)
-        .position(x as f64, y as f64)
-        .inner_size(w as f64, h as f64)
-        .decorations(false)
-        .transparent(true)
-        .shadow(false)
-        /*
-         * 刻意**不**在这里设 always_on_bottom：层级改由前端按形态显式决定
-         * （纸片默认压底、贴边胶囊置顶）。
-         *
-         * 因为 tao 在 WM_WINDOWPOSCHANGING 里有这么一段：
-         *     if window_flags.contains(ALWAYS_ON_BOTTOM) { pos.hwndInsertAfter = HWND_BOTTOM }
-         * 窗口只要还带着这个标记，**每次位置变化都会被强制塞回底部** ——
-         * 于是 setAlwaysOnTop(true) 只生效一瞬就被推翻；而滑出动画一秒要改十几次位置，
-         * 更是一路压到底。实测症状极具迷惑性：窗口能显示、能穿透、位置尺寸全对，
-         * 只是 z 序紧贴 Program Manager、ex 样式里永远没有 WS_EX_TOPMOST。
-         * 前端用 setAlwaysOnBottom(true/false) 显式设置同一标记则没有这个副作用。
-         */
-        .skip_taskbar(true)
-        .visible(false)
-        .build()
-        .map_err(|e| e.to_string())?;
-    Ok(())
-}
-
-/// 关闭某日的待办纸片窗口（不存在则忽略）。
-#[tauri::command]
-pub async fn close_todo_paper(app: AppHandle, date: String) -> Result<(), String> {
-    let label = format!("todo-{date}");
-    if let Some(win) = app.get_webview_window(&label) {
-        let _ = win.close();
-    }
-    Ok(())
-}
-
-/// 当前已打开的待办纸片日期列表（启动时恢复用）。
-#[tauri::command]
-pub async fn list_todo_papers(app: AppHandle) -> Result<Vec<String>, String> {
-    Ok(app
-        .webview_windows()
-        .keys()
-        .filter_map(|label| label.strip_prefix("todo-").map(|s| s.to_string()))
-        .collect())
 }
 
 /// 弹出菜单窗口的 label（全局唯一，复用一个窗口，避免反复创建 WebView）。

@@ -12,7 +12,7 @@ function fixture(){
  useFences.setState({fences:{a:{...DEFAULT_FENCE,open:true,x:211,w:333,pinned:true,form:'capsule',edge:'right',edgeMonitor:'primary'}}});
  const windows=new Map(),trace=[],waiters=new Map();let failOpen='',failClose='',busyClose='',failFlush=false,openGate,listGate;
  const window=id=>({label:id,hide:async()=>trace.push(['hide',id]),once:async(event,cb)=>{waiters.set(id,cb);return()=>waiters.delete(id);}});
- windows.set('fence-a',window('fence-a'));windows.set('todo-2099-01-01',window('todo-2099-01-01'));
+ windows.set('fence-a',window('fence-a'));windows.set('desktop-dock',window('desktop-dock'));
  const groups={group:{monitorId:'primary',edge:'right',collapsed:true,order:[],offset:48}};
  const deps={
   '@/stores/files':{useFiles,useFences,DEFAULT_FENCE},
@@ -24,7 +24,7 @@ function fixture(){
   '@/features/desktop/edge-workspace':{useEdgeWorkspace:{getState:()=>({groups,setCollapsed:(key,value)=>{groups[key].collapsed=value;trace.push(['unfold',key]);}})}},
  };
  const api=load('./desktop-actions.ts',deps,{setTimeout:(fn)=>setTimeout(fn,8),clearTimeout});
- const registry=load('../desktop/registry.ts',{...deps,'./edge-core':{queueWindowOperation},'@/stores/papers':{usePapers:{getState:()=>({papers:{}})}}});
+ const registry=load('../desktop/registry.ts',{...deps,'./edge-core':{queueWindowOperation}});
  return{...api,...registry,useFiles,useFences,windows,trace,groups,setFailure:(kind,id)=>{if(kind==='open')failOpen=id;if(kind==='close')failClose=id;if(kind==='busy')busyClose=id;if(kind==='flush')failFlush=true;},gate:promise=>{openGate=promise;},pauseListing:promise=>{listGate=promise;}};
 }
 test('show all enables every category including children, keeps saved geometry and unfolds affected queues',async()=>{
@@ -34,9 +34,9 @@ test('show all enables every category including children, keeps saved geometry a
  assert.ok(h.trace.filter(c=>c[0]==='open').every(c=>c[2]===true));assert.equal(h.groups.group.collapsed,false);
  assert.ok(h.trace.some(c=>c[0]==='emit'&&c[1]==='fence-a'&&c[2]==='show'));
 });
-test('disable all confirms native destruction and leaves todo windows untouched',async()=>{
+test('disable all confirms native destruction and leaves unrelated windows untouched',async()=>{
  const h=fixture();assert.equal(typeof h.setAllFencesOnDesktop,'function');await h.setAllFencesOnDesktop(false);
- assert.equal(h.windows.has('fence-a'),false);assert.equal(h.windows.has('todo-2099-01-01'),true);
+ assert.equal(h.windows.has('fence-a'),false);assert.equal(h.windows.has('desktop-dock'),true);
  assert.equal(h.useFences.getState().fences.a.open,false);assert.equal(h.useFences.getState().fences.b?.open??false,false);
 });
 test('partial open failure reports only the failed category and rolls back its enabled flag',async()=>{

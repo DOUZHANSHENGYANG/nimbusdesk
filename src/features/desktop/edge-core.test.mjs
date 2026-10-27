@@ -44,15 +44,15 @@ test('custom sticky sizes and expanded preview remain independent from ordinary 
  await c.restore(false);assert.equal(calls.at(-1).w,450);assert.equal(calls.at(-1).h,600);
  assert.deepEqual(normal,{x:-900,y:100,w:300,h:400});
 });
-test('new papers and fences receive distinct persistent slots, including undefined prior positions',async()=>{
- const {allocateEdgeY}=await load();const slots=[{id:'todo-a'},{id:'todo-b'},{id:'fence-a'}];
+test('new fences receive distinct persistent slots, including undefined prior positions',async()=>{
+ const {allocateEdgeY}=await load();const slots=[{id:'fence-a'},{id:'fence-b'},{id:'fence-c'}];
  assert.equal(new Set(slots.map(slot=>allocateEdgeY(slot.id,slots))).size,3);
- assert.notEqual(allocateEdgeY('todo-c',[{id:'fence-a',y:48}]),48);
+ assert.notEqual(allocateEdgeY('fence-d',[{id:'fence-a',y:48}]),48);
 });
 test('switching sides avoids occupied target slots and preserves a free preferred position',async()=>{
- const {allocateEdgeY}=await load();const target=[{id:'todo-a',y:48},{id:'fence-a',y:116}];
- assert.equal(allocateEdgeY('todo-b',target,48),192);
- assert.equal(allocateEdgeY('todo-b',target,252),252);
+ const {allocateEdgeY}=await load();const target=[{id:'fence-a',y:48},{id:'fence-b',y:116}];
+ assert.equal(allocateEdgeY('fence-c',target,48),192);
+ assert.equal(allocateEdgeY('fence-c',target,252),252);
 });
 test('real tab and open card stay within either edge of negative-origin scaled monitors',async()=>{
  const {edgeBounds}=await load();

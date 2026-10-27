@@ -32,10 +32,10 @@ try{
  assert.equal(await page.evaluate(()=>filesReview.calls.some(c=>c.cmd==='probe_paths'&&c.args.paths.includes('E:/Downloads/dialog-ignored.txt'))),false);
  await page.getByRole('button',{name:'取消',exact:true}).click();
  await show.click();await page.waitForFunction(()=>Object.values(filesReview.fixtures.fences.state.fences).filter(f=>f.open).length===3);
- assert.ok(await page.evaluate(()=>filesReview.windows.has('todo-2099-10-18')));
+ assert.ok(await page.evaluate(()=>filesReview.windows.has('desktop-dock')));
  await hide.click();await page.waitForFunction(()=>[...filesReview.windows].filter(label=>label.startsWith('fence-')).length===0);
  await page.waitForFunction(()=>Object.values(filesReview.fixtures.fences.state.fences).every(f=>!f.open));
- assert.ok(await page.evaluate(()=>filesReview.windows.has('todo-2099-10-18')));
+ assert.ok(await page.evaluate(()=>filesReview.windows.has('desktop-dock')));
  await page.evaluate(()=>{filesReview.failOpen='child';});await show.click();
  await page.waitForFunction(()=>filesReview.fixtures.fences.state.fences.work?.open&&!filesReview.fixtures.fences.state.fences.child?.open);
  await page.waitForTimeout(300);assert.equal(await page.evaluate(()=>filesReview.fixtures.fences.state.fences.child.open),false);

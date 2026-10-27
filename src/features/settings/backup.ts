@@ -38,11 +38,16 @@ import { cleanProvider, getProviderModels } from "@/features/ai/core";
 import { collectAttachmentPaths, validateAttachmentFiles, type BackupAttachmentFile } from "./backup-files";
 import { readZenBackup, mergeZenBackup, rewriteMergedPlanLinks, assertPlanLinks } from "@/features/projects/backup";
 
-/** 备份文件格式版本（与各 store 自己的 version 是两件事） */
-export const BACKUP_SCHEMA = 2;
+/**
+ * 备份文件格式版本（与各 store 自己的 version 是两件事）。
+ *
+ * 3：桌面待办纸片删掉后不再带 `todo-papers`。恢复仍接受 1/2 的旧包 —— 里面那份
+ * `todo-papers` 会被忽略，因为合并只按 BACKUP_KEYS 里的名字取，取不到就当老备份缺这块。
+ */
+export const BACKUP_SCHEMA = 3;
 
 /** 备份里会带上的数据 key。顺序即展示顺序 */
-export const BACKUP_KEYS = ["settings", "files", "fences", "projects", "zentao", "plans", "plans-archive", "todo-papers", "reminders", "favorites", "custom-feeds", "feed-network", "ai-providers", "knowledge-settings"] as const;
+export const BACKUP_KEYS = ["settings", "files", "fences", "projects", "zentao", "plans", "plans-archive", "reminders", "favorites", "custom-feeds", "feed-network", "ai-providers", "knowledge-settings"] as const;
 export type BackupKey = (typeof BACKUP_KEYS)[number];
 
 export interface BackupFile {
@@ -87,7 +92,7 @@ export function parseBackup(text: string): BackupFile {
   if (!raw || typeof raw !== "object") throw new Error("not-an-object");
   const file = raw as Partial<BackupFile>;
   if (file.kind !== "nimbusdesk-backup") throw new Error("not-a-nimbusdesk-backup");
-  if (file.schema !== 1 && file.schema !== BACKUP_SCHEMA) {
+  if (typeof file.schema !== "number" || file.schema < 1 || file.schema > BACKUP_SCHEMA) {
     throw new Error(`unsupported-schema:${String(file.schema)}`);
   }
   if (!file.data || typeof file.data !== "object" || Array.isArray(file.data)) throw new Error("no-data");
@@ -148,16 +153,6 @@ function unwrapState(value: unknown): Record<string, unknown> | null {
   const box = value as { state?: unknown };
   const inner = (box.state ?? value) as Record<string, unknown>;
   return inner && typeof inner === "object" ? inner : null;
-}
-
-/** Settings keyed by stable identifiers have no edit timestamp: keep local conflicts. */
-function mergeLocalMap(local: Record<string, unknown>, incoming: Record<string, unknown>, stats: MergeStats) {
-  const merged = { ...local };
-  for (const [id, value] of Object.entries(incoming)) {
-    if (Object.prototype.hasOwnProperty.call(merged, id)) stats.skipped++;
-    else { Object.defineProperty(merged, id, { value, enumerable: true, writable: true, configurable: true }); stats.added++; }
-  }
-  return merged;
 }
 
 /** 合并「日期 → 任务数组」形态（plans / plans-archive 共用） */
@@ -327,15 +322,6 @@ export async function mergeBackup(
     usePlansArchive.setState({
       days: mergeDayTasks(cur, archive.days as Record<string, unknown>, stats),
     } as never);
-  }
-
-  const papers = unwrapState(file.data["todo-papers"]);
-  if (papers?.papers && typeof papers.papers === "object" && !Array.isArray(papers.papers)) {
-    const { usePapers } = await import("@/stores/papers");
-    const current = usePapers.getState();
-    const merged = mergeLocalMap(current.papers, papers.papers as Record<string, unknown>, stats);
-    const order = [...new Set([...current.order, ...(Array.isArray(papers.order) ? papers.order.filter((id): id is string => typeof id === "string" && Object.prototype.hasOwnProperty.call(merged, id)) : [])])];
-    usePapers.setState({ papers: merged, order } as never);
   }
 
   const favorites = unwrapState(file.data.favorites);

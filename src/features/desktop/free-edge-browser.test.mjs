@@ -7,7 +7,7 @@ try {
  const page=await browser.newPage({viewport:{width:412,height:380}}),errors=[];page.setDefaultTimeout(12000);
  page.on('pageerror',e=>errors.push(e.message));
  await page.goto('http://127.0.0.1:17811/src/features/desktop/fixtures/edge.html?docked');
- const tab=page.getByRole('button',{name:'展开10月18日',exact:true});await tab.waitFor();
+ const tab=page.getByRole('button',{name:'展开Owned fence',exact:true});await tab.waitFor();
  await page.waitForFunction(()=>edgeReview.size.width===112);
  const sync=async()=>{const size=await page.evaluate(()=>edgeReview.size);await page.setViewportSize(size);};
  const drag=async(target,expectedEdge,offset)=>{
@@ -16,7 +16,7 @@ try {
    const box=await tab.boundingBox();await page.mouse.move(box.x+55,box.y+20);await page.mouse.down();await page.mouse.move(box.x+63,box.y+24);
    await page.waitForFunction(()=>typeof edgeReview.finishDrag==='function');
    await page.mouse.up();await page.evaluate(()=>edgeReview.finishDrag(true));
-   await page.waitForFunction(async({edge,offset})=>{const {usePapers}=await import('/src/stores/papers.ts');const p=usePapers.getState().papers['2099-10-18'];return p.edge===edge&&p.dockOffset===offset;},{edge:expectedEdge,offset});
+   await page.waitForFunction(async({edge,offset})=>{const {useFences}=await import('/src/stores/files.ts');const p=useFences.getState().fences.fixture;return p.edge===edge&&p.dockOffset===offset;},{edge:expectedEdge,offset});
    await page.waitForTimeout(360);await sync();
  };
  await drag({x:1168,y:440},'right',440);
@@ -32,8 +32,6 @@ try {
  const opened=await page.evaluate(()=>({...edgeReview.position})),box=await tab.boundingBox();
  assert.equal(Math.round(opened.x+box.x),folded.x,'top arrow stays under pointer when preview clamps left');
  assert.equal(opened.y,0);
- const add=page.getByRole('textbox',{name:'输入后回车添加…',exact:true});await add.waitFor();
- const addBox=await add.boundingBox();assert.ok(addBox.y>=44&&addBox.y+addBox.height<=page.viewportSize().height);
  await page.getByRole('button',{name:'便签外观与大小',exact:true}).click();
  const dialog=page.getByRole('dialog',{name:'便签外观与大小',exact:true});const d=await dialog.boundingBox();
  assert.ok(d.y>=44&&d.x>=0&&d.x+d.width<=page.viewportSize().width);
@@ -42,5 +40,5 @@ try {
  await page.waitForFunction(()=>edgeReview.position.x===0&&edgeReview.size.width>112);
  await tab.focus();await page.keyboard.press('Escape');await page.waitForFunction(()=>edgeReview.size.width===112);
  assert.equal(await tab.getAttribute('aria-expanded'),'false');
- assert.deepEqual(errors,[]);console.log('PASS top docking, preview anchor, task footer, bounded palette and explicit left docking');
+ assert.deepEqual(errors,[]);console.log('PASS top docking, preview anchor, bounded palette and explicit left docking');
 } finally {await browser.close();await server.close();}

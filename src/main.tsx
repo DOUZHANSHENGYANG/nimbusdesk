@@ -10,7 +10,7 @@ import "@/index.css";
  * 每个窗口一个 chunk，主应用也是。
  *
  * 以前这 8 个窗口组件 + `App` 全是静态 import —— 于是右键菜单浮窗（一个几十行的菜单）、
- * 桌面便签纸、文件栅栏、Dock，全都要把主应用、工具箱、AI SDK 一起解析一遍：
+ * 文件栅栏、Dock，全都要把主应用、工具箱、AI SDK 一起解析一遍：
  * 单包 3.6 MB，而每个窗口在 Windows 上都是一个独立 WebView2 进程。
  * 现在入口只留 label 分流这一小段，各窗口按需拉自己的组件。
  *
@@ -25,17 +25,16 @@ const EdgeHubWindow = lazy(() => import("@/features/desktop/edge-hub").then((m) 
 const DockWindow = lazy(() => import("@/features/desktop/dock").then((m) => ({ default: m.DockWindow })));
 const FenceWindow = lazy(() => import("@/features/files/fence").then((m) => ({ default: m.FenceWindow })));
 const MenuPopupWindow = lazy(() => import("@/features/files/menu-popup").then((m) => ({ default: m.MenuPopupWindow })));
-const TodoPaperWindow = lazy(() => import("@/features/plans/views/paper").then((m) => ({ default: m.TodoPaperWindow })));
 const CaptureWindow = lazy(() => import("@/features/knowledge/capture").then((m) => ({ default: m.CaptureWindow })));
 const SearchWindow = lazy(() => import("@/features/search").then((m) => ({ default: m.SearchWindow })));
 
 /**
- * 按窗口 label 分流：fence-* 文件栅栏 / todo-* 待办纸片 /
+ * 按窗口 label 分流：fence-* 文件栅栏 /
  * popup-menu 右键菜单浮窗 / main 主应用。
  *
- * 注意 todo- 的匹配必须放在 main 兜底之前，且前缀不与 fence- 重叠 ——
- * label 是唯一的路由依据，前缀撞了就会把纸片当成主应用渲染
- * （表现为纸片窗口里出现整个侧栏）。
+ * 注意各前缀必须互不重叠，且分流要放在 main 兜底之前 ——
+ * label 是唯一的路由依据，前缀撞了就会把独立窗口当成主应用渲染
+ * （表现为栅栏窗口里出现整个侧栏）。
  */
 const windowLabel = (() => {
   try {
@@ -64,9 +63,6 @@ if (windowLabel.startsWith("edge-hub-")) {
 } else if (windowLabel.startsWith("fence-")) {
   document.documentElement.classList.add("fence-root");
   root = <FenceWindow categoryId={windowLabel.slice("fence-".length)} />;
-} else if (windowLabel.startsWith("todo-")) {
-  document.documentElement.classList.add("fence-root");
-  root = <TodoPaperWindow date={windowLabel.slice("todo-".length)} />;
 } else {
   root = <App />;
 }

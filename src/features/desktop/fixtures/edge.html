@@ -2,22 +2,22 @@
 import {mockIPC,mockWindows} from '@tauri-apps/api/mocks';
 import {emitTo} from '@tauri-apps/api/event';
 import {groupKey} from '/src/features/desktop/queue-core.ts';
-const params=new URLSearchParams(location.search),date='2099-10-18',fence=params.has('fence');
+const params=new URLSearchParams(location.search),date='2099-10-18';
 const normal={x:220,y:170,w:300,h:380},form=params.has('docked')?'capsule':'paper';
-const fixtures={settings:{state:{theme:'dark',lang:'zh',autoClearDone:false,autoSortDone:false},version:3},'todo-papers':{state:{papers:{[date]:{...normal,form,open:true,pinned:true}},order:[date]},version:1},plans:{state:{days:{[date]:[{id:'task',title:'Owned edge task',parentId:null,done:false,createdAt:1,updatedAt:1},{id:'child',title:'Owned subtask',parentId:'task',done:false,createdAt:1,updatedAt:1}]}},version:4},files:{state:{categories:[{id:'fixture',name:'Owned fence',createdAt:1}],items:[]},version:2},fences:{state:{fences:{fixture:{...normal,open:true,ghost:false,pinned:true,form}}},version:1},'ai-providers':{state:{providers:[],defaultTextId:null},version:1},'knowledge-settings':{state:{vaultRoot:null,shortcut:''},version:1},'search-settings':{state:{shortcut:'',documentRoots:[],nameRoots:[],documentIndexEnabled:false,pinyinEnabled:false},version:1}};
+const fixtures={settings:{state:{theme:'dark',lang:'zh',autoClearDone:false,autoSortDone:false},version:3},plans:{state:{days:{[date]:[{id:'task',title:'Owned edge task',parentId:null,done:false,createdAt:1,updatedAt:1},{id:'child',title:'Owned subtask',parentId:'task',done:false,createdAt:1,updatedAt:1}]}},version:4},files:{state:{categories:[{id:'fixture',name:'Owned fence',createdAt:1}],items:[]},version:2},fences:{state:{fences:{fixture:{...normal,open:true,ghost:false,pinned:true,form}}},version:1},'ai-providers':{state:{providers:[],defaultTextId:null},version:1},'knowledge-settings':{state:{vaultRoot:null,shortcut:''},version:1},'search-settings':{state:{shortcut:'',documentRoots:[],nameRoots:[],documentIndexEnabled:false,pinyinEnabled:false},version:1}};
 const monitor={name:'Owned monitor',position:{x:0,y:0},size:{width:1280,height:800},workArea:{position:{x:0,y:0},size:{width:1280,height:760}},scaleFactor:1};
 const monitorId='Owned monitor@0,0',key=groupKey(monitorId,'right');
 fixtures['edge-workspace']={state:{groups:{[key]:{monitorId,edge:'right',offset:48,collapsed:false,order:[]}}},version:1};
 if(params.has('bottom'))fixtures['edge-workspace'].state.groups[key].offset=600;
 if(params.has('locked'))fixtures.fences.state.fences.fixture.locked=true;
 if(params.has('items'))fixtures.files.state.items=Array.from({length:15},(_,index)=>({id:'fixture-item-'+index,categoryId:'fixture',type:index===0?'folder':'file',title:index===0?'项目资料':index===1?'很长的文件名称用于验证列表不会挤在一起.md':`文档-${index}.txt`,path:`E:/OwnedFixture/${index}.txt`,tags:[],createdAt:1}));
-if(params.has('occupied'))fixtures['todo-papers'].state.papers['2099-10-19']={...normal,open:true,form:'capsule',edge:'left',edgeY:48,edgeMonitor:monitorId};
+if(params.has('occupied')){fixtures.files.state.categories.push({id:'occupied',name:'Owned neighbor',createdAt:1});fixtures.fences.state.fences.occupied={...normal,open:true,form:'capsule',edge:'left',edgeY:48,edgeMonitor:monitorId};}
 if(params.has('crowded'))for(let i=0;i<40;i++){
  fixtures.files.state.categories.push({id:'crowded-'+i,name:'crowded-'+i,createdAt:1});
  fixtures.fences.state.fences['crowded-'+i]={...normal,open:true,form:'capsule',edge:'right',edgeMonitor:monitorId};
 }
-if(params.has('hub')){fixtures['todo-papers'].state.papers[date].open=false;fixtures.fences.state.fences.fixture.open=false;}
-const label=params.has('hub')?'edge-hub-'+key:fence?'fence-fixture':`todo-${date}`;
+if(params.has('hub'))fixtures.fences.state.fences.fixture.open=false;
+const label=params.has('hub')?'edge-hub-'+key:'fence-fixture';
 window.edgeReview={fixtures,calls:[],position:{x:normal.x,y:normal.y},size:{width:normal.w,height:normal.h},monitor,monitors:[monitor],visible:false,delay:0,fail:null,emit:(action)=>emitTo(label,'desktop://window-action',{action}),fire:(event,payload)=>emitTo(label,event,payload)};
 const listeners=new Map();
 mockIPC(async(cmd,args)=>{
@@ -30,7 +30,7 @@ mockIPC(async(cmd,args)=>{
    return null;
  }
  if(r.fail===cmd)throw new Error('OWNED_IPC_FAILURE');
- if(cmd==='read_json'){if(params.has('slow')&&args.key==='todo-papers')await new Promise(resolve=>setTimeout(resolve,200));return structuredClone(fixtures[args.key]??null);}
+ if(cmd==='read_json'){if(params.has('slow')&&args.key==='fences')await new Promise(resolve=>setTimeout(resolve,200));return structuredClone(fixtures[args.key]??null);}
  if(cmd==='write_json'){fixtures[args.key]=structuredClone(args.value);return args.value;}
  if(cmd==='get_data_dir')return 'E:/OwnedFixture';
  if(cmd==='window_ready'||cmd.endsWith('|show'))r.visible=true;

@@ -32,7 +32,7 @@ function store(initial) {
   let state = initial;
   return { getState: () => state, setState: (patch) => { state = { ...state, ...patch }; } };
 }
-const backup = (data, files = []) => ({ kind: "nimbusdesk-backup", app: "nimbusdesk", schema: 2, exportedAt: "2026-10-17", data, attachments: files });
+const backup = (data, files = []) => ({ kind: "nimbusdesk-backup", app: "nimbusdesk", schema: 3, exportedAt: "2026-10-17", data, attachments: files });
 
 test("news fallback preferences are included in full backups", async () => {
   const value={state:{routes:[{id:'rss',name:'RSS',url:'https://rss.test/feed',format:'rss',enabled:true}]},version:1};
@@ -72,7 +72,7 @@ test("exports all current module keys, attachment bytes and sanitized provider m
   const result = await api.buildBackup({ includeDirs: false });
   // 除 files 之外的键都还从 readJson 读；files 单独走 files_load
   assert.deepEqual(read, api.BACKUP_KEYS.filter((key) => key !== "files"));
-  for (const key of ["todo-papers", "reminders", "favorites", "custom-feeds", "ai-providers", "knowledge-settings"]) assert.ok(read.includes(key));
+  for (const key of ["reminders", "favorites", "custom-feeds", "ai-providers", "knowledge-settings"]) assert.ok(read.includes(key));
   assert.ok(!read.includes("ai-settings"));
   assert.deepEqual(result.data.files, { state: filesSnapshot, version: 2 });
   assert.deepEqual(result.attachments, [material]);
@@ -93,9 +93,14 @@ test("backup roundtrip preserves per-model parameters and an independent image m
   assert.deepEqual(target.getState().providers[0].models, [{ id: "text", vision: false, parameters: { temperature: 0, maxTokens: 1024 } }, { id: "vision", vision: true, parameters: { topP: .5 } }]);
 });
 
-test("schema 1 stays readable, while incomplete schema 2 material fails before mutation", async () => {
+test("older schemas stay readable, while incomplete material fails before mutation", async () => {
   const api = await loadBackup({ invoke: () => assert.fail("must not write") });
   assert.equal(api.parseBackup(JSON.stringify({ ...backup({}), schema: 1, attachments: undefined })).schema, 1);
+  // schema 2 的老包里还带着一份 `todo-papers`。纸片删掉之后它必须被安静忽略，
+  // 而不是让整包恢复失败 —— 「旧备份仍可读」这条就是靠这里钉住的。
+  const legacy = { ...backup({ "todo-papers": { papers: { today: { open: true } }, order: ["today"] } }), schema: 2 };
+  assert.equal(api.parseBackup(JSON.stringify(legacy)).schema, 2);
+  assert.deepEqual(api.backupKeysOf(legacy), [], "旧包里那份 todo-papers 不再算一个要恢复的模块");
   assert.throws(() => api.parseBackup(JSON.stringify({ ...backup({}), schema: 0 })), /unsupported-schema/);
   assert.throws(() => api.parseBackup(JSON.stringify(backup({ plans }))), /missing/);
   await assert.rejects(api.mergeBackup(backup({ plans }), { overwriteSettings: false }), /missing/);
@@ -108,23 +113,20 @@ test("restores binary files before task state and keeps local entity/settings co
   usePlans.setState = (patch) => { events.push("tasks"); originalSet(patch); };
   const useFavorites = store({ items: [{ id: "local", url: "local", title: "keep" }] });
   const useCustomFeeds = store({ feeds: [{ id: "same", name: "local" }] });
-  const usePapers = store({ papers: { today: { pinned: true } }, order: ["today"] });
   const useReminderSettings = store({ enabled: true, advance: 10, notified: ["local"] });
   const useSettings = store({ theme: "dark", dataDir: "local" });
   const modules = {
     "@/features/plans/store": { usePlans }, "@/stores/favorites": { useFavorites }, "@/stores/custom-feeds": { useCustomFeeds },
-    "@/stores/papers": { usePapers }, "@/stores/reminders": { useReminderSettings },
+    "@/stores/reminders": { useReminderSettings },
   };
   const api = await loadBackup({ useSettings, getModule: async (name) => modules[name], invoke: async (command, args) => {
     assert.equal(command, "task_attachments_import"); assert.deepEqual(args, { files: [material] }); events.push("files");
   } });
-  await api.mergeBackup(backup({ plans, settings: { theme: "light" }, favorites: { items: [{ id: "new", url: "new" }] }, "custom-feeds": { feeds: [{ id: "same", name: "incoming" }, { id: "extra" }] }, "todo-papers": { papers: { today: { pinned: false }, tomorrow: { pinned: true } }, order: ["tomorrow"] }, reminders: { enabled: false, advance: 0, notified: ["incoming"] } }, [material]), { overwriteSettings: false });
+  await api.mergeBackup(backup({ plans, settings: { theme: "light" }, favorites: { items: [{ id: "new", url: "new" }] }, "custom-feeds": { feeds: [{ id: "same", name: "incoming" }, { id: "extra" }] }, reminders: { enabled: false, advance: 0, notified: ["incoming"] } }, [material]), { overwriteSettings: false });
   assert.deepEqual(events, ["files", "tasks"]);
   assert.equal(usePlans.getState().days["2026-10-17"][0].attachments[0].path, path);
   assert.equal(useSettings.getState().theme, "dark");
   assert.equal(useCustomFeeds.getState().feeds[0].name, "local");
-  assert.equal(usePapers.getState().papers.today.pinned, true);
-  assert.deepEqual(usePapers.getState().order, ["today", "tomorrow"]);
   assert.equal(useReminderSettings.getState().enabled, true);
   assert.deepEqual(useReminderSettings.getState().notified, ["local", "incoming"]);
   assert.equal(useFavorites.getState().items.length, 2);

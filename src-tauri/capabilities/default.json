@@ -10,7 +10,6 @@
     "desktop-dock",
     "fence-*",
     "popup-menu",
-    "todo-*",
     "edge-hub-*"
   ],
   "permissions": [
