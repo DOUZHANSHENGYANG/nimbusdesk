@@ -26,7 +26,7 @@ import { useSettings } from "@/stores/settings";
 import { DayPicker, type DayProps } from "react-day-picker";
 import { chatWithProvider, type ChatMessage } from "@/features/ai/client";
 import { ageBucket, dateKey, summarizeDay } from "./dock-float-core";
-import { nearestFloatEdge } from "./dock-core";
+import { nearestFloatEdge, DOCK_CAPSULE_W, DOCK_CARD_W } from "./dock-core";
 import { monitorArea } from "./monitors";
 import "./dock-float.css";
 
@@ -178,6 +178,16 @@ export function DockFloat({ onExpand, onHide, panels }: {
     document.documentElement.style.setProperty(
       "--df-card-h",
       String(useSettings.getState().dockCardHeight) + "px",
+    );
+    /*
+     * 收拢动画的 clip 终点必须正好是胶囊的可见矩形：
+     * 横向内缩 = (卡片宽 − 胶囊宽) / 2。这个值写死过 98px（464 宽胶囊时代），
+     * 胶囊改 244 后没跟着算 —— 收拢的最后一帧就会从「长条」跳成「短条」。
+     */
+    document.documentElement.style.setProperty("--df-capsule-w", String(DOCK_CAPSULE_W) + "px");
+    document.documentElement.style.setProperty(
+      "--df-capsule-inset-x",
+      String(Math.round((DOCK_CARD_W - DOCK_CAPSULE_W) / 2)) + "px",
     );
     return () => {
       if (phaseTimer.current !== null) window.clearTimeout(phaseTimer.current);

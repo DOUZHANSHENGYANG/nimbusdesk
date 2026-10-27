@@ -966,7 +966,7 @@
   transform: none !important;
   animation: none !important;
   border-radius: 20px;
-  clip-path: inset(0 98px calc(var(--df-card-h, 591px) - 44px) 98px round 22px);
+  clip-path: inset(0 var(--df-capsule-inset-x, 208px) calc(var(--df-card-h, 591px) - 44px) var(--df-capsule-inset-x, 208px) round 22px);
   transition:
     clip-path 240ms cubic-bezier(0.4, 0, 0.2, 1),
     opacity 140ms var(--pr-ease-out);
@@ -978,7 +978,7 @@
 .df-root[data-phase="compact"] .df-card,
 .df-root[data-phase="resizing"] .df-card {
   opacity: 0;
-  clip-path: inset(0 98px calc(var(--df-card-h, 591px) - 44px) 98px round 22px);
+  clip-path: inset(0 var(--df-capsule-inset-x, 208px) calc(var(--df-card-h, 591px) - 44px) var(--df-capsule-inset-x, 208px) round 22px);
 }
 .df-root[data-phase="expanding"] .df-card {
   opacity: 1;
@@ -990,7 +990,7 @@
 }
 .df-root[data-phase="collapsing"] .df-card {
   opacity: 1;
-  clip-path: inset(0 98px calc(var(--df-card-h, 591px) - 44px) 98px round 22px);
+  clip-path: inset(0 var(--df-capsule-inset-x, 208px) calc(var(--df-card-h, 591px) - 44px) var(--df-capsule-inset-x, 208px) round 22px);
 }
 
 /* 卡片内容晚一拍出现：clip 已经张开一部分，避免「464 宽的头部先露半截」。 */
