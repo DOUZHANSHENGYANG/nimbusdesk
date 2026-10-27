@@ -960,6 +960,8 @@ export const en: AppMessages = {
     searching: "Searching the web and synthesizing…",
     sources: "Sources",
     searchFail: "Error: ",
+    noAiProvider: "No AI provider configured — showing search results only, without a synthesized answer.",
+    goAiSettings: "Set up",
     aiReading: "AI is generating…",
     close: "Close",
     noResult: "Nothing here yet",

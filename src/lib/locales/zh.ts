@@ -946,6 +946,8 @@ export const zh = {
     searching: "正在检索网络并综合答案…",
     sources: "来源",
     searchFail: "出错：",
+    noAiProvider: "未配置 AI 提供商 —— 当前只列出检索结果，不生成综合答案。",
+    goAiSettings: "去配置",
     aiReading: "AI 正在生成…",
     close: "关闭",
     noResult: "暂无内容",

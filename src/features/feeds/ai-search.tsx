@@ -1,5 +1,6 @@
 import { useTranslation } from "react-i18next";
-import { Search, Loader2 } from "lucide-react";
+import { Search, Loader2, Settings2 } from "lucide-react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -7,13 +8,15 @@ import { useAiSearch } from "./search-state";
 import { useAiSettings } from "@/stores/ai";
 import { openExternal } from "@/lib/open";
 
-/** AI 问答搜索视图 */
+/** 搜索视图：检索结果始终列出，配了 AI 才额外综合答案 */
 export function AiSearchView() {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const query = useAiSearch((s) => s.query);
   const asking = useAiSearch((s) => s.asking);
   const answer = useAiSearch((s) => s.answer);
   const sources = useAiSearch((s) => s.sources);
+  const synthesized = useAiSearch((s) => s.synthesized);
   const error = useAiSearch((s) => s.error);
   const setQuery = useAiSearch((s) => s.setQuery);
   const run = useAiSearch((s) => s.run);
@@ -24,6 +27,8 @@ export function AiSearchView() {
         ? "tavily"
         : "bing",
   );
+
+  const hasOutput = !!answer || !!sources.length;
 
   return (
     <div className="flex h-full min-w-0 flex-col">
@@ -55,7 +60,7 @@ export function AiSearchView() {
       <ScrollArea className="min-h-0 flex-1 p-4">
         {error ? <div role="alert" className="mb-3 text-sm text-destructive">{t("feeds.searchFail")}{error}</div> : null}
 
-        {!answer && asking ? (
+        {!hasOutput && asking ? (
           <div className="space-y-2">
             {Array.from({ length: 4 }).map((_, i) => (
               <div key={i} className="h-4 animate-pulse rounded bg-muted" style={{ width: `${90 - i * 12}%` }} />
@@ -64,12 +69,28 @@ export function AiSearchView() {
           </div>
         ) : null}
 
-        {answer ? (
-          <div className="max-w-3xl" aria-label={t("feeds.aiAnswer")}>
-            <div className="whitespace-pre-wrap text-sm leading-relaxed">{answer}</div>
+        {hasOutput ? (
+          <div className="max-w-3xl">
+            {answer ? (
+              <div aria-label={t("feeds.aiAnswer")} className="whitespace-pre-wrap text-sm leading-relaxed">{answer}</div>
+            ) : null}
+
+            {/* 没配 AI：明确说明只有结果，并给一条去配置的入口 */}
+            {!synthesized ? (
+              <div className="mt-1 flex flex-wrap items-center gap-2 rounded-md border border-input bg-muted/30 px-3 py-2 text-[11px] text-muted-foreground">
+                <span className="min-w-0 flex-1">{t("feeds.noAiProvider")}</span>
+                <Button size="sm" variant="outline" onClick={() => navigate("/settings")}>
+                  <Settings2 className="size-3.5" />{t("feeds.goAiSettings")}
+                </Button>
+              </div>
+            ) : null}
+
             {sources.length ? (
-              <div className="mt-4 border-t pt-3">
-                <div className="mb-2 text-[11px] font-medium text-muted-foreground">{t("feeds.sources")}</div>
+              <div className={answer || !synthesized ? "mt-4 border-t pt-3" : ""}>
+                <div className="mb-2 text-[11px] font-medium text-muted-foreground">
+                  {t("feeds.sources")}
+                  <span className="ml-1.5 tabular-nums">{sources.length}</span>
+                </div>
                 <ul className="space-y-1">
                   {sources.map((s, i) => (
                     <li key={s.url}>
@@ -80,7 +101,7 @@ export function AiSearchView() {
                         <Badge variant="secondary" className="mr-1.5 px-1.5">[{i + 1}]</Badge>
                         <span className="align-middle">{s.title}</span>
                         <span className="ml-2 align-middle text-muted-foreground">
-                          {new URL(s.url).hostname}
+                          {hostOf(s.url)}
                         </span>
                       </button>
                     </li>
@@ -91,7 +112,7 @@ export function AiSearchView() {
           </div>
         ) : null}
 
-        {!answer && !asking && !error ? (
+        {!hasOutput && !asking && !error ? (
           <div className="flex h-full items-center justify-center text-sm text-muted-foreground">
             {t("feeds.askHint")}
           </div>
@@ -99,4 +120,13 @@ export function AiSearchView() {
       </ScrollArea>
     </div>
   );
+}
+
+/** 磁力/ed2k 这类结果没有 hostname，别让整块渲染炸掉 */
+function hostOf(url: string): string {
+  try {
+    return new URL(url).hostname || url.slice(0, 40);
+  } catch {
+    return url.slice(0, 40);
+  }
 }

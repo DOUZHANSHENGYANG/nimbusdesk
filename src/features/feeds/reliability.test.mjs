@@ -236,7 +236,18 @@ test('the EOS backend is selectable and returns only its extracted results', asy
 
 test('AI search synthesizes retrieved sources through the shared model and returns references', async () => {
   const sources=[{title:'SQLite',url:'https://sqlite.org',content:'Embedded SQL database engine'}];let request;
-  const {ask}=await load('../../search/pipeline.ts',{searchWeb:async()=>sources,chatStream:async(messages,delta)=>{request=messages;delta('An embedded database [1].');return 'An embedded database [1].';}});
+  const {ask}=await load('../../search/pipeline.ts',{searchWeb:async()=>sources,chatStream:async(messages,delta)=>{request=messages;delta('An embedded database [1].');return 'An embedded database [1].';},providersReady:async()=>{},useProviders:{getState:()=>({providers:[{id:'p1'}],defaultTextId:'p1'})},selectProvider:()=>({id:'p1'}),inTauri:true});
   let answer='';const result=await ask('What is SQLite?',chunk=>{answer+=chunk;});
-  assert.equal(result.answer,answer);assert.deepEqual(result.sources,sources);assert.ok(request[1].content.includes('https://sqlite.org'));
+  assert.equal(result.answer,answer);assert.equal(result.synthesized,true);assert.deepEqual(result.sources,sources);assert.ok(request[1].content.includes('https://sqlite.org'));
+});
+
+test('search still returns results when no AI provider is configured', async () => {
+  const sources=[{title:'三体',url:'https://site.test/p/1',content:'测试站（测试）'}];
+  let called=false;
+  const {ask}=await load('../../search/pipeline.ts',{searchWeb:async()=>sources,chatStream:async()=>{called=true;return 'should not run';},providersReady:async()=>{},useProviders:{getState:()=>({providers:[],defaultTextId:null})},selectProvider:()=>{throw new Error('AI_NO_PROVIDER');},inTauri:true});
+  const result=await ask('三体',()=>{});
+  assert.deepEqual(result.sources,sources);
+  assert.equal(result.answer,'');
+  assert.equal(result.synthesized,false,'must report that no answer was synthesized');
+  assert.equal(called,false,'the model must not be called without a provider');
 });
