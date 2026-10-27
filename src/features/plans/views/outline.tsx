@@ -66,6 +66,8 @@ export function OutlineView({ date, searchTaskId, searchToken }: { date: string;
   const [input, setInput] = useState("");
   const reorderTask = usePlans((s) => s.reorderTask);
   const [selected, setSelected] = useState<Selection | null>(null);
+  /** 完整详情卡片收进浮层：右栏只放备注，详情由行上的 ⋯ 打开 */
+  const [detailOpen, setDetailOpen] = useState(false);
   /** 选中项要跟当天任务对得上：被删掉、被挪到别的日子之后，这一栏自己收起来 */
   const selectedTask = selected ? tasks.find((task) => task.id === selected.id) : undefined;
   useEffect(() => {
@@ -216,7 +218,7 @@ export function OutlineView({ date, searchTaskId, searchToken }: { date: string;
             list={roots}
             dividerIndent={4}
             label={t("plans.doneGroup")}
-            render={(task) => <TaskRow date={date} task={task} depth={0} drag={rowDrag} selectedId={selected?.id ?? null} onSelect={select} searchTaskId={searchTaskId} revealIds={revealIds} searchToken={searchToken} />}
+            render={(task) => <TaskRow date={date} task={task} depth={0} drag={rowDrag} selectedId={selected?.id ?? null} onSelect={select} onDetail={(id) => { setSelected({ id, focus: "title" }); setDetailOpen(true); }} searchTaskId={searchTaskId} revealIds={revealIds} searchToken={searchToken} />}
           />
         )}
       </div>
@@ -226,7 +228,27 @@ export function OutlineView({ date, searchTaskId, searchToken }: { date: string;
           aria-label={t("plans.detail")}
           className="w-80 shrink-0 rounded-xl border border-border bg-card/40"
         >
-          <TaskDetail date={date} task={selectedTask} focus={selected!.focus} onClose={() => setSelected(null)} />
+          {detailOpen ? (
+            <>
+              {/* 详情浮层：背板只挡鼠标，× / Esc 关闭；右栏本身只放备注，所以这里是唯一入口 */}
+              <button
+                type="button"
+                aria-label={t("plans.closeDetail")}
+                onClick={() => setDetailOpen(false)}
+                className="fixed inset-0 z-30 cursor-default"
+              />
+              <div className="fixed right-6 top-16 z-40 max-h-[70vh] w-[min(380px,90vw)] overflow-auto rounded-2xl border border-border bg-card shadow-[var(--pr-shadow-3)]">
+                <TaskDetail
+                  date={date}
+                  task={selectedTask}
+                  focus="title"
+                  onClose={() => setDetailOpen(false)}
+                />
+              </div>
+            </>
+          ) : (
+            <NoteColumn date={date} task={selectedTask} onClose={() => setSelected(null)} />
+          )}
         </aside>
       )}
     </div>
@@ -313,7 +335,46 @@ function RowIcon({ title, onClick, children }: { title: string; onClick: () => v
  * 也不再需要在行里判断「点到行外算不算保存」。拖动把手、加子任务、更多
  * 挤在标题后面显形：动作都在一块，不用去行两端各找一遍。
  */
-function TaskRow({ date, task, depth, drag, selectedId, onSelect, searchTaskId, revealIds, searchToken }: { date: string; task: PlanTask; depth: number; drag: RowDrag; selectedId: string | null; onSelect: (id: string, focus: Selection["focus"]) => void; searchTaskId?: string; revealIds: Set<string>; searchToken?: string }) {
+/**
+ * 右栏 = 只有备注。
+ *
+ * 之前这一栏是完整详情卡片：想写句备注要在一堆字段里找，改个日期又得滚过去。现在它就一件事 ——
+ * 写备注。进来即聚焦，离开焦点即存，没有保存按钮（和标题同一套写法：一次编辑一次提交，
+ * 不是每敲一个字都进撤销栈）。完整卡片收在行上的 ⋯ 里。
+ */
+function NoteColumn({ date, task, onClose }: { date: string; task: PlanTask; onClose: () => void }) {
+  const { t } = useTranslation();
+  const [draft, setDraft] = useState(task.note ?? "");
+  const commit = () => {
+    const next = draft.trim();
+    if (next !== (task.note ?? "")) usePlans.getState().updateTask(date, task.id, { note: next || undefined });
+  };
+  return (
+    <aside className="flex h-full min-h-0 w-72 shrink-0 flex-col rounded-[var(--pr-radius-xl)] border border-border bg-card p-3">
+      <div className="mb-2 flex items-center gap-2">
+        <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-muted-foreground">{task.title}</span>
+        <button
+          type="button"
+          aria-label={t("plans.closeDetail")}
+          onClick={() => { commit(); onClose(); }}
+          className="shrink-0 rounded p-0.5 text-muted-foreground transition-colors hover:text-foreground"
+        >
+          ×
+        </button>
+      </div>
+      <textarea
+        autoFocus
+        aria-label={t("plans.noteLabel")}
+        value={draft}
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={commit}
+        className="min-h-40 w-full flex-1 resize-y rounded-lg border border-border bg-background px-2.5 py-2 text-[12px] leading-5 outline-none focus:border-brand/50"
+      />
+    </aside>
+  );
+}
+
+function TaskRow({ date, task, depth, drag, selectedId, onSelect, onDetail, searchTaskId, revealIds, searchToken }: { date: string; task: PlanTask; depth: number; drag: RowDrag; selectedId: string | null; onSelect: (id: string, focus: Selection["focus"]) => void; onDetail: (id: string) => void; searchTaskId?: string; revealIds: Set<string>; searchToken?: string }) {
   const { t } = useTranslation();
   const tasks = useDayTasks(date);
   const now = useNow();
@@ -448,7 +509,10 @@ function TaskRow({ date, task, depth, drag, selectedId, onSelect, searchTaskId, 
               )}
             </button>
 
-            {/* 动作块：只剩加子任务，紧挨标题、悬停显形 —— 详情由标题本身开，不需要第三个按钮 */}
+            {/* 动作块：加子任务 + 详情（⋯）。详情卡片是完整形态，行上只留这一个入口 */}
+            <RowIcon title={t("plans.detail")} onClick={() => onDetail(task.id)}>
+              <span className="text-[13px] leading-none tracking-tight">⋯</span>
+            </RowIcon>
             <RowIcon title={t("plans.addChild")} onClick={() => setAdding(!adding)}>
               <Plus className="size-4" />
             </RowIcon>
@@ -508,7 +572,7 @@ function TaskRow({ date, task, depth, drag, selectedId, onSelect, searchTaskId, 
             list={children}
             dividerIndent={4}
             label={t("plans.doneGroup")}
-            render={(child) => <TaskRow date={date} task={child} depth={depth + 1} drag={drag} selectedId={selectedId} onSelect={onSelect} searchTaskId={searchTaskId} revealIds={revealIds} searchToken={searchToken} />}
+            render={(child) => <TaskRow date={date} task={child} depth={depth + 1} drag={drag} selectedId={selectedId} onSelect={onSelect} onDetail={onDetail} searchTaskId={searchTaskId} revealIds={revealIds} searchToken={searchToken} />}
           />
         </div>
       )}
