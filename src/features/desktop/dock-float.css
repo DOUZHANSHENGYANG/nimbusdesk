@@ -965,7 +965,7 @@
   transform: none !important;
   animation: none !important;
   border-radius: 20px;
-  clip-path: inset(0 var(--df-capsule-inset-x, 208px) calc(var(--df-card-h, 591px) - 44px) var(--df-capsule-inset-x, 208px) round 22px);
+  clip-path: var(--df-clip-compact, inset(0 var(--df-capsule-inset-x, 208px) calc(var(--df-card-h, 591px) - 44px) var(--df-capsule-inset-x, 208px) round 22px));
   transition:
     clip-path 240ms cubic-bezier(0.4, 0, 0.2, 1),
     opacity 140ms var(--pr-ease-out);
@@ -977,7 +977,7 @@
 .df-root[data-phase="compact"] .df-card,
 .df-root[data-phase="resizing"] .df-card {
   opacity: 0;
-  clip-path: inset(0 var(--df-capsule-inset-x, 208px) calc(var(--df-card-h, 591px) - 44px) var(--df-capsule-inset-x, 208px) round 22px);
+  clip-path: var(--df-clip-compact, inset(0 var(--df-capsule-inset-x, 208px) calc(var(--df-card-h, 591px) - 44px) var(--df-capsule-inset-x, 208px) round 22px));
 }
 .df-root[data-phase="expanding"] .df-card {
   opacity: 1;
@@ -989,7 +989,7 @@
 }
 .df-root[data-phase="collapsing"] .df-card {
   opacity: 1;
-  clip-path: inset(0 var(--df-capsule-inset-x, 208px) calc(var(--df-card-h, 591px) - 44px) var(--df-capsule-inset-x, 208px) round 22px);
+  clip-path: var(--df-clip-compact, inset(0 var(--df-capsule-inset-x, 208px) calc(var(--df-card-h, 591px) - 44px) var(--df-capsule-inset-x, 208px) round 22px));
 }
 
 /* 卡片内容晚一拍出现：clip 已经张开一部分，避免「464 宽的头部先露半截」。 */
@@ -1153,6 +1153,21 @@
 .df-act span { font-size:10px; letter-spacing:.02em; color:var(--foreground-muted, var(--muted-foreground)); }
 .df-act .df-icon { width:16px; height:16px; }
 .df-home { display:grid; grid-template-columns:repeat(4, 1fr); gap:8px; flex:1; min-height:0; align-content:stretch; }
+/* 贴左右缘：胶囊转竖排（44 × 150，内容纵向堆叠；单位文字隐藏，只留数字） */
+.df-root[data-float-edge="left"] .df-capsule,
+.df-root[data-float-edge="right"] .df-capsule {
+  flex-direction: column;
+  width: 44px;
+  height: 150px;
+  padding: 9px 0;
+  gap: 7px;
+}
+.df-root[data-float-edge="left"] .df-sep,
+.df-root[data-float-edge="right"] .df-sep { width: 18px; height: 1px; }
+.df-root[data-float-edge="left"] .df-carousel,
+.df-root[data-float-edge="right"] .df-carousel { flex-direction: column; gap: 5px; }
+.df-root[data-float-edge="left"] .df-stat-unit,
+.df-root[data-float-edge="right"] .df-stat-unit { display: none; }
 .df-hcard { display:flex; flex-direction:column; gap:5px; padding:11px 12px 10px; border-radius:var(--pr-radius-lg, 14px); background:var(--dock-face, oklch(1 0 0 / .07)); border:1px solid var(--hairline, oklch(1 0 0 / .1)); color:var(--foreground); cursor:pointer; min-height:0; }
 .df-hcard:hover { background:var(--dock-face2, oklch(1 0 0 / .13)); }
 .df-hcard .tt { display:flex; align-items:center; gap:6px; font-size:12px; font-weight:640; color:var(--foreground-muted, var(--muted-foreground)); }

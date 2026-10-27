@@ -126,7 +126,8 @@ test("dockFloatEdgeBounds pins left/right to the edge and centers vertically by 
   const workarea = { x: 0, y: 0, w: 2000, h: 1000 };
   const left = dockFloatEdgeBounds(workarea, "strip", "left", null, null);
   assert.equal(left.x, DOCK_FLOAT_GAP, "左缘留一条呼吸缝");
-  assert.equal(left.y, Math.round((workarea.h - DOCK_CAPSULE_H) / 2), "没拖过就垂直居中");
+  assert.equal(left.w, DOCK_CAPSULE_H, "贴左右缘时胶囊转竖排（宽 = 胶囊高 44）");
+  assert.equal(left.y, Math.round((workarea.h - 150) / 2), "没拖过就垂直居中");
   const right = dockFloatEdgeBounds(workarea, "flyout", "right", null, 300);
   assert.equal(right.x, workarea.w - DOCK_CARD_W - DOCK_FLOAT_GAP, "卡片从右缘向屏幕内长");
   assert.equal(right.y, 300, "纵向用拖拽保存的 floatY");

@@ -154,6 +154,8 @@ export function DockFloat({ onExpand, onHide, panels }: {
   const [clock, setClock] = useState(() => new Date().toTimeString().slice(0, 5));
   /** 收起形态：胶囊（信息全）/ 指示条（只剩一条线，最大化窗口时最不碍事） */
   const compactStyleSetting = useSettings((state) => state.dockCompactStyle);
+  /** 悬浮胶囊吸附的边：贴左右缘时胶囊转竖排（CSS 按 data-float-edge 适配） */
+  const floatEdge = useSettings((state) => state.dockFloatEdge);
   /**
    * 前台窗口最大化时自动切成指示条（对应 BrimDeck 的「最大化切指示条」）。
    * 手动设置仍然优先：用户选了指示条就一直是指示条；选了胶囊则只在最大化
@@ -218,6 +220,16 @@ export function DockFloat({ onExpand, onHide, panels }: {
       if (phaseTimer.current !== null) window.clearTimeout(phaseTimer.current);
     };
   }, []);
+
+  // 形变起点的裁剪区域按吸附边走：top = 顶部居中胶囊；left/right = 缘上的竖排胶囊
+  useEffect(() => {
+    const clip = floatEdge === "left"
+      ? "inset(0 calc(100% - 44px) calc(100% - 150px) 0 round 22px)"
+      : floatEdge === "right"
+        ? "inset(0 0 calc(100% - 150px) calc(100% - 44px) round 22px)"
+        : "inset(0 var(--df-capsule-inset-x, 208px) calc(var(--df-card-h, 591px) - 44px) var(--df-capsule-inset-x, 208px) round 22px)";
+    document.documentElement.style.setProperty("--df-clip-compact", clip);
+  }, [floatEdge]);
 
   const runWindowTransition = useCallback((nextOpen: boolean, height?: number) => {
     const next = windowTransition.current.then(() => onExpand(nextOpen, height));
@@ -310,6 +322,7 @@ export function DockFloat({ onExpand, onHide, panels }: {
 
   return (
     <div className="df-root" data-open={open} data-phase={phase} data-compact-style={compactStyle}
+      data-float-edge={floatEdge}
       onPointerLeave={hoverCollapse}>
       {compactStyle === "line" ? (
         <div className="df-line" data-open={open}
@@ -360,8 +373,8 @@ export function DockFloat({ onExpand, onHide, panels }: {
             </svg>
           </span>
           <span className="df-stat">
-            <b>{summary.todo}</b> {t("dockFloat.todoUnit")}
-            {summary.late > 0 && <> · <b className="is-warn">{summary.late}</b> {t("dockFloat.lateUnit")}</>}
+            <b>{summary.todo}</b>
+            <span className="df-stat-unit">{t("dockFloat.todoUnit")}{summary.late > 0 && <> · <b className="is-warn">{summary.late}</b> {t("dockFloat.lateUnit")}</>}</span>
           </span>
           <span className="df-clock">{clock}</span>
           <button type="button" className="df-expand"

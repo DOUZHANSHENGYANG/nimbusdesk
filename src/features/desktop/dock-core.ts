@@ -69,6 +69,8 @@ export function dockBounds(area: DockArea, edge: DockEdge, mode: DockMode, ancho
 export const DOCK_FLOAT_GAP = 12;
 /** 胶囊态：窗口不能按内容自适应宽度，给一个放得下「云台 · 3 项待办 · 17:15」的保守值。 */
 export const DOCK_CAPSULE_W = 244;
+/** 贴左右缘时的竖排胶囊高度 */
+export const DOCK_CAPSULE_SIDE_H = 150;
 export const DOCK_CAPSULE_H = 44;
 /** 卡片态：五页共用一个矩形，切页不跳窗（视觉稿实测 660 × 591）。 */
 export const DOCK_CARD_W = 660;
@@ -171,9 +173,17 @@ export function dockFloatEdgeBounds(
       y: Math.round(clamp(floatY ?? base.y, area.y, Math.max(area.y, area.y + area.h - base.h))) };
   }
   if (edge === "left" || edge === "right") {
-    const x = edge === "left"
-      ? area.x + DOCK_FLOAT_GAP
-      : area.x + area.w - base.w - DOCK_FLOAT_GAP;
+    // 贴左右缘：胶囊转**竖排**（宽 44 × 高 150），纵向用 floatY（没拖过就垂直居中）
+    if (mode === "strip") {
+      const w = DOCK_CAPSULE_H;
+      const h = Math.min(DOCK_CAPSULE_SIDE_H, area.h - DOCK_FLOAT_GAP * 2);
+      const x = edge === "left" ? area.x + DOCK_FLOAT_GAP : area.x + area.w - w - DOCK_FLOAT_GAP;
+      const wantedY = floatY ?? area.y + Math.round((area.h - h) / 2);
+      const y = clamp(wantedY, area.y + DOCK_FLOAT_GAP, Math.max(area.y + DOCK_FLOAT_GAP, area.y + area.h - h - DOCK_FLOAT_GAP));
+      return { x, y, w, h };
+    }
+    // 展开卡：从缘向屏幕内长，纵向贴着胶囊（floatY 或居中）
+    const x = edge === "left" ? area.x + DOCK_FLOAT_GAP : area.x + area.w - base.w - DOCK_FLOAT_GAP;
     const wantedY = floatY ?? area.y + Math.round((area.h - base.h) / 2);
     const maxY = Math.max(area.y + DOCK_FLOAT_GAP, area.y + area.h - base.h - DOCK_FLOAT_GAP);
     return { ...base, x, y: Math.round(clamp(wantedY, area.y + DOCK_FLOAT_GAP, maxY)) };
