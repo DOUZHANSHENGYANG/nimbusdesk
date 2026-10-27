@@ -911,7 +911,7 @@ export const en: AppMessages = {
     saveNetwork: "Save settings",
     networkSaved: "Fallback sources saved",
     tabFlow: "Information",
-    tabAi: "AI Search",
+    tabAi: "Search",
     aiAnswer: "AI search answer",
     favorites: "Favorites",
     groupTech: "Tech",

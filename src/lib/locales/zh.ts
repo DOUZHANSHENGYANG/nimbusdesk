@@ -897,7 +897,7 @@ export const zh = {
     saveNetwork: "保存设置",
     networkSaved: "备用来源设置已保存",
     tabFlow: "信息获取",
-    tabAi: "AI 搜索",
+    tabAi: "搜索",
     aiAnswer: "AI 搜索回答",
     favorites: "收藏",
     groupTech: "技术",
