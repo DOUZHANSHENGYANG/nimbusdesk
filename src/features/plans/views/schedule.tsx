@@ -7,6 +7,7 @@ import {
   dayProgress,
   fmtDate,
   fmtMinutes,
+  monthGrid,
   normalizeRange,
   parseDate,
   shiftRange,
@@ -23,7 +24,7 @@ import { capturePointer, releasePointer } from "@/lib/touch";
  * 日程视图：日 / 周 / 年三档（月档由 CalendarView 负责）。
  *
  * 为什么不把四档塞进一个组件：月视图是「格子里塞任务名」的网格，
- * 周/日是「时间轴 × 多列」的甘特式布局，年视图是「12 个月的热力概览」，
+ * 周/日是「时间轴 × 多列」的甘特式布局，年视图是「12 个月格、每格列当天的事」，
  * 三者的几何与交互没有共享部分。硬合并只会得到一个到处都是 if 的组件。
  *
  * 这一版只做只读浏览（点选日期、点任务跳日），不做拖拽改期 ——
@@ -281,56 +282,112 @@ function TimeGrid({ date, mode, onPick }: { date: string; mode: "day" | "week"; 
     </div>
   );
 }
-/* ── 年视图：12 个月热力概览 ────────────────────────────── */
+/* ── 年视图：12 个月格，每格把当天的事列出来 ──────────────── */
+
+/**
+ * 每格最多列几条。比月视图的 3 还少 —— 年视图一个格子只有 ~62px 宽（1440 三列时），
+ * 多列一条整年就要多滚一屏，「一眼看一年」的用处就没了，剩下的用「+N 项」收口。
+ */
+const YEAR_CHIPS = 2;
 
 function YearView({ date, onPick }: { date: string; onPick: (date: string) => void }) {
+  const { t, i18n } = useTranslation();
   const days = usePlans((s) => s.days);
   const archive = usePlansArchive((s) => s.days);
+  const now = useNow();
   const year = parseDate(date).getFullYear();
-  const [hover, setHover] = useState<string | null>(null);
+  const today = todayStr();
 
-  const months = useMemo(() => Array.from({ length: 12 }, (_, month) => {
-    const first = new Date(year, month, 1);
-    const offset = (first.getDay() + 6) % 7;
-    const cells = Array.from({ length: 42 }, (_, i) => {
-      const d = new Date(year, month, 1 - offset + i);
-      const cell = fmtDate(d);
-      const tasks = days[cell] ?? archive[cell]?.tasks ?? [];
-      return { date: cell, inMonth: d.getMonth() === month, count: tasks.length, done: tasks.filter((task) => task.done).length };
-    });
-    return { month, label: new Intl.DateTimeFormat(undefined, { month: "short" }).format(first), cells };
-  }), [year, days, archive]);
+  // 周一为起点，与月视图、周视图同一口径（2024-01-01 是周一）
+  const weekdayLabels = useMemo(() => {
+    const fmt = new Intl.DateTimeFormat(i18n.language === "en" ? "en-US" : "zh-CN", { weekday: "narrow" });
+    return Array.from({ length: 7 }, (_, i) => fmt.format(new Date(2024, 0, 1 + i)));
+  }, [i18n.language]);
+
+  const months = useMemo(
+    () =>
+      Array.from({ length: 12 }, (_, month) => ({
+        month,
+        label: new Intl.DateTimeFormat(i18n.language === "en" ? "en-US" : "zh-CN", { month: "short" }).format(
+          new Date(year, month, 1),
+        ),
+        // 复用 monthGrid：42 格、周一起，与月视图同源，免得两处口径漂移
+        cells: monthGrid(year, month).map(({ date: cell, inMonth }) => ({
+          date: cell,
+          inMonth,
+          tasks: days[cell] ?? archive[cell]?.tasks ?? [],
+        })),
+      })),
+    [year, days, archive, i18n.language],
+  );
 
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
       {months.map(({ month, label, cells }) => (
-        <div key={month} className="rounded-xl border border-border p-2">
+        <div key={month} data-month={month} className="rounded-xl border border-border p-2">
           <p className="mb-1 text-[11px] font-semibold text-muted-foreground">{label}</p>
           <div className="grid grid-cols-7 gap-px">
+            {weekdayLabels.map((w) => (
+              <span key={w} data-dow={w} className="pb-px text-center text-[9px] leading-3 text-muted-foreground">
+                {w}
+              </span>
+            ))}
             {cells.map((cell) => {
-              // 热度：任务越多颜色越深；全完成用 success 色区分
-              const ratio = cell.count === 0 ? 0 : cell.done / cell.count;
-              const intensity = Math.min(cell.count, 4) / 4;
+              const shown = cell.tasks.slice(0, YEAR_CHIPS);
+              const rest = cell.tasks.length - shown.length;
+              const done = cell.tasks.filter((task) => task.done).length;
               return (
-                <button key={cell.date} type="button" onClick={() => onPick(cell.date)}
-                  onMouseEnter={() => setHover(`${cell.date} · ${cell.count}`)}
-                  onMouseLeave={() => setHover(null)}
-                  title={`${cell.date}${cell.count ? ` · ${cell.done}/${cell.count}` : ""}`}
+                <button
+                  key={cell.date}
+                  type="button"
+                  data-day={cell.date}
+                  onClick={() => onPick(cell.date)}
+                  title={`${cell.date}${cell.tasks.length ? ` · ${done}/${cell.tasks.length}` : ""}`}
                   className={cn(
-                    "aspect-square rounded-[2px] transition-transform hover:scale-125",
-                    !cell.inMonth && "opacity-25",
-                    cell.count === 0 && "bg-muted/40",
-                    cell.count > 0 && ratio === 1 && "bg-success/70",
-                    cell.count > 0 && ratio < 1 && "bg-brand",
+                    "flex min-h-8 flex-col gap-px overflow-hidden rounded border border-transparent p-0.5 text-left transition-colors duration-150",
+                    !cell.inMonth && "opacity-35",
+                    cell.date === today ? "border-brand" : "hover:border-muted-foreground/40 hover:bg-surface-hover",
                   )}
-                  style={cell.count > 0 && ratio < 1 ? { opacity: 0.35 + intensity * 0.65 } : undefined}
-                />
+                >
+                  <span
+                    className={cn(
+                      "self-start text-[9px] font-semibold leading-3 tabular-nums",
+                      cell.date === today ? "text-brand" : "text-muted-foreground",
+                    )}
+                  >
+                    {parseDate(cell.date).getDate()}
+                  </span>
+                  {/* 只列标题：62px 的格子里再加时间前缀，标题就一个字都看不见了 */}
+                  {shown.map((task) => {
+                    const status = statusOf(task, cell.date, now);
+                    return (
+                      <span
+                        key={task.id}
+                        title={task.title}
+                        className={cn(
+                          "block w-full truncate rounded px-0.5 text-[9px] leading-3",
+                          status === "done"
+                            ? "bg-muted/60 text-muted-foreground line-through"
+                            : status === "doing"
+                              ? "bg-brand text-white"
+                              : "bg-muted text-foreground/80",
+                        )}
+                      >
+                        {task.title}
+                      </span>
+                    );
+                  })}
+                  {rest > 0 && (
+                    <span className="px-0.5 text-[9px] leading-3 text-muted-foreground">
+                      {t("plans.moreTasks", { count: rest })}
+                    </span>
+                  )}
+                </button>
               );
             })}
           </div>
         </div>
       ))}
-      <p className="col-span-full text-center text-[11px] text-muted-foreground">{hover ?? ""}</p>
     </div>
   );
 }
