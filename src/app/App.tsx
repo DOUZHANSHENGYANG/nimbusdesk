@@ -70,7 +70,7 @@ function Shell() {
       */}
       <div className="flex min-h-0 flex-1 gap-2.5 p-2.5">
         {!standalone && <Sidebar />}
-        <main className="mat-surface relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-[var(--pr-radius-xl)]">
+        <main className="relative flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-[var(--pr-radius-xl)]">
           <PageTransition>
             <Suspense fallback={null}>
               <Routes>
