@@ -1152,9 +1152,16 @@
 .df-act.is-on .df-icon, .df-act.is-on span { color:var(--brand); }
 .df-act span { font-size:10px; letter-spacing:.02em; color:var(--foreground-muted, var(--muted-foreground)); }
 .df-act .df-icon { width:16px; height:16px; }
-.df-home { display:grid; grid-template-columns:repeat(3, 1fr); gap:10px; padding:6px 2px 2px; }
-.df-home-card { display:flex; flex-direction:column; gap:4px; align-items:flex-start; padding:12px; border-radius:var(--pr-radius-lg, 14px); border:1px solid var(--hairline, oklch(1 0 0 / .1)); background:var(--dock-face, oklch(1 0 0 / .08)); color:var(--foreground); text-align:left; cursor:pointer; }
-.df-home-card:hover { background:var(--dock-face2, oklch(1 0 0 / .14)); }
-.df-home-card b { font-size:13px; font-weight:640; }
-.df-home-card span { font-size:11.5px; color:var(--foreground-muted, var(--muted-foreground)); }
-.df-home-card.is-warn span { color:var(--warning, oklch(0.75 0.12 80)); }
+.df-home { display:grid; grid-template-columns:repeat(4, 1fr); gap:8px; flex:1; min-height:0; align-content:stretch; }
+.df-hcard { display:flex; flex-direction:column; gap:5px; padding:11px 12px 10px; border-radius:var(--pr-radius-lg, 14px); background:var(--dock-face, oklch(1 0 0 / .07)); border:1px solid var(--hairline, oklch(1 0 0 / .1)); color:var(--foreground); cursor:pointer; min-height:0; }
+.df-hcard:hover { background:var(--dock-face2, oklch(1 0 0 / .13)); }
+.df-hcard .tt { display:flex; align-items:center; gap:6px; font-size:12px; font-weight:640; color:var(--foreground-muted, var(--muted-foreground)); }
+.df-hcard .tt svg { width:13px; height:13px; }
+.df-hcard .mid { margin:auto 0; display:flex; flex-direction:column; gap:3px; }
+.df-hcard .big { font-size:22px; font-weight:700; line-height:1; font-variant-numeric:tabular-nums; }
+.df-hcard .unit { font-size:11px; color:var(--foreground-muted, var(--muted-foreground)); }
+.df-hcard .pv { font-size:11px; color:var(--foreground-muted, var(--muted-foreground)); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; border-top:1px solid var(--hairline, oklch(1 0 0 / .1)); padding-top:6px; }
+.df-hcard .pv b { color:var(--foreground); font-weight:600; }
+.df-hcard .apps { display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin:auto 0; min-height:30px; }
+.df-app { display:grid; place-items:center; width:30px; height:30px; border-radius:8px; background:var(--dock-inset, oklch(0 0 0 / .22)); cursor:pointer; }
+.df-app:hover { box-shadow:inset 0 0 0 1px var(--brand); }

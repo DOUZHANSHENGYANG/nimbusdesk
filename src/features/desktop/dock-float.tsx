@@ -7,6 +7,7 @@ import {
   AppWindow, ArrowLeft, BookOpen, Bookmark, CalendarCheck, Camera, ChevronDown, ExternalLink, FileText, Folder,
   Bell, CalendarDays, CloudSun, FolderKanban, Inbox, LayoutGrid, Newspaper, SquareTerminal, RefreshCw, Rss, Search, Send, Settings2, Sparkles, Star, Trash2,
 } from "lucide-react";
+import { ItemIcon } from "@/features/files/icons";
 import { useFavorites } from "@/stores/favorites";
 import { usePlans } from "@/features/plans/store";
 import { todayStr, type PlanTask } from "@/features/plans/types";
@@ -18,10 +19,12 @@ import { useFeeds } from "@/stores/feeds";
 import { ArticleReader } from "@/features/feeds/article-reader";
 import {
   openUrl,
+  openPath,
   openNotificationSettings,
   systemNotifications,
   type SystemNotificationSnapshot,
 } from "@/lib/tauri";
+import { sortedTopCategories, useFiles } from "@/stores/files";
 import { useSettings } from "@/stores/settings";
 import { DayPicker, type DayProps } from "react-day-picker";
 import { chatWithProvider, type ChatMessage } from "@/features/ai/client";
@@ -67,27 +70,54 @@ const ACT_ROW: { key: DockTab; icon: typeof Search }[] = [
   { key: "news", icon: Newspaper },
 ];
 
-/** 活动页（P0 定稿的队列卡）：一张卡 = 一个「有东西等你的地方」，点卡片就是去那里。 */
+/** 主页（P0 定稿 v4）：今日待办 / 日历 / 天气 / 收纳盒 —— 收纳盒直接摆条目本体，能点能启动。 */
 function HomePanel({ onOpen }: { onOpen: (tab: DockTab) => void }) {
   const { t } = useTranslation();
   const today = todayStr();
   const tasks = usePlans((state) => state.days[today]) ?? [];
   const summary = summarizeDay(tasks);
-  const favs = useFavorites((state) => state.items.length);
-  const cards: { key: string; title: string; value: string; tab: DockTab; warn?: boolean }[] = [
-    { key: "todo", title: t("dockFloat.homeTodo"), value: t("dockFloat.homeTodoValue", { todo: summary.todo, late: summary.late }), tab: "plans", warn: summary.todo > 0 || summary.late > 0 },
-    { key: "favs", title: t("dockFloat.homeFavs"), value: t("dockFloat.homeFavsValue", { n: favs }), tab: "search" },
-    { key: "cal", title: t("dockFloat.homeCal"), value: today, tab: "cal" },
-  ];
+  const categories = useFiles((state) => state.categories);
+  const items = useFiles((state) => state.items);
+  const next = tasks.find((task) => !task.done);
+  const cats = sortedTopCategories(categories);
+  const apps = cats.flatMap((category) => items.filter((item) => item.categoryId === category.id)).slice(0, 8);
+  const launch = (item: (typeof apps)[number]) =>
+    (item.type === "url" ? openUrl(item.path) : openPath(item.path)).catch(report);
   return (
     <div className="df-home">
-      {cards.map((card) => (
-        <button key={card.key} type="button" className={card.warn ? "df-home-card is-warn" : "df-home-card"}
-          onClick={() => onOpen(card.tab)}>
-          <b>{card.title}</b>
-          <span>{card.value}</span>
-        </button>
-      ))}
+      <div className="df-hcard" role="button" tabIndex={0} onClick={() => onOpen("plans")}>
+        <span className="tt"><CalendarCheck />{t("dockFloat.homeTodo")}</span>
+        <span className="mid">
+          <span className="big">{summary.todo}</span>
+          <span className="unit">{t("dockFloat.todoUnit")}</span>
+        </span>
+        <span className="pv">{next ? <b>{next.title}</b> : t("dockFloat.homeNothing")}</span>
+      </div>
+      <div className="df-hcard" role="button" tabIndex={0} onClick={() => onOpen("cal")}>
+        <span className="tt"><CalendarDays />{t("dockFloat.tab.cal")}</span>
+        <span className="mid">
+          <span className="big">{today.slice(8)}</span>
+          <span className="unit">{today.slice(0, 7)}</span>
+        </span>
+        <span className="pv">{t("dockFloat.homeTodayFree")}</span>
+      </div>
+      <div className="df-hcard" role="button" tabIndex={0} onClick={() => onOpen("weather")}>
+        <WeatherCardBody />
+      </div>
+      <div className="df-hcard" role="button" tabIndex={0} onClick={() => onOpen("fences")}>
+        <span className="tt"><Folder />{t("dockFloat.tab.fences")} · {items.length}</span>
+        <span className="apps">
+          {apps.length === 0
+            ? <span className="df-hint">{t("dockFloat.homeFencesEmpty")}</span>
+            : apps.map((item) => (
+              <span key={item.id} className="df-app" title={item.title}
+                onClick={(event) => { event.stopPropagation(); void launch(item); }}>
+                <ItemIcon type={item.type} path={item.path} iconUrl={item.iconUrl} size={22} />
+              </span>
+            ))}
+        </span>
+        <span className="pv">{t("dockFloat.homeFencesHint")}</span>
+      </div>
     </div>
   );
 }
@@ -166,6 +196,9 @@ export function DockFloat({ onExpand, onHide, panels }: {
   const phaseTimer = useRef<number | null>(null);
   /** 原生窗口过渡串行化：快速 hover 时 set_size 不能互相超车。 */
   const windowTransition = useRef<Promise<void>>(Promise.resolve());
+  /** 当前页签的 ref：相位机里要读「这页该多高」，不想把 tab 加进依赖反复重挂 */
+  const tabRef = useRef(tab);
+  tabRef.current = tab;
 
   const open = phase === "expanding" || phase === "expanded";
 
@@ -201,8 +234,8 @@ export function DockFloat({ onExpand, onHide, panels }: {
     return () => clearTimeout(timer);
   }, [summary.late]);
 
-  const runWindowTransition = useCallback((nextOpen: boolean) => {
-    const next = windowTransition.current.then(() => onExpand(nextOpen));
+  const runWindowTransition = useCallback((nextOpen: boolean, height?: number) => {
+    const next = windowTransition.current.then(() => onExpand(nextOpen, height));
     windowTransition.current = next.catch(() => undefined);
     return next;
   }, [onExpand]);
@@ -221,7 +254,8 @@ export function DockFloat({ onExpand, onHide, panels }: {
       suppressHoverUntil.current = Date.now() + 700;
       setMounted(true);
       setSurfacePhase("resizing");
-      void runWindowTransition(true).then(() => {
+      // 活动页内容矮（四张卡一行）：展开高度按页走
+      void runWindowTransition(true, tabRef.current === "home" ? 300 : undefined).then(() => {
         if (generation !== transitionGeneration.current) return;
         // 等 WebView2 收到 WM_SIZE 再开始 clip，避免窗口还没到位、内容先展开。
         window.setTimeout(() => {
@@ -288,6 +322,13 @@ export function DockFloat({ onExpand, onHide, panels }: {
     window.addEventListener("keydown", onKey);
     return () => { window.removeEventListener("keydown", onKey); clearHoverTimer(); };
   }, [setExpanded]);
+
+  // 展开中切页：活动页矮（四张卡一行），窗口高度平滑跟过去；其它页回默认卡高
+  useEffect(() => {
+    if (phase !== "expanded" && phase !== "expanding") return;
+    void onExpand(true, tab === "home" ? 300 : undefined).catch(report);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab]);
 
 
   return (
@@ -874,15 +915,21 @@ function ChatPanel({ onClose }: { onClose: () => void }) {
 let weatherCache: { at: number; data: WeatherNow } | null = null;
 interface WeatherNow { temp: number; code: number; wind: number; days: { date: string; max: number; min: number; code: number }[] }
 
-function WeatherPanel() {
-  const { t } = useTranslation();
-  const [data, setData] = useState<WeatherNow | null>(weatherCache?.data ?? null);
-  const [error, setError] = useState<string | null>(null);
+let weatherLoading = false;
+let weatherWaiters: ((data: WeatherNow | null) => void)[] = [];
 
-  useEffect(() => {
-    if (weatherCache && Date.now() - weatherCache.at < 10 * 60_000) return;
-    let cancelled = false;
-    void (async () => {
+/** 拉天气（10 分钟缓存）：天气面板与主页天气卡共用这一份 —— 谁先触发谁拉，其余等同一份结果。 */
+function ensureWeather(): Promise<WeatherNow | null> {
+  if (weatherCache && Date.now() - weatherCache.at < 10 * 60_000) {
+    return Promise.resolve(weatherCache.data);
+  }
+  if (weatherLoading) {
+    return new Promise((resolve) => weatherWaiters.push(resolve));
+  }
+  weatherLoading = true;
+  void (async () => {
+    let data: WeatherNow | null = null;
+    try {
       let lat = useSettings.getState().weatherLat;
       let lon = useSettings.getState().weatherLon;
       /*
@@ -899,28 +946,54 @@ function WeatherPanel() {
           }
         } catch { /* 定位失败按原坐标继续 */ }
       }
-      try {
-        const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code,wind_speed_10m&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=auto&forecast_days=4`;
-        const reply = await fetch(url).then((r) => r.json());
-        const next: WeatherNow = {
-          temp: Math.round(reply.current.temperature_2m),
-          code: reply.current.weather_code,
-          wind: Math.round(reply.current.wind_speed_10m),
-          days: (reply.daily.time as string[]).map((date, i) => ({
-            date,
-            max: Math.round(reply.daily.temperature_2m_max[i]),
-            min: Math.round(reply.daily.temperature_2m_min[i]),
-            code: reply.daily.weather_code[i],
-          })),
-        };
-        weatherCache = { at: Date.now(), data: next };
-        if (!cancelled) setData(next);
-      } catch (cause) { if (!cancelled) setError(String(cause)); }
-    })();
-    return () => { cancelled = true; };
+      const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,weather_code,wind_speed_10m&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=auto&forecast_days=4`;
+      const reply = await fetch(url).then((r) => r.json());
+      data = {
+        temp: Math.round(reply.current.temperature_2m),
+        code: reply.current.weather_code,
+        wind: Math.round(reply.current.wind_speed_10m),
+        days: (reply.daily.time as string[]).map((date, i) => ({
+          date,
+          max: Math.round(reply.daily.temperature_2m_max[i]),
+          min: Math.round(reply.daily.temperature_2m_min[i]),
+          code: reply.daily.weather_code[i],
+        })),
+      };
+      weatherCache = { at: Date.now(), data };
+    } catch { data = null; }
+    weatherLoading = false;
+    for (const waiter of weatherWaiters.splice(0)) waiter(data);
+  })();
+  return new Promise((resolve) => weatherWaiters.push(resolve));
+}
+
+/** 主页的天气卡：同一份缓存，小块展示（点卡片进天气页看详情）。 */
+function WeatherCardBody() {
+  const { t } = useTranslation();
+  const [data, setData] = useState<WeatherNow | null>(weatherCache?.data ?? null);
+  useEffect(() => {
+    void ensureWeather().then((next) => next && setData(next));
+  }, []);
+  return (
+    <>
+      <span className="tt"><CloudSun />{t("dockFloat.tab.weather")}</span>
+      <span className="mid">
+        <span className="big">{data ? `${data.temp}°` : "…"}</span>
+        <span className="unit">{data ? t(`dockFloat.weatherCode.${data.code}`) : t("dockFloat.weatherLoading")}</span>
+      </span>
+      <span className="pv">{data ? `${data.wind} km/h · ${useSettings.getState().weatherCity}` : t("dockFloat.weatherLoading")}</span>
+    </>
+  );
+}
+
+function WeatherPanel() {
+  const { t } = useTranslation();
+  const [data, setData] = useState<WeatherNow | null>(weatherCache?.data ?? null);
+
+  useEffect(() => {
+    void ensureWeather().then((next) => next && setData(next));
   }, []);
 
-  if (error) return <p className="df-hint">{t("dockFloat.weatherFailed")}</p>;
   if (!data) return <p className="df-hint">{t("dockFloat.weatherLoading")}</p>;
 
   return (
