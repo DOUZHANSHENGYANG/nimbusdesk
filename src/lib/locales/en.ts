@@ -580,7 +580,7 @@ export const en: AppMessages = {
     title: "AI assistant",
     subtitle: "A conversational assistant that reads local data and asks before writing.",
     hint: "Enter to send · Shift+Enter for a new line · Esc to stop · Ctrl+Shift+O for a new chat",
-    placeholder: "Ask something, or have it look up local data…",
+    placeholder: "",
     leaderboard: "AI model leaderboard",
     relayCheck: "Relay endpoint check",
     send: "Send",
