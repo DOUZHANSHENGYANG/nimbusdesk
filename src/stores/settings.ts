@@ -14,7 +14,7 @@ import {
 } from "@/features/agent/composer-core";
 
 /** 计划的视图键（与 `features/plans/page.tsx` 的 VIEW_KEYS 对应） */
-export type PlansView = "outline" | "timeline" | "kanban" | "calendar" | "stats" | "archive";
+export type PlansView = "outline" | "kanban" | "calendar" | "stats" | "archive";
 
 /** 文件管理页的三种展示：图标网格 / 紧凑列表 / 收纳盒（按分类聚合）。 */
 export type FilesViewMode = "icons" | "list" | "boxes";
@@ -146,7 +146,7 @@ interface SettingsState {
   setAgentThinking: (v: ThinkingLevel) => void;
 }
 
-const PLANS_VIEWS: PlansView[] = ["outline", "timeline", "kanban", "calendar", "stats", "archive"];
+const PLANS_VIEWS: PlansView[] = ["outline", "kanban", "calendar", "stats", "archive"];
 const FILES_VIEW_MODES: FilesViewMode[] = ["icons", "list", "boxes"];
 
 /** 防手改坏 settings.json：读到不认识的视图键就退回大纲 */

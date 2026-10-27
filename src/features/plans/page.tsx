@@ -8,7 +8,6 @@ import { useDayTasks, usePlans, usePlansArchive, archiveDay, autoArchivePastDays
 import { canRedo, canUndo, redoLabel, undoLabel } from "@/features/plans/history";
 import { OutlineView } from "@/features/plans/views/outline";
 import { KanbanView } from "@/features/plans/views/kanban";
-import { TimelineView } from "@/features/plans/views/timeline";
 import { CalendarView } from "@/features/plans/views/calendar";
 import { ArchiveView } from "@/features/plans/views/archive";
 import { StatsView } from "@/features/plans/views/stats";
@@ -24,7 +23,7 @@ import { useSettingsHydrated } from "@/stores/settings";
  * 用 `as const` 数组而不是 union 字面量，是为了让快捷键能从同一份顺序里取键 ——
  * 两处各写一份列表，加视图时必然漏改一处。
  */
-export const VIEW_KEYS = ["outline", "timeline", "kanban", "calendar", "stats", "archive"] as const;
+export const VIEW_KEYS = ["outline", "kanban", "calendar", "stats", "archive"] as const;
 export type ViewKey = (typeof VIEW_KEYS)[number];
 
 /** persist 水合完成（响应式） */
@@ -350,7 +349,6 @@ export function PlansPage() {
         {/* ── 视图主体 ── */}
         <div ref={bodyRef} className="min-h-0">
           {view === "outline" && <OutlineView date={date} searchTaskId={date === searchDate ? searchTaskId : undefined} searchToken={`${location.key}:${location.search}`} />}
-          {view === "timeline" && <TimelineView date={date} />}
           {view === "kanban" && <KanbanView date={date} />}
           {view === "calendar" && (
             <CalendarView
