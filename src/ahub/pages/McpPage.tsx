@@ -724,12 +724,7 @@ export function McpPage() {
               )}
             >
               <div className="flex items-start justify-between gap-2">
-                {/* 传输类型跟在名字后面，「已应用 N 个工具 / 仅池中」删掉 ——
-                    接没接进工具是「批量配置」的事，卡片上每张都挂一个数字只是噪音 */}
-                <div className="flex min-w-0 flex-1 items-center gap-1.5">
-                  <h3 className="min-w-0 truncate font-mono text-[12.5px] font-semibold text-foreground">{s.name}</h3>
-                  <Badge variant="outline" className="shrink-0 font-mono">{s.transport}</Badge>
-                </div>
+                {/* 复选框在左上角（选中态的视觉锚点跟手），传输类型跟在名字后面 */}
                 {batchSel.size > 0 ? (
                   <button
                     type="button"
@@ -752,6 +747,10 @@ export function McpPage() {
                     {batchSel.has(s.id) ? <Check className="size-3.5" strokeWidth={3} /> : null}
                   </button>
                 ) : null}
+                <div className="flex min-w-0 flex-1 items-center gap-1.5">
+                  <h3 className="min-w-0 truncate font-mono text-[12.5px] font-semibold text-foreground">{s.name}</h3>
+                  <Badge variant="outline" className="shrink-0 font-mono">{s.transport}</Badge>
+                </div>
               </div>
               {s.description ? <p className="mt-1 line-clamp-1 text-xs text-ink-2">{s.description}</p> : null}
               <div className="mt-2 truncate rounded-md bg-bg-subtle px-2 py-1.5 font-mono text-[11px] text-ink-2" dir="ltr">
