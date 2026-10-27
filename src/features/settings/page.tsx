@@ -11,7 +11,7 @@ import { openUrl } from "@tauri-apps/plugin-opener";
 import { invoke } from "@tauri-apps/api/core";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
-import { FolderOpen, FolderInput, ExternalLink, Database, Palette, Info, Bot, SlidersHorizontal, ArrowLeft, Download, Upload, Bell, TriangleAlert, ListChecks, BookOpen, CalendarCheck, Search, LayoutGrid } from "lucide-react";
+import { FolderOpen, FolderInput, ExternalLink, Database, Palette, Info, Bot, SlidersHorizontal, ArrowLeft, Download, Upload, Bell, TriangleAlert, ListChecks, BookOpen, CalendarCheck, LayoutGrid } from "lucide-react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useModal } from "@/components/shell/modal-host";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -42,7 +42,7 @@ type SettingsTab = "system" | "plans" | "knowledge" | "feeds" | "ai" | "features
 
 /** 设置页：独立路由 + 左侧功能分类侧栏 + 右侧内容 */
 export function SettingsPage() {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const { confirm } = useModal();
   const aiCopy = useProviderCopy();
@@ -57,12 +57,9 @@ export function SettingsPage() {
 
   const TABS: { key: SettingsTab; icon: React.ComponentType<{ className?: string }>; label: string }[] = [
     { key: "system", icon: SlidersHorizontal, label: t("settings.tabs.system") },
-    { key: "plans", icon: CalendarCheck, label: t("settings.tabs.plans") },
-    { key: "search", icon: Search, label: i18n.language.startsWith("en") ? "Search" : "搜索" },
-    { key: "knowledge", icon: BookOpen, label: t("nav.knowledge") },
-    { key: "feeds", icon: SlidersHorizontal, label: t("nav.feeds") },
+    { key: "plans", icon: CalendarCheck, label: t("nav.workbench") },
     { key: "ai", icon: Bot, label: t("settings.tabs.ai") },
-    { key: "features", icon: LayoutGrid, label: t("settings.tabs.features") },
+    { key: "knowledge", icon: BookOpen, label: t("nav.library") },
     { key: "about", icon: Info, label: t("settings.tabs.about") },
   ];
 
@@ -124,7 +121,16 @@ export function SettingsPage() {
       <div ref={contentRef} className="min-w-0 flex-1 overflow-y-auto">
         <div className={cn("mx-auto flex w-full flex-col gap-5 p-6 pb-10", tab === "ai" ? "max-w-6xl" : "max-w-2xl")}>
           {tab === "system" && <SystemSection />}
-          {tab === "plans" && <PlansSection />}
+          {/* 工作台：原来四个独立导航项（计划/搜索/资讯/功能）现在并成一页，各自一块卡片 */}
+          {tab === "plans" && (
+            <>
+              <PlansSection />
+              <SearchSettings />
+              <HomeFeedSection />
+              <FeedNetworkSettings />
+              <FeaturesSection />
+            </>
+          )}
           {tab === "search" && <SearchSettings />}
           {tab === "knowledge" && <KnowledgeSettings />}
           {tab === "feeds" && <><HomeFeedSection /><FeedNetworkSettings /></>}
