@@ -1,6 +1,6 @@
-import { useMemo, useRef, useState, type ReactElement, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { CalendarDays, ChevronLeft, ChevronRight, Plus, Trash2 } from "lucide-react";
+import { CalendarDays, ChevronLeft, ChevronRight, Plus, Trash2, X } from "lucide-react";
 import { toast } from "sonner";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useModal } from "@/components/shell/modal-host";
@@ -160,7 +160,16 @@ function shiftMonth(anchor: { y: number; m: number }, delta: number) {
   return { y: d.getFullYear(), m: d.getMonth() };
 }
 
-export function TaskDetail({ date, task, trigger }: { date: string; task: PlanTask; trigger: ReactElement }) {
+export function TaskDetail({
+  date,
+  task,
+  onClose,
+}: {
+  date: string;
+  task: PlanTask;
+  /** 详情是列表右边的一栏，不是一个浮层 —— 关掉它就是把这一栏收起来 */
+  onClose: () => void;
+}) {
   const { t } = useTranslation();
   const { confirm } = useModal();
   const updateTask = usePlans((s) => s.updateTask);
@@ -169,7 +178,6 @@ export function TaskDetail({ date, task, trigger }: { date: string; task: PlanTa
   const removeTask = usePlans((s) => s.removeTask);
   const moveTaskToDate = usePlans((s) => s.moveTaskToDate);
 
-  const [open, setOpen] = useState(false);
   const [title, setTitle] = useState(task.title);
   const [note, setNote] = useState(task.note ?? "");
   const [child, setChild] = useState("");
@@ -179,6 +187,10 @@ export function TaskDetail({ date, task, trigger }: { date: string; task: PlanTa
   draft.current = { title, note };
   /** 删除之后不该再回写草稿：那时行已经没了，写进去只会多一条撤销记录 */
   const gone = useRef(false);
+  /** 换一条任务时把光标放到标题上：换之前「点标题就能改」的肌肉记忆不用重新学 */
+  useEffect(() => {
+    inputRef.current?.focus({ preventScroll: true });
+  }, [task.id]);
 
   const commit = () => {
     if (gone.current) return;
@@ -189,6 +201,12 @@ export function TaskDetail({ date, task, trigger }: { date: string; task: PlanTa
     const nextNote = draft.current.note.trim();
     if (nextNote !== (task.note ?? "")) patch.note = nextNote || undefined;
     if (Object.keys(patch).length) updateTask(date, task.id, patch);
+  };
+
+  /** 关这一栏统一走这里：先落地再收，别让已经改好的字卡在草稿里 */
+  const close = () => {
+    commit();
+    onClose();
   };
 
   const addChild = () => {
@@ -219,45 +237,34 @@ export function TaskDetail({ date, task, trigger }: { date: string; task: PlanTa
   };
 
   return (
-    <Popover
-      open={open}
-      onOpenChange={(next) => {
-        if (!next) commit();
-        setOpen(next);
-      }}
-    >
-      <PopoverTrigger asChild>{trigger}</PopoverTrigger>
-      <PopoverContent
-        align="start"
-        sideOffset={6}
-        collisionPadding={12}
-        aria-label={t("plans.detail")}
-        className="w-[22rem] gap-0 p-3"
-        onOpenAutoFocus={(event) => {
-          event.preventDefault();
-          inputRef.current?.focus({ preventScroll: true });
+    <div className="flex flex-col gap-3 p-4">
+      <div className="flex items-center gap-2">
+        <span className="text-[11px] font-medium text-muted-foreground">{t("plans.detail")}</span>
+        <button
+          type="button"
+          onClick={close}
+          title={t("plans.closeDetail")}
+          aria-label={t("plans.closeDetail")}
+          className="ml-auto grid size-6 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+        >
+          <X className="size-3.5" />
+        </button>
+      </div>
+
+      <input
+        ref={inputRef}
+        value={title}
+        onChange={(e) => setTitle(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          // 回车只落地、不关这一栏：详情栏是常驻的，关它是另一个动作
+          if (e.key === "Enter") commit();
+          if (e.key === "Escape") close();
         }}
-      >
-        <div className="flex flex-col gap-3">
-          <input
-            ref={inputRef}
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            onBlur={commit}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") {
-                commit();
-                setOpen(false);
-              }
-              if (e.key === "Escape") {
-                setTitle(task.title);
-                setOpen(false);
-              }
-            }}
-            aria-label={t("plans.titleLabel")}
-            placeholder={t("plans.titleLabel")}
-            className="w-full rounded-lg border border-border bg-card px-2.5 py-1.5 text-[13px] font-medium outline-none placeholder:text-muted-foreground/60 focus:border-brand/60"
-          />
+        aria-label={t("plans.titleLabel")}
+        placeholder={t("plans.titleLabel")}
+        className="w-full rounded-lg border border-border bg-card px-2.5 py-1.5 text-[13px] font-medium outline-none placeholder:text-muted-foreground/60 focus:border-brand/60"
+      />
 
           <Field label={t("plans.dateLabel")}>
             <DateField date={date} onPick={move} />
@@ -285,16 +292,18 @@ export function TaskDetail({ date, task, trigger }: { date: string; task: PlanTa
           </Field>
 
           <Field label={t("plans.noteLabel")}>
-            <input
+            {/* 文本域而不是单行输入：备注天然会写成几行，默认一行、往下自己拉 */}
+            <textarea
+              rows={1}
               value={note}
               onChange={(e) => setNote(e.target.value)}
               onBlur={commit}
               onKeyDown={(e) => {
-                if (e.key === "Enter") commit();
                 if (e.key === "Escape") setNote(task.note ?? "");
               }}
               placeholder={t("plans.noteLabel")}
-              className="w-full min-w-0 rounded-lg border border-border bg-card px-2.5 py-1 text-[12px] outline-none placeholder:text-muted-foreground/50 focus:border-brand/60"
+              aria-label={t("plans.noteLabel")}
+              className="w-full min-w-0 resize-y rounded-lg border border-border bg-card px-2.5 py-1.5 text-[12px] leading-5 outline-none placeholder:text-muted-foreground/50 focus:border-brand/60"
             />
           </Field>
 
@@ -311,7 +320,7 @@ export function TaskDetail({ date, task, trigger }: { date: string; task: PlanTa
               }}
               placeholder={t("plans.addChild")}
               aria-label={t("plans.addChild")}
-              className="w-full min-w-0 bg-transparent text-[12px] outline-none placeholder:text-muted-foreground/60"
+              className="w-full min-w-0 rounded-md bg-transparent px-2 py-1 text-[12px] outline-none placeholder:text-muted-foreground/60"
             />
             <button
               type="button"
@@ -322,8 +331,6 @@ export function TaskDetail({ date, task, trigger }: { date: string; task: PlanTa
               {t("plans.delete")}
             </button>
           </div>
-        </div>
-      </PopoverContent>
-    </Popover>
+    </div>
   );
 }

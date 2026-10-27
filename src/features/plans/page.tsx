@@ -1,13 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { CalendarDays, ChevronLeft, ChevronRight, Archive, Undo2, Redo2, MonitorUp } from "lucide-react";
+import { CalendarDays, ChevronLeft, ChevronRight, Archive, Undo2, Redo2 } from "lucide-react";
 import { motion } from "motion/react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { addDays, dayProgress, parseDate, todayStr } from "@/features/plans/types";
 import { useDayTasks, usePlans, usePlansArchive, archiveDay, autoArchivePastDays } from "@/features/plans/store";
 import { canRedo, canUndo, redoLabel, undoLabel } from "@/features/plans/history";
-import { openTodoPaper, closeTodoPaper, inTauri } from "@/lib/tauri";
-import { paperGeometryFor, usePapers } from "@/stores/papers";
 import { OutlineView } from "@/features/plans/views/outline";
 import { KanbanView } from "@/features/plans/views/kanban";
 import { TimelineView } from "@/features/plans/views/timeline";
@@ -18,7 +16,6 @@ import { useModal } from "@/components/shell/modal-host";
 import { useSettings } from "@/stores/settings";
 import { gsap, useGSAP } from "@/lib/gsap";
 import { cn } from "@/lib/utils";
-import { usePlanCopy } from "@/features/plans/copy";
 import { useLocation, useSearchParams } from "react-router-dom";
 import { useSettingsHydrated } from "@/stores/settings";
 
@@ -45,7 +42,6 @@ function useStoreHydrated(store: typeof usePlans | typeof usePlansArchive): bool
 
 /** 计划管理：日期导航 + 六视图切换（`1`–`6` 快捷键）+ 自动/手动归档 */
 export function PlansPage() {
-  const copy = usePlanCopy();
   const { t, i18n } = useTranslation();
   const { confirm } = useModal();
   const [date, setDate] = useState(todayStr());
@@ -196,28 +192,7 @@ export function PlansPage() {
     if (redo() && label) toast.success(t("plans.redone", { label: t(label) }));
   }, [history, redo, t]);
 
-  /* ── 待办纸片：把这一天放到桌面上 ─────────────────── */
-
-  /** 「开着」是一个持久化的意图（papers[date].open），不是「窗口此刻存在」——
-      后者在应用启动前为假，会让纸片无法在重启后自动回来 */
-  const paperOn = usePapers((s) => s.papers[date]?.open) ?? false;
-  const setPaperOpen = usePapers((s) => s.setOpen);
-
-  const onTogglePaper = async () => {
-    if (!inTauri) {
-      toast.error(t("files.err.unsupported"));
-      return;
-    }
-    if (paperOn) {
-      setPaperOpen(date, false);
-      await closeTodoPaper(date).catch(() => undefined);
-      return;
-    }
-    // 标题用本地化日期：Windows 任务栏/Alt+Tab 里看到的是这个串
-    setPaperOpen(date, true);
-    await openTodoPaper(date, dateLabel, paperGeometryFor(date)).catch(() => undefined);
-    toast.success(t("plans.paperOpened"));
-  };
+  /* ── 归档 ─────────────────────────────────────────── */
 
   const onArchiveDay = async () => {
     if (tasks.length === 0) return;
@@ -358,24 +333,6 @@ export function PlansPage() {
               <Redo2 className="size-4" />
             </button>
           </div>
-
-          {!isArchivedDay && (
-            <button
-              type="button"
-              onClick={() => void onTogglePaper()}
-              title={paperOn ? copy.closeDesktopDay : copy.desktopDay}
-              aria-label={paperOn ? copy.closeDesktopDay : copy.desktopDay}
-              className={cn(
-                "flex items-center gap-1.5 rounded-xl border px-2.5 py-1.5 text-[12px] transition-colors",
-                paperOn
-                  ? "border-brand/40 bg-brand/10 text-brand"
-                  : "border-border bg-card text-muted-foreground hover:border-brand/40 hover:text-brand",
-              )}
-            >
-              <MonitorUp className="size-3.5" />
-              {paperOn ? t("plans.paperClose") : t("plans.paperOpen")}
-            </button>
-          )}
 
           {!isArchivedDay && (
             <button
