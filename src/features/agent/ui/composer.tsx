@@ -172,7 +172,7 @@ export function Composer() {
           rows={1}
           value={text}
           disabled={guide}
-          placeholder={guide ? t("agent.guide.placeholder") : t("agent.placeholder")}
+          placeholder={guide ? t("agent.guide.placeholder") : undefined}
           onChange={(event) => setText(event.target.value)}
           onKeyDown={(event) => {
             if (event.key === "Escape") {

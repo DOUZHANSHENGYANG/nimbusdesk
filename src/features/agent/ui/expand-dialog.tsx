@@ -52,7 +52,6 @@ export function ExpandDialog({ open, value, busy, disabled, onChange, onClose, o
           className="min-h-[52vh] w-full resize-none rounded-lg border border-border bg-background p-3 text-sm leading-relaxed text-foreground outline-none focus:border-ring focus:ring-3 focus:ring-ring/30"
           value={value}
           disabled={disabled}
-          placeholder={t("agent.placeholder")}
           autoFocus
           onChange={(event) => onChange(event.target.value)}
           onKeyDown={(event) => {
