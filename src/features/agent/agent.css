@@ -68,6 +68,8 @@
 /* 未完成提示挂在被打断的用户消息那一行：右侧对齐（跟用户气泡同侧） */
 .agent-user-resume { display:flex; justify-content:flex-end; }
 .agent-user-resume .agent-stopped { flex-wrap:wrap; gap:6px; }
+/* 用户消息的操作条（复制/编辑/回退）跟气泡同侧：靠右 */
+.agent-user-actions { display:flex; justify-content:flex-end; }
 
 /* ── 工具行：左边「往里加东西」，右边「这一轮怎么跑」 ──────────── */
 .agent-composer-tools { display:flex; align-items:center; justify-content:space-between; gap:8px; min-width:0; }

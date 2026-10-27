@@ -154,7 +154,9 @@ function UserMessage({ message }: { message: AgentMessage }) {
         </Bubble>
         {attachments.length > 0 && <Attachments items={attachments} />}
         <MessageFooter className="agent-meta">{time && <span>{time}</span>}</MessageFooter>
-        <Actions message={message} items={["copy", "edit", "revert"]} onEdit={() => setEditing(true)} />
+        <div className="agent-user-actions">
+          <Actions message={message} items={["copy", "edit", "revert"]} onEdit={() => setEditing(true)} />
+        </div>
       </MessageContent>
     </Message>
   );
