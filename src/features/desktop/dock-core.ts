@@ -114,8 +114,8 @@ export function dockFloatSpringPair(area: DockArea, from: DockMode, to: DockMode
   return { from: dockFloatBounds(area, from), to: dockFloatBounds(area, to) };
 }
 
-/** 悬浮胶囊允许吸附的边（用户定的规矩：上 / 左 / 右，下不算）。 */
-export type FloatEdge = "top" | "left" | "right";
+/** 悬浮胶囊允许吸附的边（用户定的规矩：上 / 左 / 右，下不算）。"free" = 不贴边，停在拖到的位置。 */
+export type FloatEdge = "top" | "left" | "right" | "free";
 
 /** 拖松手后吸附到最近的边（在允许的三条里挑距离最近的）。 */
 export function nearestFloatEdge(rect: { x: number; y: number; w: number; h: number }, area: DockArea): FloatEdge {
@@ -124,6 +124,29 @@ export function nearestFloatEdge(rect: { x: number; y: number; w: number; h: num
   const dRight = Math.max(0, area.x + area.w - (rect.x + rect.w));
   const min = Math.min(dTop, dLeft, dRight);
   return min === dLeft ? "left" : min === dRight ? "right" : "top";
+}
+
+/** 离某条边的垂直/水平距离（仅允许的三条）。 */
+function edgeDistance(rect: { x: number; y: number; w: number; h: number }, area: DockArea, edge: "top" | "left" | "right"): number {
+  if (edge === "top") return Math.max(0, rect.y - area.y);
+  if (edge === "left") return Math.max(0, rect.x - area.x);
+  return Math.max(0, area.x + area.w - (rect.x + rect.w));
+}
+
+/**
+ * 拖松手后的落位：离允许的边 ≤ 阈值（默认 56px）就**吸附**到那条边，
+ * 否则 **free** —— 停在拖到的位置（clamp 回工作区内），哪都不吸附。
+ */
+export function settleFloatEdge(
+  rect: { x: number; y: number; w: number; h: number },
+  area: DockArea,
+  threshold = 56,
+): { edge: FloatEdge; x: number; y: number } {
+  const edge = nearestFloatEdge(rect, area) as "top" | "left" | "right";
+  if (edgeDistance(rect, area, edge) > threshold) {
+    return { edge: "free", x: rect.x, y: rect.y };
+  }
+  return { edge, x: rect.x, y: rect.y };
 }
 
 /**
@@ -142,6 +165,11 @@ export function dockFloatEdgeBounds(
 ): DockBounds {
   const base = dockFloatBounds(area, mode, "center", cardHeight);
   const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(v, hi));
+  if (edge === "free") {
+    // 自由摆放：停在拖到的位置，只 clamp 回工作区（永远够得着、不出屏）
+    return { ...base, x: Math.round(clamp(floatX ?? base.x, area.x, Math.max(area.x, area.x + area.w - base.w))),
+      y: Math.round(clamp(floatY ?? base.y, area.y, Math.max(area.y, area.y + area.h - base.h))) };
+  }
   if (edge === "left" || edge === "right") {
     const x = edge === "left"
       ? area.x + DOCK_FLOAT_GAP

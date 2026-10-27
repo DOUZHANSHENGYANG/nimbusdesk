@@ -574,11 +574,10 @@
 .df-card .df-body { animation-delay: 60ms; }
 
 /* ── 一个表面：胶囊与卡片不再「二选一」，而是同一块区域的两层状态 ──
-   展开时胶囊淡出但不卸载（窗口在长大的过程中它还在），收起时卡片多留
+   展开时胶囊行**保持可见并居中**（P0 定稿：身份行是岛顶的常驻条，
+   展开时它不移动、不淡出 —— 用户明确要「始终居中」），收起时卡片多留
    320ms 一起缩，动作才合成一次而不是「内容先没、窗口后缩」。 */
 .df-capsule { transition: opacity 140ms var(--pr-ease-out); }
-/* 从根节点判形态：胶囊自身的属性会被 :hover 规则顶掉 */
-.df-root[data-open="true"] .df-capsule { opacity: 0 !important; pointer-events: none; }
 /* 卡片本身只动圆角，不动 scale —— 量尺寸的地方（含回归）必须拿到 660 的实宽 */
 .df-root[data-open="false"] .df-card { opacity: 0; transition: opacity 180ms var(--pr-ease-out); }
 
@@ -1139,7 +1138,7 @@
 .df-root[data-compact-style="capsule"][data-phase="compact"] .df-card { opacity: 1; }
 
 /* ── 状态轮播（P0 定稿）：胶囊里一次只读一条状态 ────────────────── */
-.df-carousel { display:flex; align-items:center; gap:8px; min-width:0; flex:1; overflow:hidden; }
+.df-carousel { display:flex; align-items:center; gap:8px; min-width:0; flex:0 0 auto; overflow:hidden; }
 .df-slide { display:inline-flex; align-items:center; gap:6px; min-width:0; }
 .df-dots { display:inline-flex; gap:3px; flex:0 0 auto; }
 .df-dots i { width:4px; height:4px; border-radius:50%; background:oklch(1 0 0 / .16); }

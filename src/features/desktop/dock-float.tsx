@@ -26,7 +26,7 @@ import { useSettings } from "@/stores/settings";
 import { DayPicker, type DayProps } from "react-day-picker";
 import { chatWithProvider, type ChatMessage } from "@/features/ai/client";
 import { ageBucket, dateKey, summarizeDay } from "./dock-float-core";
-import { nearestFloatEdge, DOCK_CAPSULE_W, DOCK_CARD_W } from "./dock-core";
+import { settleFloatEdge, DOCK_CAPSULE_W, DOCK_CARD_W } from "./dock-core";
 import { monitorArea } from "./monitors";
 import "./dock-float.css";
 
@@ -319,10 +319,11 @@ export function DockFloat({ onExpand, onHide, panels }: {
               const area = monitorArea(monitor);
               const rect = { x: pos.x / scale, y: pos.y / scale, w: size.width / scale, h: size.height / scale };
               const store = useSettings.getState();
-              const edge = nearestFloatEdge(rect, area);
-              store.setDockFloatEdge(edge);
-              if (edge === "top") store.setDockFloatX(rect.x);
-              else store.setDockFloatY(rect.y);
+              // 吸附 or 自由：离允许的边 ≤56px 才贴边，否则停在拖到的位置
+              const settle = settleFloatEdge(rect, area);
+              store.setDockFloatEdge(settle.edge);
+              store.setDockFloatX(settle.x);
+              store.setDockFloatY(settle.y);
               void onExpand(open).catch(() => undefined);
             })().catch(() => undefined);
           }}>

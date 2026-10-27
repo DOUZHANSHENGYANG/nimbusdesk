@@ -57,8 +57,8 @@ interface SettingsState {
   dockStyle: "rail" | "capsule";
   /** 胶囊被拖到的工作区左边（逻辑像素）；null = 水平居中 */
   dockFloatX: number | null;
-  /** 悬浮胶囊吸附的屏幕边（只支持 上 / 左 / 右） */
-  dockFloatEdge: "top" | "left" | "right";
+  /** 悬浮胶囊吸附的屏幕边（上/左/右 = 吸附；free = 停在拖到的位置） */
+  dockFloatEdge: "top" | "left" | "right" | "free";
   /** 贴左右缘时的纵向位置（null = 垂直居中） */
   dockFloatY: number | null;
   /** 展开方向：居中向两边 / 钉住左缘向右 */
@@ -119,7 +119,7 @@ interface SettingsState {
   setDockEdge: (edge: "left" | "right" | "top") => void;
   setDockStyle: (style: "rail" | "capsule") => void;
   setDockFloatX: (x: number | null) => void;
-  setDockFloatEdge: (edge: "top" | "left" | "right") => void;
+  setDockFloatEdge: (edge: "top" | "left" | "right" | "free") => void;
   setDockFloatY: (y: number | null) => void;
   setDockExpandAnchor: (anchor: "center" | "left") => void;
   setDockCompactStyle: (style: "capsule" | "line") => void;
