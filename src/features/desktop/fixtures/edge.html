@@ -12,6 +12,7 @@ if(params.has('bottom'))fixtures['edge-workspace'].state.groups[key].offset=600;
 if(params.has('locked'))fixtures.fences.state.fences.fixture.locked=true;
 if(params.has('items'))fixtures.files.state.items=Array.from({length:15},(_,index)=>({id:'fixture-item-'+index,categoryId:'fixture',type:index===0?'folder':'file',title:index===0?'项目资料':index===1?'很长的文件名称用于验证列表不会挤在一起.md':`文档-${index}.txt`,path:`E:/OwnedFixture/${index}.txt`,tags:[],createdAt:1}));
 if(params.has('occupied')){fixtures.files.state.categories.push({id:'occupied',name:'Owned neighbor',createdAt:1});fixtures.fences.state.fences.occupied={...normal,open:true,form:'capsule',edge:'left',edgeY:48,edgeMonitor:monitorId};}
+if(params.has('neighbor')){fixtures.files.state.categories.push({id:'neighbor',name:'Locked neighbor',createdAt:1});fixtures.fences.state.fences.neighbor={...normal,open:true,form:'capsule',edge:'right',dockOffset:220,edgeMonitor:monitorId,locked:true};}
 if(params.has('crowded'))for(let i=0;i<40;i++){
  fixtures.files.state.categories.push({id:'crowded-'+i,name:'crowded-'+i,createdAt:1});
  fixtures.fences.state.fences['crowded-'+i]={...normal,open:true,form:'capsule',edge:'right',edgeMonitor:monitorId};
@@ -19,6 +20,9 @@ if(params.has('crowded'))for(let i=0;i<40;i++){
 if(params.has('hub'))fixtures.fences.state.fences.fixture.open=false;
 const label=params.has('hub')?'edge-hub-'+key:'fence-fixture';
 window.edgeReview={fixtures,calls:[],position:{x:normal.x,y:normal.y},size:{width:normal.w,height:normal.h},monitor,monitors:[monitor],visible:false,delay:0,fail:null,emit:(action)=>emitTo(label,'desktop://window-action',{action}),fire:(event,payload)=>emitTo(label,event,payload)};
+// 2026-10 起多屏列表与解析都在 Rust（display_list / display_resolve），前端只剩薄转发。
+// 少了这两条，readMonitors() 会拿到 null，sameMonitors 直接 null.map 崩掉 —— hub 窗口全挂。
+const areas=()=>params.has('allmonitorsmissing')?[]:window.edgeReview.monitors.map(m=>({id:`${m.name??'display'}@${m.position.x},${m.position.y}`,name:m.name,x:m.workArea.position.x,y:m.workArea.position.y,w:m.workArea.size.width,h:m.workArea.size.height,scale:m.scaleFactor}));
 const listeners=new Map();
 mockIPC(async(cmd,args)=>{
  const r=window.edgeReview;r.calls.push({cmd,args});
@@ -32,6 +36,12 @@ mockIPC(async(cmd,args)=>{
  if(r.fail===cmd)throw new Error('OWNED_IPC_FAILURE');
  if(cmd==='read_json'){if(params.has('slow')&&args.key==='fences')await new Promise(resolve=>setTimeout(resolve,200));return structuredClone(fixtures[args.key]??null);}
  if(cmd==='write_json'){fixtures[args.key]=structuredClone(args.value);return args.value;}
+ // 文件库走行级表：读取只认 files_load，没有「回退读旧 files 键」的兼容路径了。
+ // 少了这一段，useFiles 会静默拿到空库 —— 栅栏拿不到分类名，停靠标签就退化成「展开便签」。
+ if(cmd==='files_load')return {categories:structuredClone(fixtures.files.state.categories),items:structuredClone(fixtures.files.state.items)};
+ if(cmd==='files_apply')return null;
+ if(cmd==='display_list')return areas();
+ if(cmd==='display_resolve')return areas()[0]??null;
  if(cmd==='get_data_dir')return 'E:/OwnedFixture';
  if(cmd==='window_ready'||cmd.endsWith('|show'))r.visible=true;
  if(cmd.endsWith('|hide'))r.visible=false;

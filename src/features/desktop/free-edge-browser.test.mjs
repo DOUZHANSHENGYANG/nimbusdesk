@@ -7,7 +7,7 @@ try {
  const page=await browser.newPage({viewport:{width:412,height:380}}),errors=[];page.setDefaultTimeout(12000);
  page.on('pageerror',e=>errors.push(e.message));
  await page.goto('http://127.0.0.1:17811/src/features/desktop/fixtures/edge.html?docked');
- const tab=page.getByRole('button',{name:'展开Owned fence',exact:true});await tab.waitFor();
+ let tab=page.getByRole('button',{name:'展开Owned fence',exact:true});await tab.waitFor();
  await page.waitForFunction(()=>edgeReview.size.width===112);
  const sync=async()=>{const size=await page.evaluate(()=>edgeReview.size);await page.setViewportSize(size);};
  const drag=async(target,expectedEdge,offset)=>{
@@ -21,9 +21,11 @@ try {
  };
  await drag({x:1168,y:440},'right',440);
  assert.equal(await page.evaluate(()=>edgeReview.position.y),440,'drop stays at requested height');
- await page.evaluate(async()=>{const {useFences}=await import('/src/stores/files.ts');const s=useFences.getState();s.setDockPosition('fixture',{edge:'right',edgeMonitor:'Owned monitor@0,0',dockOffset:220});s.setLocked('fixture',true);});
+ await page.goto('http://127.0.0.1:17811/src/features/desktop/fixtures/edge.html?docked&neighbor');
+ tab=page.getByRole('button',{name:'展开Owned fence',exact:true});await tab.waitFor();await page.waitForFunction(()=>edgeReview.size.width===112);
  await drag({x:1168,y:530},'right',530);
- assert.equal(await page.evaluate(async()=>{const {queueSnapshot}=await import('/src/features/desktop/queue-registry.ts');const {monitorArea}=await import('/src/features/desktop/monitors.ts');return queueSnapshot('fence-fixture',monitorArea(edgeReview.monitor),'right').slot.y;}),220);
+ assert.equal(await page.evaluate(()=>edgeReview.position.y),530,'drop stays at requested height beside a locked neighbor');
+ assert.equal(await page.evaluate(async()=>{const {queueSnapshot}=await import('/src/features/desktop/queue-registry.ts');const {monitorArea}=await import('/src/features/desktop/monitors.ts');return queueSnapshot('fence-neighbor',monitorArea(edgeReview.monitor),'right').slot.y;}),220,'locked neighbor keeps its slot');
  console.log('PASS individual dropped height persists, unlocked sticky moves independently of locked neighbor');
  await drag({x:1160,y:0},'top',1160);
  assert.equal(await tab.evaluate(e=>getComputedStyle(e).clipPath.includes('50% 100%')),true,'top arrow points downward');
