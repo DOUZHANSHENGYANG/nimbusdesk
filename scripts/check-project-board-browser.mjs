@@ -52,10 +52,10 @@ try {
   assert.equal(await page.getByRole("button", { name: "看全部状态" }).count(), 0, "Filter note disappears once all statuses are shown");
   assert.equal((await column("已完成").innerText()).includes("拖到这里"), true, "Empty column must explain where to drop");
 
-  // 选中项目后多出「项目资料」：栏位条件没被移到 Tabs 外面时也不会丢。
+  // 选中项目后多出「文档」：栏位条件没被移到 Tabs 外面时也不会丢。
   await page.locator(".projects-nav button.pl-5").first().click();
-  assert.deepEqual(await page.getByRole("tab").allTextContents(), ["总览", "工作项", "看板", "项目资料"], "Files tab must come back for a selected project");
-  await page.getByRole("tab", { name: "项目资料" }).click();
+  assert.deepEqual(await page.getByRole("tab").allTextContents(), ["总览", "工作项", "看板", "文档"], "Files tab must come back for a selected project");
+  await page.getByRole("tab", { name: "文档" }).click();
   await page.waitForTimeout(150);
   assert.equal((await page.locator("[data-slot='tabs-content']").first().innerText()).trim().length > 0, true, "Files panel must render its content");
   assert.equal(await page.locator('section[aria-label^="待办"]').count(), 0, "Board must unmount while files is open");

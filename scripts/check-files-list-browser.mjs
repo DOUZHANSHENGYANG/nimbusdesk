@@ -1,14 +1,17 @@
 #!/usr/bin/env node
 /**
- * 文件页分片渲染回归：上千个条目时 DOM 不能一次铺满，滚到底要能续上。
+ * 文件收纳页回归：分片渲染 / 行级写入 / 收纳盒墙 / 盒子浮层 / 深链定位。
  *
  * 前置：`npm run dev`（Vite 在 17800），夹具 `src/features/files/fixtures/page.html`。
  * 用法：`node scripts/check-files-list-browser.mjs`
  *
  * 断言：
- *   1. 800 个条目时，首屏渲染的卡片数远小于总数（分片生效）；
- *   2. 反复滚到底，最终能把全部条目铺出来（不会漏、不会卡在第一批）；
- *   3. 全程无运行时错误。
+ *   1. 墙上按分类出方块，数量徽标等于该分类条目数；
+ *   2. 点方块打开浮层，条目网格只在浮层里渲染（外面不再有第二份）；
+ *   3. 800 个条目时首屏远小于总数；反复滚到底能铺满（不会漏、不会卡）；
+ *   4. 改一条只推一条（行级写入没退化成整份重写）；
+ *   5. 深链 /files?item=<第 200 条> 会自动打开它所在的盒子并滚进视野；
+ *   6. 全程无运行时错误。
  */
 import assert from "node:assert/strict";
 import { loadPlaywright, resolveBrowser } from "./browser-harness.mjs";
@@ -23,35 +26,49 @@ const page = await browser.newPage({ viewport: { width: 1400, height: 900 } });
 const errors = [];
 page.on("pageerror", (error) => errors.push(error.message));
 
-const cards = () => page.locator("[data-card]").count();
+const cards = () => page.locator("[data-box-panel] [data-card]").count();
+const panel = () => page.locator("[data-box-panel]");
 
 try {
   await page.goto(`${ORIGIN}/src/features/files/fixtures/page.html`);
-  await page.locator("[data-card]").first().waitFor({ timeout: 20000 });
+  await page.locator("[data-files-boxes]").waitFor({ timeout: 20000 });
 
-  // 塞 800 条进去（真实使用里「整目录映射」就是这个量级）
-  await page.evaluate(async (total) => {
+  /* ── 墙：按分类出方块 ── */
+  const boxCards = page.locator("[data-files-boxes] [data-box-card]");
+  assert.equal(await boxCards.count(), 2, "两个分类应渲染两个收纳盒方块");
+  assert.ok(await page.locator("[data-files-boxes] [data-box-new]").count() === 1, "墙末尾要有「新建收纳盒」");
+  assert.equal(await page.locator("[data-card]").count(), 0, "没打开盒子时不应该有第二份条目网格");
+  console.log("✓ 收纳盒墙：两个方块 + 新建入口，网格只在盒子浮层里");
+
+  /* ── 点开第一个盒子，把 800 条塞进它所属分类 ── */
+  const firstCategoryId = await boxCards.first().getAttribute("data-cat-id");
+  assert.ok(firstCategoryId, "方块要带 data-cat-id，右键菜单与深链都靠它");
+  await boxCards.first().click();
+  await panel().waitFor({ timeout: 5000 });
+
+  await page.evaluate(async ({ total, categoryId }) => {
     const { useFiles } = await import("/src/stores/files.ts");
     const base = useFiles.getState().items[0];
     useFiles.setState({
       items: Array.from({ length: total }, (_, index) => ({
         ...base,
         id: `bulk-${index}`,
+        categoryId,
         title: `压力测试文件 ${index}`,
         path: `E:/bulk/file-${index}.txt`,
         tags: index % 7 === 0 ? ["标签"] : [],
         createdAt: index,
       })),
     });
-  }, TOTAL);
+  }, { total: TOTAL, categoryId: firstCategoryId });
 
-  await page.waitForFunction((min) => document.querySelectorAll("[data-card]").length > min, STEP, { timeout: 15000 });
+  await page.waitForFunction((min) => document.querySelectorAll("[data-box-panel] [data-card]").length > min, STEP, { timeout: 15000 });
   const first = await cards();
   assert.ok(first >= STEP, `首屏至少要铺第一批（当前 ${first}）`);
   assert.ok(first < TOTAL, `首屏不能一次铺完（当前 ${first} / ${TOTAL}）——分片没生效`);
   console.log(`✓ 首屏渲染 ${first} / ${TOTAL} 张卡片（分片生效）`);
 
-  /* ── 行级增量写入：改一条只推一条，不做整份重写 ── */
+  /* ── 行级增量写入：改一条只推一条 ── */
   await page.evaluate(async () => {
     const { useFiles } = await import("/src/stores/files.ts");
     const items = useFiles.getState().items.map((item, index) => (index === 0 ? { ...item, title: "只改这一条" } : item));
@@ -64,40 +81,27 @@ try {
   assert.equal(applied.items.reorder.length, 0, "内容变了但位置没变，不该产生 reorder");
   console.log("✓ 行级写入：改一条只推一条");
 
-  /* ── 三种视图切换：图标 / 列表 / 收纳盒 ──
-     收纳盒视图必须按分类出盒子（数量徽标不显示 0），点盒子进该分类网格；
-     切到收纳盒时内容顶边不能跳（布局抖动的回归点）。 */
-  const gridBox = await page.locator("[data-card]").first().boundingBox();
-  await page.getByRole("button", { name: "收纳盒视图" }).click();
+  /* ── 关掉浮层：回到墙，徽标是真实条目数 ── */
+  await page.locator("[data-box-panel] header button").last().click();
   await page.locator("[data-files-boxes]").waitFor({ timeout: 5000 });
-  const boxCards = page.locator("[data-files-boxes] [data-box-card]");
-  assert.equal(await boxCards.count(), 2, "两个分类应渲染两个收纳盒方块");
-  assert.equal(await boxCards.first().locator("[data-box-badge]").textContent(), String(TOTAL), "数量徽标应显示分类条目数");
-  assert.equal(await boxCards.first().locator("[data-box-preview] > span > *").count(), 6, "3×3 预览只放前 6 个图标");
-  const boxesBox = await page.locator("[data-files-boxes]").boundingBox();
-  assert.ok(gridBox && boxesBox && Math.abs(gridBox.y - boxesBox.y) <= 1, "切到收纳盒视图时内容顶边不应跳动");
-  console.log("✓ 收纳盒视图：分类方块 / 数量徽标 / 6 个预览图标，切换无纵向抖动");
+  const badge = page.locator(`[data-box-card][data-cat-id="${firstCategoryId}"] [data-box-badge]`);
+  assert.equal(await badge.textContent(), String(TOTAL), "数量徽标应显示分类条目数");
+  console.log("✓ 关掉浮层回到墙，徽标 = 分类条目数");
 
-  await boxCards.first().click();
-  await page.locator("[data-files-boxes]").waitFor({ state: "detached", timeout: 5000 });
-  await page.getByRole("button", { name: "返回收纳盒" }).waitFor({ timeout: 5000 });
-  assert.ok((await page.locator("[data-card]:visible").count()) > 0, "点开收纳盒后应显示该分类的条目网格");
-  await page.getByRole("button", { name: "返回收纳盒" }).click();
-  await page.locator("[data-files-boxes]").waitFor({ timeout: 5000 });
+  /* ── 墙上方块：预览图标是拖拽源（真正的换盒由 move-between-boxes 单测覆盖） ── */
+  const dragSource = await page.evaluate(() => {
+    const icons = [...document.querySelectorAll("[data-tile-item]")];
+    return { total: icons.length, draggable: icons.filter(node => node.getAttribute("draggable") === "true").length };
+  });
+  assert.ok(dragSource.total > 0, "盒子上应该能看到预览图标");
+  assert.equal(dragSource.draggable, dragSource.total, "墙上的预览图标都必须可拖动");
+  console.log(`✓ 墙上方块：${dragSource.total} 个预览图标可拖`);
 
-  await page.getByRole("button", { name: "列表视图" }).click();
-  await page.locator("[data-files-list]").waitFor({ timeout: 5000 });
-  assert.equal(await page.locator("[data-files-list] [data-card]").count(), STEP, "列表视图也应按分片只铺第一批");
-  await page.getByRole("button", { name: "图标视图" }).click();
-  await page.locator("[data-files-boxes]").waitFor({ state: "detached", timeout: 5000 });
-  console.log("✓ 列表视图按分片渲染；三种视图可来回切换");
-
-  /* ── 深链定位：目标条目排在第 200 位（远超首批），也必须被滚进视野 ──
-     这一步必须在「滚满全量」之前做，否则目标早就在 DOM 里，测不出分片下的定位逻辑。 */
-  await page.evaluate(() => { window.location.hash = "#/files?item=bulk-200"; });
+  /* ── 深链：自动打开目标所在盒子并滚进视野 ── */
+  await page.evaluate(() => { window.location.hash = "#/tools/files?item=bulk-200"; });
   await page.waitForFunction(
     () => {
-      const card = [...document.querySelectorAll("[data-card]")]
+      const card = [...document.querySelectorAll("[data-box-panel] [data-card]")]
         .find(node => (node.getAttribute("data-item-id") ?? "") === "bulk-200");
       if (!card) return false;
       const box = card.getBoundingClientRect();
@@ -108,53 +112,26 @@ try {
   );
   const afterJump = await cards();
   assert.ok(afterJump < TOTAL, `深链定位不应把整份列表铺开（当前 ${afterJump} / ${TOTAL}）`);
-  console.log(`✓ 深链 /files?item=<第 200 条> 已滚进视野，此时渲染 ${afterJump} 张卡片`);
+  console.log(`✓ 深链 /files?item=<第 200 条> 自动开盒并滚进视野，此时渲染 ${afterJump} 张卡片`);
 
-  /* ── 带过滤时的深链：当前搜索词把目标筛掉，深链仍必须定位到它 ──
-     深链会自己清空搜索、切分类，那些状态到下一次渲染才生效；若按「旧过滤条件下找不到」
-     就放弃，用户从全局搜索跳过来只会看到网格顶部（上一轮 bug 的形态）。 */
-  await page.locator("input").first().fill("no-such-file-zzz");
-  await page.waitForTimeout(200);
-  await page.evaluate(() => { window.location.hash = "#/files?item=bulk-300"; });
-  await page.waitForFunction(
-    () => {
-      const card = [...document.querySelectorAll("[data-card]")]
-        .find(node => (node.getAttribute("data-item-id") ?? "") === "bulk-300");
-      if (!card) return false;
-      const box = card.getBoundingClientRect();
-      return box.top >= -8 && box.bottom <= window.innerHeight + 8;
-    },
-    undefined,
-    { timeout: 15000 },
-  );
-  const afterFilteredJump = await cards();
-  assert.ok(afterFilteredJump < TOTAL, `带过滤的深链也不该铺开全量（当前 ${afterFilteredJump} / ${TOTAL}）`);
-  console.log(`✓ 带过滤的深链 /files?item=<第 300 条> 已滚进视野，此时渲染 ${afterFilteredJump} 张卡片`);
-
-  // 反复滚到底，看能不能续上
+  /* ── 反复滚到底，看能不能续上 ── */
   let rounds = 0;
-  let previous = afterFilteredJump;
+  let previous = afterJump;
   while (previous < TOTAL && rounds < 40) {
     await page.evaluate(() => {
-      document.querySelector("[data-card]:last-of-type")?.scrollIntoView({ block: "end" });
-      const sentinel = [...document.querySelectorAll("div[aria-hidden]")].at(-1);
-      sentinel?.scrollIntoView({ block: "end" });
+      const nodes = document.querySelectorAll("[data-box-panel] [data-card]");
+      nodes[nodes.length - 1]?.scrollIntoView({ block: "end" });
     });
     await page.waitForTimeout(120);
     const now = await cards();
-    if (now === previous) {
-      // 哨兵可能需要再滚一次容器
-      await page.mouse.wheel(0, 4000);
-      await page.waitForTimeout(160);
-    }
-    previous = await cards();
-    rounds += 1;
+    if (now === previous) rounds++;
+    else { rounds = 0; previous = now; }
   }
-  assert.equal(previous, TOTAL, `滚到底后应能铺出全部 ${TOTAL} 条，实际 ${previous}`);
+  assert.equal(previous, TOTAL, `滚动应能续到全量（当前 ${previous} / ${TOTAL}）`);
   console.log(`✓ 滚动续批 ${rounds} 轮后铺满 ${previous} 条`);
 
-  assert.deepEqual(errors, [], "分片渲染不应产生运行时错误");
-  console.log("\nPASS 文件页：分片渲染生效，滚动可续至全量，深链能定位到首批之外的条目，无运行时报错");
+  assert.deepEqual(errors, []);
+  console.log("PASS 文件收纳：墙 / 浮层 / 分片 / 行级写入 / 深链定位 / 滚动续批，无运行时报错");
 } finally {
   await browser.close();
 }

@@ -278,7 +278,7 @@ td.mono, .mono { font-family: "Cascadia Mono", Consolas, monospace; font-size: v
           <h3>排版尺度</h3>
           <div class="type-row"><b>2xl · 23 / 600</b><span style="font-size: var(--pr-text-2xl); font-weight: 600">今日计划</span></div>
           <div class="type-row"><b>xl · 19 / 600</b><span style="font-size: var(--pr-text-xl); font-weight: 600">数据与存储</span></div>
-          <div class="type-row"><b>lg · 16 / 600</b><span style="font-size: var(--pr-text-lg); font-weight: 600">文件管理</span></div>
+          <div class="type-row"><b>lg · 16 / 600</b><span style="font-size: var(--pr-text-lg); font-weight: 600">文件收纳</span></div>
           <div class="type-row"><b>md · 14 / 400</b><span>任务标题与说明文字</span></div>
           <div class="type-row"><b>base · 13 / 400</b><span style="font-size: var(--pr-text-base)">密集列表正文</span></div>
           <div class="type-row"><b>sm · 12 / 400</b><span style="font-size: var(--pr-text-sm); color: var(--muted-foreground)">辅助说明、时间戳</span></div>
@@ -292,7 +292,7 @@ td.mono, .mono { font-family: "Cascadia Mono", Consolas, monospace; font-size: v
           <a class="on">▦ 主页</a>
           <a>▤ 项目管理</a>
           <a>▥ 计划管理</a>
-          <a>▧ 文件管理</a>
+          <a>▧ 文件收纳</a>
           <a>▨ 资讯</a>
           <a style="margin-top: auto">⚙ 设置</a>
         </nav>

@@ -30,10 +30,10 @@ try {
   await page.keyboard.press("Escape");
   await page.waitForFunction(() => !document.querySelector(".projects-details"));
 
-  // 点「项目进度」的一行把范围收到那个项目：项目资料 tab 因此出现，且看板/列表的筛选保持同一份。
+  // 点「项目进度」的一行把范围收到那个项目：文档 tab 因此出现，且看板/列表的筛选保持同一份。
   await page.getByRole("button", { name: /业务门户/ }).first().click();
   await page.waitForFunction(() => [...document.querySelectorAll('[role="tab"]')].length === 4);
-  assert.deepEqual(await page.getByRole("tab").allTextContents(), ["总览", "工作项", "看板", "项目资料"]);
+  assert.deepEqual(await page.getByRole("tab").allTextContents(), ["总览", "工作项", "看板", "文档"]);
   assert.equal(await selectedTab(), "总览", "Narrowing the scope keeps the view you are on");
   // 项目范围内只剩该项目的工作项（「临时小需求」不属于任何项目，因此不在这一屏里）。
   assert.equal(await tile("todo"), 0);
