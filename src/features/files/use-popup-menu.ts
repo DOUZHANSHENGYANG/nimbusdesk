@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
-import { useFiles, type FileItem } from "@/stores/files";
+import { useFiles, categoryKind, type FileCategory, type FileItem } from "@/stores/files";
 import { useSettings } from "@/stores/settings";
 import type { FileActions } from "@/features/files/actions";
 import type { MenuIconKey, MenuNode } from "@/features/files/menu-model";
@@ -50,7 +50,8 @@ export function usePopupMenu({
   onToggleFence,
   onCategoryRename,
   onCategoryDelete,
-  onCategoryAddChild,
+  onChangeMapping,
+  onCategoryAdd,
   onOpenChange,
 }: {
   actions: FileActions;
@@ -58,7 +59,10 @@ export function usePopupMenu({
   onToggleFence?: (categoryId: string) => void;
   onCategoryRename?: (categoryId: string) => void;
   onCategoryDelete?: (categoryId: string) => void;
-  onCategoryAddChild?: (categoryId: string) => void;
+  /** 映射盒专用：重新挑一个文件夹 */
+  onChangeMapping?: (categoryId: string) => void;
+  /** 新建顶级收纳盒（空白处/分类菜单都提供） */
+  onCategoryAdd?: () => void;
   /** Owner lifecycle, unlike open()'s promise which resolves before menu dismissal. */
   onOpenChange?: (open: boolean) => void;
 }) {
@@ -121,7 +125,7 @@ export function usePopupMenu({
           });
         nodes = buildItemMenu(t, target.item, moves);
       } else if (target.kind === "category" && cat) {
-        nodes = buildCategoryMenu(t);
+        nodes = buildCategoryMenu(t, cat);
       } else {
         nodes = buildBlankMenu(t, cat, !!filesRoot, categories.length > 0);
       }
@@ -230,11 +234,14 @@ export function usePopupMenu({
       case "renameCategory":
         if (categoryId) onCategoryRename?.(categoryId);
         break;
-      case "newSubCategory":
-        if (categoryId) onCategoryAddChild?.(categoryId);
-        break;
       case "deleteCategory":
         if (categoryId) onCategoryDelete?.(categoryId);
+        break;
+      case "changeMapping":
+        if (categoryId) onChangeMapping?.(categoryId);
+        break;
+      case "newCategory":
+        onCategoryAdd?.();
         break;
       case "toggleFence":
         if (categoryId) onToggleFence?.(categoryId);
@@ -327,6 +334,13 @@ function buildBlankMenu(
 ): MenuNode[] {
   return [
     {
+      kind: "item",
+      action: "newCategory",
+      label: t("files.ctx.newBox"),
+      icon: "newBox",
+    },
+    { kind: "sep" },
+    {
       kind: "sub",
       label: t("files.ctx.new"),
       icon: "newFile",
@@ -375,8 +389,15 @@ function buildBlankMenu(
   ];
 }
 
-function buildCategoryMenu(t: T): MenuNode[] {
+function buildCategoryMenu(t: T, category: FileCategory): MenuNode[] {
   return [
+    {
+      kind: "item",
+      action: "newCategory",
+      label: t("files.ctx.newBox"),
+      icon: "newBox",
+    },
+    { kind: "sep" },
     {
       kind: "sub",
       label: t("files.ctx.new"),
@@ -394,6 +415,14 @@ function buildCategoryMenu(t: T): MenuNode[] {
       ],
     },
     { kind: "sep" },
+    ...(categoryKind(category) === "mapped"
+      ? [{
+          kind: "item" as const,
+          action: "changeMapping",
+          label: t("files.mapping.change"),
+          icon: "changeMapping" as const,
+        }]
+      : []),
     {
       kind: "item",
       action: "renameCategory",

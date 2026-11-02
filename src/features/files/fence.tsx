@@ -2,14 +2,20 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { getCurrentWebviewWindow, getAllWebviewWindows } from "@tauri-apps/api/webviewWindow";
 import { resolveMonitor } from "@/features/desktop/monitors";
 import { PhysicalPosition } from "@tauri-apps/api/dpi";
-import { Eye, EyeOff, X, Pin, PinOff, PanelRightClose, ArrowLeftRight, Expand, List, LayoutGrid, LockKeyhole, UnlockKeyhole, MoreHorizontal, Palette } from "lucide-react";
+import { X, Pin, PinOff, PanelRightClose, ArrowLeftRight, Expand, List, LayoutGrid, LockKeyhole, UnlockKeyhole, MoreHorizontal, Palette, Search, Settings } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
 import { Providers } from "@/app/providers";
-import { useFiles, useFences, DEFAULT_FENCE, type FileItem } from "@/stores/files";
-import { inTauri, openPath, openUrl, dragOut, windowReady } from "@/lib/tauri";
+import { useFiles, useFences, DEFAULT_FENCE, type FileItem, type FenceSortMode } from "@/stores/files";
+import { useSettings } from "@/stores/settings";
+import { inTauri, dragOut, windowReady } from "@/lib/tauri";
+import { invoke } from "@tauri-apps/api/core";
 import { moveDroppedFiles } from "./fence-drop";
-import { ItemIcon } from "@/features/files/icons";
+import { openTarget } from "./open-target";
+import { ItemVisual } from "./file-preview";
+import { boxAppearance, boxDisplayName, boxFontFamily } from "./box-appearance";
+import { BoxAppearancePanel } from "./box-appearance-panel";
+import { openFenceGroup } from "./desktop-actions";
 import { useFileActions } from "@/features/files/actions";
 import { usePopupMenu } from "@/features/files/use-popup-menu";
 import { ITEM_ATTR } from "@/features/files/menu-model";
@@ -18,6 +24,7 @@ import { flushAllStorage } from "@/lib/storage";
 import { EdgeDockFrame, useEdgeDock, queueWindowOperation } from "@/features/desktop/edge-dock";
 import { logicalFenceGeometry, dragDockEdge } from "./fence-geometry";
 import { fenceLayout, fenceInsertionBefore, FENCE_GAP as GAP } from "./fence-presentation";
+
 
 const win = inTauri ? getCurrentWebviewWindow() : null;
 
@@ -48,6 +55,8 @@ function FencePanel({ categoryId }: { categoryId: string }) {
   const categories = useFiles((s) => s.categories);
   const allItems = useFiles((s) => s.items); // 稳定引用，selector 内不得造新数组
   const moveItemBefore = useFiles((s) => s.moveItemBefore);
+  const setCategoryAppearance = useFiles((s) => s.setCategoryAppearance);
+  const setCategoryGroupColor = useFiles((s) => s.setCategoryGroupColor);
   const category = useMemo(
     () => categories.find((c) => c.id === categoryId),
     [categories, categoryId],
@@ -57,7 +66,7 @@ function FencePanel({ categoryId }: { categoryId: string }) {
     [allItems, categoryId],
   );
   const fence = useFences((s) => s.fences[categoryId]) ?? DEFAULT_FENCE;
-  const setGhost = useFences((s) => s.setGhost);
+  const fenceReveal = useSettings((s) => s.fenceReveal);
   const setGeometry = useFences((s) => s.setGeometry);
   const setOpen = useFences((s) => s.setOpen);
   const setPinned = useFences((s) => s.setPinned);
@@ -65,12 +74,26 @@ function FencePanel({ categoryId }: { categoryId: string }) {
   const setForm = useFences((s) => s.setForm);
   const setEdge = useFences((s) => s.setEdge);
   const setEdgeY = useFences((s) => s.setEdgeY);
-  const setViewMode = useFences((s) => s.setViewMode);
+  const setSortMode = useFences((s) => s.setSortMode);
   const setLocked = useFences((s) => s.setLocked);
+  const [appearanceOpen, setAppearanceOpen] = useState(false);
+  /** 同色编组拖动：起点 + 同伴窗口的起点；Ctrl 拖动时 temp=true（临时解组） */
+  const dragGroupRef = useRef<null | {
+    temp: boolean;
+    origin: { x: number; y: number };
+    peers: { label: string; x: number; y: number }[];
+  }>(null);
   const docked = fence.form === "capsule";
   const pinned = fence.pinned ?? false;
   const locked = fence.locked ?? false;
-  const viewMode = fence.viewMode ?? "icons";
+  /** 外观以盒子上的 appearance 为准；旧 fence.viewMode / fileNameMode 只作迁移前的 fallback */
+  const look = useMemo(() => ({
+    ...boxAppearance(category?.appearance),
+    // 没有 appearance 的旧盒子继续读 fence.fileNameMode，避免升级后显示口径突变。
+    nameMode: category?.appearance ? (category.appearance.nameMode ?? "full") : (fence.fileNameMode ?? "full"),
+  }), [category?.appearance, fence.fileNameMode]);
+  const viewMode = category?.appearance?.view ?? fence.viewMode ?? "icons";
+  const sortMode: FenceSortMode = fence.sortMode ?? "manual";
   const listView = viewMode === "list";
   const dockingBusy = useRef(false);
   const modeRef = useRef(docked);
@@ -93,6 +116,10 @@ function FencePanel({ categoryId }: { categoryId: string }) {
   const closeBusy = useRef(false);
 
   const [page, setPage] = useState(0);
+  /** 盒内搜索：栅栏只有一屏大小，条目一多翻页就不够用了 */
+  const [searching, setSearching] = useState(false);
+  const [query, setQuery] = useState("");
+  const searchRef = useRef<HTMLInputElement>(null);
   const [hover, setHover] = useState(false);
   const [focusWithin, setFocusWithin] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -310,7 +337,7 @@ function FencePanel({ categoryId }: { categoryId: string }) {
       const peers = (
         await Promise.all(
           (await getAllWebviewWindows())
-            .filter((x) => x.label !== win.label && x.label.startsWith("fence-"))
+            .filter((x) => x.label !== win.label && x.label.startsWith("fence-") && !x.label.startsWith("fence-group-"))
             .map(async (x) => {
               try {
                 const [p, s] = await Promise.all([x.outerPosition(), x.outerSize()]);
@@ -353,6 +380,25 @@ function FencePanel({ categoryId }: { categoryId: string }) {
         await queueWindowOperation(win.label, async () => {
           if (!cancelled && !modeRef.current && !useFences.getState().fences[categoryId]?.locked) await win.setPosition(new PhysicalPosition(self.x + dx, self.y + dy));
         });
+      }
+
+      /*
+       * 同色编组：拖一个 = 整组平移。
+       * 用「本次拖动起点 → 当前位置」的总位移，而不是每次增量 —— onMoved 会
+       * 反复触发，增量会越拖越远；总位移是幂等的。
+       * Ctrl 按下时 temp=true，只动自己（Pogget 的临时解组）。
+       */
+      const group = dragGroupRef.current;
+      if (group && !group.temp && !cancelled && !modeRef.current) {
+        const moveX = self.x + dx - group.origin.x;
+        const moveY = self.y + dy - group.origin.y;
+        if (moveX !== 0 || moveY !== 0) {
+          await Promise.all(group.peers.map(async (peer) => {
+            const peerWin = (await getAllWebviewWindows()).find((entry) => entry.label === peer.label);
+            if (!peerWin) return;
+            await queueWindowOperation(peer.label, () => peerWin.setPosition(new PhysicalPosition(Math.round(peer.x + moveX), Math.round(peer.y + moveY))));
+          }));
+        }
       }
     };
 
@@ -402,13 +448,37 @@ function FencePanel({ categoryId }: { categoryId: string }) {
     return () => ro.disconnect();
   }, [docked]);
 
-  const { cellW, cellH, cols, pageSize, iconSize } = fenceLayout(viewMode, scale, gridSize.w, gridSize.h);
+  const { cellW, cellH, cols, pageSize, iconSize } = fenceLayout(viewMode, scale, gridSize.w, gridSize.h, look);
 
-  const pages = Math.max(1, Math.ceil(items.length / pageSize));
+  /* ── 盒内排序 + 搜索：先排序再过滤，翻页在过滤后的列表上算 ── */
+  const ordered = useMemo(() => {
+    if (sortMode === "manual") return items;
+    const copy = [...items];
+    if (sortMode === "name") {
+      return copy.sort((a, b) => a.title.localeCompare(b.title, i18n.language, { numeric: true, sensitivity: "base" }));
+    }
+    // 最近创建的在前：优先用文件自身的修改时间，扫描来的条目 createdAt 只是扫描时刻
+    return copy.sort((a, b) => (b.mtime ?? b.createdAt ?? 0) - (a.mtime ?? a.createdAt ?? 0) || a.id.localeCompare(b.id));
+  }, [items, sortMode, i18n.language]);
+
+  const visible = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return ordered;
+    return ordered.filter(item =>
+      item.title.toLowerCase().includes(q) || item.path.toLowerCase().includes(q),
+    );
+  }, [ordered, query]);
+
+  const pages = Math.max(1, Math.ceil(visible.length / pageSize));
   const safePage = Math.min(page, pages - 1);
-  const pageItems = items.slice(safePage * pageSize, safePage * pageSize + pageSize);
+  const pageItems = visible.slice(safePage * pageSize, safePage * pageSize + pageSize);
+
+  /** 换搜索词或排序后回到第一页，否则可能停在一个已经不存在的页码上 */
+  useEffect(() => { setPage(0); }, [query, sortMode]);
   const focusableId = pageItems.some(item => item.id === selectedId) ? selectedId : pageItems[0]?.id;
-  const ghosted = fence.ghost && !hover && !focusWithin && !renaming && !renameItemId && !menuOpen && !controlsOpen;
+  const ghosted = fenceReveal === "hover" && !hover && !focusWithin && !renaming && !renameItemId && !menuOpen && !controlsOpen;
+  /** 标题栏：Pogget 的 AutoHideTitleBar。hidden 时只留顶部 6px 拖动条 */
+  const titleVisible = look.titleBar === "always" || (look.titleBar === "auto" && (hover || focusWithin || renaming || Boolean(renameItemId) || menuOpen || controlsOpen));
 
   /* ── 拖入收集：桌面/资源管理器 → 栅栏 ── */
   useEffect(() => {
@@ -440,9 +510,8 @@ function FencePanel({ categoryId }: { categoryId: string }) {
           const destination = await actions.ensureDir(categoryId);
           if (!destination || cancelled) return;
           const result = await moveDroppedFiles(categoryId, paths, destination);
-          const en = i18n.language.startsWith('en');
-          if (result.moved.length) toast.success(en ? `Added ${result.moved.length} items to this fence` : `已移动并加入栅格 ${result.moved.length} 项`);
-          if (result.moved.some(entry => entry.sourceRetained)) toast.warning(en ? 'A source could not be removed. Its original was kept.' : '部分源文件无法移除，原文件已保留。');
+          if (result.moved.length) toast.success(t("files.collected"));
+          if (result.moved.some(entry => entry.sourceRetained)) toast.warning(i18n.language.startsWith('en') ? 'A source could not be removed. Its original was kept.' : '部分源文件无法移除，原文件已保留。');
           if (result.failed.length) toast.error(result.failed.map(item => `${item.source.split(/[\\/]/).pop()}: ${item.error}`).join('\n'));
         } catch (e) {
           toast.error(String(e));
@@ -598,11 +667,7 @@ function FencePanel({ categoryId }: { categoryId: string }) {
 
   const openItem = (path: string, type: string) => {
     if (Date.now() < suppressClickUntil.current) return;
-    const p =
-      type === "url"
-        ? openUrl(path).catch(() => toast.error(t("common.error")))
-        : openPath(path).catch(() => toast.error(t("common.error")));
-    void p;
+    void openTarget(path, type as "file" | "folder" | "url").catch(() => toast.error(t("common.error")));
   };
 
   const onItemKeyDown = (event: React.KeyboardEvent<HTMLDivElement>, item: FileItem) => {
@@ -649,8 +714,36 @@ function FencePanel({ categoryId }: { categoryId: string }) {
       dragging = true;
       userTitleDrag.current = true;
       cleanup();
-      void win.startDragging().then(() => settleTitleDrag.current()).catch(error => {
+      // 记下同色编组的起点；Ctrl = 临时解组，只拖自己。
+      const groupColor = useFiles.getState().categories.find((entry) => entry.id === categoryId)?.groupColor;
+      dragGroupRef.current = null;
+      const groupTask = groupColor
+        ? (async () => {
+            const [self, windows] = await Promise.all([win.outerPosition(), getAllWebviewWindows()]);
+            const peers = await Promise.all(windows
+              .filter((entry) => entry.label !== win.label && entry.label.startsWith("fence-") && !entry.label.startsWith("fence-group-"))
+              .map(async (entry) => {
+                const peerCategoryId = entry.label.slice("fence-".length);
+                const peerCategory = useFiles.getState().categories.find((candidate) => candidate.id === peerCategoryId);
+                if (peerCategory?.groupColor !== groupColor) return null;
+                const position = await entry.outerPosition();
+                return { label: entry.label, x: position.x, y: position.y };
+              }));
+            dragGroupRef.current = {
+              temp: ev.ctrlKey,
+              origin: { x: self.x, y: self.y },
+              peers: peers.filter((peer): peer is { label: string; x: number; y: number } => peer !== null),
+            };
+          })().catch(() => undefined)
+        : Promise.resolve();
+      void groupTask.then(() => win.startDragging()).then(async () => {
+        settleTitleDrag.current();
+        // startDragging 在按下时就返回；等系统拖动真正结束再丢弃编组起点。
+        await invoke("desktop_wait_drag_end").catch(() => undefined);
+        dragGroupRef.current = null;
+      }).catch(error => {
         userTitleDrag.current = false;
+        dragGroupRef.current = null;
         toast.error(String(error));
       });
     };
@@ -677,22 +770,35 @@ function FencePanel({ categoryId }: { categoryId: string }) {
       <div
         ref={panelRef}
         className={cn(
-          "relative flex h-full w-full flex-col overflow-hidden rounded-2xl border transition-opacity duration-300",
+          "relative flex h-full w-full flex-col overflow-hidden border transition-opacity duration-300",
           ghosted && !docked ? "opacity-[0.14]" : "opacity-100",
         )}
         style={{
-          background: "color-mix(in oklch, var(--card) 86%, transparent)",
+          background: `color-mix(in oklch, var(--card) ${Math.round(look.backgroundAlpha * 100)}%, transparent)`,
           borderColor: "var(--border)",
+          borderRadius: look.radius,
+          fontFamily: boxFontFamily(look.fontFamily) || undefined,
           backdropFilter: "blur(2px)",
         }}
       >
         {(dropActive || dropBusy) && <div role="status" className="pointer-events-none absolute inset-0 z-40 grid place-items-center rounded-2xl border-2 border-brand bg-card/95 p-5 text-center text-sm text-foreground">
           {i18n.language.startsWith('en') ? (dropBusy ? 'Moving files…' : 'Drop to move into this fence\u2019s folder') : (dropBusy ? '正在移动文件…' : '松开以移动到此栅格目录')}
         </div>}
+        {/* 标题栏隐藏时留一条 6px 拖动带：不占整行，但窗口仍然能移动 */}
+        {look.titleBar === "hidden" && (
+          <div
+            onPointerDown={startTitleDrag}
+            className="absolute inset-x-0 top-0 z-20 h-1.5 cursor-move"
+            aria-hidden="true"
+          />
+        )}
         {/* 迷你标题栏：按住拖动移动（自己实现，避免双击被当成最大化）；双击名称 = 改名 */}
         <div
           onPointerDown={startTitleDrag}
-          className="flex h-9 shrink-0 cursor-default items-center gap-1.5 border-b border-border/60 px-3 select-none"
+          className={cn(
+            "flex h-9 shrink-0 cursor-default items-center gap-1.5 border-b border-border/60 px-3 select-none",
+            !titleVisible && "hidden",
+          )}
           style={docked && dock.tabTop > 0 ? { [dock.edge === "right" ? "paddingLeft" : "paddingRight"]: 24 } : undefined}
         >
           {renaming ? (
@@ -725,7 +831,17 @@ function FencePanel({ categoryId }: { categoryId: string }) {
           )}
           {/* 计数与按钮区不参与拖动，避免点按钮时误拖窗口 */}
           <span data-tauri-drag-region="false" className="flex shrink-0 items-center gap-1.5">
-            <span className="text-[10px] text-muted-foreground">{items.length}</span>
+            {category?.groupColor && (
+              <span
+                aria-hidden="true"
+                title={t("files.appearanceGroup")}
+                className="size-2.5 shrink-0 rounded-full border border-black/10"
+                style={{ background: category.groupColor }}
+              />
+            )}
+            <span className="text-[10px] text-muted-foreground">
+              {query.trim() ? `${visible.length}/${items.length}` : items.length}
+            </span>
             {docked && <TitleBtn title={t("plans.capsuleSwitchEdge")} disabled={locked} onClick={() => void dock.switchEdge()}><ArrowLeftRight className="size-3.5" /></TitleBtn>}
             <TitleBtn title={t(docked ? "plans.capsuleExpand" : "plans.capsuleToEdge")}
               onClick={() => {
@@ -744,9 +860,23 @@ function FencePanel({ categoryId }: { categoryId: string }) {
               }}>
               {docked ? <Expand className="size-3.5" /> : <PanelRightClose className="size-3.5" />}
             </TitleBtn>
+            <TitleBtn title={t("files.boxSearch")} active={searching}
+              onClick={() => {
+                setSearching(open => {
+                  if (open) { setQuery(""); }
+                  else { requestAnimationFrame(() => searchRef.current?.focus()); }
+                  return !open;
+                });
+              }}>
+              <Search className="size-3.5" />
+            </TitleBtn>
             <TitleBtn title={t(listView ? "files.iconView" : "files.listView")} active={listView}
-              onClick={() => { setViewMode(categoryId, listView ? "icons" : "list"); setPage(0); }}>
+              onClick={() => { setCategoryAppearance(categoryId, { view: listView ? "icons" : "list" }); setPage(0); }}>
               {listView ? <LayoutGrid className="size-3.5" /> : <List className="size-3.5" />}
+            </TitleBtn>
+            <TitleBtn title={t("files.appearanceTitle")} active={appearanceOpen}
+              onClick={() => setAppearanceOpen((open) => !open)}>
+              <Settings className="size-3.5" />
             </TitleBtn>
             <TitleBtn title={t(locked ? "files.unlockPosition" : "files.lockPosition")} active={locked}
               onClick={() => setLocked(categoryId, !locked)}>
@@ -764,10 +894,45 @@ function FencePanel({ categoryId }: { categoryId: string }) {
                   className="flex min-h-9 w-full items-center gap-2 rounded-lg px-2 text-left text-xs text-foreground hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring">
                   {pinned ? <Pin className="size-3.5 shrink-0 text-brand" /> : <PinOff className="size-3.5 shrink-0" />}{t(pinned ? "files.unpin" : "files.pin")}
                 </button>
-                <button type="button" aria-pressed={fence.ghost} onClick={() => setGhost(categoryId, !fence.ghost)}
-                  className="flex min-h-9 w-full items-center gap-2 rounded-lg px-2 text-left text-xs text-foreground hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring">
-                  {fence.ghost ? <EyeOff className="size-3.5 shrink-0 text-brand" /> : <Eye className="size-3.5 shrink-0" />}{t("files.ghostToggle")}
-                </button>
+                <div className="my-1 h-px bg-border/60" />
+                <p className="px-2 pb-1 pt-0.5 text-[10px] text-muted-foreground">{t("files.sortBy")}</p>
+                {([
+                  { mode: "manual" as FenceSortMode, label: t("files.sortManual") },
+                  { mode: "name" as FenceSortMode, label: t("files.sortName") },
+                  { mode: "time" as FenceSortMode, label: t("files.sortTime") },
+                ]).map(({ mode, label }) => (
+                  <button key={mode} type="button" data-sort={mode} aria-pressed={sortMode === mode}
+                    onClick={() => setSortMode(categoryId, mode)}
+                    className={cn(
+                      "flex min-h-9 w-full items-center gap-2 rounded-lg px-2 text-left text-xs hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring",
+                      sortMode === mode ? "text-brand" : "text-foreground",
+                    )}>
+                    <span className={cn("size-1.5 shrink-0 rounded-full", sortMode === mode ? "bg-brand" : "bg-muted-foreground/30")} />
+                    {label}
+                  </button>
+                ))}
+                <div className="my-1 h-px bg-border/60" />
+                <p className="px-2 pb-1 pt-0.5 text-[10px] text-muted-foreground">{t("files.fileName")}</p>
+                {([
+                  { mode: "full" as const, label: t("files.fileNameFull") },
+                  { mode: "noExt" as const, label: t("files.fileNameNoExt") },
+                  { mode: "extOnly" as const, label: t("files.fileNameExtOnly") },
+                  { mode: "none" as const, label: t("files.fileNameNone") },
+                ]).map(({ mode, label }) => (
+                  <button key={mode} type="button" data-name-mode={mode} aria-pressed={look.nameMode === mode}
+                    onClick={() => {
+                      setCategoryAppearance(categoryId, { nameMode: mode });
+                      // 旧字段同步写一份：老版本回退/旧数据仍能读到同一个选择。
+                      if (mode !== "none") useFences.getState().setFileNameMode(categoryId, mode);
+                    }}
+                    className={cn(
+                      "flex min-h-9 w-full items-center gap-2 rounded-lg px-2 text-left text-xs hover:bg-muted focus-visible:outline-2 focus-visible:outline-ring",
+                      look.nameMode === mode ? "text-brand" : "text-foreground",
+                    )}>
+                    <span className={cn("size-1.5 shrink-0 rounded-full", look.nameMode === mode ? "bg-brand" : "bg-muted-foreground/30")} />
+                    {label}
+                  </button>
+                ))}
               </div>}
             </div>
             <TitleBtn danger title={t("titlebar.close")} onClick={() => void win?.close().catch(error => toast.error(String(error)))}>
@@ -775,6 +940,50 @@ function FencePanel({ categoryId }: { categoryId: string }) {
             </TitleBtn>
           </span>
         </div>
+
+        {appearanceOpen && category && (
+          <BoxAppearancePanel
+            category={category}
+            onChange={(patch) => setCategoryAppearance(categoryId, patch)}
+            onClose={() => setAppearanceOpen(false)}
+            onGroupColor={(color) => setCategoryGroupColor(categoryId, color)}
+            onMerge={category.groupColor ? () => {
+              void openFenceGroup(category.groupColor!).catch((error) => toast.error(String(error)));
+            } : undefined}
+            className="absolute right-1 top-10 z-40 w-[calc(100%-8px)] max-w-[300px] max-h-[calc(100%-52px)] overflow-y-auto"
+          />
+        )}
+
+        {/* 盒内搜索栏：只在需要时占一行，平时不挤标题栏 */}
+        {searching && (
+          <div className="flex shrink-0 items-center gap-1.5 border-b border-border/60 px-2 py-1.5">
+            <Search className="size-3.5 shrink-0 text-muted-foreground" />
+            <input
+              ref={searchRef}
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => {
+                e.stopPropagation();
+                if (e.nativeEvent.isComposing) return;
+                if (e.key === "Escape") { e.preventDefault(); setQuery(""); setSearching(false); }
+              }}
+              placeholder={t("files.boxSearchPlaceholder")}
+              aria-label={t("files.boxSearch")}
+              data-tauri-drag-region="false"
+              className="min-w-0 flex-1 bg-transparent text-[12px] outline-none placeholder:text-muted-foreground/60"
+            />
+            {query && (
+              <button
+                type="button"
+                aria-label={t("files.boxSearchClear")}
+                onClick={() => { setQuery(""); searchRef.current?.focus(); }}
+                className="shrink-0 text-muted-foreground transition-colors hover:text-foreground"
+              >
+                <X className="size-3.5" />
+              </button>
+            )}
+          </div>
+        )}
 
         {/* 条目网格：右键菜单在独立浮窗渲染（可溢出栅栏窗口边界） */}
         <div
@@ -791,7 +1000,7 @@ function FencePanel({ categoryId }: { categoryId: string }) {
         >
           {pageItems.length === 0 ? (
             <div className="grid h-full place-items-center px-4 text-center text-[11px] leading-relaxed text-muted-foreground">
-              {t("files.fenceEmpty")}
+              {query.trim() ? t("files.boxNoMatch") : t("files.fenceEmpty")}
             </div>
           ) : (
             <div
@@ -844,12 +1053,11 @@ function FencePanel({ categoryId }: { categoryId: string }) {
                       className="grid shrink-0 place-items-center"
                       style={{ width: iconSize, height: iconSize }}
                     >
-                      <ItemIcon
-                        type={item.type}
-                        path={item.path}
-                        iconUrl={item.iconUrl}
+                      <ItemVisual
+                        item={item}
                         size={iconSize}
-                        className="size-full"
+                        appearance={look}
+                        iconClassName="size-full"
                       />
                     </span>
                     {isRenaming ? (
@@ -873,14 +1081,14 @@ function FencePanel({ categoryId }: { categoryId: string }) {
                         }}
                         className={cn("min-w-0 w-full rounded border border-brand/60 bg-card px-1 py-0.5 text-[10px] outline-none", !listView && "text-center")}
                       />
-                    ) : (
+                    ) : look.nameMode !== "none" ? (
                       <span
                         className={cn("w-full leading-tight text-foreground/85", listView ? "min-w-0 truncate text-left" : "line-clamp-2 break-all text-center")}
-                        style={{ fontSize: Math.max(listView ? 11 : 9, Math.round((listView ? 12 : 10) * scale)) }}
+                        style={{ fontSize: Math.max(8, Math.round(look.fontSize * scale)) }}
                       >
-                        {item.title}
+                        {boxDisplayName(item.title, look.nameMode)}
                       </span>
-                    )}
+                    ) : null}
                   </div>
                 );
               })}

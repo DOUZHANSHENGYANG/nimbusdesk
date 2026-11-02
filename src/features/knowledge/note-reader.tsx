@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { RiLayoutColumnLine as Columns2, RiEyeLine as Eye, RiEditLine as Pencil, RiSaveLine as Save, RiRestartLine as RotateCcw, RiCheckLine as Check, RiCheckboxBlankCircleFill as Circle, RiMoreLine, RiInformationLine, RiExternalLinkLine, RiFolderOpenLine, RiFolderLine } from "@remixicon/react";
+import { Check, Circle, Columns2, Ellipsis, ExternalLink, Eye, Folder, FolderOpen, Info, Pencil, RotateCcw, Save } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useModal } from "@/components/shell/modal-host";
 import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
@@ -97,12 +97,12 @@ export function NoteReader({ root, note, title, recipe, onOpen, onInfo, onSaved,
       <div className="knowledge-reader-actions flex items-center gap-2">
         {(mode !== "preview" || dirty || saving || status) && <span role="status" className="inline-flex items-center gap-1.5 text-[11px] text-muted-foreground">{dirty ? <Circle className="size-2 fill-warning text-warning" /> : <Check className="size-3" />}{saving ? c.savingNote : dirty ? c.unsavedNote : status || c.noteSaved}</span>}
         {(mode !== "preview" || dirty) && <Button className="knowledge-note-save" size="sm" disabled={!dirty || !ready || saving || writing} onClick={() => void save()} title="Ctrl+S"><Save className="size-3.5" />{c.saveNote}</Button>}
-        <DropdownMenu><DropdownMenuTrigger asChild><Button size="icon" variant="ghost" title={c.noteMore} aria-label={c.noteMore}><RiMoreLine className="size-4" /></Button></DropdownMenuTrigger><DropdownMenuContent align="end" className="workbench-ui knowledge-note-menu">
-          <DropdownMenuItem onSelect={onInfo}><RiInformationLine />{c.noteInfo}</DropdownMenuItem>
+        <DropdownMenu><DropdownMenuTrigger asChild><Button size="icon" variant="ghost" title={c.noteMore} aria-label={c.noteMore}><Ellipsis className="size-4" /></Button></DropdownMenuTrigger><DropdownMenuContent align="end" className="workbench-ui knowledge-note-menu">
+          <DropdownMenuItem onSelect={onInfo}><Info />{c.noteInfo}</DropdownMenuItem>
           <DropdownMenuSeparator />
-          <DropdownMenuItem onSelect={() => onOpen("obsidian")}><RiExternalLinkLine />{c.openObsidian}</DropdownMenuItem>
-          <DropdownMenuItem onSelect={() => onOpen("default")}><RiFolderOpenLine />{c.open}</DropdownMenuItem>
-          <DropdownMenuItem onSelect={() => onOpen("reveal")}><RiFolderLine />{c.reveal}</DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => onOpen("obsidian")}><ExternalLink />{c.openObsidian}</DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => onOpen("default")}><FolderOpen />{c.open}</DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => onOpen("reveal")}><Folder />{c.reveal}</DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem disabled={!ready || saving || writing} onSelect={() => void reload()}><RotateCcw />{c.reloadNote}</DropdownMenuItem>
         </DropdownMenuContent></DropdownMenu>

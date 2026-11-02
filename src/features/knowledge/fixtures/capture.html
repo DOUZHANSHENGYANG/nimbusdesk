@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>收集弹框 · 夹具</title>
+</head>
+<body>
+<div id="root" style="width:400px"></div>
+<script type="module">
+import { mockIPC, mockWindows } from '@tauri-apps/api/mocks';
+
+const settings = { version: 3, state: { theme: 'dark', lang: 'zh', sidebarCollapsed: true } };
+const knowledge = { version: 1, state: { vaultRoot: 'E:/User/knowledge-base', vaultName: 'knowledge-base', shortcut: 'Ctrl+Alt+Space', folderBindings: {} } };
+
+mockIPC(async (cmd, args) => {
+  if (cmd === 'read_json') {
+    if (args.key === 'settings') return structuredClone(settings);
+    if (args.key === 'knowledge-settings') return structuredClone(knowledge);
+    return null;
+  }
+  if (cmd === 'write_json') return args.value;
+  if (cmd === 'get_data_dir') return 'E:/CaptureFixture';
+  if (cmd === 'plugin:event|listen') return args.handler;
+  if (cmd === 'plugin:event|unlisten') return null;
+  if (cmd === 'knowledge_capture') return { id: 'fixture', title: 'x', createdAt: Date.now(), project: '', source: '', status: 'inbox', attachments: [], notePath: '00-Agent工作区/Inbox/工作台/x/条目.md' };
+  if (cmd === 'plugin:window|set_always_on_top' || cmd === 'plugin:window|is_always_on_top') return false;
+  return null;
+});
+mockWindows('capture');
+document.documentElement.classList.add('dark');
+
+const React = (await import('react')).default;
+const { createRoot } = await import('react-dom/client');
+const { I18nextProvider } = await import('react-i18next');
+await import('/src/index.css');
+const { i18n } = await import('/src/lib/i18n.ts');
+const { Providers } = await import('/src/app/providers.tsx');
+const { CaptureForm } = await import('/src/features/knowledge/capture.tsx');
+
+createRoot(document.getElementById('root')).render(
+  React.createElement(I18nextProvider, { i18n },
+    React.createElement(Providers, null,
+      React.createElement('div', { className: 'workbench-ui capture-window' },
+        React.createElement('main', { className: 'capture-window-main' },
+          React.createElement(CaptureForm))))
+  )
+);
+if (new URLSearchParams(location.search).get('image')) setTimeout(() => {
+  const canvas = document.createElement('canvas');
+  canvas.width = 160; canvas.height = 100;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#26323d'; ctx.fillRect(0, 0, 160, 100);
+  ctx.fillStyle = '#8fb4d9'; ctx.font = '14px sans-serif'; ctx.fillText('截图预览', 18, 54);
+  canvas.toBlob((blob) => {
+    const file = new File([blob], '截图.png', { type: 'image/png' });
+    const dt = new DataTransfer(); dt.items.add(file);
+    document.querySelector('.capture-composer')?.dispatchEvent(new DragEvent('drop', { dataTransfer: dt, bubbles: true, cancelable: true }));
+  }, 'image/png');
+}, 1600);
+</script>
+</body>
+</html>

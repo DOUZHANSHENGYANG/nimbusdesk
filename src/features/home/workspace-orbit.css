@@ -1,7 +1,7 @@
 /* The orb, jellyfish, and neural-thread composition adapts neural-creator-dashboard.
    Full source, media provenance and license: docs/third-party/neural-creator-dashboard. */
 .home-workspace { container-type: inline-size; height: 100%; overflow: auto; font-family: var(--workbench-font); }
-.home-content { display: flex; flex-direction: column; min-height: 100%; max-width: 1600px; margin: 0 auto; padding: 28px 32px 20px; }
+.home-content { display: flex; flex-direction: column; min-height: 100%; padding: 28px 32px 20px; }
 .home-header h1 { line-height: 1.4; }
 .home-layout { position: relative; display: flex; flex: 1; min-height: 480px; padding: 6px 0 16px; }
 .orbit-field { display: flex; flex-direction: column; flex: 1; min-width: 0; }

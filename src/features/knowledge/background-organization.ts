@@ -55,7 +55,7 @@ const coordinator=createOrganizationCoordinator({
     const selected=request.paths ? new Set(request.paths) : null;
     if(control.shouldStop())return {completed:[],failed:[],cancelled:true};
     try{selectProvider(useProviders.getState(),false);}catch{throw new Error('请先在「设置 → AI」选择默认模型提供商，再启动整理。');}
-    const [notes,captures]=await Promise.all([scanNotes(request.root,folders),listCaptures(request.root)]);
+    const [notes,captures]=await Promise.all([scanNotes(request.root),listCaptures(request.root)]);
     const candidates=automaticCandidates(notes,captures,prefs).filter(note=>!selected || selected.has(note.path));
     control.progress({processed:0,total:candidates.length,title:''});
     return runAutomaticOrganization(candidates,prefs,{

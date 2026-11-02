@@ -25,6 +25,7 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { TaskAttachments } from "@/features/plans/attachments";
 import { TaskDetail } from "@/features/plans/views/task-detail";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 /** 每层缩进（树形引导线间距） */
 const INDENT = 20;
@@ -67,7 +68,6 @@ export function OutlineView({ date, searchTaskId, searchToken }: { date: string;
   const reorderTask = usePlans((s) => s.reorderTask);
   const [selected, setSelected] = useState<Selection | null>(null);
   /** 完整详情卡片收进浮层：右栏只放备注，详情由行上的 ⋯ 打开 */
-  const [detailOpen, setDetailOpen] = useState(false);
   /** 选中项要跟当天任务对得上：被删掉、被挪到别的日子之后，这一栏自己收起来 */
   const selectedTask = selected ? tasks.find((task) => task.id === selected.id) : undefined;
   useEffect(() => {
@@ -78,7 +78,6 @@ export function OutlineView({ date, searchTaskId, searchToken }: { date: string;
 
   /** 点同一条的同一处 = 收起；点它的备注行 = 换落点但不收起 */
   const select = (id: string, focus: Selection["focus"]) => {
-    setDetailOpen(false); // 点行只开备注栏；详情浮层由 ⋯ 单独开
     setSelected((prev) => (prev?.id === id && prev.focus === focus ? null : { id, focus }));
   };
 
@@ -232,8 +231,8 @@ export function OutlineView({ date, searchTaskId, searchToken }: { date: string;
 
   return (
     /* 列表 + 详情两栏：详情是这一页的第三栏，不盖住任何一行（浮层会压住下面几行） */
-    <div className="flex min-w-0 items-start gap-4">
-      <div className="flex min-w-0 flex-1 flex-col" ref={listRef}>
+    <div className="flex h-full min-h-0 min-w-0 items-stretch gap-4">
+      <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto pr-1" ref={listRef}>
         {/* 顶部快速添加：不加框，跟任务行同一套形状（它本来就是「第一行任务」） */}
         <div className="mb-1 flex items-center gap-2.5 rounded-lg px-1.5 py-2.5 transition-colors hover:bg-surface-hover focus-within:bg-surface-hover">
           <Plus className="size-4 shrink-0 text-brand" strokeWidth={2.4} />
@@ -261,7 +260,7 @@ export function OutlineView({ date, searchTaskId, searchToken }: { date: string;
             list={roots}
             dividerIndent={4}
             label={t("plans.doneGroup")}
-            render={(task) => <TaskRow date={date} task={task} depth={0} drag={rowDrag} selectedId={selected?.id ?? null} onSelect={select} onDetail={(id) => { setSelected({ id, focus: "title" }); setDetailOpen(true); }} searchTaskId={searchTaskId} revealIds={revealIds} searchToken={searchToken} />}
+            render={(task) => <TaskRow date={date} task={task} depth={0} drag={rowDrag} selectedId={selected?.id ?? null} onSelect={select} searchTaskId={searchTaskId} revealIds={revealIds} searchToken={searchToken} />}
           />
         )}
       </div>
@@ -269,29 +268,9 @@ export function OutlineView({ date, searchTaskId, searchToken }: { date: string;
       {selectedTask && (
         <aside
           aria-label={t("plans.detail")}
-          className="w-80 shrink-0 rounded-xl border border-border bg-card/40"
+          className="w-[clamp(300px,34vw,560px)] shrink-0"
         >
-          {detailOpen ? (
-            <>
-              {/* 详情浮层：背板只挡鼠标，× / Esc 关闭；右栏本身只放备注，所以这里是唯一入口 */}
-              <button
-                type="button"
-                aria-label={t("plans.closeDetail")}
-                onClick={() => setDetailOpen(false)}
-                className="fixed inset-0 z-30 cursor-default"
-              />
-              <div className="fixed right-6 top-16 z-40 max-h-[70vh] w-[min(380px,90vw)] overflow-auto rounded-2xl border border-border bg-card shadow-[var(--pr-shadow-3)]">
-                <TaskDetail
-                  date={date}
-                  task={selectedTask}
-                  focus="title"
-                  onClose={() => setDetailOpen(false)}
-                />
-              </div>
-            </>
-          ) : (
-            <NoteColumn date={date} task={selectedTask} focus={selected!.focus} onClose={() => setSelected(null)} />
-          )}
+          <NoteColumn date={date} task={selectedTask} focus={selected!.focus} onClose={() => setSelected(null)} />
         </aside>
       )}
     </div>
@@ -393,7 +372,7 @@ function NoteColumn({ date, task, focus, onClose }: { date: string; task: PlanTa
     if (next !== (task.note ?? "")) usePlans.getState().updateTask(date, task.id, { note: next || undefined });
   };
   return (
-    <aside aria-label="任务详情" data-note-title={task.title} className="flex h-full min-h-0 w-72 shrink-0 flex-col">
+    <aside aria-label="任务详情" data-note-title={task.title} className="flex h-full min-h-0 w-[clamp(300px,34vw,560px)] shrink-0 flex-col">
       <div className="flex items-center gap-2 px-3 pb-1 pt-2">
         <span className="min-w-0 flex-1 truncate text-[12px] font-medium text-muted-foreground">{task.title}</span>
         <button
@@ -412,13 +391,13 @@ function NoteColumn({ date, task, focus, onClose }: { date: string; task: PlanTa
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
         onBlur={commit}
-        className="min-h-0 w-full flex-1 resize-none border-0 bg-transparent px-3 pb-2 text-[12px] leading-5 outline-none"
+        className="min-h-0 w-full flex-1 resize-none border-0 bg-transparent px-3 pb-3 text-[12.5px] leading-6 outline-none"
       />
     </aside>
   );
 }
 
-function TaskRow({ date, task, depth, drag, selectedId, onSelect, onDetail, searchTaskId, revealIds, searchToken }: { date: string; task: PlanTask; depth: number; drag: RowDrag; selectedId: string | null; onSelect: (id: string, focus: Selection["focus"]) => void; onDetail: (id: string) => void; searchTaskId?: string; revealIds: Set<string>; searchToken?: string }) {
+function TaskRow({ date, task, depth, drag, selectedId, onSelect, searchTaskId, revealIds, searchToken }: { date: string; task: PlanTask; depth: number; drag: RowDrag; selectedId: string | null; onSelect: (id: string, focus: Selection["focus"]) => void; searchTaskId?: string; revealIds: Set<string>; searchToken?: string }) {
   const { t } = useTranslation();
   const tasks = useDayTasks(date);
   const now = useNow();
@@ -431,6 +410,7 @@ function TaskRow({ date, task, depth, drag, selectedId, onSelect, onDetail, sear
   const status = statusOf(task, date, now);
   const range = rangeLabel(task);
   const [open, setOpen] = useState(true);
+  const [detailOpen, setDetailOpen] = useState(false);
   const [adding, setAdding] = useState(false);
   const [childInput, setChildInput] = useState("");
   useEffect(() => { if (revealIds.has(task.id)) setOpen(true); }, [revealIds, task.id, searchToken]);
@@ -469,6 +449,10 @@ function TaskRow({ date, task, depth, drag, selectedId, onSelect, onDetail, sear
     <div data-row>
       <div
         data-search-task-id={task.id}
+        onClick={(event) => {
+          if ((event.target as HTMLElement).closest("button,input,textarea,select,a,[contenteditable='true']")) return;
+          onSelect(task.id, "note");
+        }}
         className={cn(
           "group flex min-h-10 items-center gap-2 rounded-lg py-1 pr-1 transition-colors hover:bg-surface-hover",
           // 进行中：左侧一条品牌色标记，扫一眼就能看到当前该做什么
@@ -523,6 +507,7 @@ function TaskRow({ date, task, depth, drag, selectedId, onSelect, onDetail, sear
             <button
               type="button"
               onClick={selectTitle}
+              onDoubleClick={() => setDetailOpen(true)}
               title={t("plans.openDetail")}
               className="min-w-0 text-left text-[13px] leading-5"
             >
@@ -550,12 +535,27 @@ function TaskRow({ date, task, depth, drag, selectedId, onSelect, onDetail, sear
             </button>
 
             {/* 动作块：加子任务 + 详情（⋯）。详情卡片是完整形态，行上只留这一个入口 */}
-            <RowIcon title={t("plans.detail")} onClick={() => onDetail(task.id)}>
-              <span className="text-[13px] leading-none tracking-tight">⋯</span>
-            </RowIcon>
+            <Popover open={detailOpen} onOpenChange={setDetailOpen}>
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
+                  title={t("plans.detail")}
+                  aria-label={t("plans.detail")}
+                  className={cn("grid size-6 shrink-0 place-items-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground", REVEAL)}
+                >
+                  <span className="text-[13px] leading-none tracking-tight">⋯</span>
+                </button>
+              </PopoverTrigger>
+              {/* align=end + side=bottom：贴着按钮右侧弹出，下方放不下时 Radix 自动翻到上方 */}
+              <PopoverContent align="start" side="bottom" sideOffset={6} className="w-[min(380px,92vw)] max-h-[70vh] overflow-auto p-0">
+                <TaskDetail date={date} task={task} focus="title" onClose={() => setDetailOpen(false)} />
+              </PopoverContent>
+            </Popover>
             <RowIcon title={t("plans.addChild")} onClick={() => setAdding(!adding)}>
               <Plus className="size-4" />
             </RowIcon>
+            {/* 附件紧挨着 + 的左边：它描述「这一条是什么」，和行内动作放一起 */}
+            <TaskAttachments date={date} task={task} />
 
             {range && (
               <span className="ml-auto shrink-0 font-mono text-[11px] leading-5 text-muted-foreground/80">
@@ -569,6 +569,7 @@ function TaskRow({ date, task, depth, drag, selectedId, onSelect, onDetail, sear
             <button
               type="button"
               onClick={() => onSelect(task.id, "note")}
+              onDoubleClick={() => setDetailOpen(true)}
               className="min-w-0 truncate text-left text-[11px] text-muted-foreground/70 transition-colors hover:text-foreground"
             >
               {task.note}
@@ -576,11 +577,6 @@ function TaskRow({ date, task, depth, drag, selectedId, onSelect, onDetail, sear
           )}
         </div>
 
-        {/* 附件留在行上：它描述「这一条是什么」，不是动作。项目关联与链接已经只在详情卡片里
-            出现，行上再摆一份就是重复（原来那块「未关联任务 ⌄ + 🔗」） */}
-        <div className="flex shrink-0 items-center gap-0.5">
-          <TaskAttachments date={date} task={task} />
-        </div>
       </div>
 
       {/* 添加子任务输入（行上的 + 打开；面板里也有同一个入口） */}
@@ -612,7 +608,7 @@ function TaskRow({ date, task, depth, drag, selectedId, onSelect, onDetail, sear
             list={children}
             dividerIndent={4}
             label={t("plans.doneGroup")}
-            render={(child) => <TaskRow date={date} task={child} depth={depth + 1} drag={drag} selectedId={selectedId} onSelect={onSelect} onDetail={onDetail} searchTaskId={searchTaskId} revealIds={revealIds} searchToken={searchToken} />}
+            render={(child) => <TaskRow date={date} task={child} depth={depth + 1} drag={drag} selectedId={selectedId} onSelect={onSelect} searchTaskId={searchTaskId} revealIds={revealIds} searchToken={searchToken} />}
           />
         </div>
       )}

@@ -58,7 +58,7 @@ data.iterations=[{...stamp,id:'iteration-old',name:'上一迭代',start:addDays(
 data.items=[{...stamp,id:'item-portal',title:'完善采购页面',projectId:'project-portal',areaId:null,note:'保留已有操作路径',status:'doing',deadline:null,activeIterationId:'iteration-now'},{...stamp,id:'item-small',title:'临时小需求',projectId:null,areaId:null,note:'无需建立项目',status:'todo',deadline:today,activeIterationId:null}];
 data.memberships=[{id:'membership-now',itemId:'item-portal',iterationId:'iteration-now',joinedAt:1,leftAt:null,carriedFrom:null,updatedAt:1}];
 fixtures.projects={version:1,state:data};
-fixtures.settings={version:3,state:{theme:'dark',lang:'zh',sidebarCollapsed:true}};
+fixtures.settings={version:13,state:{theme:new URLSearchParams(location.search).get('theme')||'dark',visualStyle:new URLSearchParams(location.search).get('skin')||'pogget',lang:'zh',sidebarCollapsed:true}};
 const tasks=[{...stamp,id:'plan-parent',parentId:null,title:'已有每日计划',done:false,workItemId:'item-portal'},{...stamp,id:'plan-child',parentId:'plan-parent',title:'继承关联的子计划',done:false}];
 fixtures.plans={version:4,state:{days:{[today]:tasks}}};
 fixtures['plans-archive']={version:3,state:{days:{[addDays(today,-1)]:{archivedAt:1,tasks:[{...stamp,id:'plan-archived',parentId:null,title:'归档的关联计划',done:true,workItemId:'item-portal'}]}}}};
@@ -73,7 +73,9 @@ const {useSettings}=await import('/src/stores/settings.ts');
 const {flushAllStorage}=await import('/src/lib/storage.ts');
 window.projectsReview.stores={useProjects,usePlans,useSettings};
 window.projectsReview.flush=flushAllStorage;
-document.documentElement.classList.add('dark');
+const efq=new URLSearchParams(location.search);
+document.documentElement.classList.toggle('dark',efq.get('theme')!=='light');
+if(efq.get('skin'))document.documentElement.dataset.skin=efq.get('skin');
 function Destination(){const loc=useLocation();return React.createElement('div',{'data-plan-destination':true},loc.pathname+loc.search)}
 history.replaceState(null,'','#/projects');
 createRoot(document.getElementById('root')).render(React.createElement(I18nextProvider,{i18n},React.createElement(ModalProvider,null,React.createElement(HashRouter,null,React.createElement(Routes,null,React.createElement(Route,{path:'/projects',element:React.createElement(ProjectsPage)}),React.createElement(Route,{path:'/plans',element:React.createElement(Destination)}))),React.createElement(Toaster))));

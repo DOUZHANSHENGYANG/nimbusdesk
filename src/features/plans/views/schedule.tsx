@@ -1,4 +1,4 @@
-﻿import { useMemo, useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
   addDays,
@@ -62,12 +62,14 @@ export function ScheduleView({
   date,
   mode,
   onPick,
+  onTaskPick,
 }: {
   date: string;
   mode: ScheduleMode;
   onPick: (date: string) => void;
+  onTaskPick?: (date: string, taskId: string) => void;
 }) {
-  if (mode === "year") return <YearView date={date} onPick={onPick} />;
+  if (mode === "year") return <YearView date={date} onPick={onPick} onTaskPick={onTaskPick} />;
   return <TimeGrid date={date} mode={mode === "week" ? "week" : "day"} onPick={onPick} />;
 }
 
@@ -292,7 +294,7 @@ function TimeGrid({ date, mode, onPick }: { date: string; mode: "day" | "week"; 
  */
 const YEAR_CHIPS = 2;
 
-function YearView({ date, onPick }: { date: string; onPick: (date: string) => void }) {
+function YearView({ date, onPick, onTaskPick }: { date: string; onPick: (date: string) => void; onTaskPick?: (date: string, taskId: string) => void }) {
   const { t, i18n } = useTranslation();
   const days = usePlans((s) => s.days);
   const archive = usePlansArchive((s) => s.days);
@@ -369,9 +371,13 @@ function YearView({ date, onPick }: { date: string; onPick: (date: string) => vo
                       <span
                         key={task.id}
                         data-chip
+                        role="link"
+                        tabIndex={0}
                         title={task.title}
+                        onClick={(event) => { event.stopPropagation(); onTaskPick?.(cell.date, task.id); }}
+                        onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); event.stopPropagation(); onTaskPick?.(cell.date, task.id); } }}
                         className={cn(
-                          "block w-full truncate rounded px-0.5 text-[9px] leading-3",
+                          "block w-full cursor-pointer truncate rounded px-0.5 text-[9px] leading-3 outline-none focus-visible:ring-1 focus-visible:ring-ring",
                           status === "done"
                             ? "bg-muted/60 text-muted-foreground line-through"
                             : status === "doing"

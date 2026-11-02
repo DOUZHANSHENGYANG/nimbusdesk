@@ -33,9 +33,7 @@ export function ProjectsBoard(props: {
   const [overColumn, setOverColumn] = useState<BoardColumn | null>(null);
   const [announced, setAnnounced] = useState("");
   const buckets = groupByStatus(props.items);
-  const where = (item: ItemRecord) => state.projects.find(p => p.id === item.projectId)?.name
-    ?? state.areas.find(a => a.id === (item.areaId ?? state.projects.find(p => p.id === item.projectId)?.areaId))?.name
-    ?? c.noProject;
+  const where = (item: ItemRecord) => state.projects.find(p => p.id === item.projectId)?.name ?? c.noProject;
 
   function move(item: ItemRecord, target: BoardColumn) {
     const next = nextStatusFor(item.status, target);
@@ -49,10 +47,10 @@ export function ProjectsBoard(props: {
   return <div className="flex min-h-0 flex-1 flex-col">
     <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-border px-4 py-1.5 text-xs text-muted-foreground">
       <span>{c.boardHint}</span>
-      <span className="flex items-center gap-2"><span className="tabular-nums" aria-live="polite">{props.items.length} {c.count}</span>{props.statusFilter !== "all" && <><span>{c.boardFilterNote}</span><Button variant="link" className="h-auto p-0 text-xs" onClick={props.onShowAllStatuses}>{c.boardShowAll}</Button></>}</span>
+      <span className="flex items-center gap-2">{props.statusFilter !== "all" && <><span>{c.boardFilterNote}</span><Button variant="link" className="h-auto p-0 text-xs" onClick={props.onShowAllStatuses}>{c.boardShowAll}</Button></>}</span>
     </div>
-    <div className="flex min-h-0 flex-1 gap-2 overflow-x-auto p-3">
-      {BOARD_COLUMNS.map(column => <section key={column} aria-label={`${c[column]} · ${buckets[column].length}`} className={cn("flex min-w-[220px] flex-1 basis-60 flex-col rounded-lg border border-border bg-muted/20", overColumn === column && "border-primary/60 bg-primary/5")}
+    <div className="grid min-h-0 flex-1 grid-cols-2 gap-2 overflow-hidden p-3 lg:grid-cols-4">
+      {BOARD_COLUMNS.map(column => <section key={column} aria-label={`${c[column]} · ${buckets[column].length}`} className={cn("flex min-h-0 min-w-0 flex-col rounded-lg border border-border bg-muted/20", overColumn === column && "border-primary/60 bg-primary/5")}
         onDragOver={event => { event.preventDefault(); event.dataTransfer.dropEffect = "move"; if (overColumn !== column) setOverColumn(column); }}
         onDragLeave={event => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setOverColumn(null); }}
         onDrop={event => {
@@ -72,7 +70,7 @@ export function ProjectsBoard(props: {
               className={cn("group rounded-md border border-border bg-background p-1.5 shadow-xs", dragging === item.id && "opacity-40")}>
               <div className="flex items-start gap-1">
                 <Button variant="ghost" size="icon-xs" className="mt-0.5 shrink-0" disabled={Boolean(item.mergedIntoId)} aria-label={`${closed ? c.restoreItem : c.completed} · ${item.title}`} title={closed ? c.restoreItem : c.completed} onClick={() => state.updateItem(item.id, { status: closed ? "todo" : "done" })}><StatusMark status={item.status} /></Button>
-                <button type="button" aria-pressed={props.selectedId === item.id} onClick={() => props.onSelect(item.id)} className={cn("min-w-0 flex-1 rounded px-0.5 py-0.5 text-left text-[13px] leading-snug outline-none hover:text-primary focus-visible:ring-2 focus-visible:ring-ring", closed && "text-muted-foreground", item.status === "done" && "line-through decoration-muted-foreground/40")}>{item.title}{item.mergedIntoId ? ` · ${z.merged}` : ""}</button>
+                <button type="button" aria-pressed={props.selectedId === item.id} onClick={() => props.onSelect(item.id)} className={cn("min-w-0 flex-1 rounded px-0.5 py-0.5 text-left text-[13px] leading-snug hover:text-primary", closed && "text-muted-foreground", item.status === "done" && "line-through decoration-muted-foreground/40")}>{item.title}{item.mergedIntoId ? ` · ${z.merged}` : ""}</button>
               </div>
               <div className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 pl-6 text-[11px] text-muted-foreground">
                 <span className="max-w-[132px] truncate">{where(item)}</span>

@@ -6,15 +6,14 @@
 .capture-window-title p { margin-top: 2px; font-size: 11px; color: var(--muted-foreground); }
 .capture-window-header [data-slot="button"] { width: 32px; height: 32px; color: var(--muted-foreground); }
 .capture-window-header [data-slot="button"][aria-pressed="true"] { color: var(--accent-foreground); background: var(--accent); }
-.capture-window-main { flex: 1; min-height: 0; overflow: auto; padding: 0 20px; scrollbar-gutter: stable; scroll-padding-bottom: 96px; }
+.capture-window-main { flex: 1; min-height: 0; overflow: auto; padding: 0 20px; scrollbar-gutter: stable both-edges; scroll-padding-bottom: 96px; }
 .capture-destination { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 0 16px; }
 .capture-destination > span:last-child { display: inline-flex; max-width: 60%; align-items: center; gap: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted-foreground); font-size: 11px; }
 .capture-destination svg { width: 13px; height: 13px; flex-shrink: 0; }
 .capture-composer { display: flex; flex-direction: column; gap: 16px; min-height: 100%; }
 .capture-window-main > .capture-composer { min-height: calc(100% - 40px); }
 .capture-fields { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
-.capture-writing { overflow: hidden; border: 1px solid var(--workbench-line); border-radius: var(--workbench-radius); background: var(--workbench-surface); box-shadow: 0 2px 8px color-mix(in srgb, var(--foreground) 2%, transparent); }
-.capture-writing:focus-within { border-color: var(--ring); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ring) 14%, transparent); }
+.capture-writing { overflow: hidden; }
 .capture-title-label { display: block; padding: 12px 12px 0; }
 .capture-title-label > span { display: flex; gap: 8px; align-items: center; font-size: 11px; font-weight: 500; color: var(--muted-foreground); }
 .capture-title-label em { font-size: 10px; font-style: normal; font-weight: 400; }
@@ -145,3 +144,14 @@
   .capture-actions { flex-direction: column; align-items: stretch; }
   .capture-actions button { flex: none; width: 100%; }
 }
+
+/* 图片：一行一个，左缩略图 + 右文件名（双击改名） */
+.capture-image-row { display: flex; align-items: center; gap: 10px; padding: 8px; border: 1px solid var(--workbench-line); border-radius: 10px; background: var(--workbench-surface); }
+.capture-image-row > img { width: 48px; height: 48px; flex: none; object-fit: cover; border: 1px solid var(--workbench-line); border-radius: 6px; background: var(--muted); }
+.capture-image-row > input { flex: 1; min-width: 0; height: 30px; padding: 0 10px; font-size: 12px; }
+.capture-image-label { flex: 1; min-width: 0; padding: 6px 2px; overflow: hidden; color: var(--foreground); font-size: 12px; text-align: left; text-overflow: ellipsis; white-space: nowrap; }
+.capture-image-label:hover { color: var(--primary); }
+.capture-image-row > button:last-child { width: 24px; height: 24px; flex: none; color: var(--muted-foreground); }
+.capture-composer .capture-fields { padding: 0; }
+.capture-composer .capture-writing .capture-title-label,
+.capture-composer .capture-writing .capture-body-label { padding: 0; }

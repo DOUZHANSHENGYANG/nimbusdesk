@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { RiCloseLine, RiSearchLine } from "@remixicon/react";
+import { Search, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -70,10 +70,10 @@ export function OrganizationLauncher({ root, blockedPath, onClose, onSelected }:
     <DialogContent showCloseButton={false} className="organization-launcher workbench-ui" aria-busy={loading || reading}>
       <DialogHeader className="organization-launcher-header">
         <div><DialogTitle>{c.manual}</DialogTitle><DialogDescription>{en ? "Choose a note to edit, classify and archive." : "选择一篇笔记，手动编辑、分类并归档。"}</DialogDescription></div>
-        <Button variant="ghost" size="icon-sm" aria-label={c.cancelled} onClick={close}><RiCloseLine /></Button>
+        <Button variant="ghost" size="icon-sm" aria-label={c.cancelled} onClick={close}><X /></Button>
       </DialogHeader>
       <div className="organization-launcher-controls">
-        <label className="organization-launcher-search"><RiSearchLine /><Input aria-label={en ? "Search material" : "搜索整理材料"} placeholder={en ? "Search title or path" : "搜索标题或路径"} value={query} disabled={reading} onChange={(event) => setQuery(event.target.value)} /></label>
+        <label className="organization-launcher-search"><Search /><Input aria-label={en ? "Search material" : "搜索整理材料"} placeholder={en ? "Search title or path" : "搜索标题或路径"} value={query} disabled={reading} onChange={(event) => setQuery(event.target.value)} /></label>
         <div className="organization-launcher-selection">
           <div className="organization-launcher-scopes" role="group" aria-label={en ? "Material scope" : "材料范围"}>
             <button type="button" aria-pressed={scope === "all"} disabled={reading} onClick={() => setScope("all")}>{en ? "All material" : "全部材料"}<span>{notes.length}</span></button>
@@ -88,7 +88,7 @@ export function OrganizationLauncher({ root, blockedPath, onClose, onSelected }:
         {loading ? <p className="organization-launcher-empty" role="status">{c.loading}</p> : visible.length === 0 ? <p className="organization-launcher-empty">{notes.length === 0 ? c.empty : c.noMatching}</p> : visible.map((note) => <label key={note.path} className="organization-launcher-row" data-disabled={note.path === blockedPath || undefined}>
           <Checkbox checked={selected.has(note.path)} disabled={reading || note.path === blockedPath} onCheckedChange={(checked) => toggle(note.path, checked === true)} aria-label={`${en ? "Select" : "选择"} ${note.title}`} />
           <span className="organization-launcher-note"><strong title={note.title}>{note.title}</strong><small title={note.path}>{note.path === blockedPath ? (en ? "Unsaved edits" : "尚未保存") : note.path}</small></span>
-          <span className="organization-launcher-kind">{c[note.kind]}</span>
+          <span className="organization-launcher-kind">{note.kind === "inbox" ? c.inbox : note.kind.replace(/^[0-9]+[-_.\\s]*/, "")}</span>
         </label>)}
       </div>
       <div className="organization-launcher-footer">

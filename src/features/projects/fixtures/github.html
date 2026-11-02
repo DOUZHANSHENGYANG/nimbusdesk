@@ -1,0 +1,139 @@
+<!doctype html><html><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head><body><div id="root" style="height:100vh"></div><script type="module">
+import React from 'react';
+import {createRoot} from 'react-dom/client';
+import {HashRouter} from 'react-router-dom';
+import {mockIPC,mockWindows} from '@tauri-apps/api/mocks';
+const fixtures={},calls=[];
+const params=new URLSearchParams(location.search);
+const review=window.githubReview={
+ fixtures,calls,http:[],held:[],
+ releaseAll:()=>{while(review.held.length)review.held.shift()();},
+ // 测试端用来模拟「窗口不可见 / 回到前台」：改的是真实 document + 真正的 visibilitychange
+ setVisibility:(state)=>{Object.defineProperty(document,"visibilityState",{configurable:true,get:()=>state});document.dispatchEvent(new Event("visibilitychange"));},
+};
+const envelope=value=>structuredClone(value);
+const json=(url,value,status=200)=>({url,status,headers:{'content-type':'application/json'},body:JSON.stringify(value)});
+
+// 只做这一期面板用到的四个接口：身份、仓库、已 star、README，外加热榜页面和翻译端点。
+const trendingRow=(owner,name,stars,gained,language,description)=>`<article class="Box-row">
+ <div class="float-right d-flex"><a href="/sponsors/${owner}"><svg><path d="m8 14.25.345"/></svg></a></div>
+ <h2 class="h3 lh-condensed"><a href="/${owner}/${name}" class="Link"><span class="text-normal"> ${owner} / </span> ${name}</a></h2>
+ <p class="col-9 color-fg-muted my-1 tmp-pr-4"> ${description} </p>
+ <div class="f6 color-fg-muted mt-2"><span><span itemprop="programmingLanguage">${language}</span></span>
+ <a href="/${owner}/${name}/stargazers" class="Link"><svg><path d="m8 .25 1.882 3.815"/></svg> ${stars}</a></div>
+ <span class="d-inline-block float-sm-right"><svg><path d="m8 .25"/></svg> ${gained} stars today </span>
+</article>`;
+const trendingHtml=`<html><body><main>${trendingRow('thedotmack','claude-mem','107,207','1,723','TypeScript','Persistent context across sessions for every agent')}${trendingRow('acme','build-kit','12,894','642','Rust','A fast build tool for monorepos')}${trendingRow('someone','notes-app','4,201','318','Swift','Offline notes with sync')}</main></body></html>`;
+const repos=[
+ {id:1,name:'nimbus-desk',full_name:'dz/nimbus-desk',fork:false,description:'本机工作台 · Tauri + React',language:'TypeScript',stargazers_count:128,forks_count:9,default_branch:'main',html_url:'https://github.com/dz/nimbus-desk',pushed_at:'2026-10-30T09:12:00Z',topics:['tauri','desktop']},
+ {id:2,name:'oil-ui',full_name:'dz/oil-ui',fork:true,parent:{full_name:'oil-oil/oil-ui'},description:'Forked design skill scratchpad',language:'JavaScript',stargazers_count:3,forks_count:0,default_branch:'main',html_url:'https://github.com/dz/oil-ui',pushed_at:'2026-10-28T11:00:00Z',topics:[]},
+ {id:3,name:'legacy-planner',full_name:'dz/legacy-planner',fork:false,archived:true,description:'归档的排期插件',language:'Go',stargazers_count:41,forks_count:2,default_branch:'master',html_url:'https://github.com/dz/legacy-planner',pushed_at:'2025-04-02T08:00:00Z',topics:[]},
+ {id:4,name:'translator',full_name:'dz/translator',fork:true,parent:{full_name:'acme/translator'},description:'',language:null,stargazers_count:0,forks_count:0,default_branch:'main',html_url:'https://github.com/dz/translator',pushed_at:'2026-10-01T00:00:00Z',topics:[]},
+];
+const starred=[repos[0]];
+// ?gone=1：模拟上游变化——dz/ghost 已从 GitHub 消失，oil-ui 的上游仓库被删除（parent 变 null）。
+if(params.get('gone')==='1')delete repos[1].parent;
+const readme=['# nimbus-desk','','A local-first workspace built with Tauri and React.','','## Why','','It keeps your projects, plans and files in one window, and never uploads them.','','- Offline first','- Single storage layer','- Keyboard driven'].join('\n');
+
+const respond=(url,method)=>{
+ if(url.startsWith('https://api.github.com/user/starred/'))return {url,status:204,headers:{},body:''};
+ if(url.startsWith('https://api.github.com/user/starred'))return json(url,starred);
+ if(url.startsWith('https://api.github.com/user/repos')){
+  // ?paged=1 让「我的仓库」有两页：第一页满满 100 条，第二页 1 条，用来验翻页。
+  if(params.get('paged')==='1'){
+   const page=Number(new URL(url).searchParams.get('page')??'1');
+   if(page===1)return json(url,Array.from({length:100},(_,index)=>({...repos[0],id:1000+index,name:`repo-${index}`,full_name:`dz/repo-${index}`,fork:false,archived:false,parent:undefined,description:`paged ${index}`})));
+   return json(url,[{...repos[0],id:2000,name:'tail-repo',full_name:'dz/tail-repo',fork:false,parent:undefined,description:'second page'}]);
+  }
+  return json(url,repos);
+ }
+ if(url==='https://api.github.com/user')return json(url,{login:'dz',name:'Dz',avatar_url:''});
+ if(url.startsWith('https://github.com/trending'))return {url,status:200,headers:{'content-type':'text/html'},body:trendingHtml};
+ if(url.startsWith('https://raw.githubusercontent.com/'))return {url,status:200,headers:{'content-type':'text/plain'},body:readme};
+ if(/^https:\/\/api\.github\.com\/repos\/[^/]+\/[^/]+\/readme$/.test(url))return {url,status:200,headers:{'content-type':'text/plain'},body:readme};
+ if(url.startsWith('https://edge.microsoft.com/translate/translatetext'))return json(url,[{detectedLanguage:{language:'en'},translations:[{text:'一个用 Tauri 和 React 构建的本地优先工作台。'}]}]);
+ return {url,status:404,headers:{},body:'not found'};
+};
+let rid=1;const pending=new Map();
+const decoder=new TextDecoder();
+const requestBody=data=>{ if(typeof data==='string')return data; if(Array.isArray(data))return decoder.decode(new Uint8Array(data)); return ''; };
+
+mockIPC(async(cmd,args)=>{
+ calls.push({cmd,args:cmd==='github_save_token'?{hasToken:Boolean(args.token)}:envelope(args)});
+ if(cmd==='read_json')return envelope(fixtures[args.key]??null);
+ if(cmd==='write_json'){fixtures[args.key]=envelope(args.value);return envelope(args.value);}
+ if(cmd==='github_token_status')return {source:params.get('token')==='none'?'none':'vault'};
+ if(cmd==='github_token'){ if(params.get('token')==='none')throw Error('GITHUB_TOKEN_MISSING'); return 'ghp_fixturefixturefixturefixture'; }
+ if(cmd==='github_save_token')return null;
+ if(cmd==='github_forget_token')return null;
+ if(cmd==='github_default_download_dir')return 'E:/Downloads';
+ if(cmd==='github_download_zip'){calls.push({cmd,args:{owner:args.owner,repo:args.repo,branch:args.branch,dir:args.dir}});return {path:`${args.dir??'E:/Downloads'}/${args.repo}-${args.branch}.zip`,bytes:2048};}
+ if(cmd==='plugin:http|fetch'){
+  // 发出去就记账：被闸门挂住的请求也算一次轮询
+  review.http.push({url:args.clientConfig.url,method:args.clientConfig.method??'GET'});
+  // ?hold=1：网络先挂住，测试端调用 window.githubReview.releaseAll() 再放行，
+  // 用来确定性地验「先渲染缓存、再后台对齐」。
+  if(params.get('hold')==='1')await new Promise(resolve=>{review.held.push(resolve);});
+  const method=args.clientConfig.method??'GET';
+  if(params.get('starfail')==='1'&&(method==='PUT'||method==='DELETE')&&/\/user\/starred\//.test(args.clientConfig.url)){
+   const response={url:args.clientConfig.url,status:500,headers:{},body:'boom'};
+   pending.set(rid,response);
+   return rid++;
+  }
+  const response=respond(args.clientConfig.url,method);
+  pending.set(rid,response);
+  return rid++;
+ }
+ if(cmd==='plugin:http|fetch_send'){const response=pending.get(args.rid);return {status:response.status,statusText:'OK',url:response.url,headers:response.headers,rid:args.rid};}
+ if(cmd==='plugin:http|fetch_read_body'){
+  const response=pending.get(args.rid);
+  if(response.sent)return new Uint8Array([1]);
+  response.sent=true;
+  const bytes=new TextEncoder().encode(response.body);
+  const out=new Uint8Array(bytes.length+1);
+  out.set(bytes);
+  return out;
+ }
+ if(cmd==='plugin:http|fetch_cancel'||cmd==='plugin:http|fetch_cancel_body')return null;
+ if(cmd==='plugin:event|listen')return 1;
+ if(cmd==='get_data_dir')return 'E:/GithubFixture';
+ return null;
+});
+mockWindows('main');
+const {emptyProjectData}=await import('/src/features/projects/types.ts');
+const data=emptyProjectData();
+data.projects=[{id:'project-desk',name:'云台工作台',areaId:null,note:'',status:'active',folder:null,createdAt:1,updatedAt:1},{id:'project-desk-2',name:'本地副本',areaId:null,note:'',status:'active',folder:null,createdAt:2,updatedAt:2}];
+fixtures.projects={version:1,state:data};
+fixtures.zentao={version:1,state:{connections:[],syncStates:{}}};
+// ?gone=1：基线里有 dz/ghost 但接口不再返回它；?cached=1：带上上一轮快照，用来验「先渲染再对齐」
+const ghostRepo={fullName:'dz/ghost',owner:'dz',name:'ghost',description:'deleted upstream',language:null,stars:1,forks:0,fork:false,parentFullName:null,archived:false,defaultBranch:'main',updatedAt:'',htmlUrl:'https://github.com/dz/ghost',topics:[]};
+const goneMode=params.get('gone')==='1',cachedMode=params.get('cached')==='1';
+// 缓存里存的是已归一化的形状，夹具也走同一个归一化，别手搓字段
+const {normalizeRepo}=await import('/src/features/projects/github-core.ts');
+const cachedRepos=repos.map(normalizeRepo);
+fixtures.github={version:4,state:{
+ pins:[],links:[],downloadDir:null,
+ login:goneMode||cachedMode?'dz':null,
+ cache:cachedMode
+  ?{viewer:{login:'dz',name:'Dz',avatarUrl:''},starred:[cachedRepos[0]],trending:[],trendingFallback:false,at:1,readmes:{'dz/nimbus-desk':{markdown:'# 缓存里的 README\n\n来自上一次打开。',at:1}}}
+  :{viewer:null,starred:[],trending:[],trendingFallback:false,at:0,readmes:{}},
+ knownRepos:goneMode?[ghostRepo]:cachedMode?cachedRepos:[],
+ missing:[],
+}};
+fixtures.settings={version:3,state:{theme:params.get('theme')??'dark',lang:params.get('lang')??'zh',sidebarCollapsed:true}};
+fixtures.plans={version:4,state:{days:{}}};
+fixtures['plans-archive']={version:3,state:{days:{}}};
+await import('/src/index.css');
+const {i18n,I18nextProvider}=await import('/src/lib/i18n.ts');
+const {ModalProvider}=await import('/src/components/shell/modal-host.tsx');
+const {GithubPage}=await import('/src/features/projects/github-page.tsx');
+const {Toaster}=await import('/src/components/ui/sonner.tsx');
+const {useProjects}=await import('/src/features/projects/store.ts');
+const {usePlans,usePlansArchive}=await import('/src/features/plans/store.ts');
+const {useSettings}=await import('/src/stores/settings.ts');
+const {useGithub}=await import('/src/features/projects/github-store.ts');
+const {flushAllStorage}=await import('/src/lib/storage.ts');
+review.stores={useProjects,usePlans,usePlansArchive,useSettings,useGithub};review.flush=flushAllStorage;
+document.documentElement.classList.toggle('dark',params.get('theme')!=='light');
+createRoot(document.getElementById('root')).render(React.createElement(I18nextProvider,{i18n},React.createElement(ModalProvider,null,React.createElement(HashRouter,null,React.createElement(GithubPage)),React.createElement(Toaster))));
+</script></body></html>

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { RiAttachment2, RiAddLine, RiFolderOpenLine, RiCloseLine, RiFileLine } from "@remixicon/react";
+import { File, FolderOpen, Paperclip, Plus, X } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { addTaskAttachment, attachmentSize, openTaskAttachment, unlinkTaskAttachment } from "./attachment-api";
 import { usePlanCopy } from "./copy";
@@ -36,21 +36,21 @@ export function TaskAttachments({ date, task, compact = false, inline = false }:
         <div className="task-attachments-header">
           <span>{copy.attachments}{attachments.length > 0 ? ` · ${attachments.length}` : ""}</span>
           <button type="button" className="task-attachments-add" disabled={busy} title={copy.localFiles} onClick={() => void upload()}>
-            <RiAddLine size={14} />{busy ? copy.addingAttachment : copy.addAttachment}
+            <Plus size={14} />{busy ? copy.addingAttachment : copy.addAttachment}
           </button>
         </div>
         {attachments.length === 0 && <p className="task-attachments-empty">{copy.noAttachments}</p>}
         {attachments.map((attachment) => (
           <div className="task-attachment" key={attachment.id}>
-            <RiFileLine size={14} className="task-attachment-icon" />
+            <File size={14} className="task-attachment-icon" />
             <button type="button" className="task-attachment-name" title={`${copy.open}: ${attachment.name}`}
               onClick={() => void open(attachment)}>
               <span>{attachment.name}</span><small>{attachmentSize(attachment.size)}</small>
             </button>
             <button type="button" className="task-attachment-action" title={copy.reveal} aria-label={`${copy.reveal}: ${attachment.name}`}
-              onClick={() => void open(attachment, true)}><RiFolderOpenLine size={14} /></button>
+              onClick={() => void open(attachment, true)}><FolderOpen size={14} /></button>
             <button type="button" className="task-attachment-action" title={copy.unlinkHint} aria-label={`${copy.unlink}: ${attachment.name}`}
-              onClick={() => unlinkTaskAttachment(date, task.id, attachment.id)}><RiCloseLine size={14} /></button>
+              onClick={() => unlinkTaskAttachment(date, task.id, attachment.id)}><X size={14} /></button>
           </div>
         ))}
         {error && <p role="alert" className="task-attachments-error">{error}</p>}
@@ -60,7 +60,7 @@ export function TaskAttachments({ date, task, compact = false, inline = false }:
     <div className={`task-attachments${compact ? " task-attachments--compact" : ""}`}>
       <PopoverTrigger asChild><button type="button" className="task-attachments-toggle"
         title={`${copy.attachments}${attachments.length ? ` · ${attachments.length}` : ""}`} aria-label={`${copy.attachments}: ${task.title}`}>
-        <RiAttachment2 size={compact ? 13 : 14}/>{attachments.length > 0 && <span className="task-attachments-count">{attachments.length}</span>}
+        <Paperclip size={compact ? 13 : 14}/>{attachments.length > 0 && <span className="task-attachments-count">{attachments.length}</span>}
       </button></PopoverTrigger>
     </div>
     <PopoverContent align="end" sideOffset={7} collisionPadding={12} aria-label={`${copy.attachments}: ${task.title}`} className="workbench-ui task-attachments-panel">{content}</PopoverContent>

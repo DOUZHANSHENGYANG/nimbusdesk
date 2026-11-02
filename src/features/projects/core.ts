@@ -1,4 +1,4 @@
-import type { ProjectData, ReminderRule, Iteration, WorkItem, ReminderDelivery } from "./types";
+import type { ProjectData, Iteration, WorkItem } from "./types";
 import { validateZenProjectData } from "./zentao-core";
 
 export function validDate(value: string): boolean {
@@ -16,11 +16,6 @@ export function iterationRange(date: string, weeks: number): { start: string; en
   const day = new Date(`${date}T12:00:00Z`).getUTCDay();
   const start = shiftDate(date, -((day + 6) % 7));
   return { start, end: shiftDate(start, weeks * 7 - 3) };
-}
-export function validateReminderRule(rule: ReminderRule): ReminderRule {
-  if (!rule || typeof rule.enabled !== "boolean" || !Array.isArray(rule.times) || !rule.times.length || rule.times.length > 12 || rule.times.some(t => !/^([01]\d|2[0-3]):[0-5]\d$/.test(t)) || !Number.isInteger(rule.advanceDays) || rule.advanceDays < 0 || rule.advanceDays > 365 || !Array.isArray(rule.weekdays) || !rule.weekdays.length || rule.weekdays.some(d => !Number.isInteger(d) || d < 0 || d > 6) || !["same", "previous"].includes(rule.nonWorkingDay)) throw new Error("Invalid reminder rule");
-  new Intl.DateTimeFormat("en", { timeZone: rule.timezone }).format();
-  return { ...rule, times: [...new Set(rule.times)].sort(), weekdays: [...new Set(rule.weekdays)].sort() };
 }
 export function resolvePlanWorkItem(tasks: readonly { id: string; parentId?: string | null; workItemId?: string | null }[], planId: string): string | null {
   const seen = new Set<string>(); const byId = new Map(tasks.map(t => [t.id, t]));
@@ -47,52 +42,73 @@ export function carryItem(data: ProjectData, id: string, target: string | null, 
 export function itemDeadline(item: WorkItem, iterations: Iteration[]): string | null {
   return item.deadline || iterations.find(i => i.id === item.activeIterationId)?.end || null;
 }
-function wallClock(now: Date, timezone: string): { date: string; time: string } {
-  const parts = new Intl.DateTimeFormat("en-CA", { timeZone: timezone, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(now);
-  const get = (name: string) => parts.find(p => p.type === name)!.value;
-  return { date: `${get("year")}-${get("month")}-${get("day")}`, time: `${get("hour")}:${get("minute")}` };
-}
-export interface DueProjectReminder extends Omit<ReminderDelivery, "notifiedAt"> { title: string; deadline: string }
-export function dueProjectReminders(data: ProjectData, now: Date): DueProjectReminder[] {
-  const result: DueProjectReminder[] = [];
-  for (const item of data.items) {
-    if (item.status === "done" || item.status === "cancelled") continue;
-    const project = data.projects.find(p => p.id === item.projectId);
-    if (project?.status === "archived") continue;
-    const rule = validateReminderRule(item.reminder ?? project?.reminder ?? data.reminderRule);
-    if (!rule.enabled) continue;
-    const deadline = itemDeadline(item, data.iterations); if (!deadline || !validDate(deadline)) continue;
-    let scheduled = shiftDate(deadline, -rule.advanceDays);
-    if (rule.nonWorkingDay === "previous") {
-      while (!rule.weekdays.includes(new Date(`${scheduled}T12:00:00Z`).getUTCDay())) scheduled = shiftDate(scheduled, -1);
-    } else if (!rule.weekdays.includes(new Date(`${scheduled}T12:00:00Z`).getUTCDay())) continue;
-    const clock = wallClock(now, rule.timezone); if (clock.date !== scheduled) continue;
-    // Stable per-effective-date/slot keys: editing unrelated settings never replays a sent reminder.
-    const prefix = `${item.id}|${deadline}|${scheduled}|`;
-    const sent = new Set(data.deliveries.filter(d => d.itemId === item.id && d.date === scheduled && d.id.startsWith(prefix)).flatMap(d => d.slots));
-    const slots = rule.times.filter(t => t <= clock.time && !sent.has(t));
-    if (slots.length) result.push({ id: `${prefix}${slots.join(",")}`, itemId: item.id, date: scheduled, slots, title: item.title, deadline });
-  }
-  return result;
+
+/**
+ * 侧栏与各处列表共用的显示顺序：置顶的在前，其余保持数组顺序（即用户拖出来的顺序）。
+ * 纯函数，方便直接断言「置顶只影响分组、不重排组内」。
+ */
+export function orderedProjects<T extends { pinned?: boolean }>(projects: T[]): T[] {
+  return [...projects.filter((project) => project.pinned), ...projects.filter((project) => !project.pinned)];
 }
 
+/** 页签只有在「有对应面板」时才算当前页：文件与图表挂在项目上，没选项目就退回任务列表。 */export type WorkTabKey = "overview" | "tasks" | "board" | "files" | "charts";
+export function resolveActiveTab(tab: WorkTabKey, hasProject: boolean): WorkTabKey {
+  if (tab === "overview" || tab === "board") return tab;
+  if ((tab === "files" || tab === "charts") && hasProject) return tab;
+  return "tasks";
+}
+
+/** 进度计算只依赖这几项，够用就好：项目级调用方不必构造完整 WorkItem。 */
+export type ProgressNode = { id: string; parentId?: string | null; status: string; percent?: number | null; weight?: number };
+export type ProgressItem = ProgressNode & { projectId: string | null };
+
+function weightOf(item: { weight?: number }): number {
+  return typeof item.weight === "number" && Number.isFinite(item.weight) && item.weight > 0 ? item.weight : 1;
+}
+/** 一条计划自身的完成度：人工百分比优先，否则按状态（done 即 100）。 */
+export function itemPercent(item: Pick<ProgressNode, "status" | "percent">): number {
+  if (typeof item.percent === "number" && Number.isFinite(item.percent)) return Math.max(0, Math.min(100, Math.round(item.percent)));
+  return item.status === "done" ? 100 : 0;
+}
+/**
+ * 计划树进度：叶子用自己的完成度，父计划按子计划的权重加权；取消的子计划不进分母。
+ * 权重只在同层有意义，所以逐层归一化——把 ×3 的计划和它的 ×1 子计划放在同一个分母里算没有意义。
+ */
+export function planPercent(items: readonly ProgressNode[], id: string): number {
+  const byId = new Map(items.map(item => [item.id, item]));
+  const children = (parentId: string) => items.filter(item => item.parentId === parentId && item.status !== "cancelled");
+  const walk = (node: ProgressNode, seen: Set<string>): number => {
+    if (seen.has(node.id)) return itemPercent(node);
+    seen.add(node.id);
+    const kids = children(node.id);
+    if (!kids.length) return itemPercent(node);
+    let sum = 0, weight = 0;
+    for (const kid of kids) { const w = weightOf(kid); sum += walk(kid, seen) * w; weight += w; }
+    return weight ? Math.round(sum / weight) : 0;
+  };
+  const node = byId.get(id);
+  return node ? walk(node, new Set()) : 0;
+}
 export function validateProjectData(data: ProjectData): void {
-  if (!data || [data.areas, data.projects, data.iterations, data.items, data.memberships, data.deliveries].some(v => !Array.isArray(v))) throw new Error("Invalid project data arrays");
+  if (!data || [data.projects, data.iterations, data.items, data.memberships].some(v => !Array.isArray(v))) throw new Error("Invalid project data arrays");
   const epoch = (value: unknown) => Number.isSafeInteger(value) && (value as number) >= 0;
   const metadata = (values: { createdAt: number; updatedAt: number }[]) => { for (const v of values) if (!epoch(v.createdAt) || !epoch(v.updatedAt)) throw new Error("Invalid modification timestamp"); };
-  metadata([...data.areas, ...data.projects, ...data.iterations, ...data.items]);
+  metadata([...data.projects, ...data.iterations, ...data.items]);
   const ids = (values: { id: string }[], kind: string) => {
     const set = new Set<string>();
     for (const v of values) { if (!v || typeof v.id !== "string" || !v.id.trim() || set.has(v.id)) throw new Error(`Invalid ${kind} id`); set.add(v.id); }
     return set;
   };
-  const areas = ids(data.areas, "area"), projects = ids(data.projects, "project"), iterations = ids(data.iterations, "iteration"), items = ids(data.items, "item");
+  const projects = ids(data.projects, "project"), iterations = ids(data.iterations, "iteration"), items = ids(data.items, "item");
   const pair = new Set<string>(); ids(data.memberships, "membership");
-  validateReminderRule(data.reminderRule);
-  for (const a of data.areas) if (typeof a.name !== "string" || !a.name.trim()) throw new Error("Invalid business area");
   for (const p of data.projects) {
-    if (typeof p.name !== "string" || !p.name.trim() || typeof p.note !== "string" || !["active", "archived"].includes(p.status) || (p.folder != null && (typeof p.folder !== "string" || !p.folder.trim())) || (p.areaId != null && !areas.has(p.areaId))) throw new Error("Invalid project");
-    if (p.reminder) validateReminderRule(p.reminder);
+    if (typeof p.name !== "string" || !p.name.trim() || typeof p.note !== "string" || !["active", "archived"].includes(p.status) || (p.folder != null && (typeof p.folder !== "string" || !p.folder.trim()))) throw new Error("Invalid project");
+    if (p.icon != null && (typeof p.icon !== "string" || !p.icon.trim() || p.icon.length > 60)) throw new Error("Invalid project icon");
+    if (p.color != null && (!Number.isInteger(p.color) || p.color < 1 || p.color > 5)) throw new Error("Invalid project color");
+    if (p.tags != null && (!Array.isArray(p.tags) || p.tags.length > 12 || p.tags.some(tag => typeof tag !== "string" || !tag.trim()) || new Set(p.tags.map(tag => tag.trim())).size !== p.tags.length)) throw new Error("Invalid project tags");
+    if (p.pinned != null && typeof p.pinned !== "boolean") throw new Error("Invalid project pinned");
+    if ((p.startDate != null && !validDate(p.startDate)) || (p.endDate != null && !validDate(p.endDate))) throw new Error("Invalid project dates");
+    if (p.startDate && p.endDate && p.startDate > p.endDate) throw new Error("Invalid project dates");
   }
   for (const i of data.iterations) if (typeof i.name !== "string" || !i.name.trim() || !validDate(i.start) || !validDate(i.end) || i.start > i.end) throw new Error("Invalid iteration dates");
   for (const m of data.memberships) {
@@ -101,12 +117,56 @@ export function validateProjectData(data: ProjectData): void {
     pair.add(key);
   }
   for (const i of data.items) {
-    if (typeof i.title !== "string" || !i.title.trim() || typeof i.note !== "string" || !["todo", "doing", "done", "cancelled"].includes(i.status) || (i.projectId != null && !projects.has(i.projectId)) || (i.areaId != null && !areas.has(i.areaId)) || (i.deadline != null && !validDate(i.deadline))) throw new Error("Invalid task");
+    if (typeof i.title !== "string" || !i.title.trim() || typeof i.note !== "string" || !["todo", "doing", "done", "cancelled"].includes(i.status) || (i.projectId != null && !projects.has(i.projectId)) || (i.deadline != null && !validDate(i.deadline))) throw new Error("Invalid task");
     if (i.activeIterationId && !data.memberships.some(m => m.itemId === i.id && m.iterationId === i.activeIterationId && m.leftAt == null)) throw new Error("Active iteration must have a live membership");
     if (data.memberships.some(m => m.itemId === i.id && m.leftAt == null && m.iterationId !== i.activeIterationId)) throw new Error("A task can have only one current iteration");
-    if (i.reminder) validateReminderRule(i.reminder);
+    if (i.weight != null && !(Number.isFinite(i.weight) && i.weight > 0 && i.weight <= 1000)) throw new Error("Invalid task weight");
+    if (i.percent != null && !(Number.isInteger(i.percent) && i.percent >= 0 && i.percent <= 100)) throw new Error("Invalid task percent");
+    if ((i.startDate != null && !validDate(i.startDate)) || (i.endDate != null && !validDate(i.endDate))) throw new Error("Invalid task dates");
+    if (i.startDate && i.endDate && i.startDate > i.endDate) throw new Error("Invalid task dates");
+    if (i.parentId != null && !items.has(i.parentId)) throw new Error("Invalid task parent");
   }
-  ids(data.deliveries, "delivery");
-  for (const d of data.deliveries) if (!items.has(d.itemId) || !validDate(d.date) || !epoch(d.notifiedAt) || !Array.isArray(d.slots) || !d.slots.length || d.slots.some(s => typeof s !== "string" || !/^([01]\d|2[0-3]):[0-5]\d$/.test(s))) throw new Error("Invalid reminder delivery");
+  // 子计划：不能指向自己、不能跨项目、不能成环。校验放在最后，前面已经保证 parent 存在。
+  for (const i of data.items) {
+    if (i.parentId == null) continue;
+    if (i.parentId === i.id) throw new Error("A task cannot be its own parent");
+    let cursor: WorkItem | undefined = data.items.find(value => value.id === i.parentId);
+    if ((cursor?.projectId ?? null) !== (i.projectId ?? null)) throw new Error("Subtasks must share the project");
+    let guard = 0;
+    while (cursor?.parentId && guard++ <= data.items.length) {
+      if (cursor.parentId === i.id) throw new Error("Task hierarchy cannot cycle");
+      cursor = data.items.find(value => value.id === cursor!.parentId);
+    }
+  }
+  for (const snapshot of data.snapshots ?? []) {
+    if (!validDate(snapshot.date) || typeof snapshot.projectId !== "string" || !snapshot.projectId.trim()) throw new Error("Invalid progress snapshot");
+    for (const key of ["todo", "doing", "done", "cancelled"] as const) if (!Number.isInteger(snapshot[key]) || snapshot[key] < 0) throw new Error("Invalid progress snapshot");
+    for (const key of ["points", "donePoints"] as const) if (!Number.isFinite(snapshot[key]) || snapshot[key] < 0) throw new Error("Invalid progress snapshot");
+  }
   validateZenProjectData(data);
+}
+
+/** 项目进度：人工覆盖 > 计划权重聚合 > 计划时间推算。 */
+export function projectProgress(
+  project: { id: string; startDate?: string | null; endDate?: string | null; progressManual?: number | null },
+  items: readonly ProgressItem[],
+  today: string,
+): { value: number; source: "manual" | "time" | "items" } {
+  const clamp = (n: number) => Math.max(0, Math.min(100, Math.round(n)));
+  if (typeof project.progressManual === "number" && Number.isFinite(project.progressManual)) {
+    return { value: clamp(project.progressManual), source: "manual" };
+  }
+  if (project.startDate && project.endDate) {
+    const start = Date.parse(project.startDate), end = Date.parse(project.endDate), now = Date.parse(today);
+    if (Number.isFinite(start) && Number.isFinite(end) && end > start) {
+      return { value: clamp(((now - start) / (end - start)) * 100), source: "time" };
+    }
+  }
+  // 只算顶层计划，子计划已经并进父计划；取消的不进分母。全为默认权重时等价于按条数算。
+  const own = items.filter(item => item.projectId === project.id && item.status !== "cancelled");
+  const roots = own.filter(item => !item.parentId || !own.some(other => other.id === item.parentId));
+  if (!roots.length) return { value: 0, source: "items" };
+  let sum = 0, weight = 0;
+  for (const root of roots) { const w = weightOf(root); sum += planPercent(own, root.id) * w; weight += w; }
+  return { value: weight ? clamp(sum / weight) : 0, source: "items" };
 }

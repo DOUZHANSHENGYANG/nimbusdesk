@@ -53,6 +53,25 @@ export function withTags(content: string, tags: string[], onlyMissing = false): 
   return content.slice(0, range.end) + `${prefix}tags: ${value}${newline}` + content.slice(range.end);
 }
 
+/** Edit one scalar field in the YAML frontmatter, preserving all other source bytes. */
+export function withField(content: string, key: string, value: string): string {
+  const range = frontmatterRange(content);
+  const newline = content.includes("\r\n") ? "\r\n" : "\n";
+  const line = `${key}: ${value}`;
+  if (!range) {
+    const bom = content.startsWith("\ufeff") ? "\ufeff" : "";
+    return `${bom}---${newline}${line}${newline}---${newline}${newline}${content.slice(bom.length)}`;
+  }
+  const doc = document(range.yaml);
+  const node = doc.get(key, true);
+  if (isNode(node) && node.range) {
+    const [start, end] = node.range;
+    return content.slice(0, range.start + start) + value + content.slice(range.start + end);
+  }
+  const prefix = range.yaml && !range.yaml.endsWith("\n") ? newline : "";
+  return content.slice(0, range.end) + `${prefix}${line}${newline}` + content.slice(range.end);
+}
+
 const TOPICS: [string, RegExp][] = [
   ["Oracle", /oracle|sqlplus|pl[ /_-]?sql/i], ["SQL", /\bsql\b|数据库|多表连接|表空间/i],
   ["Java", /\bjava\b|spring\s?boot|mybatis/i], ["SpringBoot", /spring\s?boot/i], ["MyBatis-Plus", /mybatis/i],

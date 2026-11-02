@@ -10,16 +10,23 @@ async function harness({ ghost = false, viewMode = 'icons', locked = false, nati
   const state = [], refs = [], calls = { open: [], rename: [], categoryRename: [], menu: [], move: [], hold: [], windowDrag: [] };
   let stateIndex = 0, refIndex = 0, tree, menuOptions;
   const items = Array.from({ length: 14 }, (_, i) => ({ id: `item-${i}`, title: `File ${i}`, path: `/files/${i}`, type: "file", categoryId: "a" }));
-  const files = { items, categories: [{ id: "a", name: "Documents" }], moveItemBefore: (...args) => calls.move.push(args), renameCategory: (...args) => calls.categoryRename.push(args) };
+  const files = { items, categories: [{ id: "a", name: "Documents" }], moveItemBefore: (...args) => calls.move.push(args), renameCategory: (...args) => calls.categoryRename.push(args),
+    setCategoryAppearance: (id, patch) => { const category = files.categories.find(entry => entry.id === id); if (category) category.appearance = { ...category.appearance, ...patch }; },
+    setCategoryGroupColor: () => {} };
   const fences = { fences: { a: { x: 10, y: 10, w: 300, h: 300, form: "paper", scale: 1, ghost, viewMode, locked } } };
   for (const name of ["setGhost", "setGeometry", "setOpen", "setPinned", "setScale", "setForm", "setEdge", "setEdgeY"]) fences[name] = () => {};
   fences.setViewMode = (id, value) => { fences.fences[id].viewMode = value; };
   fences.setLocked = (id, value) => { fences.fences[id].locked = value; };
+  fences.setSortMode = (id, value) => { fences.fences[id].sortMode = value; };
+  fences.setFileNameMode = (id, value) => { fences.fences[id].fileNameMode = value; };
   const useFiles = selector => selector(files); useFiles.getState = () => files;
   const useFences = selector => selector(fences); useFences.getState = () => fences;
   const icon = () => null;
   const presentation = ts.transpileModule(await readFile(new URL('./fence-presentation.ts', import.meta.url), 'utf8'), { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText;
   const { fenceLayout, fenceInsertionBefore, FENCE_GAP: GAP } = await import(`data:text/javascript;base64,${Buffer.from(presentation).toString('base64')}`);
+  // 显示名工具也走真实现（纯函数，无依赖）
+  const displaySource = ts.transpileModule(await readFile(new URL('./display-name.ts', import.meta.url), 'utf8'), { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022 } }).outputText.replace(/^import[\s\S]*?;\s*/gm, "");
+  const { displayName } = await import(`data:text/javascript;base64,${Buffer.from(displaySource).toString('base64')}`);
   const windowEvents = new Map();
   const deps = {
     React: { createElement: (type, props, ...children) => ({ type, props: { ...props, children: children.flat(Infinity).filter(child => child !== false && child != null) } }) },
@@ -32,9 +39,24 @@ async function harness({ ghost = false, viewMode = 'icons', locked = false, nati
     useRef: initial => refs[refIndex++] ??= { current: initial }, useMemo: fn => fn(), useEffect: () => {},
     useTranslation: () => ({ t: key => key, i18n: { language: "en" } }),
     useFiles, useFences, DEFAULT_FENCE: fences.fences.a, inTauri: native,
+    useSettings: selector => selector ? selector({ fenceReveal: "hover" }) : { fenceReveal: "hover" },
     getCurrentWebviewWindow: () => ({ startDragging: async () => calls.windowDrag.push(true) }),
+    getAllWebviewWindows: async () => [],
+    invoke: async () => undefined,
+    boxAppearance: value => ({ view: "icons", iconSize: 34, nameMode: "full", fontSize: 10, fontFamily: "system", showTextPreview: true, showMediaPreview: true, titleBar: "always", backgroundAlpha: 0.92, radius: 16, ...(value ?? {}) }),
+    boxDisplayName: (name, mode) => {
+      if (mode === "none") return "";
+      const dot = name.lastIndexOf(".");
+      if (dot <= 0 || dot >= name.length - 1) return name;
+      if (mode === "noExt") return name.slice(0, dot);
+      if (mode === "extOnly") return name.slice(dot + 1);
+      return name;
+    },
+    boxFontFamily: () => "",
+    ItemVisual: icon,
+    BoxAppearancePanel: icon,
     window: { addEventListener: (key, fn) => windowEvents.set(key, fn), removeEventListener: key => windowEvents.delete(key) },
-    fenceLayout, fenceInsertionBefore, GAP,
+    fenceLayout, fenceInsertionBefore, GAP, displayName,
     useFileActions: () => ({ rename: async (...args) => calls.rename.push(args) }),
     usePopupMenu: options => {
       menuOptions = options;
@@ -42,10 +64,11 @@ async function harness({ ghost = false, viewMode = 'icons', locked = false, nati
     },
     useEdgeDock: () => ({ hold: (...args) => calls.hold.push(args) }),
     openPath: async path => calls.open.push(path), openUrl: async path => calls.open.push(path),
+    openTarget: async (path, type) => { calls.open.push(path); return type; },
     cn: (...parts) => parts.filter(Boolean).join(" "), ITEM_ATTR: "data-item-id",
     requestAnimationFrame: () => {}, toast: { error: error => { throw new Error(error); } },
     Eye: icon, EyeOff: icon, X: icon, Pin: icon, PinOff: icon, PanelRightClose: icon, ArrowLeftRight: icon, Expand: icon, ItemIcon: icon,
-    List: icon, LayoutGrid: icon, LockKeyhole: icon, UnlockKeyhole: icon, MoreHorizontal: icon,
+    List: icon, LayoutGrid: icon, LockKeyhole: icon, UnlockKeyhole: icon, MoreHorizontal: icon, Search: icon, Palette: icon, Settings: icon,
   };
   const source = await readFile(new URL("./fence.tsx", import.meta.url), "utf8");
   const code = ts.transpileModule(`${source}\nexport { FencePanel };`, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.React } }).outputText.replace(/^import[\s\S]*?;\s*/gm, "");
@@ -83,8 +106,25 @@ async function harness({ ghost = false, viewMode = 'icons', locked = false, nati
     const event = { key: value, shiftKey: false, nativeEvent: { isComposing: false }, target: elements.get(node.props[deps.ITEM_ATTR]) ?? {}, currentTarget: elements.get(node.props[deps.ITEM_ATTR]) ?? {}, preventDefault() {}, stopPropagation() {}, ...extra };
     node.props.onKeyDown?.(event); return event;
   };
+  /**
+   * 可控的输入注入：派发 onChange 再重渲染。
+   *
+   * 这个 harness 用假 createElement 渲染，不派发真实 DOM 事件，所以输入类行为
+   * （盒内搜索）以前根本测不到。`field(label)` 按 aria-label 找到那个可输入的节点，
+   * `type(node, value)` 直接把 value 送进 onChange —— 与浏览器里打字的路径一致。
+   */
+  const field = label => nodes(node => node.props?.["aria-label"] === label && typeof node.props?.onChange === "function")[0];
+  const type = (target, value) => {
+    const node = typeof target === "string" ? field(target) : target;
+    assert.ok(node, `找不到可输入的控件：${typeof target === "string" ? target : "(node)"}`);
+    node.props.onChange?.({ target: { value }, currentTarget: { value } });
+    render();
+    return tree;
+  };
+  /** 当前这页渲染出来的条目 id，按 DOM 顺序 */
+  const visibleIds = () => nodes(node => node.props?.["data-item"]).map(node => node.props[deps.ITEM_ATTR]);
   render();
-  return { render, nodes, entry, key, elements, items, calls, windowEvents, fences, menuChange: open => menuOptions.onOpenChange?.(open) };
+  return { render, nodes, entry, key, elements, items, calls, windowEvents, fences, field, type, visibleIds, menuChange: open => menuOptions.onOpenChange?.(open) };
 }
 
 test('list/icon switching changes the actual row layout and preserves keyboard opening', async () => {
@@ -251,4 +291,94 @@ test("a keyboard popup keeps its ghost owner readable while the popup holds focu
   h.menuChange(false); h.render();
   assert.match(opacityOf(h), /opacity-\[0\.14\]/);
   assert.deepEqual(h.calls.hold.at(-1), ["menu", false]);
+});
+
+test("file name display modes shorten the visible label only", async () => {
+  const h = await harness();
+  const text = node => [node?.props?.children ?? []].flat(Infinity).filter(child => typeof child === "string").join("");
+  h.items.forEach((item, index) => { item.title = `File ${index}.txt`; });
+  h.render();
+  // 条目名那个 span：图标视图下带 line-clamp-2
+  const labelOf = () => text(h.nodes(node => typeof node.props?.className === "string" && node.props.className.includes("line-clamp-2"))[0]);
+  assert.equal(labelOf(), "File 0.txt", "默认完整显示");
+
+  h.fences.fences.a.fileNameMode = "noExt";
+  h.render();
+  assert.equal(labelOf(), "File 0", "隐藏扩展名只改显示");
+
+  h.nodes(node => node.props?.["aria-label"] === "files.fenceOptions")[0].props.onClick();
+  h.render();
+  const modeButtons = h.nodes(node => node.props?.["data-name-mode"] !== undefined);
+  assert.deepEqual(
+    modeButtons.map(node => node.props["data-name-mode"]),
+    ["full", "noExt", "extOnly", "none"],
+    "四个显示档位都要在菜单里",
+  );
+  const extOnly = modeButtons.find(node => node.props["data-name-mode"] === "extOnly");
+  assert.ok(extOnly, "只留扩展名那一项必须可点");
+  extOnly.props.onClick();
+  h.render();
+  assert.equal(h.fences.fences.a.fileNameMode, "extOnly", "点选后要落到栅栏记录里");
+});
+
+test("box search filters by title and path, and reports matched over total", async () => {
+  const h = await harness();
+  // 假 createElement 把 children 收成数组，比对文本要拼一下
+  const text = node => [node?.props?.children ?? []].flat(Infinity).join("");
+  // 打开搜索栏（标题栏放大镜）
+  h.nodes(node => node.type?.name === "TitleBtn" && node.props.title === "files.boxSearch")[0].props.onClick();
+  h.render();
+  const input = h.field("files.boxSearch");
+  assert.ok(input, "搜索栏应该渲染出一个可输入的控件");
+
+  h.type(input, "File 12");
+  assert.deepEqual(h.visibleIds(), ["item-12"], "只应剩下匹配的那一条");
+
+  // 路径也参与匹配：/files/13 能命中 item-13
+  h.type(h.field("files.boxSearch"), "/files/13");
+  assert.deepEqual(h.visibleIds(), ["item-13"]);
+
+  // 计数变成「命中/总数」
+  const counter = h.nodes(node => /^\d+\/\d+$/.test(text(node)))[0];
+  assert.equal(text(counter), "1/14");
+});
+
+test("box search with no match shows the no-match hint, not the empty-fence hint", async () => {
+  const h = await harness();
+  const text = node => [node?.props?.children ?? []].flat(Infinity).join("");
+  h.nodes(node => node.type?.name === "TitleBtn" && node.props.title === "files.boxSearch")[0].props.onClick();
+  h.render();
+  h.type(h.field("files.boxSearch"), "zzz-no-such-file");
+  assert.deepEqual(h.visibleIds(), []);
+  assert.equal(h.nodes(node => text(node) === "files.boxNoMatch").length, 1, "空结果要用「没有匹配」");
+  assert.equal(h.nodes(node => text(node) === "files.fenceEmpty").length, 0);
+});
+
+test("per-box sort: the chosen mode comes from the fence record and reshuffles the grid", async () => {
+  const h = await harness();
+  // 夹具里条目本来就按 File 0…13 排列，名称排序等于原序 —— 把标题反过来，
+  // 排序是否真的生效才看得出来（numeric 排序下 File 2 本来就该排在 File 10 前面）
+  h.items.forEach((item, index) => { item.title = `File ${String(13 - index).padStart(2, "0")}`; });
+  h.render();
+  assert.deepEqual(h.visibleIds().slice(0, 2), ["item-0", "item-1"], "手动排序仍是条目数组顺序");
+
+  h.fences.fences.a.sortMode = "name";
+  h.render();
+  assert.deepEqual(
+    h.visibleIds(),
+    ["item-13", "item-12", "item-11", "item-10", "item-9", "item-8"],
+    "名称排序后第一页应当是 File 00 起的那一批",
+  );
+});
+
+test("the sort menu writes the chosen mode into the fence record", async () => {
+  const h = await harness();
+  h.nodes(node => node.props?.["aria-label"] === "files.fenceOptions")[0].props.onClick();
+  h.render();
+  const buttons = h.nodes(node => node.props?.["data-sort"] !== undefined);
+  assert.deepEqual(buttons.map(node => node.props["data-sort"]), ["manual", "name", "time"], "三个排序档位都要在菜单里");
+  assert.equal(buttons[0].props["aria-pressed"], true, "默认是手动");
+  buttons.find(node => node.props["data-sort"] === "time").props.onClick();
+  h.render();
+  assert.equal(h.fences.fences.a.sortMode, "time", "点了「最近添加」要落到栅栏记录里");
 });

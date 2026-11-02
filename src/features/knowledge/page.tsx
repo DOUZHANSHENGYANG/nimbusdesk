@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useTranslation } from "react-i18next";
-import { RiBookOpenLine as BookOpen, RiFolderOpenLine as FolderOpen, RiAddLine as Plus, RiRefreshLine as RefreshCw, RiSearchLine as Search, RiMagicLine as Sparkles, RiArrowDownSLine as ChevronDown, RiArrowLeftSLine, RiArrowRightSLine, RiCloseLine, RiMoreLine, RiSettings3Line, RiListCheck } from "@remixicon/react";
+import { ArrowLeft, ArrowRight, BookOpen, ChevronDown, FolderOpen, Hash, Plus, RefreshCw, Search, Settings2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
-import { DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem } from "@/components/ui/dropdown-menu";
+
 import { pickFolder, openPath, revealInExplorer, openUrl, inTauri } from "@/lib/tauri";
-import { bindVault, scanNotes, searchNotes, listCaptures, readNote, openCaptureWindow } from "./api";
+import { bindVault, scanNotes, searchNotes, listCaptures, readNote, openCaptureWindow, moveNote, renameNote } from "./api";
 import { useKnowledge } from "./store";
 import { useKnowledgeCopy } from "./copy";
 import { CaptureForm } from "./capture";
@@ -14,15 +14,18 @@ import { NoteReader } from "./note-reader";
 import type { OrganizeMaterial } from "./organize";
 import { OrganizationWorkspace } from "./organization-workspace";
 import { OrganizationLauncher } from "./organization-launcher";
-import { startOrganization, setOrganizationBlockedPath } from './background-organization';
+import { setOrganizationBlockedPath } from './background-organization';
 import { useOrganizationJobs } from './organization-jobs';
 import { organizationWritesNote } from './background-organization-core';
 import { TagBrowser, UNTAGGED, noteTags } from "./tag-browser";
 import { NoteTags } from "./note-tags";
-import type { CaptureRecord, KnowledgeNote, NoteKind, ReadNote } from "./types";
+import { VaultManager } from "./vault-manager";
+import { useManagerCopy } from "./manager-copy";
+
+import type { CaptureRecord, KnowledgeNote, ReadNote } from "./types";
 import "./knowledge-workspace.css";
 
-const categories = ["all", "inbox", "experience", "recipe", "resource"] as const;
+
 const NOTES_PER_PAGE = 30;
 
 export function KnowledgePage() {
@@ -40,11 +43,14 @@ function VaultPage({ root }: { root: string | null }) {
   const requestedNote = searchParams.get("note") || "";
   const routeRequest = `${location.key}:${requestedNote}`;
   const [consumedRoute, setConsumedRoute] = useState("");
+  const m = useManagerCopy();
+  // 带 ?note= 进来的是「看某篇笔记」（首页/搜索跳转），其余默认落在管理面。
+  const [mode, setMode] = useState<"manage" | "notes">(requestedNote ? "notes" : "manage");
   const { t, i18n } = useTranslation();
   const name = useKnowledge((s) => s.vaultName);
   const [notes, setNotes] = useState<KnowledgeNote[]>([]);
   const [captures, setCaptures] = useState<CaptureRecord[]>([]);
-  const [category, setCategory] = useState<typeof categories[number]>("all");
+  const [category, setCategory] = useState<string>("all");
   const [query, setQuery] = useState("");
   const queryRef = useRef(query); queryRef.current = query;
   const scanRequest = useRef(0);
@@ -59,17 +65,23 @@ function VaultPage({ root }: { root: string | null }) {
   const [notice, setNotice] = useState("");
   const [captureOpen, setCaptureOpen] = useState(false);
   const [launcherOpen, setLauncherOpen] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
+
   const job = useOrganizationJobs(state=>state.job);
   const [noteInfoOpen, setNoteInfoOpen] = useState(false);
+  const [railOpen, setRailOpen] = useState(true);
+  // 三个区：人类工作区 / AI 工作区 / 正式区。分类是区里的目录。
+  const [moveOpen, setMoveOpen] = useState(false);
+  const [dest, setDest] = useState("");
+  const [renameOpen, setRenameOpen] = useState(false);
+  const [renameValue, setRenameValue] = useState("");
   const [materials, setMaterials] = useState<OrganizeMaterial[] | null>(null);
   const [tag, setTag] = useState<string | null>(null);
+  const [tagQuery, setTagQuery] = useState("");
   const [pageIndex, setPageIndex] = useState(0);
   const noteItems = useRef<HTMLDivElement>(null);
   const searchInput = useRef<HTMLInputElement>(null);
   const initiallySelected = useRef(false);
   const [noteDirty, setNoteDirty] = useState(false);
-  const organizing = job?.status === 'running' || job?.status === 'stopping';
   const mounted = useRef(true);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const refresh = useCallback(async () => {
@@ -81,7 +93,8 @@ function VaultPage({ root }: { root: string | null }) {
     try {
       const [nextNotes, nextCaptures] = await Promise.all([needle ? searchNotes(root, needle) : scanNotes(root), listCaptures(root)]);
       if (isCurrent()) {
-        setNotes(nextNotes); setCaptures(nextCaptures);
+        // 库根下散落的单文件（AGENTS.md / README.md）不属于任何区，列表里一律不显示。
+      setNotes(nextNotes.filter((note) => note.path.includes("/"))); setCaptures(nextCaptures);
         // Reading again refreshes the original content and fingerprint after external edits.
         setActive((old) => old ? nextNotes.find((note) => note.path === old.path) ?? (needle ? old : null) : null);
       }
@@ -115,13 +128,6 @@ function VaultPage({ root }: { root: string | null }) {
     catch (e) { setError(String(e)); }
     finally { if (mounted.current) setBinding(false); }
   }
-  async function organizeInBackground(){
-    if(!root||submitting)return;
-    setSubmitting(true);setError('');setNotice('');
-    try{await startOrganization({root,blockedPaths:noteDirty&&active?[active.path]:[],trigger:'manual'});}
-    catch(failure){setError(failure instanceof Error?failure.message:String(failure));}
-    finally{if(mounted.current)setSubmitting(false);}
-  }
   function noteSaved(saved: ReadNote) { readRequest.current++; setReading(false); setDetail(saved); void refresh(); }
   function chooseTag(value: string | null) { setTag(value); }
   function chooseNote(note: KnowledgeNote) {
@@ -129,6 +135,20 @@ function VaultPage({ root }: { root: string | null }) {
     if (active?.path !== note.path) setNoteDirty(true);
     setNoteInfoOpen(false);
     setActive(note);
+  }
+  async function submitRename() {
+    if (!root || !active || !renameValue.trim()) return;
+    try {
+      const path = await renameNote(root, active.path, renameValue.trim());
+      setRenameOpen(false); setNotice(c.renamed.replace("{path}", path)); await refresh();
+    } catch (e) { setError(String(e)); }
+  }
+  async function submitMove() {
+    if (!root || !active || !dest) return;
+    try {
+      const path = await moveNote(root, active.path, dest);
+      setMoveOpen(false); setNotice(c.moved.replace("{path}", path)); await refresh();
+    } catch (e) { setError(String(e)); }
   }
   function clearFilters() { setCategory("all"); setTag(null); queryRef.current = ""; setQuery(""); }
   function navigateNotes(event: KeyboardEvent<HTMLDivElement>) {
@@ -152,6 +172,7 @@ function VaultPage({ root }: { root: string | null }) {
   const needle = query.trim().toLocaleLowerCase();
   const categoryNotes = useMemo(() => notes.filter((note) => {
     const capture = captureForPath.get(note.path);
+    if (note.kind.startsWith("00-") || note.kind === "inbox") return false;
     if (category !== "all" && note.kind !== category) return false;
     return category !== "inbox" || capture?.status !== "archived";
   }), [notes, category, captureForPath]);
@@ -188,7 +209,15 @@ function VaultPage({ root }: { root: string | null }) {
     }
   }, [filtered, loading, active, requestedNote, consumedRoute, routeRequest]);
   const currentCapture = active ? captureForPath.get(active.path) : null;
-  const categoryName = (kind: NoteKind | "all") => c[kind];
+  // 归档区只展示正式区（01~04）；两个工作区的内容在「工作区」面里管。
+  const formalNotes = useMemo(() => notes.filter((note) => !note.kind.startsWith("00-") && note.kind !== "inbox"), [notes]);
+  const categories = useMemo(() => {
+    const kinds = Array.from(new Set(formalNotes.map((note) => note.kind)));
+    kinds.sort((a, b) => a.localeCompare(b));
+    return ["all", ...kinds];
+  }, [formalNotes]);
+  const folders = useMemo(() => Array.from(new Set(notes.map((note) => note.path.replace(/[\\/][^\\/]*$/, "")))).sort(), [notes]);
+  const categoryName = (kind: string) => kind === "all" ? c.all : kind === "inbox" ? c.inbox : kind === "note" ? c.note : kind.replace(/^[0-9]+[-_.\s]*/, "");
   const totalPages = Math.max(1, Math.ceil(filtered.length / NOTES_PER_PAGE));
   const currentPage = Math.min(pageIndex, totalPages - 1);
   const pageNotes = filtered.slice(currentPage * NOTES_PER_PAGE, (currentPage + 1) * NOTES_PER_PAGE);
@@ -217,40 +246,55 @@ function VaultPage({ root }: { root: string | null }) {
     <header className="knowledge-header">
       <button type="button" onClick={() => void bind()} disabled={binding} title={root || c.bindHint} aria-label={`${root ? c.change : c.bind}: ${name || "Obsidian"}`} className="knowledge-vault-switch">
         <span className="knowledge-vault-icon"><FolderOpen /></span>
-        <span className="knowledge-vault-name"><span>Obsidian</span><strong>{name || c.bind}</strong></span>
+        <span className="knowledge-vault-name"><strong>{name || c.bind}</strong></span>
         <span className="knowledge-vault-change">{c.changeVault}<ChevronDown /></span>
       </button>
+      {root && <nav className="knowledge-modes" aria-label={c.title}>
+        <button type="button" aria-pressed={mode === "manage"} onClick={() => setMode("manage")}>{m.tabs.manage}</button>
+        <button type="button" aria-pressed={mode === "notes"} onClick={() => setMode("notes")}>{m.tabs.notes}</button>
+      </nav>}
       <div className="knowledge-header-actions">
-      {root && <><Button variant="ghost" size="icon" title={c.refresh} aria-label={c.refresh} onClick={() => void refresh()} disabled={loading || binding}><RefreshCw className={loading ? "animate-spin" : ""} /></Button><div className="knowledge-organization-actions"><Button className="knowledge-organize-button" variant="outline" size="sm" disabled={binding||submitting||organizing} onClick={() => void organizeInBackground()}><Sparkles /><span>{organizing ? c.organizingNow : c.autoOrganize}</span></Button><DropdownMenu><DropdownMenuTrigger asChild><Button variant="ghost" size="icon" aria-label={c.organizationOptions} title={c.organizationOptions}><RiMoreLine /></Button></DropdownMenuTrigger><DropdownMenuContent align="end" className="workbench-ui knowledge-note-menu"><DropdownMenuItem disabled={binding||organizing} onSelect={() => setLauncherOpen(true)}><RiListCheck />{c.manual}</DropdownMenuItem><DropdownMenuItem onSelect={() => navigate("/settings?tab=knowledge")}><RiSettings3Line />{c.organizationSettings}</DropdownMenuItem></DropdownMenuContent></DropdownMenu></div><Button size="sm" onClick={() => { if (inTauri) void openCaptureWindow().catch((e) => setError(String(e))); else setCaptureOpen(true); }}><Plus />{c.capture}</Button></>}
+      {root && <><Button variant="ghost" size="icon" title={c.refresh} aria-label={c.refresh} onClick={() => void refresh()} disabled={loading || binding}><RefreshCw className={loading ? "animate-spin" : ""} /></Button><Button variant="ghost" size="icon" aria-label={c.organizationSettings} title={c.organizationSettings} onClick={() => navigate("/settings?tab=knowledge")}><Settings2 /></Button><Button size="sm" onClick={() => { if (inTauri) void openCaptureWindow().catch((e) => setError(String(e))); else setCaptureOpen(true); }}><Plus />{c.openCapture}</Button></>}
     </div></header>
     {error && !materials && <p role="alert" className="rounded-lg border border-destructive/40 p-3 text-sm text-destructive">{error}</p>}
     {notice && <p role="status" className="text-sm text-muted-foreground">{notice}</p>}
-    {!root ? <div className="flex flex-1 flex-col items-center justify-center gap-4 rounded-xl border border-dashed p-8"><BookOpen className="size-10 text-muted-foreground" /><p className="text-sm">{c.unbound}</p><p className="text-xs text-muted-foreground">{c.bindHint}</p><Button onClick={() => void bind()}>{c.bind}</Button></div> : <>
+    {!root ? <div className="flex flex-1 flex-col items-center justify-center gap-4 rounded-xl border border-dashed p-8"><BookOpen className="size-10 text-muted-foreground" /><p className="text-sm">{c.unbound}</p><p className="text-xs text-muted-foreground">{c.bindHint}</p><Button onClick={() => void bind()}>{c.bind}</Button></div> : mode === "manage" ? <VaultManager root={root} /> : <>
       <div className="knowledge-controls">
         <div className="knowledge-filter-bar">
-          <nav aria-label={c.title} className="knowledge-categories">{categories.map((kind) => <button key={kind} type="button" aria-pressed={category === kind} onClick={() => setCategory(kind)}>{categoryName(kind)}<span>{notes.filter((note) => (kind === "all" || note.kind === kind) && (kind !== "inbox" || captureForPath.get(note.path)?.status !== "archived")).length}</span></button>)}</nav>
-          <div className="knowledge-search-field knowledge-main-search"><Search aria-hidden="true" /><input ref={searchInput} type="search" aria-label={c.search} placeholder={c.search} value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={(event) => { if (event.key === "Escape" && query) { event.preventDefault(); event.stopPropagation(); setQuery(""); } }} /><span className="knowledge-search-suffix">{query ? <button type="button" aria-label={c.clearSearch} title={c.clearSearch} onClick={() => { setQuery(""); searchInput.current?.focus(); }}><RiCloseLine /></button> : <kbd aria-hidden="true" title="Ctrl+F">/</kbd>}</span></div>
+          <nav aria-label={c.title} className="knowledge-categories">{categories.map((kind) => <button key={kind} type="button" aria-pressed={category === kind} onClick={() => setCategory(kind)}>{categoryName(kind)}<span>{formalNotes.filter((note) => (kind === "all" || note.kind === kind) && (kind !== "inbox" || captureForPath.get(note.path)?.status !== "archived")).length}</span></button>)}</nav>
+          <div className="knowledge-tag-tools">
+            <span className="knowledge-tag-title"><Hash aria-hidden="true" />{c.tagBrowse}</span>
+            <div className="knowledge-search-field knowledge-tag-search">
+              <Search aria-hidden="true" /><input aria-label={c.findTag} placeholder={c.findTag} value={tagQuery} onChange={(event) => setTagQuery(event.target.value)} onKeyDown={(event) => { if (event.key === "Escape" && tagQuery) { event.preventDefault(); setTagQuery(""); } }} />
+              {tagQuery && <span className="knowledge-search-suffix"><button type="button" aria-label={c.clearTagSearch} title={c.clearTagSearch} onClick={() => setTagQuery("")}><X /></button></span>}
+            </div>
+          </div>
         </div>
-        <TagBrowser notes={categoryNotes} selected={tag} onSelect={chooseTag} />
+        <TagBrowser notes={categoryNotes} selected={tag} onSelect={chooseTag} query={tagQuery} />
       </div>
       <div className="knowledge-reading-layout">
         <aside className="knowledge-note-list" aria-label={c.notesLabel}>
-          <div className="knowledge-list-heading"><h2>{categoryName(category)}</h2><span aria-live="polite">{loading && <RefreshCw className="animate-spin" aria-label={c.loading} />}{filtered.length} {c.noteCount}</span></div>
+          <div className="knowledge-list-search"><div className="knowledge-search-field knowledge-main-search"><Search aria-hidden="true" /><input ref={searchInput} type="search" aria-label={c.search} placeholder={c.search} value={query} onChange={(e) => setQuery(e.target.value)} onKeyDown={(event) => { if (event.key === "Escape" && query) { event.preventDefault(); event.stopPropagation(); setQuery(""); } }} /><span className="knowledge-search-suffix">{query ? <button type="button" aria-label={c.clearSearch} title={c.clearSearch} onClick={() => { setQuery(""); searchInput.current?.focus(); }}><X /></button> : <kbd aria-hidden="true" title="Ctrl+F">/</kbd>}</span></div></div>
           <div ref={noteItems} className="knowledge-note-items" onKeyDown={navigateNotes} aria-busy={loading}>{loading && !pageNotes.length && <p role="status" className="knowledge-list-message">{c.loading}</p>}{!loading && filtered.length === 0 && <div className="knowledge-list-message"><p>{needle || tag ? c.noMatching : c.empty}</p>{(needle || tag || category !== "all") && <button onClick={clearFilters}>{c.resetFilters}</button>}</div>}{pageNotes.map((note) => {
           return <div key={note.path} className="knowledge-note-item" data-active={active?.path === note.path}>
             <button className="knowledge-note-open" title={note.title} aria-current={active?.path === note.path ? "true" : undefined} onClick={() => chooseNote(note)}><h3>{note.title}</h3><span className="knowledge-note-category">{categoryName(note.kind)}</span></button>
           </div>;
-        })}</div><nav className="knowledge-pagination" aria-label={c.notePagination}><Button variant="ghost" size="icon" aria-label={c.previousPage} disabled={currentPage === 0} onClick={() => setPageIndex(currentPage - 1)}><RiArrowLeftSLine /></Button><span aria-live="polite">{currentPage + 1} / {totalPages}</span><Button variant="ghost" size="icon" aria-label={c.nextPage} disabled={currentPage >= totalPages - 1} onClick={() => setPageIndex(currentPage + 1)}><RiArrowRightSLine /></Button></nav></aside>
+        })}</div><nav className="knowledge-pagination" aria-label={c.notePagination}><Button variant="ghost" size="icon" aria-label={c.previousPage} disabled={currentPage === 0} onClick={() => setPageIndex(currentPage - 1)}><ArrowLeft /></Button><span aria-live="polite">{currentPage + 1} / {totalPages}</span><Button variant="ghost" size="icon" aria-label={c.nextPage} disabled={currentPage >= totalPages - 1} onClick={() => setPageIndex(currentPage + 1)}><ArrowRight /></Button></nav></aside>
         <article className="knowledge-reader-pane" aria-label={c.readingMode}>{!active ? <div className="knowledge-reader-empty"><span className="knowledge-reader-empty-icon"><BookOpen /></span><h2>{c.readingMode}</h2><p>{c.readerHint}</p></div> : <div className="knowledge-note-document">
           {!loading && !filtered.some((note) => note.path === active.path) && <div className="knowledge-outside-filter" role="status"><span>{c.readingOutsideFilter}</span><button onClick={clearFilters}>{c.resetFilters}</button></div>}
-          {detail?.path === active.path ? <NoteReader key={detail.path} root={root} note={detail} title={active.title} onOpen={handleOpen} onInfo={() => setNoteInfoOpen(true)} recipe={active.kind === "recipe"} onSaved={noteSaved} onDirtyChange={setNoteDirty} /> : reading && <p role="status" className="p-5 text-sm text-muted-foreground">{c.loading}</p>}
+          {detail?.path === active.path ? <NoteReader key={detail.path} root={root} note={detail} title={active.title} onOpen={handleOpen} onInfo={() => setNoteInfoOpen(true)} recipe={active.path.includes("配方")} onSaved={noteSaved} onDirtyChange={setNoteDirty} /> : reading && <p role="status" className="p-5 text-sm text-muted-foreground">{c.loading}</p>}
         </div>}</article>
         {/* 第三列：文档信息常驻。弹窗只留「采集来源」那几项（原始项目/来源/目标），
             两处不重复：这里放当前文档本身的事实，以及可以直接改的标签。 */}
-        {active && <aside className="knowledge-info-rail" aria-label={c.noteInfo}>
-          <h2>{c.noteInfo}</h2>
+        {active && <aside className={railOpen ? "knowledge-info-rail" : "knowledge-info-rail is-collapsed"} aria-label={c.noteInfo}>
+          <button type="button" className="knowledge-rail-toggle" aria-expanded={railOpen} aria-label={railOpen ? c.hideInfo : c.showInfo} title={railOpen ? c.hideInfo : c.showInfo} onClick={() => setRailOpen(!railOpen)}>{railOpen ? <ArrowRight /> : <ArrowLeft />}</button>
+          {railOpen && <><h2>{c.noteInfo}</h2>
           <div className="knowledge-rail-row"><span>{c.originalPath}</span><b title={active.path}>{active.path}</b></div>
           <div className="knowledge-rail-row"><span>{c.kind}</span><b>{categoryName(active.kind)}</b></div>
+          <div className="knowledge-rail-actions">
+            <button type="button" className="knowledge-rail-action" onClick={() => { setDest(active.path.replace(/[\\\\/][^\\\\/]*$/, "")); setMoveOpen(true); }}>{c.moveTo}</button>
+            <button type="button" className="knowledge-rail-action" onClick={() => { setRenameValue(active.title); setRenameOpen(true); }}>{c.rename}</button>
+          </div>
           <div className="knowledge-rail-label">{t("knowledgeRail.tags")}</div>
           {detail?.path === active.path && <NoteTags key={active.path} root={root} note={detail} disabled={noteDirty || organizationWritesNote(job, root, active.path)} onUpdated={noteSaved} onSelect={(value) => chooseTag(value)} />}
           <div className="knowledge-rail-label">{t("knowledgeRail.relatedNotes")}</div>
@@ -261,13 +305,15 @@ function VaultPage({ root }: { root: string | null }) {
             </div>
           ))}
           {relatedNotes.length === 0 && <p className="knowledge-rail-empty">{t("knowledgeRail.noRelated")}</p>}
+        </>}
         </aside>}
       </div>
     </>}
-    <Dialog open={captureOpen} onOpenChange={setCaptureOpen}><DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-xl"><DialogHeader><DialogTitle>{c.capture}</DialogTitle><DialogDescription>{c.collectionHint}</DialogDescription></DialogHeader><CaptureForm onSaved={() => void refresh()} /></DialogContent></Dialog>
+    {root && active && <Dialog open={renameOpen} onOpenChange={setRenameOpen}><DialogContent className="workbench-ui sm:max-w-md"><DialogHeader><DialogTitle>{c.rename}</DialogTitle><DialogDescription>{active.path}</DialogDescription></DialogHeader><label className="workbench-field"><span>{c.newNoteTitle}</span><input autoFocus value={renameValue} onChange={(event) => setRenameValue(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") void submitRename(); }} /></label><div className="mt-4 flex justify-end gap-2"><Button variant="outline" size="sm" onClick={() => setRenameOpen(false)}>{c.cancel}</Button><Button size="sm" disabled={!renameValue.trim()} onClick={() => void submitRename()}>{c.rename}</Button></div></DialogContent></Dialog>}
+    {root && active && <Dialog open={moveOpen} onOpenChange={setMoveOpen}><DialogContent className="workbench-ui sm:max-w-md"><DialogHeader><DialogTitle>{c.moveTo}</DialogTitle><DialogDescription>{active.path}</DialogDescription></DialogHeader><label className="workbench-field"><span>{c.folderLabel}</span><select value={dest} onChange={(event) => setDest(event.target.value)}>{folders.map((folder) => <option key={folder} value={folder}>{folder}</option>)}</select></label><div className="mt-4 flex justify-end gap-2"><Button variant="outline" size="sm" onClick={() => setMoveOpen(false)}>{c.cancel}</Button><Button size="sm" disabled={!dest || dest === active.path.replace(/[\\/][^\\/]*$/, "")} onClick={() => void submitMove()}>{c.move}</Button></div></DialogContent></Dialog>}    <Dialog open={captureOpen} onOpenChange={setCaptureOpen}><DialogContent className="max-h-[90dvh] overflow-y-auto sm:max-w-xl"><DialogHeader><DialogTitle>{c.capture}</DialogTitle><DialogDescription>{c.collectionHint}</DialogDescription></DialogHeader><CaptureForm onSaved={() => void refresh()} /></DialogContent></Dialog>
     {root && active && <Dialog open={noteInfoOpen} onOpenChange={setNoteInfoOpen}><DialogContent className="workbench-ui knowledge-note-info"><DialogHeader><DialogTitle>{c.noteInfo}</DialogTitle><DialogDescription>{active.title}</DialogDescription></DialogHeader><dl className="knowledge-info-fields"><div><dt>{c.originalPath}</dt><dd>{active.path}</dd></div><div><dt>{c.kind}</dt><dd>{categoryName(active.kind)}</dd></div>{currentCapture?.project && <div><dt>{c.originalProject}</dt><dd>{currentCapture.project}</dd></div>}{currentCapture?.source && <div><dt>{c.originalSource}</dt><dd>{currentCapture.source}</dd></div>}{currentCapture?.archivedPath && <div><dt>{c.target}</dt><dd>{currentCapture.archivedPath}</dd></div>}</dl></DialogContent></Dialog>}
     {root && launcherOpen && <OrganizationLauncher root={root} blockedPath={noteDirty ? active?.path : undefined} onClose={() => setLauncherOpen(false)} onSelected={(next) => { setLauncherOpen(false); setNotice(""); setMaterials(next); }} />}
-    {root && materials && <OrganizationWorkspace root={root} materials={materials} onClose={() => setMaterials(null)} onArchived={(result) => { setMaterials(null); setNotice(c.archiveSuccess); setActive(result); setCategory(result.kind === "note" ? "all" : result.kind); setTag(null); queryRef.current = ""; setQuery(""); void refresh(); }} />}
+    {root && materials && <OrganizationWorkspace root={root} materials={materials} onClose={() => setMaterials(null)} onArchived={() => { setMaterials(null); setNotice(c.archiveSuccess); setActive(null); setCategory("all"); setTag(null); queryRef.current = ""; setQuery(""); void refresh(); }} />}
 
   </div>;
 }

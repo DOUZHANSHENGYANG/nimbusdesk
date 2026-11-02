@@ -22,7 +22,7 @@ try{
  await page.getByRole('button',{name:'业务门户',exact:false}).filter({has:page.locator('svg')}).first().click();
  assert.equal(await page.locator('[data-work-item]').count(),0,'project selection preserves unplanned iteration filter');
  await choose('迭代','全部迭代');await page.locator('[data-work-item="item-portal"]').waitFor();
- await page.getByRole('tab',{name:'项目资料',exact:true}).click();await page.getByText('尚未绑定资料目录',{exact:true}).waitFor();
+ await page.getByRole('tab',{name:'文档',exact:true}).click();await page.getByText('尚未绑定资料目录',{exact:true}).waitFor();
  await page.getByRole('tab',{name:'工作项',exact:true}).click();
  await page.getByRole('button',{name:'新建业务范围',exact:true}).click();await dialog().getByRole('textbox').fill('平台研发');await saved();
  await page.getByRole('button',{name:'新建项目',exact:true}).click();await dialog().getByRole('textbox',{name:'名称',exact:true}).fill('开放平台');await saved();
@@ -55,14 +55,14 @@ try{
  await page.keyboard.press('Escape');await page.getByRole('complementary',{name:'工作项详情'}).waitFor({state:'hidden'});
  assert.equal(await page.locator(`[data-work-item="${itemId}"] button[aria-pressed]`).evaluate(node=>node===document.activeElement),true,'Escape returns focus to the selected row');
  await page.getByRole('textbox',{name:'搜索工作项…',exact:true}).fill('不存在的结果');await page.getByText('没有匹配的工作项',{exact:true}).waitFor();await page.getByRole('button',{name:'清除搜索',exact:true}).click();
- await page.getByRole('button',{name:'无项目',exact:true}).click();await choose('迭代','全部迭代');await page.locator('[data-work-item="item-small"]').waitFor();
+ await page.getByRole('button',{name:'未归属计划',exact:true}).click();await choose('迭代','全部迭代');await page.locator('[data-work-item="item-small"]').waitFor();
  await page.getByRole('button',{name:'新建工作项',exact:true}).first().click();await dialog().getByRole('textbox',{name:'标题',exact:true}).fill('无需项目的零碎任务');await saved();
  assert.equal(await page.evaluate(()=>projectsReview.stores.useProjects.getState().items.find(i=>i.title==='无需项目的零碎任务').projectId),null);
  await page.getByRole('button',{name:'关闭详情',exact:true}).click();
  await page.getByRole('button',{name:'编辑业务范围 · 平台研发',exact:true}).click();await dialog().getByRole('textbox').fill('平台工程');await saved();
  await page.getByRole('button',{name:'删除业务范围 · 平台工程',exact:true}).click();await dialog().getByRole('button',{name:'删除',exact:true}).click();await dialog().waitFor({state:'hidden'});
  assert.equal(await page.evaluate(id=>projectsReview.stores.useProjects.getState().projects.find(p=>p.id===id).areaId,projectId),null,'area deletion keeps the project and clears classification');
- await page.getByRole('button',{name:'全部项目',exact:false}).click();
+ await page.getByRole('button',{name:'全部计划',exact:false}).click();
  await page.locator('[data-work-item="item-portal"]').getByRole('button',{pressed:false}).last().click();
  await page.getByText('已有每日计划',{exact:true}).waitFor();await page.getByText('继承关联的子计划',{exact:true}).waitFor();await page.getByText('归档的关联计划',{exact:true}).waitFor();
  await page.getByRole('button').filter({hasText:'已有每日计划'}).click();await page.locator('[data-plan-destination]').waitFor();assert.match(page.url(),/\/plans\?date=\d{4}-\d{2}-\d{2}&task=plan-parent/);
@@ -74,7 +74,7 @@ try{
  await page.evaluate(async()=>{projectsReview.stores.useSettings.getState().setLang('en');const{i18n}=await import('/src/lib/i18n.ts');await i18n.changeLanguage('en');document.documentElement.classList.remove('dark');});await page.getByRole('button',{name:'New work item',exact:true}).first().waitFor();await page.screenshot({path:'Temp/projects-list-light-en.png'});
  await page.goto('http://127.0.0.1:17819/src/features/projects/fixtures/page.html?files=1');await page.locator('[data-work-item="item-portal"]').waitFor();
  const pane=()=>page.getByRole('region',{name:'项目资料',exact:true}),editorFor=name=>pane().getByRole('textbox',{name:`${name} · 编辑`,exact:true});
- async function openFiles(project){await page.getByRole('button',{name:new RegExp('^'+project)}).first().click();await page.getByRole('tab',{name:'项目资料',exact:true}).click();}
+ async function openFiles(project){await page.getByRole('button',{name:new RegExp('^'+project)}).first().click();await page.getByRole('tab',{name:'文档',exact:true}).click();}
  await openFiles('业务门户');await pane().getByRole('button',{name:'alpha.txt',exact:true}).waitFor();
  await page.evaluate(()=>{projectsReview.fileIO.holdReadPath='alpha.txt';});await pane().getByRole('button',{name:'alpha.txt',exact:true}).click();await page.waitForFunction(()=>projectsReview.fileIO.readWaiting);
  await pane().getByRole('button',{name:'beta.txt',exact:true}).click();await editorFor('beta.txt').waitFor();await page.evaluate(()=>projectsReview.fileIO.releaseFileRead());

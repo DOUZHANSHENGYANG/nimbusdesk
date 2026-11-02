@@ -5,7 +5,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { toast } from "sonner";
 import { inTauri } from "@/lib/tauri";
 import { useFiles, useFences } from "@/stores/files";
-import { hideFenceTemporarily, restoreFenceOnDesktop } from "./desktop-actions";
+import { hideFenceTemporarily, openFenceGroup, restoreFenceOnDesktop } from "./desktop-actions";
 import { useSettings } from "@/stores/settings";
 
 let toggling: Promise<void> | null = null;
@@ -13,15 +13,33 @@ export function toggleDesktopFences(): Promise<void> {
     if (toggling) return toggling;
     const request = (async () => {
         if (!inTauri) return;
-        const windows = (await getAllWebviewWindows()).filter(window => window.label.startsWith('fence-'));
-        const visibility = await Promise.all(windows.map(window => window.isVisible()));
-        if (visibility.some(Boolean)) { await Promise.all(windows.map(window => hideFenceTemporarily(window.label.slice(6)))); return; }
-        const { fences } = useFences.getState();
+        const windows = (await getAllWebviewWindows()).filter(window => window.label.startsWith('fence-') && !window.label.startsWith('fence-group-'));
+        const groupWindows = (await getAllWebviewWindows()).filter(window => window.label.startsWith('fence-group-'));
+        const visibility = await Promise.all([...windows, ...groupWindows].map(window => window.isVisible()));
+        if (visibility.some(Boolean)) {
+            await Promise.all(windows.map(window => hideFenceTemporarily(window.label.slice(6))));
+            await Promise.all(groupWindows.map(async window => { await window.hide(); }));
+            return;
+        }
+        const { fences, groups: storedGroups } = useFences.getState();
+        const groups = storedGroups ?? {};
         const categories = useFiles.getState().categories.filter(category => fences[category.id]?.open);
-        if (!categories.length) throw new Error(useSettings.getState().lang === 'en' ? 'Enable a desktop fence in Files first.' : '请先在文件管理中启用一个桌面栅格。');
+        const grouped = new Set<string>();
         for (const category of categories) {
+            const color = category.groupColor?.toLowerCase();
+            const group = color ? groups[color] : undefined;
+            if (color && group?.open) {
+                if (!grouped.has(color)) { grouped.add(color); await openFenceGroup(color); }
+                continue;
+            }
             await restoreFenceOnDesktop(category.id, true);
         }
+        for (const [key, group] of Object.entries(groups)) {
+            if (group.open && !grouped.has(key) && categories.some(category => category.groupColor?.toLowerCase() === key)) {
+                await openFenceGroup(key);
+            }
+        }
+        if (!categories.length && !Object.values(groups).some(group => group.open)) throw new Error(useSettings.getState().lang === 'en' ? 'Enable a desktop fence in Files first.' : '请先在文件管理中启用一个桌面栅格。');
     })();
     toggling = request;
     void request.finally(() => { toggling = null; }).catch(() => undefined);

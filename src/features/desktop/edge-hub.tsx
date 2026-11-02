@@ -244,7 +244,7 @@ export function EdgeHub() {
         })}
         <div role="separator" className="my-1 h-px bg-border" />
         {menuItem(en ? "Open tasks" : "打开计划", <LayoutGrid className="size-3.5" />, () => void main("/plans"))}
-        {menuItem(en ? "Open files" : "打开文件", <LayoutGrid className="size-3.5" />, () => void main("/files"))}
+        {menuItem(en ? "Open files" : "打开文件", <LayoutGrid className="size-3.5" />, () => void main("/tools/files"))}
         {menuItem(en ? "Open settings" : "打开设置", <LayoutGrid className="size-3.5" />, () => void main("/settings"))}
       </div>
       {error && <p role="status" className="max-h-12 shrink-0 overflow-y-auto px-2 py-1 text-[10px] text-destructive">{en ? "Action failed. Try again from the tray." : "操作未完成，请从托盘重试。"}</p>}

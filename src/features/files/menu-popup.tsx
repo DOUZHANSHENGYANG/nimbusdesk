@@ -9,6 +9,7 @@ import {
   Copy,
   FolderTree,
   FolderX,
+  FolderSync,
   Monitor,
   MonitorOff,
   Folder,
@@ -55,6 +56,8 @@ const ICONS: IconMap = {
   root: FolderOpen,
   fence: Monitor,
   fenceOff: MonitorOff,
+  changeMapping: FolderSync,
+  newBox: FolderPlus,
   moveTo: ArrowRightLeft,
   category: Folder,
 };

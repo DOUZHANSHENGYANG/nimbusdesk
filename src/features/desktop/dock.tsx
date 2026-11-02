@@ -3,9 +3,8 @@ import { invoke } from "@tauri-apps/api/core";
 import { currentMonitor } from "@tauri-apps/api/window";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
-import { BookOpen, CalendarCheck, FolderKanban, GripHorizontal, GripVertical, LayoutGrid, List, Search, Settings2, X } from "lucide-react";
+import { BookOpen, CalendarCheck, Clipboard as ClipboardIcon, FolderKanban, GripHorizontal, GripVertical, LayoutGrid, List, Paperclip, Pin, Plus, Search, Settings2, Sparkles, X } from "lucide-react";
 import { Trash2 } from "lucide-react";
-import { RiAddLine, RiAttachment2, RiClipboardLine, RiCloseLine, RiDeleteBinLine, RiPushpinLine, RiSparklingLine } from "@remixicon/react";
 import { chatWithProvider, testProvider } from "@/features/ai/client";
 import { selectProvider } from "@/features/ai/core";
 import { providersReady, useProviders } from "@/features/ai/providers";
@@ -15,6 +14,7 @@ import { useModal } from "@/components/shell/modal-host";
 import { inTauri, openPath, openUrl } from "@/lib/tauri";
 import { useSettings } from "@/stores/settings";
 import { categoryKind, sortedTopCategories, useFiles } from "@/stores/files";
+import { dissolveBox } from "@/features/files/dissolve";
 import { usePlans } from "@/features/plans/store";
 import { todayStr } from "@/features/plans/types";
 import { addTaskAttachment, attachmentSize, openTaskAttachment, unlinkTaskAttachment } from "@/features/plans/attachment-api";
@@ -397,7 +397,7 @@ export function DockWindow() {
       case "plans.open": nav("/plans"); break;
       case "projects.open": if (action.value) nav(`/projects?project=${action.value}`); break;
       case "projects.all": nav("/projects"); break;
-      case "fences.files": nav("/files"); break;
+      case "fences.files": nav("/tools/files"); break;
       case "knowledge.panel": setPanel("capture"); break;
       case "knowledge.window": invoke("open_capture").catch(report); break;
       case "settings.open": nav("/settings"); break;
@@ -556,7 +556,6 @@ function FencesFlyout() {
   const items = useFiles((s) => s.items);
   const moveCategory = useFiles((s) => s.moveCategory);
   const addCategory = useFiles((s) => s.addCategory);
-  const removeCategory = useFiles((s) => s.removeCategory);
   const updateItem = useFiles((s) => s.updateItem);
   const moveItemBefore = useFiles((s) => s.moveItemBefore);
   const tileSize = useSettings((s) => s.dockTileSize);
@@ -593,15 +592,10 @@ function FencesFlyout() {
    * 只对**非映射**盒子开放 —— 映射盒子的内容属于磁盘上那个真实目录，
    * 「解散」在语义上没法表达（删了盒子文件还在，用户会以为文件没了）。
    */
+  /** 解散：映射盒只解除映射（文件不动），其余把条目散到默认分类 —— 语义见 dissolve.ts */
   const dissolveFolder = (categoryId: string) => {
-    const category = categories.find((c) => c.id === categoryId);
-    if (!category || categoryKind(category) === "mapped") return;
-    const target = categories.find((c) => c.id !== categoryId && !c.parentId);
-    const fallbackId = target?.id ?? addCategory(t("dock.defaultCategory"));
-    for (const item of items.filter((i) => i.categoryId === categoryId)) {
-      updateItem(item.id, { categoryId: fallbackId });
-    }
-    removeCategory(categoryId);
+    const outcome = dissolveBox(categoryId);
+    if (!outcome.ok) return;
     setOpenFolder(null);
     setChip(null);
   };
@@ -690,7 +684,7 @@ function FencesFlyout() {
             onClick={() => setView("list")}><List className="size-3.5" aria-hidden="true" /></button>
           <button type="button" aria-label={t("dock.clipCollect")} title={t("dock.clipCollect")}
             onClick={() => void collectClipboard()}>
-            <RiClipboardLine className="size-3.5" aria-hidden="true" />
+            <ClipboardIcon className="size-3.5" aria-hidden="true" />
           </button>
         </span>
       </div>
@@ -842,14 +836,14 @@ function CapturePanel({ setPanel }: { setPanel: (next: DockPanel | null) => void
             onClick={() => setTab("capture")}>{t("dock.knowledge")}</button>
           {showAsk && (
             <button type="button" aria-pressed={tab === "ask"} onClick={() => setTab("ask")}>
-              <RiSparklingLine size={12} aria-hidden="true" />{t("dock.aiAsk")}
+              <Sparkles size={12} aria-hidden="true" />{t("dock.aiAsk")}
             </button>
           )}
         </span>
         <button type="button" className="dock-capture-pin" title={t("dock.captureDetach")}
           aria-label={t("dock.captureDetach")}
           onClick={() => { invoke("open_capture").catch(report); setPanel(null); }}>
-          <RiPushpinLine size={12} aria-hidden="true" />{t("dock.captureDetach")}
+          <Pin size={12} aria-hidden="true" />{t("dock.captureDetach")}
         </button>
       </div>
       {tab === "ask" && showAsk ? <AiAsk /> : <div className="dock-capture-form"><CaptureForm onHide={() => setPanel(null)} /></div>}
@@ -879,7 +873,7 @@ function AiAsk() {
           maxLength={2000} onChange={(event) => setQuestion(event.target.value)} />
         <button type="submit" className="dock-ask-send" disabled={busy || !question.trim()}
           aria-label={t("dock.aiAsk")}>
-          <RiSparklingLine size={13} aria-hidden="true" />
+          <Sparkles size={13} aria-hidden="true" />
         </button>
       </form>
       {busy && <p className="dock-pnone">{t("dock.aiBusy")}</p>}
@@ -944,17 +938,17 @@ function PlansFlyout() {
           <button type="button" title={t("dock.plansAddSub")} aria-label={t("dock.plansAddSub")}
             aria-expanded={subFor === task.id}
             onClick={() => { setSubFor(subFor === task.id ? null : task.id); setSubDraft(""); }}>
-            <RiAddLine size={13} aria-hidden="true" />
+            <Plus size={13} aria-hidden="true" />
           </button>
           <button type="button" title={t("dock.plansAttach")} aria-label={t("dock.plansAttach")}
             aria-expanded={attsFor === task.id}
             onClick={() => setAttsFor(attsFor === task.id ? null : task.id)}>
-            <RiAttachment2 size={13} aria-hidden="true" />
+            <Paperclip size={13} aria-hidden="true" />
             {(task.attachments?.length ?? 0) > 0 && <i>{task.attachments!.length}</i>}
           </button>
           <button type="button" className="is-danger" title={t("dock.plansDelete")} aria-label={t("dock.plansDelete")}
             onClick={() => remove(task.id)}>
-            <RiDeleteBinLine size={13} aria-hidden="true" />
+            <Trash2 size={13} aria-hidden="true" />
           </button>
         </span>
       )}
@@ -962,7 +956,7 @@ function PlansFlyout() {
         <span className="dock-todo-actions">
           <button type="button" className="is-danger" title={t("dock.plansDelete")} aria-label={t("dock.plansDelete")}
             onClick={() => remove(task.id)}>
-            <RiDeleteBinLine size={13} aria-hidden="true" />
+            <Trash2 size={13} aria-hidden="true" />
           </button>
         </span>
       )}
@@ -999,13 +993,13 @@ function PlansFlyout() {
                         <button type="button" className="dock-att-x" title={t("dock.plansUnlink")}
                           aria-label={`${t("dock.plansUnlink")}: ${attachment.name}`}
                           onClick={() => unlinkTaskAttachment(date, task.id, attachment.id)}>
-                          <RiCloseLine size={12} aria-hidden="true" />
+                          <X size={12} aria-hidden="true" />
                         </button>
                       </span>
                     ))}
                     <button type="button" className="dock-att-add" disabled={addBusy}
                       onClick={() => { setAddBusy(true); addTaskAttachment(date, task.id).catch(report).finally(() => setAddBusy(false)); }}>
-                      <RiAddLine size={12} aria-hidden="true" />{t("dock.plansAddAttachment")}
+                      <Plus size={12} aria-hidden="true" />{t("dock.plansAddAttachment")}
                     </button>
                   </div>
                 )}
@@ -1095,7 +1089,7 @@ function ProjectsFlyout() {
                     <button type="button" className="dock-padd-item" aria-label={t("dock.projectsAddItem")}
                       aria-expanded={addFor === entry.id}
                       onClick={() => { setAddFor(addFor === entry.id ? null : entry.id); setItemDraft(""); }}>
-                      <RiAddLine size={12} aria-hidden="true" />
+                      <Plus size={12} aria-hidden="true" />
                     </button>
                   </div>
                   <span className="dock-pbar" aria-hidden="true"><i style={{ width: `${pct}%` }} /></span>

@@ -65,6 +65,6 @@ test('per-category and per-date settings preserve geometry, legacy fields and in
     store.getState().setStickyAppearance('a', { stickyColor: undefined, tabWidth: Infinity });
     assert.equal(store.getState()[mapName].a.stickyColor, undefined);
     assert.equal(store.getState()[mapName].a.tabWidth, 240);
-    assert.equal(store.persist.getOptions().version, 1);
+    assert.equal(store.persist.getOptions().version, 2);
   }
 });

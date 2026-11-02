@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { RiArchiveLine, RiSettings3Line, RiSparklingLine, RiCloseLine, RiFileTextLine, RiCheckboxCircleLine } from "@remixicon/react";
+import { Archive, CheckCircle2, FileText, Settings2, Sparkles, X } from "lucide-react";
 import "./workspace.css";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -91,23 +91,23 @@ export function OrganizationWorkspace({ root, materials, onClose, onArchived }: 
   }
   return <Dialog open onOpenChange={(open) => { if (!open && busy !== "archive") onClose(); }}><DialogContent data-organization-workspace="true" className="workbench-ui organization-sheet" showCloseButton={false} onEscapeKeyDown={(event) => { if (busy === "archive") event.preventDefault(); }} onPointerDownOutside={(event) => { if (busy) event.preventDefault(); }}>
     <DialogHeader className="organization-header">
-      <div className="organization-heading"><span className="workbench-icon"><RiSparklingLine aria-hidden="true" /></span><div><DialogTitle>{c.manual}</DialogTitle><DialogDescription>{c.aiWorkspaceHint}</DialogDescription></div></div>
-      <Button variant="ghost" size="icon" aria-label="Close" disabled={busy === "archive"} onClick={onClose}><RiCloseLine /></Button>
+      <div className="organization-heading"><span className="workbench-icon"><Sparkles aria-hidden="true" /></span><div><DialogTitle>{c.manual}</DialogTitle><DialogDescription>{c.aiWorkspaceHint}</DialogDescription></div></div>
+      <Button variant="ghost" size="icon" aria-label="Close" disabled={busy === "archive"} onClick={onClose}><X /></Button>
     </DialogHeader>
     <div className="organization-scroll">
-      <div className="organization-material"><div><span className="workbench-eyebrow">{c.sourceMaterials} · {String(materials.length).padStart(2, "0")}</span><p title={materials.map(({ capture }) => capture.title).join(" · ")}>{materials.map(({ capture }) => capture.title).join(" · ")}</p></div><Button size="sm" variant="ghost" onClick={() => setSetup((old) => !old)} title={provider ? `${provider.name} · ${provider.model}` : undefined}><RiSettings3Line className="size-3.5" />{provider ? provider.name : c.configureAI}</Button></div>
+      <div className="organization-material"><div><span className="workbench-eyebrow">{c.sourceMaterials} · {String(materials.length).padStart(2, "0")}</span><p title={materials.map(({ capture }) => capture.title).join(" · ")}>{materials.map(({ capture }) => capture.title).join(" · ")}</p></div><Button size="sm" variant="ghost" onClick={() => setSetup((old) => !old)} title={provider ? `${provider.name} · ${provider.model}` : undefined}><Settings2 className="size-3.5" />{provider ? provider.name : c.configureAI}</Button></div>
       {setup && <div className="organization-provider-setup"><ProviderSettings /></div>}
       {!provider && <p className="organization-hint">{c.aiProviderNeeded}</p>}
       <div className="organization-template">
         <label className="workbench-field"><span>{c.documentTemplate}</span><select value={template} disabled={!!busy} onChange={(event) => { setTemplate(event.target.value); setGenerated(false); }}><optgroup label={c.builtInTemplates}>{BUILTINS.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}</optgroup>{templates.length > 0 && <optgroup label={c.vaultTemplates}>{templates.map((item) => <option key={item.path} value={item.path}>{item.title}</option>)}</optgroup>}</select></label>
-        <Button disabled={!!busy} onClick={() => void generate()}><RiSparklingLine className={busy === "generate" ? "animate-pulse" : ""} />{busy === "generate" ? c.aiBusy : generated ? c.regenerate : c.generateDocument}</Button>
+        <Button disabled={!!busy} onClick={() => void generate()}><Sparkles className={busy === "generate" ? "animate-pulse" : ""} />{busy === "generate" ? c.aiBusy : generated ? c.regenerate : c.generateDocument}</Button>
       </div>
       <p className="organization-hint">{c.generateHint}</p>
       {templateError && <p className="organization-hint text-warning">{c.templateReadFailed}: {templateError}</p>}
       {materials.some(({ capture }) => capture.attachments.length > 0) && <div className="organization-attachments"><div className="organization-attachments-names">{materials.flatMap(({ capture }) => capture.attachments).map((image) => <span key={image.path} title={image.path}>{image.name}</span>)}</div><label><Checkbox checked={vision} onCheckedChange={(value) => setVision(value === true)} disabled={!!busy} />{c.sendImages}</label><p className="organization-hint">{c.imageNameContext}</p></div>}
       {error && <p role="alert" className="workbench-notice mt-4 break-words text-destructive">{error}</p>}
       <section className="organization-output">
-        <h3 className="organization-section-heading">{generated ? <RiCheckboxCircleLine aria-hidden="true" /> : <RiFileTextLine aria-hidden="true" />}{c.archiveReview}</h3>
+        <h3 className="organization-section-heading">{generated ? <CheckCircle2 aria-hidden="true" /> : <FileText aria-hidden="true" />}{c.archiveReview}</h3>
         <fieldset disabled={!!busy} className="organization-fields disabled:opacity-70">
           <label className="workbench-field"><span>{c.titleField}</span><Input value={suggestion.title} onChange={(event) => patch({ title: event.target.value })} /></label>
           <div className="organization-metadata"><label className="workbench-field"><span>{c.targetCategory}</span><select aria-label={c.targetCategory} value={suggestion.kind} onChange={(event) => patch({ kind: event.target.value as ArchiveKind })}>{(["experience", "recipe", "resource"] as const).map((kind) => <option key={kind} value={kind}>{c[kind]}</option>)}</select></label><label className="workbench-field"><span>{c.tags}</span><Input value={tags} onChange={(event) => setTags(event.target.value)} /></label></div>
@@ -117,6 +117,6 @@ export function OrganizationWorkspace({ root, materials, onClose, onArchived }: 
         </fieldset>
       </section>
     </div>
-    <footer className="organization-footer"><p>{generated ? c.aiReviewBeforeArchive : c.manualBeforeAI}</p><div><Button variant="ghost" disabled={busy === "archive"} onClick={onClose}>{c.cancelled}</Button><Button disabled={!!busy || !suggestion.title.trim() || !suggestion.content.trim()} onClick={() => void archive()}><RiArchiveLine />{busy === "archive" ? c.archiving : c.archive}</Button></div></footer>
+    <footer className="organization-footer"><p>{generated ? c.aiReviewBeforeArchive : c.manualBeforeAI}</p><div><Button variant="ghost" disabled={busy === "archive"} onClick={onClose}>{c.cancelled}</Button><Button disabled={!!busy || !suggestion.title.trim() || !suggestion.content.trim()} onClick={() => void archive()}><Archive />{busy === "archive" ? c.archiving : c.archive}</Button></div></footer>
   </DialogContent></Dialog>;
 }

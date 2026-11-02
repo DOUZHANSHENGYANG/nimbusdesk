@@ -9,13 +9,15 @@ import {
   deleteEntry,
   deleteEntries,
   ensureDir as ensureDirOnDisk,
-  openPath,
-  openUrl,
+  pathMeta,
   pickFolder,
   renameEntry,
   revealInExplorer,
 } from "@/lib/tauri";
 import { inTauri } from "@/lib/tauri";
+import { assessDeleteRisk, formatBytes, type DeleteRisk } from "./delete-risk";
+import { openTarget } from "./open-target";
+import { useFileHistory } from "./history";
 import { useSettings } from "@/stores/settings";
 
 /**
@@ -72,6 +74,7 @@ export function useFileActions() {
 
   const categories = useFiles((s) => s.categories);
   const items = useFiles((s) => s.items);
+  const pushHistory = useFileHistory((s) => s.push);
   const updateItem = useFiles((s) => s.updateItem);
   const removeItem = useFiles((s) => s.removeItem);
   const addItem = useFiles((s) => s.addItem);
@@ -96,8 +99,7 @@ export function useFileActions() {
   const open = useCallback(
     async (item: FileItem) => {
       try {
-        if (item.type === "url") await openUrl(item.path);
-        else await openPath(item.path);
+        await openTarget(item.path, item.type);
       } catch {
         toast.error(t("files.openErr"));
       }
@@ -262,6 +264,7 @@ export function useFileActions() {
         const newPath = await renameEntry(item.path, next);
         // 磁盘已改名 → 条目路径与标题同步（避免出现幽灵条目）
         updateItem(item.id, { path: newPath, title: next });
+        pushHistory({ kind: "rename", itemId: item.id, from: item.path, to: newPath, label: `${current} → ${next}` });
         toast.success(t("files.renamed"));
         return true;
       } catch (e) {
@@ -269,17 +272,51 @@ export function useFileActions() {
         return false;
       }
     },
-    [explain, prompt, t, updateItem],
+    [explain, prompt, pushHistory, t, updateItem],
   );
 
   /* ── 删除（磁盘进回收站 + 移除条目） ───────────────── */
 
+  /**
+   * 删除前取一次元信息做风险分级。
+   * 取不到大小就记成 null —— 不能把「未知」当成「很小」。
+   */
+  const deleteRiskOf = useCallback(async (targets: FileItem[]): Promise<DeleteRisk> => {
+    const local = targets.filter((item) => item.type !== "url");
+    const sizes = new Map<string, number | null>();
+    if (local.length && inTauri) {
+      try {
+        for (const meta of await pathMeta(local.map((item) => item.path))) sizes.set(meta.path, meta.size);
+      } catch {
+        /* 读不到元信息就按未知处理，不假装很小 */
+      }
+    }
+    return assessDeleteRisk(local.map((item) => ({
+      kind: item.type === "folder" ? ("folder" as const) : ("file" as const),
+      size: sizes.get(item.path) ?? null,
+    })));
+  }, []);
+
+  /** 风险文案：低风险只说「移进回收站」；高风险才补体积与「这是文件夹」的提醒 */
+  const deleteRiskLines = useCallback((risk: DeleteRisk): string => {
+    const lines = [t("files.deleteDiskHint")];
+    if (risk.severity === "high") {
+      if (risk.hasFolder) lines.push(t("files.deleteRiskFolder"));
+      const size = formatBytes(risk.bytes);
+      if (size) lines.push(t("files.deleteRiskSize", { size }));
+    }
+    return lines.join("\n");
+  }, [t]);
+
   const remove = useCallback(
     async (item: FileItem) => {
       const isUrl = item.type === "url";
+      const risk = isUrl
+        ? assessDeleteRisk([{ kind: "url" as const }])
+        : await deleteRiskOf([item]);
       const ok = await confirm({
         title: isUrl ? t("files.removeItemConfirm") : t("files.deleteDiskConfirm"),
-        description: isUrl ? item.title : `${item.title}\n${t("files.deleteDiskHint")}`,
+        description: isUrl ? item.title : `${item.title}\n${deleteRiskLines(risk)}`,
         danger: true,
         confirmText: isUrl ? t("common.confirm") : t("files.deleteToRecycle"),
       });
@@ -297,17 +334,19 @@ export function useFileActions() {
         }
       }
       removeItem(item.id);
+      if (!isUrl) pushHistory({ kind: "delete", itemId: item.id, from: item.path, label: item.title });
     },
-    [confirm, explain, removeItem, t],
+    [confirm, deleteRiskLines, deleteRiskOf, explain, pushHistory, removeItem, t],
   );
 
   /** 批量删除：一次回收站操作，保证可整体撤销 */
   const removeMany = useCallback(
     async (targets: FileItem[]) => {
       if (!targets.length) return;
+      const risk = await deleteRiskOf(targets);
       const ok = await confirm({
         title: t("files.deleteDiskConfirm"),
-        description: t("files.deleteCountHint", { count: targets.length }),
+        description: `${t("files.deleteCountHint", { count: targets.length })}\n${deleteRiskLines(risk)}`,
         danger: true,
         confirmText: t("files.deleteToRecycle"),
       });
@@ -325,8 +364,13 @@ export function useFileActions() {
         }
       }
       for (const it of targets) removeItem(it.id);
+      const groupId = crypto.randomUUID();
+      for (const it of targets) {
+        if (it.type === "url") continue;
+        pushHistory({ kind: "delete", itemId: it.id, from: it.path, label: it.title, groupId });
+      }
     },
-    [confirm, explain, removeItem, t],
+    [confirm, deleteRiskLines, deleteRiskOf, explain, pushHistory, removeItem, t],
   );
 
   /* ── 分类目录绑定 ─────────────────────────────────── */

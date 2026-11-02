@@ -5,7 +5,7 @@ import ts from 'typescript';
 import {create} from 'zustand';import {persist,createJSONStorage} from 'zustand/middleware';
 let sequence=0;
 async function load(path,deps={}){const key=`__desktopTest${++sequence}`;const code=ts.transpileModule(await readFile(new URL(path,import.meta.url),'utf8'),{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText.replace(/^import[\s\S]*?;\s*/gm,'');globalThis[key]=deps;try{return await import(`data:text/javascript;base64,${Buffer.from(`const {${Object.keys(deps).join(',')}}=globalThis.${key};\n${code}`).toString('base64')}`);}finally{delete globalThis[key];}}
-async function files(){return(await load('../../stores/files.ts',{create,persist,createJSONStorage,tauriJsonStorage:{getItem:()=>null,setItem:()=>{}},filesTableStorage:{getItem:()=>null,setItem:()=>{},removeItem:()=>{}}})).useFiles;}
+async function files(){return(await load('../../stores/files.ts',{create,persist,createJSONStorage,tauriJsonStorage:{getItem:()=>null,setItem:()=>{}},filesTableStorage:{getItem:()=>null,setItem:()=>{},removeItem:()=>{}},normalizedMappingPath:value=>String(value??'').replace(/\\/g,'/').replace(/\/+$/,'').toLowerCase(),reconcileDirectoryItems:()=>[]})).useFiles;}
 const item=(id,path,categoryId='old')=>({id,path,categoryId,title:path.split('/').at(-1),type:'file',tags:['kept'],createdAt:1});
 
 test('moving dropped entries updates existing references and descendants, adds the destination once',async()=>{
@@ -23,8 +23,28 @@ test('newly moved paths are registered, Windows case is ignored, and retained or
  store.getState().applyMovedEntries('target',[{source:'e:\\files\\LOCKED.txt',path:'E:/Files/locked.txt',name:'locked.txt',kind:'file'}]);assert.equal(store.getState().items.length,2);
 });
 
-test('desktop toggle hides visible fences and shows enabled ones without changing persistent open flags',async()=>{
- const state={fences:{a:{open:true,x:10,y:20,w:200,h:300},b:{open:false}}};const calls=[];let visible=true;
+test('deleting the last item dissolves a normal box, but moving it out keeps the box',async()=>{
+ const store=await files();const cat=(id,extra={})=>({id,name:id,createdAt:1,...extra});
+ store.setState({categories:[cat('a'),cat('b'),cat('m',{kind:'mapped'}),cat('p'),cat('child',{parentId:'p'})],items:[
+  {id:'i1',categoryId:'a',path:'C:/1.txt',title:'1',type:'file',tags:[],createdAt:1},
+  {id:'i2',categoryId:'b',path:'C:/2.txt',title:'2',type:'file',tags:[],createdAt:1},
+  {id:'i3',categoryId:'m',path:'C:/3.txt',title:'3',type:'file',tags:[],createdAt:1},
+ ]});
+ store.getState().removeItem('i1');assert.equal(store.getState().categories.some(c=>c.id==='a'),false);
+ store.getState().updateItem('i2',{categoryId:''});assert.equal(store.getState().categories.some(c=>c.id==='b'),true);
+ store.getState().removeItem('i3');assert.equal(store.getState().categories.some(c=>c.id==='m'),true);
+ assert.equal(store.getState().categories.some(c=>c.id==='p'),true);
+});
+
+test('boxes only reorder: moveCategoryBefore inserts before a target and compacts sortOrder',async()=>{
+ const store=await files();store.setState({categories:[{id:'a',name:'A',createdAt:1},{id:'b',name:'B',createdAt:2},{id:'c',name:'C',createdAt:3}],items:[]});
+ const order=()=>[...store.getState().categories].sort((x,y)=>(x.sortOrder??99)-(y.sortOrder??99)).map(x=>x.id).join('');
+ store.getState().moveCategoryBefore('c','a');assert.equal(order(),'cab');
+ store.getState().moveCategoryBefore('c',null);assert.equal(order(),'abc');
+ store.getState().moveCategoryBefore('a','missing');assert.equal(order(),'bca');
+});
+
+test('desktop toggle hides visible fences and shows enabled ones without changing persistent open flags',async()=>{ const state={fences:{a:{open:true,x:10,y:20,w:200,h:300},b:{open:false}}};const calls=[];let visible=true;
  const window={label:'fence-a',isVisible:async()=>visible,hide:async()=>{visible=false;calls.push('hide');}};
  const {toggleDesktopFences}=await load('./desktop-runtime.tsx',{useEffect:()=>{},emitTo:async()=>{},inTauri:true,getAllWebviewWindows:async()=>[window],useFiles:{getState:()=>({categories:[{id:'a',name:'One'},{id:'b',name:'Two'}]})},useFences:{getState:()=>state},restoreFenceOnDesktop:async(id)=>{calls.push(id);visible=true;},hideFenceTemporarily:async()=>window.hide()});
  await toggleDesktopFences();assert.deepEqual(calls,['hide']);await toggleDesktopFences();assert.deepEqual(calls,['hide','a']);assert.equal(state.fences.a.open,true);assert.equal(state.fences.b.open,false);

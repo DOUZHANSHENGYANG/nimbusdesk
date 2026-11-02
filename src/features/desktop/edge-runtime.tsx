@@ -84,7 +84,7 @@ export function EdgeRuntime() {
   }, [main, ready]);
 
   useEffect(() => {
-    if (!main || !ready || !monitors.length) return;
+    if (!main || !ready || !monitors?.length) return;
     const intent = ++reconcileIntent.current;
     let alive = true;
     const current = () => alive && intent === reconcileIntent.current;

@@ -1,8 +1,9 @@
 import { getAllWebviewWindows, type WebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { emitTo } from "@tauri-apps/api/event";
+import { invoke } from "@tauri-apps/api/core";
 import { closeFence, inTauri, openFence } from "@/lib/tauri";
 import { flushAllStorage } from "@/lib/storage";
-import { useFiles, useFences, DEFAULT_FENCE } from "@/stores/files";
+import { useFiles, useFences, DEFAULT_FENCE, DEFAULT_GROUP_GEOMETRY } from "@/stores/files";
 import { queueWindowOperation } from "@/features/desktop/edge-core";
 import { useEdgeWorkspace } from "@/features/desktop/edge-workspace";
 
@@ -79,6 +80,42 @@ export function setFenceOnDesktop(id: string, visible: boolean, index = 0): Prom
 /** Startup and the shortcut may reveal enabled fences, but cannot enable disabled ones. */
 export function restoreFenceOnDesktop(id: string, reveal = false): Promise<void> {
   return queueWindowOperation(`fence-${id}`, () => showFence(id, 0, false, reveal));
+}
+
+/** 打开同色编组的宿主窗口（成员盒子仍各自保留 fence 窗口）。 */
+export async function openFenceGroup(color: string): Promise<void> {
+  if (!inTauri) return;
+  const key = color.toLowerCase();
+  useFences.getState().ensureGroup(key);
+  const group = useFences.getState().groups[key];
+  if (!group) return;
+  if (!group.open) useFences.getState().setGroupOpen(key, true);
+  await flushAllStorage();
+  await invoke("open_fence_group", {
+    groupId: key.replace("#", ""),
+    title: navigator.language.toLowerCase().startsWith("zh") ? "编组窗口" : "Group host",
+    x: group.x ?? DEFAULT_GROUP_GEOMETRY.x,
+    y: group.y ?? DEFAULT_GROUP_GEOMETRY.y,
+    w: group.w ?? DEFAULT_GROUP_GEOMETRY.w,
+    h: group.h ?? DEFAULT_GROUP_GEOMETRY.h,
+  });
+  /*
+   * 合并后成员栅栏只是藏起来，不销毁：宿主窗口关闭时还能按原几何恢复。
+   * 用 hideFenceTemporarily 而不是 setOpen(false)，避免把用户「启用」的
+   * 选择改掉 —— open 仍是持久状态，hidden 只是这一次合并的呈现。
+   */
+  const members = useFiles.getState().categories.filter((category) => category.groupColor?.toLowerCase() === key);
+  await Promise.all(members.map(async (category) => {
+    if (useFences.getState().fences[category.id]?.open) {
+      await hideFenceTemporarily(category.id).catch(() => undefined);
+    }
+  }));
+}
+
+/** 编组宿主窗口没有独立命令：用 label 直接隐藏/关闭由前端处理。 */
+export async function hideFenceGroup(color: string): Promise<void> {
+  const window = (await getAllWebviewWindows()).find((item) => item.label === `fence-group-${color.replace("#", "")}`);
+  if (window) await window.hide();
 }
 
 export function hideFenceTemporarily(id: string): Promise<void> {

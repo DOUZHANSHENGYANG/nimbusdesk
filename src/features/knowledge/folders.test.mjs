@@ -10,7 +10,7 @@ test('existing paths stay default and each vault keeps its own bindings', () => 
 });
 test('normalize editable vault-relative folders and reject overlap or protected scopes', () => {
   assert.deepEqual(normalizeFolders({experience:'团队\\经验/',recipe:'团队/配方',resource:'资料/收藏'}),{experience:'团队/经验',recipe:'团队/配方',resource:'资料/收藏'});
-  for (const experience of ['', '../outside','E:/absolute','.obsidian','assets/images','08-收件箱','bad/../name','team/CON','team/name.','team/node_modules']) {
+  for (const experience of ['', '../outside','E:/absolute','.obsidian','assets/images','00-Human工作区/Inbox','bad/../name','team/CON','team/name.','team/node_modules']) {
     assert.throws(()=>normalizeFolders({...DEFAULT_KNOWLEDGE_FOLDERS,experience}));
   }
   assert.throws(()=>normalizeFolders({experience:'Team',recipe:'team/recipes',resource:'资源'}));

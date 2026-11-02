@@ -2,9 +2,16 @@ import { useEffect, useRef, useState } from "react";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { inTauri } from "@/lib/tauri";
 
+export interface FileDropPoint {
+  x: number;
+  y: number;
+}
+
 interface FileDropOptions {
   enabled: boolean;
-  onDrop: (paths: string[]) => Promise<unknown>;
+  /** 原生拖放的指针位置（物理像素），用于判断落在哪个收纳盒上。 */
+  onOver?: (point: FileDropPoint | null) => void;
+  onDrop: (paths: string[], point?: FileDropPoint) => Promise<unknown>;
   onError: (error: unknown) => void;
 }
 
@@ -24,10 +31,18 @@ export function useFileDrop(options: FileDropOptions): { dragging: boolean; busy
     let mounted = true;
     let pending = 0;
     let unlisten: (() => void) | undefined;
+    const pointOf = (event: { position?: { x: number; y: number } }): FileDropPoint | undefined =>
+      event.position ? { x: event.position.x, y: event.position.y } : undefined;
     void getCurrentWebviewWindow().onDragDropEvent(({ payload }) => {
       if (!mounted || !latest.current.enabled) return;
       if (payload.type === "enter" || payload.type === "over") {
         setDragging(true);
+        latest.current.onOver?.(pointOf(payload) ?? null);
+        return;
+      }
+      if (payload.type === "leave") {
+        setDragging(false);
+        latest.current.onOver?.(null);
         return;
       }
       setDragging(false);
@@ -38,7 +53,9 @@ export function useFileDrop(options: FileDropOptions): { dragging: boolean; busy
       pending++;
       setBusy(true);
       void (async () => {
-        try { await accepted.onDrop([...payload.paths]); }
+        try {
+          await accepted.onDrop([...payload.paths], pointOf(payload));
+        }
         catch (error) { accepted.onError(error); }
         finally {
           pending--;

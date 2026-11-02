@@ -8,9 +8,8 @@ test('restore retains local task metadata, adopts newer entities and never rebin
  const merged=mergeProjectBackup(local,incoming);assert.equal(merged.projects[0].name,'new');assert.equal(merged.projects[0].folder,'C:/local');assert.equal(merged.projects[1].folder,null);assert.equal(local.projects[0].name,'local');
 });
 test('invalid references fail before backup changes and plan links require an existing work item',()=>{const {mergeProjectBackup,assertPlanLinks}=load('./backup');const incoming=emptyProjectData();incoming.items=[entity('i',{title:'x',projectId:'missing',areaId:null,note:'',deadline:null,status:'todo',activeIterationId:null})];assert.throws(()=>mergeProjectBackup(emptyProjectData(),incoming));assert.throws(()=>assertPlanLinks({state:{days:{day:[{id:'p',workItemId:'missing'}]}}},new Set()));assert.doesNotThrow(()=>assertPlanLinks({state:{days:{day:{tasks:[{id:'p',workItemId:null}]}}}},new Set()));});
-test('explicit settings restore recovers project reminder preferences and validates every linked plan ID',()=>{
- const {mergeProjectBackup,assertPlanLinks}=load('./backup');const a=emptyProjectData(),b=emptyProjectData();b.reminderRule={...b.reminderRule,times:['12:34'],timezone:'UTC'};
- assert.deepEqual(mergeProjectBackup(a,b,{overwriteSettings:true}).reminderRule,b.reminderRule);assert.deepEqual(mergeProjectBackup(a,b).reminderRule,a.reminderRule);
+test('restore validates every linked plan ID',()=>{
+ const {assertPlanLinks}=load('./backup');
  assert.throws(()=>assertPlanLinks({days:{day:[{id:'',workItemId:null}]}},new Set()),/plan ID/);
  assert.throws(()=>assertPlanLinks({days:{day:[{id:'same',workItemId:null},{id:'same',workItemId:null}]}},new Set()),/plan ID/);
 });

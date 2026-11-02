@@ -205,11 +205,12 @@ export function ItemIcon({
           alt=""
           loading="lazy"
           onError={() => setBrokenUrl(iconUrl)}
+          style={{ width: size, height: size }}
           className={cn("shrink-0 rounded object-contain", className)}
         />
       );
     }
-    return <Globe className={cn("shrink-0 text-info", className)} strokeWidth={1.8} />;
+    return <Globe size={size} className={cn("shrink-0 text-info", className)} strokeWidth={1.8} />;
   }
 
   // 本地条目：优先原生图标（与资源管理器/桌面一致），取不到再回退
@@ -223,17 +224,18 @@ export function ItemIcon({
           nativeCache.delete(`${path}\u{1}${targetSize(size)}`);
           setBrokenUrl(nativeUrl);
         }}
+        style={{ width: size, height: size }}
         className={cn("shrink-0 object-contain", className)}
       />
     );
   }
 
   if (type === "folder") {
-    return <Folder className={cn("shrink-0 text-brand", className)} strokeWidth={1.8} />;
+    return <Folder size={size} className={cn("shrink-0 text-brand", className)} strokeWidth={1.8} />;
   }
 
   const ext = extOf(path);
   const hit = EXT_MAP[ext] ?? { Icon: FileIcon, cls: "text-muted-foreground" };
   const { Icon, cls } = hit;
-  return <Icon className={cn("shrink-0", cls, className)} strokeWidth={1.8} />;
+  return <Icon size={size} className={cn("shrink-0", cls, className)} strokeWidth={1.8} />;
 }

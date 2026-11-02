@@ -1,5 +1,6 @@
 export type ArchiveKind = "experience" | "recipe" | "resource";
-export type NoteKind = ArchiveKind | "inbox" | "note";
+/** 笔记的「区域」就是库里的顶层目录名（如 01-工作），随库结构变化，不再写死。 */
+export type NoteKind = string;
 
 export interface VaultInfo { root: string; name: string }
 export interface CaptureAttachment { name: string; path: string; mime: string }

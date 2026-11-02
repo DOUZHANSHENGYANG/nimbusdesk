@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>知识库管理面 · 夹具</title>
+</head>
+<body>
+<div id="root"></div>
+<script type="module">
+import { mockIPC, mockWindows } from '@tauri-apps/api/mocks';
+
+const report = {
+  scanned: 268,
+  total: 4,
+  groups: [
+    { id: 'bad_status', label: 'status 越界', severity: 'error', items: [
+      { path: '00-Human工作区/Inbox/随手记.md', detail: '进行中' },
+      { path: '00-Agent工作区/Inbox/AI 初稿-系统代理.md', detail: '进行中' }
+    ] },
+    { id: 'bom_md', label: 'BOM', severity: 'warn', items: [
+      { path: '00-Human工作区/Inbox/附件/讲稿.md' }
+    ] },
+    { id: 'draft_old', label: 'draft 超 90 天没动', severity: 'warn', items: [
+      { path: '02-IT/01-前端/旧草稿一.md' },
+      { path: '03-生活/01-学习/旧草稿二.md' }
+    ] },
+    { id: 'no_type', label: '缺 type', severity: 'error', items: [
+      { path: '00-Agent工作区/Inbox/AI 初稿-系统代理.md' }
+    ] }
+  ],
+  skipped: []
+};const triage = {
+  reviewed: [
+    { dir: '00-Human工作区/已审核', exists: true, count: 0 },
+    { dir: '00-Agent工作区/已审核', exists: true, count: 0 }
+  ],
+  ready: [],
+  problems: []
+};
+const loop = {
+  cases: 4, cold: 0,
+  concepts: [{ concept: '系统代理', path: '00-Agent工作区/wiki/concepts/系统代理.md', state: 'hypothesis', support: 1, reasons: ['只有 1 例支持（至少 2 例才算成立）', '断言置信度：7 条硬 / 10 条软'] }],
+  threshold: 3, coldDays: 14,
+  distribution: [
+    { concept: '系统代理', count: 1, hasConcept: true, ready: false },
+    { concept: '依赖解析', count: 1, hasConcept: false, ready: false },
+    { concept: 'monorepo', count: 1, hasConcept: false, ready: false },
+    { concept: '构建产物', count: 1, hasConcept: false, ready: false }
+  ],
+  orphans: []
+};
+
+const settings = { version: 3, state: { theme: 'dark', lang: 'zh', sidebarCollapsed: true } };
+const knowledge = { version: 1, state: { vaultRoot: 'E:/User/knowledge-base', vaultName: 'knowledge base', shortcut: 'Ctrl+Alt+Space', folderBindings: {} } };
+
+const notes = [
+  { path: '00-Human工作区/Inbox/随手记.md', title: '随手记：先别急着归档', kind: 'inbox', modifiedAt: 1761900000000, preview: '想到什么先丢进来…' },
+  { path: '02-IT/05-工具/pnpm monorepo 的 dev 脚本必须显式构建内部包.md', title: 'pnpm monorepo 的 dev 脚本必须显式构建内部包', kind: '02-IT', modifiedAt: 1761800000000, preview: '内部包的 exports 指向 dist…' },
+  { path: '02-IT/01-前端/Vue 路由守卫踩坑.md', title: 'Vue 路由守卫踩坑', kind: '02-IT', modifiedAt: 1761700000000, preview: '路由守卫里异步判断…' },
+  { path: '01-工作/开发经验/接口联调排错.md', title: '接口联调排错', kind: '01-工作', modifiedAt: 1761600000000, preview: '先看网关再看服务…' },
+  { path: '03-生活/01-学习/读书笔记.md', title: '读书笔记', kind: '03-生活', modifiedAt: 1761500000000, preview: '这本讲的是…' },
+  { path: '00-Agent工作区/Inbox/AI 初稿-系统代理.md', title: 'AI 初稿：系统代理', kind: '00-Agent工作区', modifiedAt: 1761910000000, preview: '代理和直连打架时的判断顺序…' },
+  { path: '00-Agent工作区/wiki/cases/系统代理踩坑.md', title: '系统代理踩坑', kind: '00-Agent工作区', modifiedAt: 1761350000000, preview: '代理和直连打架…' },
+  { path: '04-资源/收藏/工具清单.md', title: '工具清单', kind: '04-资源', modifiedAt: 1761400000000, preview: '常用的命令行工具…' }
+];
+
+window.knowledgeFixture = { calls: [], report, triage, loop, notes };
+
+const params = new URLSearchParams(location.search);
+const state = params.get('state') || '';
+const emptyReport = { scanned: 267, total: 0, groups: [], skipped: [] };
+const emptyLoop = { cases: 0, cold: 0, concepts: [], threshold: 3, coldDays: 14, distribution: [], orphans: [] };
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+mockIPC(async (cmd, args) => {
+  window.knowledgeFixture.calls.push({ cmd, args });
+  if (cmd === 'read_json') {
+    if (args.key === 'settings') return structuredClone(settings);
+    if (args.key === 'knowledge-settings') return structuredClone(knowledge);
+    return null;
+  }
+  if (cmd === 'write_json') return args.value;
+  if (cmd === 'get_data_dir') return 'E:/KnowledgeFixture';
+  if (cmd === 'plugin:event|listen') return args.handler;
+  if (cmd === 'plugin:event|unlisten') return null;
+  if (cmd === 'knowledge_vault_tool') {
+    if (state === 'slow') await sleep(2200);
+    if (state === 'error' && args.action === 'report') throw new Error('找不到可用的 python（python 与 py 都不在 PATH）');
+    const body = state === 'empty' && args.action === 'report' ? emptyReport
+      : state === 'empty' && args.action === 'loop_status' ? emptyLoop
+        : args.action === 'report' ? report
+          : args.action === 'triage_status' ? triage
+            : args.action === 'triage_plan' ? { apply: false, moved: 0, skipped: 0, entries: [] }
+              : args.action === 'loop_status' ? loop
+                : args.action === 'backlog' ? { exists: false, pending: [], worst: 0, threshold: 3, overdue: false }
+                  : '已执行';
+    return typeof body === 'string' ? body : JSON.stringify(body);
+  }
+  if (cmd === 'knowledge_scan') return structuredClone(notes);
+  if (cmd === 'knowledge_search') return structuredClone(notes).filter((note) => note.title.includes(String(args.query)) || note.path.includes(String(args.query)));
+  if (cmd === 'knowledge_read') {
+    const note = notes.find((item) => item.path === args.path);
+    return { path: args.path, fingerprint: 'fixture', content: `# ${note ? note.title : ''}\n\n${note ? note.preview : ''}\n\n## 小节\n这里的正文由夹具提供，只用来检查版式。\n` };
+  }
+  if (cmd === 'knowledge_captures' || cmd === 'knowledge_templates') return [];
+  if (cmd === 'knowledge_update') {
+    const input = args.input || {};
+    return { path: input.path, content: input.content || '', fingerprint: 'fixture' };
+  }
+  if (cmd === 'list_prompts' || cmd === 'list_skills' || cmd === 'list_mcp' || cmd === 'preset_list') return [];
+  if (cmd === 'search_status') return { count: 0, indexing: false, backend: 'windows', everythingAvailable: false, files: { running: false, paused: false, total: 0, processed: 0, indexed: 0, failed: 0 } };
+  return null;
+});
+mockWindows('main');
+
+document.documentElement.classList.add('dark');
+
+const React = (await import('react')).default;
+const { createRoot } = await import('react-dom/client');
+const { MemoryRouter } = await import('react-router-dom');
+const { I18nextProvider } = await import('react-i18next');
+await import('/src/index.css');
+const { i18n } = await import('/src/lib/i18n.ts');
+const { KnowledgePage } = await import('/src/features/knowledge/page.tsx');
+const { Providers } = await import('/src/app/providers.tsx');
+
+createRoot(document.getElementById('root')).render(
+  React.createElement(I18nextProvider, { i18n },
+    React.createElement(Providers, null,
+      React.createElement(MemoryRouter, { initialEntries: ['/ai/knowledge'] },
+        React.createElement(KnowledgePage))))
+);
+
+// 截图用：?cat=1 待归档 / ?cat=2 经验；?view=notes 切到笔记面
+const cat = new URLSearchParams(location.search).get('cat');
+if (cat) setTimeout(() => { document.querySelectorAll('.vm-nav button')[Number(cat)]?.click(); }, 1200);
+if (params.get('view') === 'notes') setTimeout(() => { document.querySelectorAll('.knowledge-modes button')[1]?.click(); }, 1400);
+if (params.get('review')) setTimeout(() => { document.querySelectorAll('.vm-table tbody tr button')[0]?.click(); }, 1800);
+if (params.get('mcat')) setTimeout(() => { document.querySelectorAll('.vm-nav button')[Number(params.get('mcat'))]?.click(); }, 1500);
+if (params.get('face')) setTimeout(() => { [...document.querySelectorAll('.vm-tabs button')].find((b) => b.textContent.includes(params.get('face')))?.click(); }, 1600);
+if (params.get('zone')) setTimeout(() => { document.querySelectorAll('.knowledge-zones button')[Number(params.get('zone'))]?.click(); }, 1600);
+if (params.get('rail') === 'closed') setTimeout(() => { document.querySelector('.knowledge-rail-toggle')?.click(); }, 2000);
+if (params.get('row')) setTimeout(() => { document.querySelectorAll('.vm-row')[Number(params.get('row'))]?.click(); }, 1500);
+if (params.get('batch')) setTimeout(() => {
+  document.querySelector('.vm-batchbar input')?.click();
+  setTimeout(() => {
+    const button = Array.from(document.querySelectorAll('.vm-actions button')).find((item) => item.textContent?.trim() === '预览改动');
+    button?.click();
+  }, 400);
+}, 1600);
+</script>
+</body>
+</html>

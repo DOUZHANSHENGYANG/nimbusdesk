@@ -29,6 +29,8 @@ export type MenuIconKey =
   | "root"
   | "fence"
   | "fenceOff"
+  | "changeMapping"
+  | "newBox"
   | "moveTo"
   | "category";
 

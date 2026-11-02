@@ -11,7 +11,7 @@ function merge<T extends { id: string; updatedAt?: number; notifiedAt?: number }
   }
   return [...values.values()];
 }
-export function mergeProjectBackup(local: ProjectData, incoming: ProjectData, opts = { overwriteSettings: false }): ProjectData {
+export function mergeProjectBackup(local: ProjectData, incoming: ProjectData, _opts: { overwriteSettings?: boolean } = {}): ProjectData {
   validateProjectData(local); validateProjectData(incoming);
   const memberships = merge(local.memberships, incoming.memberships);
   const pairs = new Map<string, (typeof memberships)[number]>();
@@ -20,14 +20,15 @@ export function mergeProjectBackup(local: ProjectData, incoming: ProjectData, op
     if (!old || m.updatedAt > old.updatedAt) pairs.set(key, m);
   }
   const data: ProjectData = {
-    areas: merge(local.areas, incoming.areas),
     projects: merge(local.projects, incoming.projects).map(p => ({ ...p, folder: local.projects.find(x => x.id === p.id)?.folder ?? null })),
     iterations: merge(local.iterations, incoming.iterations), items: merge(local.items, incoming.items),
+    // 图表快照是本机观测记录，不随备份迁移：合并别人的历史会让燃尽图凭空改变。
+    snapshots: local.snapshots ?? [],
     remoteTasks: merge(local.remoteTasks ?? [], incoming.remoteTasks ?? []), remoteExecutions: merge(local.remoteExecutions ?? [], incoming.remoteExecutions ?? []), remoteLinks: merge(local.remoteLinks ?? [], incoming.remoteLinks ?? []),
     // A backup cannot prove whether an external write happened on another machine.
     // Only intentions actually adopted from this backup lose their send-ready state.
     remoteChanges: merge(local.remoteChanges ?? [], (incoming.remoteChanges ?? []).map(change => ({ ...change, status: change.status === "conflict" ? "conflict" as const : "uncertain" as const }))),
-    memberships: [...pairs.values()], reminderRule: opts.overwriteSettings ? incoming.reminderRule : local.reminderRule, deliveries: merge(local.deliveries, incoming.deliveries).slice(-4096),
+    memberships: [...pairs.values()],
   };
   // Conflicting active-iteration graphs must be reviewed, never silently detached.
   validateProjectData(data); return data;

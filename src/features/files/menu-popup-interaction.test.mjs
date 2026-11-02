@@ -32,7 +32,7 @@ async function harness(component = "MenuPopupWindow", props = {}) {
     window: { addEventListener: (name, fn) => listeners.set(name, fn), removeEventListener: name => listeners.delete(name) },
     document, requestAnimationFrame: fn => { frames.push(fn); return frames.length; }, cancelAnimationFrame: () => {},
   };
-  for (const name of ["FolderPlus", "FilePlus2", "Pencil", "Trash2", "ExternalLink", "FolderOpen", "Copy", "FolderTree", "FolderX", "Monitor", "MonitorOff", "Folder", "FileText", "FileSpreadsheet", "FileCode", "FileImage", "FileArchive", "ArrowRightLeft"]) deps[name] = icon;
+  for (const name of ["FolderPlus", "FilePlus2", "Pencil", "Trash2", "ExternalLink", "FolderOpen", "Copy", "FolderTree", "FolderX", "FolderSync", "Monitor", "MonitorOff", "Folder", "FileText", "FileSpreadsheet", "FileCode", "FileImage", "FileArchive", "ArrowRightLeft"]) deps[name] = icon;
   const source = await readFile(new URL("./menu-popup.tsx", import.meta.url), "utf8");
   const code = ts.transpileModule(`${source}\nexport { MenuRow };`, { compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2022, jsx: ts.JsxEmit.React } }).outputText.replace(/^import[\s\S]*?;\s*/gm, "");
   globalThis.__menuPopupInteraction = deps;

@@ -5,9 +5,9 @@
 .feed-article-header time { display: block; margin-top: 12px; font-size: 12px; color: var(--muted-foreground); }
 .feed-article-info { display: inline-block; margin-top: 12px; font-size: 12px; color: var(--muted-foreground); }
 .feed-article-contents { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 0 0 28px; padding: 14px 0; border-block: 1px solid var(--border); }
-.feed-article-contents button { min-height: 30px; color: var(--muted-foreground); font-size: 12px; cursor: pointer; }
+.feed-article-contents button { min-height: 36px; color: var(--muted-foreground); font-size: 12px; cursor: pointer; }
 .feed-article-contents button:hover { color: var(--primary); }
-.feed-article-body { font-size: 14px; line-height: 1.95; overflow-wrap: anywhere; }
+.feed-article-body { max-width: 68ch; margin-inline: auto; font-size: 14px; line-height: 1.95; overflow-wrap: anywhere; }
 .feed-article-body > :first-child, .feed-article-body > div > :first-child { margin-top: 0; }
 .feed-article-body p { margin: 0 0 18px; }
 .feed-article-body h1, .feed-article-body h2, .feed-article-body h3, .feed-article-body h4, .feed-article-body h5, .feed-article-body h6 { color: var(--foreground); font-weight: 600; line-height: 1.55; scroll-margin-top: 20px; }

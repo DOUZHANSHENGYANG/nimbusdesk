@@ -76,6 +76,11 @@ export function ArticleReader({ entry, sourceName, onOpen }: {
   }
 
   const plain = content?.value || entry.extra?.hover || "";
+  const rendered = parsed
+    ? Array.from(parsed.body.childNodes).map((node, index) => render(node, String(index)))
+    : plain.split(/\n\s*\n/).filter(Boolean).map((paragraph, index) => <p key={index} className="whitespace-pre-line">{paragraph}</p>);
+  // 解析成功但什么都没剩（图片无 alt、正文被站点塞进脚本）时，不能留一片空白
+  const bodyEmpty = !rendered.some(node => node !== null);
   return (
     <article className="feed-article select-text">
       <header className="feed-article-header">
@@ -90,7 +95,7 @@ export function ArticleReader({ entry, sourceName, onOpen }: {
         </nav>
       )}
       <div className="feed-article-body">
-        {parsed ? Array.from(parsed.body.childNodes).map((node, index) => render(node, String(index))) : plain.split(/\n\s*\n/).filter(Boolean).map((paragraph, index) => <p key={index} className="whitespace-pre-line">{paragraph}</p>)}
+        {bodyEmpty ? <p className="text-muted-foreground">{t("feeds.articleBodyMissing")}</p> : rendered}
       </div>
     </article>
   );

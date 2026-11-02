@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { RiHashtag as Hash, RiMagicLine as Sparkles } from "@remixicon/react";
+import { Hash, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { chatWithProvider } from "@/features/ai/client";

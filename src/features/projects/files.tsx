@@ -10,6 +10,7 @@ import { pickFile, pickFolder, openUrl, inTauri } from "@/lib/tauri";
 import { flushAllStorage } from "@/lib/storage";
 import { cn } from "@/lib/utils";
 import { createProjectEntry, createProjectRoot, importProjectFile, listProjectFiles, moveProjectFile, openProjectFile, readProjectFile, trashProjectFile, writeProjectText, type ProjectDocument, type ProjectFile } from "./api";
+import { ProjectDocuments } from "./documents";
 
 const copy = {
   zh: { title: "项目资料", choose: "选择已有目录", createRoot: "创建项目目录", unbound: "尚未绑定资料目录", empty: "此目录为空", refresh: "刷新", new: "新建", folder: "文件夹", markdown: "Markdown 文件", text: "文本文件", import: "导入副本", importFolder: "导入文件夹副本", importMove: "移动文件到项目", moveConfirm: "将从原位置移走文件", source: "来源", target: "目标", name: "名称", rename: "重命名", move: "移动", moveHint: "输入相对于项目根目录的完整目标路径，含文件名；目标目录须已存在。", trash: "移到回收站", trashConfirm: "将此条目移到系统回收站？", open: "系统打开", root: "根目录", save: "保存", preview: "预览", edit: "编辑", saved: "已保存", dirty: "未保存", select: "选择文件查看内容", unsupported: "此格式请用系统程序打开", conflict: "磁盘文件已由其他程序更改，本地草稿已保留。", local: "本地草稿", disk: "磁盘当前内容", reload: "采用磁盘内容", reloadConfirm: "丢弃当前草稿并载入磁盘内容？", saveCopy: "另存副本", unbind: "解除绑定", unbindConfirm: "解除绑定仅移除项目关联，磁盘文件将保留。", native: "请在桌面应用中管理项目资料", close: "关闭预览", pending: "处理中…", failed: "文件操作失败", conflictKeep: "可先复制本地草稿，或另存为新文件。", importHint: "默认复制并保留来源；同名文件不会被覆盖。" },
@@ -158,9 +159,12 @@ function FileWorkspace({ projectId, folder, onFolderChange }: { projectId: strin
     });
   };
   if (!inTauri) return <p className="p-3 text-xs text-muted-foreground">{c.native}</p>;
-  if (!folder) return <section aria-label={c.title} className="space-y-2 py-3"><p className="text-xs text-muted-foreground">{c.unbound}</p><div className="flex flex-wrap gap-2"><Button size="sm" variant="outline" className={toolClass} disabled={busy} onClick={() => void run(async () => { const picked = await pickFolder(); if (picked) await onFolderChange(picked); })}>{c.choose}</Button><Button size="sm" variant="outline" className={toolClass} disabled={busy} onClick={() => void run(async () => { const root = await createProjectRoot(projectId); await onFolderChange(root); })}>{c.createRoot}</Button></div>{error && <p role="alert" className="text-xs text-destructive">{error}</p>}</section>;
+  if (!folder) return <section aria-label={c.title} className="flex min-h-64 flex-col items-center justify-center gap-3 p-6 text-center"><Folder className="size-8 text-muted-foreground/50" /><p className="text-sm font-medium">{c.unbound}</p><div className="flex flex-wrap justify-center gap-2"><Button size="sm" variant="outline" className={toolClass} disabled={busy} onClick={() => void run(async () => { const picked = await pickFolder(); if (picked) await onFolderChange(picked); })}>{c.choose}</Button><Button size="sm" variant="outline" className={toolClass} disabled={busy} onClick={() => void run(async () => { const root = await createProjectRoot(projectId); await onFolderChange(root); })}>{c.createRoot}</Button></div>{error && <p role="alert" className="text-xs text-destructive">{error}</p>}</section>;
   const editable = document?.kind === "text" || document?.kind === "markdown";
-  return <section aria-label={c.title} aria-busy={busy || reading} className="flex min-h-64 flex-col text-xs">
+  return <>
+    {/* 文档槽位就在文件区里：同一块「文档」页签，上面是五类固定文档，下面是自由文件树 */}
+    <ProjectDocuments projectId={projectId} folder={folder} />
+    <section aria-label={c.title} aria-busy={busy || reading} className="flex min-h-64 flex-col text-xs">
     <div className="flex flex-wrap items-center gap-1 border-b py-2">
       <nav aria-label={c.title} className="mr-auto flex min-w-0 flex-wrap items-center gap-1"><button className="rounded px-1 py-1 text-muted-foreground hover:bg-muted" onClick={() => setPath("")} title={folder}>{c.root}</button>{path.split("/").filter(Boolean).map((part, index, parts) => <span key={index} className="flex items-center gap-1"><span className="text-muted-foreground">/</span><button className="max-w-32 truncate rounded px-1 py-1 hover:bg-muted" onClick={() => setPath(parts.slice(0, index + 1).join("/"))}>{part}</button></span>)}</nav>
       <Button size="sm" variant="ghost" className={toolClass} disabled={busy} title={c.refresh} aria-label={c.refresh} onClick={() => void run(async () => { await refresh(); if (selected) await show(selected); })}><RefreshCw className="size-3.5" /></Button>
@@ -182,5 +186,6 @@ function FileWorkspace({ projectId, folder, onFolderChange }: { projectId: strin
         {document?.kind === "external" && <p className="py-8 text-center text-muted-foreground">{c.unsupported}</p>}
       </div>}
     </div>
-  </section>;
+  </section>
+  </>;
 }

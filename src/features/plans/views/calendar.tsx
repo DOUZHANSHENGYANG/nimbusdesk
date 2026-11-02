@@ -24,7 +24,7 @@ const MAX_CHIPS = 3;
 export type CalendarScale = "day" | "week" | "month" | "year";
 
 /** 日历容器：日/周/月/年四档，共用一套导航（上一页 / 今天 / 下一页 + 档位切换） */
-export function CalendarView({ date, onPick }: { date: string; onPick: (date: string) => void }) {
+export function CalendarView({ date, onPick, onTaskPick }: { date: string; onPick: (date: string) => void; onTaskPick?: (date: string, taskId: string) => void }) {
   const { t, i18n } = useTranslation();
   const [scale, setScale] = useState<CalendarScale>("month");
   const [anchor, setAnchor] = useState(date);
@@ -121,8 +121,8 @@ export function CalendarView({ date, onPick }: { date: string; onPick: (date: st
 
       <div>
         {scale === "month"
-          ? <MonthGrid date={anchor} onPick={onPick} />
-          : <ScheduleView date={anchor} mode={scale} onPick={(cell) => { setAnchor(cell); onPick(cell); }} />}
+          ? <MonthGrid date={anchor} onPick={onPick}  onTaskPick={onTaskPick} />
+          : <ScheduleView date={anchor} mode={scale} onPick={(cell) => { setAnchor(cell); onPick(cell); }} onTaskPick={onTaskPick} />}
       </div>
 
       {railOpen && (
@@ -150,7 +150,7 @@ function weekStart(dateStr: string): string {
 }
 
 /** 月档：整月网格 + 任务名 + 每日进度 + 点选日期 */
-function MonthGrid({ date, onPick }: { date: string; onPick: (date: string) => void }) {
+function MonthGrid({ date, onPick, onTaskPick }: { date: string; onPick: (date: string) => void; onTaskPick?: (date: string, taskId: string) => void }) {
   const { t, i18n } = useTranslation();
   const days = usePlans((s) => s.days);
   const archiveDays = usePlansArchive((s) => s.days);
@@ -250,9 +250,13 @@ function MonthGrid({ date, onPick }: { date: string; onPick: (date: string) => v
                     <span
                       key={task.id}
                       data-chip
+                      role="link"
+                      tabIndex={0}
                       title={task.title}
+                      onClick={(event) => { event.stopPropagation(); onTaskPick?.(cell, task.id); }}
+                      onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); event.stopPropagation(); onTaskPick?.(cell, task.id); } }}
                       className={cn(
-                        "block w-full truncate rounded px-1 py-px text-[10px] leading-4",
+                        "block w-full cursor-pointer truncate rounded px-1 py-px text-[10px] leading-4 outline-none focus-visible:ring-1 focus-visible:ring-ring",
                         status === "done"
                           ? "bg-muted/60 text-muted-foreground line-through"
                           : status === "doing"

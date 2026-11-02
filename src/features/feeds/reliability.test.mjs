@@ -19,11 +19,18 @@ async function load(path, dependencies = {}) {
 const entry = (title) => ({id:title,title,url:`https://github.com/example/${title}`});
 const deferred = () => { let resolve; const promise=new Promise(done=>resolve=done); return {promise,resolve}; };
 
-test('personal RSS sources precede built-ins and cannot shadow a built-in id', async () => {
-  const SOURCE_BASE=[{id:'github-trending',name:'GitHub',group:'技术'}];
-  const feeds=[{id:'rss:first',name:'First',group:'技术',url:'https://first.test/feed'},{id:'rss:second',name:'Second',group:'项目',url:'https://second.test/feed'},{id:'github-trending',url:'https://collision.test/feed'}];
-  const {mergedSources}=await load('../../sources/custom.ts',{SOURCE_BASE,useCustomFeeds:{getState:()=>({feeds})},fetchRssEntries:async()=>[]});
-  assert.deepEqual(mergedSources().map(source=>source.id),['rss:first','rss:second','github-trending']);
+test('sources follow the local order, and hidden ones stay out of every list', async () => {
+  const SOURCE_BASE=[{id:'github-trending',name:'GitHub',group:'技术'},{id:'solidot',name:'Solidot',group:'资讯'}];
+  const sources=[{id:'fs_a',kind:'rss',name:'First',config:{url:'https://first.test/feed'}},{id:'fs_b',kind:'searxng',name:'Second',config:{queries:['x']}}];
+  const deps={SOURCE_BASE,useSubscriptions:{getState:()=>({sources,run:async()=>[]})}};
+
+  const plain=await load('../../sources/custom.ts',{...deps,useFeedOrder:{getState:()=>({order:[],hidden:[]})}});
+  assert.deepEqual(plain.mergedSources().map(source=>source.id),['fs_a','fs_b','github-trending','solidot']);
+  assert.equal(plain.mergedSources()[0].homepage,'https://first.test/feed');
+  assert.equal(plain.mergedSources()[1].group,'搜索');
+
+  const arranged=await load('../../sources/custom.ts',{...deps,useFeedOrder:{getState:()=>({order:['solidot','fs_b','fs_a'],hidden:['github-trending']})}});
+  assert.deepEqual(arranged.mergedSources().map(source=>source.id),['solidot','fs_b','fs_a']);
 });
 
 test('initial view prefers the first RSS but preserves a source explicitly selected later', async () => {
@@ -195,14 +202,15 @@ test('opening the feeds page again uses existing cache instead of forcing anothe
   await useFeeds.getState().initialize();await useFeeds.getState().initialize();assert.equal(calls,1);
 });
 
-test('runtime waits for cache and subscriptions hydration, runs on app start and focus, and cleans up', async () => {
-  const target=new EventTarget();let ready=false,runs=0;const callbacks=new Set();
-  const subscriptions={persist:{hasHydrated:()=>ready,onFinishHydration:fn=>{callbacks.add(fn);return()=>callbacks.delete(fn);}},subscribe:()=>()=>{}};
-  const state={refreshDaily:async()=>{runs++;}};
-  const cache={...subscriptions,getState:()=>state};
-  const {startFeedsRuntime}=await load('./runtime.tsx',{useEffect:()=>{},useFeeds:cache,useCustomFeeds:subscriptions});
+test('runtime loads subscriptions, runs on app start and focus, and cleans up', async () => {
+  const target=new EventTarget();let ready=false,runs=0,loads=0;const callbacks=new Set();
+  const cache={persist:{hasHydrated:()=>ready,onFinishHydration:fn=>{callbacks.add(fn);return()=>callbacks.delete(fn);}},getState:()=>({refreshDaily:async()=>{runs++;}})};
+  const subscriptions={getState:()=>({load:async()=>{loads++;}}),subscribe:()=>()=>{}};
+  const {startFeedsRuntime}=await load('./runtime.tsx',{useEffect:()=>{},useFeeds:cache,useSubscriptions:subscriptions,inTauri:false,listen:async()=>()=>{},invoke:async()=>[],toEntry:item=>item});
   const stop=startFeedsRuntime(target);assert.equal(runs,0);ready=true;for(const fn of callbacks)fn();
-  assert.equal(runs,1);target.dispatchEvent(new Event('focus'));assert.equal(runs,2);stop();target.dispatchEvent(new Event('focus'));assert.equal(runs,2);
+  for(let tick=0;tick<4;tick++)await Promise.resolve();
+  assert.equal(loads,1);assert.equal(runs,1);
+  target.dispatchEvent(new Event('focus'));assert.equal(runs,2);stop();target.dispatchEvent(new Event('focus'));assert.equal(runs,2);
 });
 
 

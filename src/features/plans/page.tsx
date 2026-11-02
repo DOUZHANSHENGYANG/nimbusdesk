@@ -15,7 +15,7 @@ import { useModal } from "@/components/shell/modal-host";
 import { useSettings } from "@/stores/settings";
 import { gsap, useGSAP } from "@/lib/gsap";
 import { cn } from "@/lib/utils";
-import { useLocation, useSearchParams } from "react-router-dom";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { useSettingsHydrated } from "@/stores/settings";
 
 /**
@@ -45,6 +45,7 @@ export function PlansPage() {
   const { confirm } = useModal();
   const [date, setDate] = useState(todayStr());
   const location = useLocation();
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const searchDate = searchParams.get("date") || "";
   const searchTaskId = searchParams.get("task") || undefined;
@@ -347,12 +348,17 @@ export function PlansPage() {
         </div>
 
         {/* ── 视图主体 ── */}
-        <div ref={bodyRef} className="min-h-0">
+        <div ref={bodyRef} className="min-h-0 flex-1">
           {view === "outline" && <OutlineView date={date} searchTaskId={date === searchDate ? searchTaskId : undefined} searchToken={`${location.key}:${location.search}`} />}
           {view === "kanban" && <KanbanView date={date} />}
           {view === "calendar" && (
             <CalendarView
               date={date}
+              onTaskPick={(d, taskId) => {
+                // 点日历上的条目：定位到那天并打开这条任务（归档日照样进归档视图，但直接开这一条）
+                const archived = Boolean(usePlansArchive.getState().days[d]);
+                navigate(`/plans?date=${d}&task=${encodeURIComponent(taskId)}${archived ? "&archived=1" : ""}`);
+              }}
               onPick={(d) => {
                 setDate(d);
                 // 归档日点选 → 跳归档视图

@@ -1,6 +1,9 @@
 import { useEffect } from "react";
+import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { useFeeds } from "@/stores/feeds";
-import { useCustomFeeds } from "@/stores/custom-feeds";
+import { toEntry, useSubscriptions, type FeedItem } from "./subscriptions";
+import { inTauri } from "@/lib/tauri";
 
 /** Main-window runtime: startup and tray/window focus, including the first open after midnight. */
 export function startFeedsRuntime(target: EventTarget = window): () => void {
@@ -10,19 +13,31 @@ export function startFeedsRuntime(target: EventTarget = window): () => void {
         if (!disposed) void useFeeds.getState().refreshDaily();
     };
     const ready = () => {
-        if (disposed || started || !useFeeds.persist.hasHydrated() || !useCustomFeeds.persist.hasHydrated()) return;
+        if (disposed || started || !useFeeds.persist.hasHydrated()) return;
         started = true;
-        run();
+        void useSubscriptions.getState().load().then(run);
     };
     const offCache = useFeeds.persist.onFinishHydration(ready);
-    const offSubscriptions = useCustomFeeds.persist.onFinishHydration(ready);
-    const offChanges = useCustomFeeds.subscribe((state, previous) => {
-        if (started && state.feeds !== previous.feeds) run();
-    });
+    // 后台采集线程跑完一个源：只换这一源的缓存。这里不能再调 refresh()，
+    // 那会再跑一次采集，事件自己喂自己。
+    const unlisten = inTauri
+        ? listen<{ sourceId?: string }>("feeds://updated", ({ payload }) => {
+            const sourceId = payload?.sourceId;
+            if (!sourceId || !started || !useFeeds.getState().entriesBySource[sourceId]) return;
+            void invoke<FeedItem[]>("feeds_items", { query: { sourceId, limit: 100 } })
+                .then(items => useFeeds.getState().seedCache(sourceId, items.map(toEntry)))
+                .catch(() => undefined);
+        })
+        : Promise.resolve(() => undefined);
     const focus = () => { if (started) run(); else ready(); };
     target.addEventListener('focus', focus);
     ready();
-    return () => { disposed = true; offCache(); offSubscriptions(); offChanges(); target.removeEventListener('focus', focus); };
+    return () => {
+        disposed = true;
+        offCache();
+        void unlisten.then(stop => stop());
+        target.removeEventListener('focus', focus);
+    };
 }
 
 export function FeedsRuntime() {

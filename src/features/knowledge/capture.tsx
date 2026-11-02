@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { RiPushpinLine, RiPushpin2Line, RiCloseLine, RiImageAddLine, RiFolderOpenLine, RiSparklingLine, RiCheckboxCircleLine, RiArrowRightLine, RiFileTextLine } from "@remixicon/react";
+import { FileText, FolderOpen, ImagePlus, Pin, PinOff, Type, X } from "lucide-react";
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import { I18nextProvider } from "react-i18next";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -14,9 +14,7 @@ import { useSettings } from "@/stores/settings";
 import { useKnowledge } from "./store";
 import { bindVault, saveCapture } from "./api";
 import { useKnowledgeCopy } from "./copy";
-import { startOrganization } from './background-organization';
 import { OrganizationActivity } from './organization-activity';
-import { useOrganizationJobs } from './organization-jobs';
 import { ensureImageExtension } from "./organize-logic";
 import "./workspace.css";
 import { loadDraft, newCapture, writeDraft } from "./drafts";
@@ -56,11 +54,11 @@ function VaultCapture({ root, onSaved, onHide }: CaptureFormProps & { root: stri
   const persistedError = useRef<unknown>(null);
   const recoveryId = useRef(crypto.randomUUID());
   const savedId = useRef<string | null>(null);
-  const job=useOrganizationJobs(state=>state.job);
-  const organizing=job?.status==='running'||job?.status==='stopping';
+  
   const [ready, setReady] = useState(false);
   const [pending, setPending] = useState(0);
   const [busy, setBusy] = useState(false);
+  const [editing, setEditing] = useState<number | null>(null);
   const busyRef = useRef(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -189,26 +187,6 @@ function VaultCapture({ root, onSaved, onHide }: CaptureFormProps & { root: stri
     }
     finally { busyRef.current = false; setBusy(false); }
   }
-  async function organizeDraft() {
-    if (!ready || busyRef.current) return;
-    const input = withTitle(draftRef.current, c.untitled);
-    if (!input.content.trim() && !input.attachments.length) { setError(c.needContent); return; }
-    generation.current++;
-    busyRef.current = true; setBusy(true); setError("");
-    try {
-      if (input !== draftRef.current) update(input);
-      await queue.current;
-      if (persistedError.current) throw persistedError.current;
-      const capture = await saveCapture(root, input);
-      savedId.current = input.id;
-      await startOrganization({root,paths:[capture.notePath],trigger:'capture'});
-      const next=newCapture();
-      revision.current=await writeDraft(root,next,revision.current);
-      savedId.current=null;draftRef.current=next;setDraft(next);
-      if (mounted.current) { setNotice(c.all==='All'?'Saved and queued for background organization. You can keep capturing.':'已保存并提交后台整理，可以继续收集。'); onSaved?.(); }
-    } catch (failure) { if (mounted.current) setError(String(failure)); }
-    finally { busyRef.current = false; if (mounted.current) setBusy(false); }
-  }
   const actions = useRef({ save, hide }); actions.current = { save, hide };
   useEffect(() => {
     const key = (event: KeyboardEvent) => {
@@ -227,35 +205,31 @@ function VaultCapture({ root, onSaved, onHide }: CaptureFormProps & { root: stri
   }} onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); void addFiles(Array.from(e.dataTransfer.files)); }}>
     <fieldset disabled={!ready || busy} className="capture-fields disabled:opacity-60">
       <section className="capture-writing">
-        <label className="capture-title-label"><span>{c.titleField}<em>{c.optional}</em></span><Input aria-label={c.optionalTitle} placeholder={c.titleExample} value={draft.title} onChange={(event) => patch({ title: event.target.value })} /></label>
-        <label className="capture-body-label"><span><RiFileTextLine aria-hidden="true" />{c.content}</span><Textarea aria-label={c.content} placeholder={c.writeSomething} value={draft.content} onChange={(event) => patch({ content: event.target.value })} /></label>
-      </section>
-      <section className="capture-context" aria-label={c.linkedContext}>
-        <div className="capture-section-heading"><h2>{c.linkedContext}</h2><span>{c.optional}</span></div>
-        <div className="capture-context-fields"><label><RiFolderOpenLine aria-hidden="true" /><Input aria-label={c.project} title={c.project} placeholder={c.originalProject} value={draft.project} onChange={(event) => patch({ project: event.target.value })} /></label><label><RiArrowRightLine aria-hidden="true" /><Input aria-label={c.source} title={c.source} placeholder={c.originalSource} value={draft.source} onChange={(event) => patch({ source: event.target.value })} /></label></div>
+        <label className="capture-title-label"><span className="capture-field-label"><Type aria-hidden="true" />{c.titleField}</span><Input aria-label={c.optionalTitle} value={draft.title} onChange={(event) => patch({ title: event.target.value })} /></label>
+        <label className="capture-body-label"><span className="capture-field-label"><FileText aria-hidden="true" />{c.content}<i className="capture-required" aria-hidden="true">*</i></span><Textarea aria-label={c.content} value={draft.content} onChange={(event) => patch({ content: event.target.value })} /></label>
       </section>
       <section className="capture-attachments" aria-label={c.imageAttachments}>
-        <div className="capture-section-heading"><h2>{c.imageAttachments}{draft.attachments.length > 0 && <span className="capture-count">{draft.attachments.length}/10</span>}</h2><Button variant="ghost" size="sm" disabled={draft.attachments.length >= 10} onClick={() => fileInput.current?.click()}><RiImageAddLine />{c.images}</Button></div>
+        <div className="capture-field-heading"><span className="capture-field-label"><ImagePlus aria-hidden="true" />{c.imageAttachments}{draft.attachments.length > 0 && <span className="capture-count">{draft.attachments.length}/10</span>}</span></div>
         <input ref={fileInput} type="file" multiple accept="image/png,image/jpeg,image/webp,image/gif" className="hidden" onChange={(event) => { void addFiles(Array.from(event.target.files ?? [])); event.target.value = ""; }} />
-        {draft.attachments.length > 0 && <>
-          <p className="capture-naming-hint">{c.imageNamingHint}</p>
-          <div className="capture-image-list">{draft.attachments.map((image, index) => <div key={index} className="capture-image-card">
-            <img src={`data:${image.mime};base64,${image.dataBase64}`} alt={image.name} />
-            <div className="capture-image-name"><label><span>{c.imageName} <span className="capture-image-number">{String(index + 1).padStart(2, "0")}</span></span><Input aria-label={`${c.imageName} ${index + 1}`} placeholder={c.imageName} value={image.name} onChange={(event) => patch({ attachments: draft.attachments.map((item, i) => i === index ? { ...item, name: event.target.value } : item) })} onBlur={() => { const name = ensureImageExtension(image.name, image.mime); if (name !== image.name) patch({ attachments: draftRef.current.attachments.map((item, i) => i === index ? { ...item, name } : item) }); }} /></label><p title={ensureImageExtension(image.name, image.mime)}><span>{c.imageLiveName}</span>{ensureImageExtension(image.name, image.mime)}</p></div>
-            <Button variant="ghost" size="icon" aria-label={`${c.remove} ${index + 1}`} title={c.remove} onClick={() => patch({ attachments: draft.attachments.filter((_, i) => i !== index) })}><RiCloseLine /></Button>
-          </div>)}</div>
-        </>}
-        <button ref={imageDropzone} type="button" className={`capture-dropzone${draft.attachments.length ? " capture-dropzone--continue" : ""}`} aria-label={draft.attachments.length ? c.continueImages : c.fileDrop} disabled={draft.attachments.length >= 10} onClick={() => fileInput.current?.click()}>
-          <span className="workbench-icon"><RiImageAddLine aria-hidden="true" /></span><span>{draft.attachments.length ? c.continueImages : c.fileDrop}<small>{draft.attachments.length >= 10 ? c.imageLimitReached : draft.attachments.length ? c.continueImagesHint : c.limits}</small></span>
+        {draft.attachments.length > 0 && <div className="capture-image-list">{draft.attachments.map((image, index) => <div key={index} className="capture-image-row">
+          <img src={`data:${image.mime};base64,${image.dataBase64}`} alt={image.name} />
+          {editing === index
+            ? <Input autoFocus aria-label={`${c.imageName} ${index + 1}`} value={image.name}
+              onChange={(event) => patch({ attachments: draft.attachments.map((item, i) => i === index ? { ...item, name: event.target.value } : item) })}
+              onBlur={() => { const next = ensureImageExtension(image.name, image.mime); if (next !== image.name) patch({ attachments: draftRef.current.attachments.map((item, i) => i === index ? { ...item, name: next } : item) }); setEditing(null); }}
+              onKeyDown={(event) => { if (event.key === "Enter") (event.target as HTMLInputElement).blur(); }} />
+            : <button type="button" className="capture-image-label" title={c.renameHint} onDoubleClick={() => setEditing(index)}>{ensureImageExtension(image.name, image.mime)}</button>}
+          <Button variant="ghost" size="icon" aria-label={`${c.remove} ${index + 1}`} title={c.remove} onClick={() => patch({ attachments: draft.attachments.filter((_, i) => i !== index) })}><X /></Button>
+        </div>)}</div>}
+        <button ref={imageDropzone} type="button" className="capture-dropzone" aria-label={draft.attachments.length ? c.continueImages : c.images} title={draft.attachments.length >= 10 ? c.imageLimitReached : c.limits} disabled={draft.attachments.length >= 10} onClick={() => fileInput.current?.click()}>
+          <ImagePlus aria-hidden="true" /><span>{draft.attachments.length ? c.continueImages : c.images}</span>
         </button>
       </section>
     </fieldset>
     {error && <div role="alert" className="workbench-notice space-y-2 text-destructive"><p>{error}</p>{String(persistedError.current).includes("DRAFT_CONFLICT") ? <div className="flex flex-wrap gap-2"><Button variant="outline" size="sm" disabled={busy} onClick={() => void recoverDraft(true)}>{c.saveLocal}</Button><Button variant="ghost" size="sm" disabled={busy} onClick={() => void recoverDraft(false)}>{c.loadLatest}</Button></div> : <Button variant="outline" size="sm" disabled={busy} onClick={() => { if (!ready) void recoverDraft(false); else if (persistedError.current) update(draftRef.current); else void save(); }}>{c.retry}</Button>}</div>}
     {notice && <p role="status" className="capture-notice">{notice}</p>}
     <footer className="capture-footer">
-      <div className="capture-footer-status"><span role="status"><RiCheckboxCircleLine aria-hidden="true" />{!ready ? c.loadingDraft : pending ? c.draftSaving : persistedError.current ? c.draftError : c.draftSaved}</span><p>{c.imageNameContext}</p></div>
-      <div className="capture-actions"><Button variant="outline" disabled={!ready || busy || pending > 0} onClick={() => void save()}>{busy ? c.saving : c.save}</Button><Button disabled={!ready || busy || pending > 0 || organizing} onClick={() => void organizeDraft()}><RiSparklingLine />{c.captureAI}</Button></div>
-      {onHide && <p className="capture-shortcuts"><kbd>Ctrl</kbd> + <kbd>Enter</kbd><span>{c.save}</span><i /><kbd>Esc</kbd><span>{c.hide}</span></p>}
+      <Button disabled={!ready || busy || pending > 0} onClick={() => void save()}>{busy ? c.saving : c.save}</Button>
     </footer>
     <OrganizationActivity compact/>
 
@@ -296,14 +270,14 @@ export function CaptureWindow() {
   }
   return <I18nextProvider i18n={i18n}><TooltipProvider><div className="workbench-ui capture-window">
     <header data-tauri-drag-region className="capture-window-header">
-      <div className="capture-window-title"><img src="/app-icon.png" alt="" /><div><h1>{c.capture}</h1><p>{c.captureSubtitle}</p></div></div><div className="flex gap-1">
+      <div className="capture-window-title"><img src="/app-icon.png" alt="" /><div><h1>{c.capture}</h1><p>{name || c.bind}</p></div></div><div className="flex gap-1">
         <Button variant="ghost" size="icon" aria-label={pinned ? c.unpin : c.pin} aria-pressed={pinned} title={pinned ? c.unpin : c.pin} onClick={() => {
           if (!inTauri) { setPinned(!pinned); return; }
           void getCurrentWebviewWindow().setAlwaysOnTop(!pinned).then(() => setPinned(!pinned)).catch((e) => setError(String(e)));
-        }}>{pinned ? <RiPushpinLine /> : <RiPushpin2Line />}</Button>
-        <Button variant="ghost" size="icon" aria-label={c.hide} title={c.hide} onClick={requestHide}><RiCloseLine /></Button>
+        }}>{pinned ? <Pin /> : <PinOff />}</Button>
+        <Button variant="ghost" size="icon" aria-label={c.hide} title={c.hide} onClick={requestHide}><X /></Button>
       </div>
     </header>
-    <main className="capture-window-main"><div className="capture-destination"><span className="workbench-eyebrow">{c.captureDestination}</span><span title={root || undefined}><RiFolderOpenLine aria-hidden="true" />{name || c.bind}</span></div>{error && <p role="alert" className="mb-3 text-sm text-destructive">{error}</p>}{root ? <CaptureForm onHide={hide} /> : <div className="space-y-4"><p className="text-sm text-muted-foreground">{c.unbound}</p><Button onClick={() => void bind()}><RiFolderOpenLine />{c.bind}</Button></div>}</main>
+    <main className="capture-window-main">{error && <p role="alert" className="mb-3 text-sm text-destructive">{error}</p>}{root ? <CaptureForm onHide={hide} /> : <div className="space-y-4"><p className="text-sm text-muted-foreground">{c.unbound}</p><Button onClick={() => void bind()}><FolderOpen />{c.bind}</Button></div>}</main>
   </div></TooltipProvider></I18nextProvider>;
 }

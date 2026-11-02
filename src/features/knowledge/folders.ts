@@ -1,6 +1,6 @@
 export interface KnowledgeFolders { experience: string; recipe: string; resource: string }
 export const DEFAULT_KNOWLEDGE_FOLDERS: KnowledgeFolders = {
-  experience: "02-工作/开发经验", recipe: "02-工作/开发配方", resource: "04-资源收藏",
+  experience: "01-工作/开发经验", recipe: "01-工作/开发配方", resource: "04-资源",
 };
 export const KNOWLEDGE_FOLDER_KEYS = ["experience", "recipe", "resource"] as const;
 
@@ -19,7 +19,7 @@ export function normalizeFolders(folders: KnowledgeFolders): KnowledgeFolders {
     const path = slash(folders[key]);
     const parts = path.split("/");
     if (!path || path.length > 1024 || parts.length > 40 || parts.some((part) => !part || part.startsWith(".") || /[<>:"|?*\u0000-\u001f]/.test(part) || /[. ]$/.test(part) || /^(node_modules|skills|target|vendor)$/i.test(part) || /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(part))
-      || /^(assets|08-收件箱)(?:\/|$)/i.test(path)) throw new Error("文件夹路径不合法 / Invalid knowledge folder");
+      || /^(assets|00-Human工作区\/Inbox)(?:\/|$)/i.test(path)) throw new Error("文件夹路径不合法 / Invalid knowledge folder");
     result[key] = path;
   }
   const paths = Object.values(result).map((path) => path.toLocaleLowerCase());

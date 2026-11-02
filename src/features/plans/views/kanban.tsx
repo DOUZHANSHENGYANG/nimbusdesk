@@ -76,7 +76,7 @@ export function KanbanView({ date }: { date: string }) {
             key={col}
             data-kanban-col={col}
             className={cn(
-              "flex min-h-72 flex-col gap-2.5 rounded-2xl border p-3 transition-colors duration-150",
+              "flex min-h-72 select-none flex-col gap-2.5 rounded-2xl border p-3 transition-colors duration-150",
               drag.over === col
                 ? "border-brand/60 bg-brand/5"
                 : "border-border bg-muted/30",
@@ -107,7 +107,7 @@ export function KanbanView({ date }: { date: string }) {
                   data-kanban-card={task.id}
                   onPointerDown={(e) => drag.start(e, task.id)}
                   className={cn(
-                    "group cursor-grab touch-none rounded-xl border bg-card p-3 shadow-[var(--pr-shadow-1)] transition-shadow hover:shadow-[var(--pr-shadow-2)] active:cursor-grabbing",
+                    "group cursor-grab touch-none select-none rounded-xl border bg-card p-3 shadow-[var(--pr-shadow-1)] transition-shadow hover:shadow-[var(--pr-shadow-2)] active:cursor-grabbing",
                     status === "doing" ? "border-brand/50" : "border-border",
                     drag.dragging === task.id && "opacity-60",
                   )}
