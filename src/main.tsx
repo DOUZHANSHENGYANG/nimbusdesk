@@ -26,6 +26,8 @@ const DockWindow = lazy(() => import("@/features/desktop/dock").then((m) => ({ d
 const FenceWindow = lazy(() => import("@/features/files/fence").then((m) => ({ default: m.FenceWindow })));
 const MenuPopupWindow = lazy(() => import("@/features/files/menu-popup").then((m) => ({ default: m.MenuPopupWindow })));
 const CaptureWindow = lazy(() => import("@/features/knowledge/capture").then((m) => ({ default: m.CaptureWindow })));
+const QuickPanelWindow = lazy(() => import("@/features/files/quick-panel").then((m) => ({ default: m.QuickPanelWindow })));
+const FenceGroupWindow = lazy(() => import("@/features/files/fence-group").then((m) => ({ default: m.FenceGroupWindow })));
 const SearchWindow = lazy(() => import("@/features/search").then((m) => ({ default: m.SearchWindow })));
 
 /**
@@ -57,9 +59,14 @@ if (windowLabel.startsWith("edge-hub-")) {
   root = <SearchWindow />;
 } else if (windowLabel === "capture") {
   root = <CaptureWindow />;
+} else if (windowLabel === "quick-panel") {
+  root = <Providers><QuickPanelWindow /></Providers>;
 } else if (windowLabel === POPUP_LABEL) {
   document.documentElement.classList.add("popup-root");
   root = <MenuPopupWindow />;
+} else if (windowLabel.startsWith("fence-group-")) {
+  document.documentElement.classList.add("fence-root");
+  root = <Providers><FenceGroupWindow groupId={`#${windowLabel.slice("fence-group-".length)}`} /></Providers>;
 } else if (windowLabel.startsWith("fence-")) {
   document.documentElement.classList.add("fence-root");
   root = <FenceWindow categoryId={windowLabel.slice("fence-".length)} />;

@@ -113,11 +113,9 @@ test("restores binary files before task state and keeps local entity/settings co
   usePlans.setState = (patch) => { events.push("tasks"); originalSet(patch); };
   const useFavorites = store({ items: [{ id: "local", url: "local", title: "keep" }] });
   const useCustomFeeds = store({ feeds: [{ id: "same", name: "local" }] });
-  const useReminderSettings = store({ enabled: true, advance: 10, notified: ["local"] });
   const useSettings = store({ theme: "dark", dataDir: "local" });
   const modules = {
     "@/features/plans/store": { usePlans }, "@/stores/favorites": { useFavorites }, "@/stores/custom-feeds": { useCustomFeeds },
-    "@/stores/reminders": { useReminderSettings },
   };
   const api = await loadBackup({ useSettings, getModule: async (name) => modules[name], invoke: async (command, args) => {
     assert.equal(command, "task_attachments_import"); assert.deepEqual(args, { files: [material] }); events.push("files");
@@ -127,8 +125,6 @@ test("restores binary files before task state and keeps local entity/settings co
   assert.equal(usePlans.getState().days["2026-10-17"][0].attachments[0].path, path);
   assert.equal(useSettings.getState().theme, "dark");
   assert.equal(useCustomFeeds.getState().feeds[0].name, "local");
-  assert.equal(useReminderSettings.getState().enabled, true);
-  assert.deepEqual(useReminderSettings.getState().notified, ["local", "incoming"]);
   assert.equal(useFavorites.getState().items.length, 2);
 });
 

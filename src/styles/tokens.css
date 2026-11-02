@@ -305,6 +305,10 @@
   --dock-inset: var(--pr-mat-dock-inset);
   --dock-edge: var(--pr-mat-dock-edge);
 
+  /* 收纳盒品类色：颜色即标签，不允许用户改（建盒时定种类） */
+  --kind-shortcut: oklch(0.55 0.17 264);
+  --kind-storage: oklch(0.60 0.15 85);
+  --kind-mapped: oklch(0.60 0.17 48);
   --chart-1: var(--pr-brand-600);
   --chart-2: var(--pr-green-600);
   --chart-3: var(--pr-amber-600);
@@ -388,6 +392,9 @@
   --dock-inset: var(--pr-mat-dock-inset);
   --dock-edge: var(--pr-mat-dock-edge);
 
+  --kind-shortcut: oklch(0.74 0.15 264);
+  --kind-storage: oklch(0.85 0.15 92);
+  --kind-mapped: oklch(0.74 0.16 48);
   --chart-1: var(--pr-brand-400);
   --chart-2: var(--pr-green-400);
   --chart-3: var(--pr-amber-400);

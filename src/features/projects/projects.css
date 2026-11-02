@@ -2,9 +2,13 @@
 .projects-layout { display: grid; grid-template-columns: 190px minmax(0, 1fr); }
 .projects-nav-row { display: flex; width: 100%; align-items: center; gap: 8px; padding: 7px 8px; border-radius: 6px; font-size: 13px; text-align: left; outline: none; }
 .projects-nav-row:hover { background: var(--muted); }
-.projects-nav-row:focus-visible { box-shadow: 0 0 0 2px var(--ring); }
 .projects-nav-row.is-active { background: var(--accent); color: var(--accent-foreground); font-weight: 500; }
 .projects-nav-row svg { flex-shrink: 0; }
+/* 与知识库的「管理 / 笔记」同一套分段样式：一排胶囊，选中项只靠底色和字重区分。 */
+.projects-modes { display: flex; flex: 0 0 auto; align-items: center; gap: 2px; padding: 2px; border: 1px solid var(--border); border-radius: 8px; background: color-mix(in srgb, var(--background) 96%, var(--foreground)); }
+.projects-modes button { padding: 4px 14px; border-radius: 6px; color: var(--muted-foreground); font-size: 12px; line-height: 1.2; }
+.projects-modes button:hover { color: var(--foreground); }
+.projects-modes button[aria-pressed="true"] { background: var(--muted); color: var(--foreground); font-weight: 600; }
 .projects-details { position: absolute; inset: 0 0 0 auto; display: flex; width: min(360px, 100%); z-index: 10; background: var(--background); box-shadow: -12px 0 32px -16px color-mix(in oklch, var(--foreground) 20%, transparent); }
 @container (min-width: 1120px) {
   .projects-layout.has-details { grid-template-columns: 190px minmax(0, 1fr) 340px; }
@@ -14,6 +18,7 @@
   .projects-layout { grid-template-columns: 150px minmax(0, 1fr); }
   .projects-nav { padding: 4px; }
   .projects-nav-row { gap: 5px; padding: 7px 5px; font-size: 12px; }
+  .projects-modes button { padding: 4px 9px; }
 }
 @container (max-width: 450px) {
   .projects-layout { grid-template-columns: 120px minmax(0, 1fr); }

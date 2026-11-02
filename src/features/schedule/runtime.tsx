@@ -11,6 +11,7 @@ import { useEffect, useRef } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
+import { notify } from "@/lib/notifications";
 import { flushAllStorage } from "@/lib/storage";
 import { getDataDir, inTauri, writeBackup } from "@/lib/tauri";
 import { mergedSources } from "@/sources/custom";
@@ -85,6 +86,24 @@ export function ScheduleRuntime() {
                 } else {
                     toast.warning(text("schedule.toast.skipped", { name: payload.taskName }));
                 }
+                notify({
+                    source: "schedule",
+                    level: payload.status === "success" ? "success" : payload.status === "failed" ? "error" : "warning",
+                    title: text(
+                        payload.status === "success"
+                            ? "notifications.scheduleDone"
+                            : payload.status === "failed"
+                                ? "notifications.scheduleFailed"
+                                : "notifications.scheduleSkipped",
+                        { name: payload.taskName },
+                    ),
+                    body: payload.status === "success"
+                        ? noteBrief(payload.note)
+                        : payload.error ?? payload.reason ?? "",
+                    dedupeKey: `schedule:${payload.taskId}:${payload.id}`,
+                    route: "/ai/schedules",
+                    system: true,
+                });
             }),
             listen<ActionRequest>("schedule://action", async ({ payload }) => {
                 try {

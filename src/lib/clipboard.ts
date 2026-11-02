@@ -1,4 +1,8 @@
 /** 剪贴板：优先 navigator.clipboard，webview 环境回退 execCommand */
+export async function readText(): Promise<string> {
+  return navigator.clipboard.readText();
+}
+
 export async function copyText(text: string): Promise<boolean> {
   try {
     await navigator.clipboard.writeText(text);

@@ -1,0 +1,366 @@
+
+/* ============================================================
+   Skin · Pogget（2026-10）
+   ------------------------------------------------------------
+   参考 Pogget / VinaUI 的视觉语言：灰白纯色分层、1px 发丝线、
+   白卡片 + 内嵌底边阴影、12px 控件圆角、彩色 Emoji 导航图标。
+   只在 `html[data-skin="pogget"]` 下覆盖 token，原 Liquid Layer
+   玻璃主题（nimbus）一字不动，设置里可随时切回。
+
+   色值直接取 VinaUI 的公开 token：
+   primary #5279fb · bg #f9fafb · border #e5e7eb · text #1f2937
+   为了正文对比度，实心按钮用更深的 #3f63e0（白字 5.1:1）。
+   ============================================================ */
+
+html[data-skin="pogget"] {
+  color-scheme: light;
+
+  /* Brand · VinaUI 蓝 */
+  --pr-brand-50: #eef3ff;
+  --pr-brand-100: #dce6ff;
+  --pr-brand-200: #bccdff;
+  --pr-brand-300: #94b0ff;
+  --pr-brand-400: #5279fb;
+  --pr-brand-500: #4565e4;
+  --pr-brand-600: #3f63e0;
+  --pr-brand-700: #3451b8;
+  --pr-brand-800: #2b4294;
+  --pr-brand-900: #243671;
+  --pr-brand-950: #17204a;
+
+  /* Neutral · 冷灰（slate），与 Pogget 的灰白层级一致 */
+  --pr-gray-0: #ffffff;
+  --pr-gray-25: #fcfcfd;
+  --pr-gray-50: #f9fafb;
+  --pr-gray-100: #f3f4f6;
+  --pr-gray-150: #eceef1;
+  --pr-gray-200: #e5e7eb;
+  --pr-gray-300: #d1d5db;
+  --pr-gray-400: #9ca3af;
+  --pr-gray-500: #6b7280;
+  --pr-gray-600: #4b5563;
+  --pr-gray-700: #374151;
+  --pr-gray-750: #2f3742;
+  --pr-gray-800: #27303a;
+  --pr-gray-850: #1f2937;
+  --pr-gray-900: #171e27;
+  --pr-gray-925: #131920;
+  --pr-gray-950: #0e1319;
+  --pr-gray-975: #0a0e13;
+  --pr-gray-1000: #06090c;
+
+  /* Material · 纯色分层，不做玻璃 */
+  --pr-mat-window: #f3f4f6;
+  --pr-mat-surface: #ffffff;
+  --pr-mat-panel: #f9fafb;
+  --pr-mat-glass: #f9fafb;
+  --pr-mat-glass-strong: #ffffff;
+  --pr-mat-glass-edge: #e5e7eb;
+  --pr-mat-hairline: #e5e7eb;
+  --pr-mat-dock-fill: #ffffff;
+  --pr-mat-dock-face: #ffffff;
+  --pr-mat-dock-inset: #f3f4f6;
+  --pr-mat-dock-edge: #e5e7eb;
+
+  /* 几何 · 更紧凑的 Windows 桌面尺度 */
+  --pr-radius-xs: 4px;
+  --pr-radius-sm: 6px;
+  --pr-radius-md: 8px;
+  --pr-radius-lg: 10px;
+  --pr-radius-xl: 12px;
+
+  /* 阴影 · 白卡片靠「内嵌底边 + 极短外影」立起来 */
+  --pr-shadow-1: 0 1px 2px rgb(16 24 40 / 0.04);
+  --pr-shadow-2: inset 0 -1.5px 0 rgb(16 24 40 / 0.06), 0 1px 3px rgb(16 24 40 / 0.06);
+  --pr-shadow-3: inset 0 -1.5px 0 rgb(16 24 40 / 0.06), 0 12px 32px rgb(16 24 40 / 0.12);
+  --pr-shadow-float: 0 16px 40px rgb(16 24 40 / 0.14), 0 2px 8px rgb(16 24 40 / 0.06);
+  --pr-shadow-glow: 0 0 0 3px rgb(82 121 251 / 0.18);
+
+  /* Semantic */
+  --background: #f3f4f6;
+  --foreground: #1f2937;
+  --surface: #ffffff;
+  --surface-foreground: #1f2937;
+  --card: #ffffff;
+  --card-foreground: #1f2937;
+  --popover: #ffffff;
+  --popover-foreground: #1f2937;
+  --primary: #3f63e0;
+  --primary-foreground: #ffffff;
+  --secondary: #f3f4f6;
+  --secondary-foreground: #374151;
+  --muted: #f3f4f6;
+  --muted-foreground: #6b7280;
+  --accent: #eef3ff;
+  --accent-foreground: #3451b8;
+  --destructive: #dc2626;
+  --destructive-foreground: #ffffff;
+  --success: #15803d;
+  --warning: #b45309;
+  --info: #2563eb;
+  --border: #e5e7eb;
+  --input: #d1d5db;
+  --ring: rgb(82 121 251 / 0.35);
+
+  --sidebar: #f9fafb;
+  --sidebar-foreground: #374151;
+  --sidebar-primary: #3f63e0;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #ffffff;
+  --sidebar-accent-foreground: #111827;
+  --sidebar-border: #e5e7eb;
+  --sidebar-ring: rgb(82 121 251 / 0.35);
+
+  --glass: #f9fafb;
+  --glass-strong: #ffffff;
+  --glass-edge: #e5e7eb;
+  --hairline: #e5e7eb;
+  --dock-fill: #ffffff;
+  --dock-face: #ffffff;
+  --dock-inset: #f3f4f6;
+  --dock-edge: #e5e7eb;
+
+  --chart-1: #4a6cf0;
+  --chart-2: #16a34a;
+  --chart-3: #d97706;
+  --chart-4: #2563eb;
+  --chart-5: #dc2626;
+
+  --surface-hover: rgb(31 41 55 / 0.04);
+  --surface-active: rgb(31 41 55 / 0.07);
+  --scrollbar-thumb: #d1d5db;
+  --backdrop: rgb(15 23 42 / 0.4);
+  --selection: rgb(82 121 251 / 0.22);
+
+  --brand: #4565e4;
+  --brand-strong: #3f63e0;
+  --brand-soft: #bccdff;
+
+  --titlebar-h: 46px;
+  --sidebar-w: 220px;
+  --sidebar-w-collapsed: 56px;
+  --page-pad: 24px;
+  --radius: 8px;
+
+  --font-sans: "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI",
+    "Microsoft YaHei", "PingFang SC", "Noto Sans SC", sans-serif;
+  --font-heading: var(--font-sans);
+  --workbench-font: var(--font-sans);
+  --workbench-radius: 12px;
+  --workbench-radius-sm: 8px;
+  --workbench-glass: #f9fafb;
+  --workbench-surface: #ffffff;
+  --workbench-raised: #ffffff;
+  --workbench-line: #e5e7eb;
+  --workbench-shadow: var(--pr-shadow-float);
+}
+
+/* 深色档：Pogget 本身只有浅色，深色按同一套灰阶反转，不引入玻璃 */
+html[data-skin="pogget"].dark {
+  color-scheme: dark;
+
+  --pr-brand-500: #7b96ff;
+  --pr-brand-600: #6b86f5;
+  --pr-brand-700: #5a72d8;
+  --pr-brand-800: #485cb0;
+  --pr-brand-900: #3a4a8c;
+  --pr-brand-950: #253058;
+
+  --pr-gray-0: #ffffff;
+  --pr-gray-25: #fbfcfd;
+  --pr-gray-50: #f5f7f9;
+  --pr-gray-100: #eceff3;
+  --pr-gray-150: #dfe4ea;
+  --pr-gray-200: #cfd6de;
+  --pr-gray-300: #aeb8c3;
+  --pr-gray-400: #8b97a5;
+  --pr-gray-500: #6f7b89;
+  --pr-gray-600: #56616e;
+  --pr-gray-700: #3f4955;
+  --pr-gray-750: #343d48;
+  --pr-gray-800: #2a323c;
+  --pr-gray-850: #232a33;
+  --pr-gray-900: #1c222a;
+  --pr-gray-925: #181d24;
+  --pr-gray-950: #14181e;
+  --pr-gray-975: #10141a;
+  --pr-gray-1000: #0b0e13;
+
+  --pr-mat-window: #12161b;
+  --pr-mat-surface: #181d24;
+  --pr-mat-panel: #20262e;
+  --pr-mat-glass: #181d24;
+  --pr-mat-glass-strong: #20262e;
+  --pr-mat-glass-edge: #2a323c;
+  --pr-mat-hairline: #2a323c;
+  --pr-mat-dock-fill: #1a2027;
+  --pr-mat-dock-face: #20262e;
+  --pr-mat-dock-inset: #12161b;
+  --pr-mat-dock-edge: #2a323c;
+
+  --background: #12161b;
+  --foreground: #e5e9ef;
+  --surface: #181d24;
+  --surface-foreground: #e5e9ef;
+  --card: #181d24;
+  --card-foreground: #e5e9ef;
+  --popover: #20262e;
+  --popover-foreground: #e5e9ef;
+  --primary: #4565e4;
+  --primary-foreground: #ffffff;
+  --secondary: #20262e;
+  --secondary-foreground: #d7dee7;
+  --muted: #20262e;
+  --muted-foreground: #9aa5b2;
+  --accent: #24304d;
+  --accent-foreground: #b9c8ff;
+  --destructive: #f87171;
+  --destructive-foreground: #1a0b0b;
+  --success: #4ade80;
+  --warning: #fbbf24;
+  --info: #60a5fa;
+  --border: #2a323c;
+  --input: #343d48;
+  --ring: rgb(123 150 255 / 0.4);
+
+  --sidebar: #171c22;
+  --sidebar-foreground: #c7d0da;
+  --sidebar-primary: #7b96ff;
+  --sidebar-primary-foreground: #0b0e13;
+  --sidebar-accent: #20262e;
+  --sidebar-accent-foreground: #f5f7f9;
+  --sidebar-border: #2a323c;
+  --sidebar-ring: rgb(123 150 255 / 0.4);
+
+  --glass: #171c22;
+  --glass-strong: #20262e;
+  --glass-edge: #2a323c;
+  --hairline: #2a323c;
+  --dock-fill: #1a2027;
+  --dock-face: #20262e;
+  --dock-inset: #12161b;
+  --dock-edge: #2a323c;
+
+  --chart-1: #7b96ff;
+  --chart-2: #4ade80;
+  --chart-3: #fbbf24;
+  --chart-4: #60a5fa;
+  --chart-5: #f87171;
+
+  --surface-hover: rgb(255 255 255 / 0.05);
+  --surface-active: rgb(255 255 255 / 0.08);
+  --scrollbar-thumb: #3f4955;
+  --backdrop: rgb(0 0 0 / 0.6);
+  --selection: rgb(123 150 255 / 0.3);
+
+  --brand: #7b96ff;
+  --brand-strong: #6b86f5;
+  --brand-soft: #3451b8;
+
+  --workbench-glass: #171c22;
+  --workbench-surface: #181d24;
+  --workbench-raised: #20262e;
+  --workbench-line: #2a323c;
+}
+
+/* ── Shell：侧栏与内容面接成一片，不再浮起 ───────────────── */
+html[data-skin="pogget"] .app-stage {
+  gap: 0;
+  padding: 0;
+}
+html[data-skin="pogget"] .app-sidebar {
+  border-radius: 0;
+  border-width: 0 1px 0 0;
+  border-color: var(--border);
+  background: var(--sidebar);
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+html[data-skin="pogget"] .app-main {
+  border-radius: 0;
+  background: var(--surface);
+}
+html[data-skin="pogget"] .titlebar-glass {
+  background: var(--sidebar);
+  border-bottom: 1px solid var(--border);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+html[data-skin="pogget"] .mat-glass {
+  background: var(--sidebar);
+  border: 1px solid var(--border);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: none;
+}
+html[data-skin="pogget"] .mat-surface {
+  box-shadow: 0 1px 2px rgb(16 24 40 / 0.04);
+}
+
+/* ── 组件：VinaUI 的内嵌底边 + 白卡片 ───────────────────── */
+html[data-skin="pogget"] [data-slot="card"] {
+  border-radius: 12px;
+  box-shadow:
+    inset 0 -1.5px 0 rgb(16 24 40 / 0.06),
+    0 1px 2px rgb(16 24 40 / 0.04);
+}
+html[data-skin="pogget"].dark [data-slot="card"] {
+  box-shadow:
+    inset 0 -1.5px 0 rgb(255 255 255 / 0.05),
+    0 1px 2px rgb(0 0 0 / 0.25);
+}
+html[data-skin="pogget"] [data-slot="button"] {
+  border-radius: 12px;
+  transition: box-shadow 160ms ease, transform 160ms ease, background-color 160ms ease;
+}
+html[data-skin="pogget"] [data-slot="button"][data-variant="default"] {
+  box-shadow:
+    inset 0 -1.5px 0 rgb(0 0 0 / 0.15),
+    inset 0 -3px 0 rgb(0 0 0 / 0.05);
+}
+html[data-skin="pogget"] [data-slot="button"][data-variant="outline"],
+html[data-skin="pogget"] [data-slot="button"][data-variant="secondary"] {
+  background: var(--surface);
+  box-shadow:
+    inset 0 -1.5px 0 rgb(16 24 40 / 0.06),
+    0 1px 2px rgb(16 24 40 / 0.04);
+}
+html[data-skin="pogget"] :is(input:not([type="checkbox"]), textarea, select) {
+  border-radius: 12px;
+  border-color: var(--input);
+  background: var(--surface);
+  box-shadow:
+    inset 0 2px 4px rgb(16 24 40 / 0.04),
+    inset 0 1px 2px rgb(16 24 40 / 0.03);
+}
+html[data-skin="pogget"] :is(input, textarea):focus-visible {
+  outline: none;
+  border-color: var(--brand);
+  box-shadow:
+    inset 0 2px 4px rgb(16 24 40 / 0.04),
+    0 0 0 3px rgb(82 121 251 / 0.15);
+}
+html[data-skin="pogget"] .app-nav-item[data-active="true"] {
+  background: var(--card);
+  border-color: var(--border);
+  box-shadow:
+    inset 0 -1.5px 0 rgb(16 24 40 / 0.06),
+    0 1px 2px rgb(16 24 40 / 0.05);
+}
+html[data-skin="pogget"] .app-nav-item {
+  border: 1px solid transparent;
+}
+html[data-skin="pogget"] .app-page-title {
+  font-size: 28px;
+  line-height: 1.2;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+html[data-skin="pogget"] .app-section-title {
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+html[data-skin="pogget"] ::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+}

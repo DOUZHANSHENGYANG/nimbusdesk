@@ -43,7 +43,7 @@ mockIPC(async(cmd,args)=>{
   if(args.scope==='file'&&r.slowFiles)await new Promise(resolve=>setTimeout(resolve,650));
   if(args.scope==='file'&&r.rejectFiles)throw new Error('FILE_OFFLINE');
   if(args.query==='broken')throw new Error('OFFLINE');
-  const results=[{id:'file-'+args.query,kind:'file',title:args.query+' · 项目资料.md',subtitle:'',snippet:'',path:'E:\\Workspace\\项目资料\\'+args.query+'-notes.md',score:100},{id:'plan-'+args.query,kind:'plan',title:'完成 '+args.query+' 的设计评审',subtitle:'2026-10-18 · 计划管理',snippet:'对照验收清单，确认交互与实现。',route:'/plans',score:90},{id:'knowledge-'+args.query,kind:'knowledge',title:args.query+' 工程笔记',subtitle:'团队知识 / 产品设计',snippet:'用具体证据记录决策与边界。',path:'E:\\Notes\\'+args.query+'.md',route:'/knowledge',score:80}].filter(result=>args.includeFiles===false?result.kind!=='file':args.scope==='file'?result.kind==='file':true);
+  const results=[{id:'file-'+args.query,kind:'file',title:args.query+' · 项目资料.md',subtitle:'',snippet:'',path:'E:\\Workspace\\项目资料\\'+args.query+'-notes.md',score:100},{id:'plan-'+args.query,kind:'plan',title:'完成 '+args.query+' 的设计评审',subtitle:'2026-10-18 · 计划管理',snippet:'对照验收清单，确认交互与实现。',route:'/plans',score:90},{id:'knowledge-'+args.query,kind:'knowledge',title:args.query+' 工程笔记',subtitle:'团队知识 / 产品设计',snippet:'用具体证据记录决策与边界。',path:'E:\\Notes\\'+args.query+'.md',route:'/ai/knowledge',score:80}].filter(result=>args.includeFiles===false?result.kind!=='file':args.scope==='file'?result.kind==='file':true);
   if(args.query==='正文'&&args.scope==='file')results.push({...results[0],id:'content-match',path:results[0].path.replaceAll('\\','/').toLowerCase(),score:80,snippet:'文档正文摘要：项目验收要求'});
   return {results,total:results.length,indexing:false,warnings:r.warning?['文件服务暂时不可用，保留工作台结果']:[],elapsedMs:4};
  }

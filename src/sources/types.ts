@@ -13,6 +13,13 @@ export interface SourceEntry {
     /** 悬停/正文描述 */
     hover?: string;
   };
+  /** 资讯订阅条目的持久状态（其它渠道没有）：已读/收藏存在 Rust 侧，按 itemId 回写。 */
+  state?: {
+    itemId: string;
+    read: boolean;
+    starred: boolean;
+    diff?: string;
+  };
 }
 
 /** 渠道适配器 —— 扩展一个新渠道 = 新建一个文件实现它 + 在 registry 注册一行 */

@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
 import { tauriJsonStorage } from "@/lib/storage";
-import type { ThemeMode } from "@/lib/theme";
+import type { ThemeMode, VisualStyle } from "@/lib/theme";
 import type { Lang } from "@/lib/i18n";
 import { setCompletionPolicyReader } from "@/features/plans/store";
 import {
@@ -16,11 +16,10 @@ import {
 /** 计划的视图键（与 `features/plans/page.tsx` 的 VIEW_KEYS 对应） */
 export type PlansView = "outline" | "kanban" | "calendar" | "stats" | "archive";
 
-/** 文件管理页的三种展示：图标网格 / 紧凑列表 / 收纳盒（按分类聚合）。 */
-export type FilesViewMode = "icons" | "list" | "boxes";
-
 interface SettingsState {
   theme: ThemeMode;
+  /** 视觉风格：pogget（浅色扁平）/ nimbus（原玻璃层）/ endfield（终末地纸本） */
+  visualStyle: VisualStyle;
   lang: Lang;
   sidebarCollapsed: boolean;
   developerMode: boolean;
@@ -28,11 +27,13 @@ interface SettingsState {
   dataDir: string | null;
   /** 文件库全局根目录：分类未单独绑定时，用 <root>/<分类名> 作为其目录 */
   filesRoot: string | null;
+  /** 调研报告目录（null = 数据目录下的 modules/research） */
+  researchRoot: string | null;
   fenceShortcut: string;
+  /** 快速面板全局快捷键（空 = 无）；默认 Ctrl+Shift+Space */
+  quickPanelShortcut: string;
   /** 计划管理上次停留的视图（持久化：刷新/切页回来不跳回大纲） */
   plansView: PlansView;
-  /** 文件管理上次停留的展示方式（持久化：从 Dock 跳回来不跳回默认网格） */
-  filesViewMode: FilesViewMode;
   /** 勾选完成后自动把该项沉到底部（只影响显示，数据不删） */
   autoSortDone: boolean;
   /** 勾选完成后自动把该项从列表移除（真删，可撤销） */
@@ -94,6 +95,14 @@ interface SettingsState {
   navDisabled: string[];
   /** 项目页保存的筛选视图：一组「迭代 + 状态 + 搜索词」的命名快照 */
   projectViews: { id: string; name: string; iteration: string; status: string; search: string }[];
+  /** 快捷访问目录（文件页右侧抽屉）：只记路径，显示名取路径最后一段 */
+  quickDirs: { id: string; name: string; path: string }[];
+  /** 桌面栅格的显示行为：悬停才显形，或始终可见 */
+  fenceReveal: "always" | "hover";
+  /** 墙上收纳盒的方块大小：小 / 中 / 大 */
+  boxTileSize: "sm" | "md" | "lg";
+  /** 收纳确认阈值（MB）：文件合计超过它就先确认；0 = 只对文件夹确认 */
+  collectConfirmMb: number;
   /** 主页「资讯」卡片显示哪个渠道；null = 自动（订阅顺序里的第一个源） */
   homeFeedSource: string | null;
   /**
@@ -106,14 +115,16 @@ interface SettingsState {
   /** 思考等级：auto = 跟随服务商模型里配的 reasoningEffort。 */
   agentThinking: ThinkingLevel;
   setTheme: (theme: ThemeMode) => void;
+  setVisualStyle: (style: VisualStyle) => void;
   setLang: (lang: Lang) => void;
   setSidebarCollapsed: (v: boolean) => void;
   setDeveloperMode: (v: boolean) => void;
   setDataDir: (dir: string | null) => void;
   setFilesRoot: (dir: string | null) => void;
+  setResearchRoot: (dir: string | null) => void;
   setFenceShortcut: (shortcut: string) => void;
+  setQuickPanelShortcut: (shortcut: string) => void;
   setPlansView: (v: PlansView) => void;
-  setFilesViewMode: (v: FilesViewMode) => void;
   setAutoSortDone: (v: boolean) => void;
   setAutoClearDone: (v: boolean) => void;
   setDockEdge: (edge: "left" | "right" | "top") => void;
@@ -140,6 +151,10 @@ interface SettingsState {
   setAiGroupOpen: (v: boolean) => void;
   setNavEnabled: (id: string, on: boolean) => void;
   setProjectViews: (views: { id: string; name: string; iteration: string; status: string; search: string }[]) => void;
+  setQuickDirs: (dirs: { id: string; name: string; path: string }[]) => void;
+  setCollectConfirmMb: (mb: number) => void;
+  setFenceReveal: (mode: "always" | "hover") => void;
+  setBoxTileSize: (size: "sm" | "md" | "lg") => void;
   setHomeFeedSource: (id: string | null) => void;
   setAgentPermission: (v: PermissionMode) => void;
   setAgentPreset: (v: AgentPreset) => void;
@@ -147,29 +162,26 @@ interface SettingsState {
 }
 
 const PLANS_VIEWS: PlansView[] = ["outline", "kanban", "calendar", "stats", "archive"];
-const FILES_VIEW_MODES: FilesViewMode[] = ["icons", "list", "boxes"];
 
 /** 防手改坏 settings.json：读到不认识的视图键就退回大纲 */
 function isPlansView(v: unknown): v is PlansView {
   return typeof v === "string" && (PLANS_VIEWS as string[]).includes(v);
 }
 
-function isFilesViewMode(v: unknown): v is FilesViewMode {
-  return typeof v === "string" && (FILES_VIEW_MODES as string[]).includes(v);
-}
-
 export const useSettings = create<SettingsState>()(
   persist(
     (set) => ({
       theme: "dark",
+      visualStyle: "pogget",
       lang: "zh",
       sidebarCollapsed: false,
       developerMode: false,
       dataDir: null,
       filesRoot: null,
+      researchRoot: null,
       fenceShortcut: "",
+      quickPanelShortcut: "Ctrl+Shift+Space",
       plansView: "outline",
-      filesViewMode: "icons",
       /*
        * 置底默认开（纯显示效果、随时可逆），自动清除默认关（真删数据）。
        * 这个不对称是有意的：默认值应该只在「用户不会因此丢失东西」时才生效。
@@ -202,19 +214,25 @@ export const useSettings = create<SettingsState>()(
       aiGroupOpen: false,
       navDisabled: [],
       projectViews: [],
+      quickDirs: [],
+      fenceReveal: "hover",
+      boxTileSize: "md",
+      collectConfirmMb: 200,
       homeFeedSource: null,
       agentPermission: "ask",
       agentPreset: "build",
       agentThinking: "auto",
       setTheme: (theme) => set({ theme }),
+      setVisualStyle: (visualStyle) => set({ visualStyle }),
       setLang: (lang) => set({ lang }),
       setSidebarCollapsed: (sidebarCollapsed) => set({ sidebarCollapsed }),
       setDeveloperMode: (developerMode) => set({ developerMode }),
       setDataDir: (dataDir) => set({ dataDir }),
       setFilesRoot: (filesRoot) => set({ filesRoot }),
+      setResearchRoot: (researchRoot) => set({ researchRoot }),
       setFenceShortcut: (fenceShortcut) => set({ fenceShortcut }),
+      setQuickPanelShortcut: (quickPanelShortcut) => set({ quickPanelShortcut }),
       setPlansView: (plansView) => set({ plansView }),
-      setFilesViewMode: (filesViewMode) => set({ filesViewMode }),
       setAutoSortDone: (autoSortDone) => set({ autoSortDone }),
       setAutoClearDone: (autoClearDone) => set({ autoClearDone }),
       setDockEdge: (dockEdge) => set({ dockEdge }),
@@ -243,6 +261,10 @@ export const useSettings = create<SettingsState>()(
         navDisabled: on ? state.navDisabled.filter((x) => x !== id) : [...state.navDisabled, id],
       })),
       setProjectViews: (projectViews) => set({ projectViews }),
+      setQuickDirs: (quickDirs) => set({ quickDirs }),
+      setCollectConfirmMb: (mb) => set({ collectConfirmMb: Math.max(0, Math.min(10240, Math.round(mb))) }),
+      setFenceReveal: (fenceReveal) => set({ fenceReveal }),
+      setBoxTileSize: (boxTileSize) => set({ boxTileSize }),
       setHomeFeedSource: (homeFeedSource) => set({ homeFeedSource }),
       setAgentPermission: (agentPermission) => set({ agentPermission }),
       setAgentPreset: (agentPreset) => set({ agentPreset }),
@@ -251,7 +273,7 @@ export const useSettings = create<SettingsState>()(
     {
       name: "settings",
       storage: createJSONStorage(() => tauriJsonStorage),
-      version: 10,
+      version: 13,
       /**
        * v1 → v2：新增 `plansView`（旧 settings.json 没这个键，pill 会全不亮）。
        * v2 → v3：新增 `autoSortDone` / `autoClearDone`。
@@ -262,8 +284,6 @@ export const useSettings = create<SettingsState>()(
        *           旧版本没有这个开关，谈不上「他手动开过」。
        * v7 → v8：新增 `dockEnabled`（桌面 Dock 总开关）。同理默认关 ——
        *           没有这个字段就等于从没开过，升级不该突然在桌面上多一条横条。
-       * v8 → v9：新增 `filesViewMode`（文件管理的三种展示）。老用户默认图标网格，
-       *           与升级前一致；手改坏的键退回默认。
        * v9 → v10：新增 `dockPinned`（图钉）。默认不固定，避免升级后 Dock 突然常驻。
        *
        * 迁移只补缺失字段、不改其它值；视图键与新增的三个值顺手校验，手改坏
@@ -293,8 +313,12 @@ export const useSettings = create<SettingsState>()(
         }
         if (version < 7) s.alwaysOnTop = s.alwaysOnTop ?? false;
         if (version < 8) s.dockEnabled = s.dockEnabled ?? false;
-        if (version < 9) s.filesViewMode = isFilesViewMode(s.filesViewMode) ? s.filesViewMode : "icons";
         if (version < 10) s.dockPinned = s.dockPinned ?? false;
+        // v11 → v12：新增视觉风格。老用户升级后直接看到 Pogget 风；
+        // 想回旧玻璃层可在设置里切回 nimbus。
+        if (version < 12) s.visualStyle = s.visualStyle === "nimbus" ? "nimbus" : "pogget";
+        // v12 → v13：快速面板快捷键。缺省给 Ctrl+Shift+Space；用户清空过就保持空。
+        if (version < 13) s.quickPanelShortcut = s.quickPanelShortcut ?? "Ctrl+Shift+Space";
         return s as SettingsState;
       },
     },

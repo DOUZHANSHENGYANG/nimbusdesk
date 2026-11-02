@@ -1,0 +1,942 @@
+/* ============================================================
+   Skin · Endfield（终末地 · 2026-11）
+   ------------------------------------------------------------
+   参考《明日方舟：终末地》的视觉语言：纸与墨是主体，黄是信号。
+
+   三条铁律（调研见 knowledge-base/0-Inbox/2026-11-01-终末地HUD主题调研.md）：
+   1. 黄只做「需要被看见的那一处」：当前项、选中、告警。浅色下黄压力底
+      只有 1.1:1，所以浅色里它**只能做填充，不能做文字**；深色里才能当线。
+   2. 全直角。圆角会把界面推向「柔和产品」，直角推向工程图纸。
+   3. 数字等宽、英文宽体大写。读数跳动不抖，小标签像仪表铭牌。
+
+   两套模式不是反色，是两种读法：
+   - 浅色 = 纸本（官网风）：#F4F4F2 纸 / #161616 墨
+   - 深色 = 炭黑（游戏内 HUD）：#191919 / #EDEDED，黄可以上墙做线
+
+   黄**不占品牌位**：--brand 在浅色里是墨、深色里是黄。理由是对比度脚本
+   （scripts/check-contrast.mjs）要求文件类型色距品牌色相 ≥20°，品牌一旦
+   挪到黄（H≈100），sheet(65°)/video(87°)/doc(113°) 全部越界。品牌给墨，
+   黄单独走 --signal —— 这也正是该 IP 的原意。
+   ============================================================ */
+
+html[data-skin="endfield"] {
+  color-scheme: light;
+
+  /* ── 品牌位 = 墨 ──────────────────────────────────────
+     text-brand / bg-brand 这类工具类把值内联成 var(--pr-brand-*)，改
+     --brand 拦不住，所以整条品牌阶梯都要重取。品牌给墨、黄走 --signal：
+     check-contrast 的「文件类型色距品牌 ≥20°」在纸本里天然满足。 */
+  --pr-brand-50: #f4f4f2;
+  --pr-brand-100: #e8e8e4;
+  --pr-brand-200: #d9d9d6;
+  --pr-brand-300: #c9c9c5;
+  --pr-brand-400: #8a8a86;
+  --pr-brand-500: #161616;
+  --pr-brand-600: #161616;
+  --pr-brand-700: #000000;
+  --pr-brand-800: #000000;
+  --pr-brand-900: #000000;
+  --pr-brand-950: #000000;
+
+  /* ── 纸 / 墨 / 线 ──────────────────────────────────────
+     暖色只进材质层：--pr-gray-* 的 C=0 契约不动（见 tokens.css 注释）。 */
+  --pr-mat-window: #f4f4f2;
+  --pr-mat-surface: #ffffff;
+  --pr-mat-panel: #e4e4e0;
+  --pr-mat-glass: #ffffff;
+  --pr-mat-glass-strong: #ffffff;
+  --pr-mat-glass-edge: #d9d9d6;
+  --pr-mat-hairline: #d9d9d6;
+  --pr-mat-dock-fill: #ffffff;
+  --pr-mat-dock-face: #fafaf8;
+  --pr-mat-dock-inset: #f1f1ee;
+  --pr-mat-dock-edge: #d9d9d6;
+
+  --background: #f4f4f2;
+  --foreground: #161616;
+  --surface: #ffffff;
+  --surface-foreground: #161616;
+  --card: #ffffff;
+  --card-foreground: #161616;
+  --popover: #ffffff;
+  --popover-foreground: #161616;
+  /* 实心按钮是墨，不是黄：黄只有信号位 */
+  --primary: #161616;
+  --primary-foreground: #ffffff;
+  --secondary: #e4e4e0;
+  --secondary-foreground: #161616;
+  --muted: #f1f1ee;
+  --muted-foreground: #5c5c5c; /* 纸上 6.1:1 */
+  /* 菜单悬停 / 选中行：实心信号黄 + 墨字（16.3:1） */
+  --accent: #fffa00;
+  --accent-foreground: #161616;
+  --destructive: #b3261e;
+  --destructive-foreground: #ffffff;
+  --success: #2f6b33;
+  --warning: #7a5c00;
+  --info: #2a4a66;
+  --border: #d9d9d6;
+  --input: #c9c9c5;
+  --ring: rgb(22 22 22 / 0.38);
+
+  --sidebar: #ededea;
+  --sidebar-foreground: #5c5c5c;
+  --sidebar-primary: #161616;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #e4e4e0;
+  --sidebar-accent-foreground: #161616;
+  --sidebar-border: #d9d9d6;
+  --sidebar-ring: rgb(22 22 22 / 0.38);
+
+  /* 纸不需要玻璃：玻璃层全部退成实底，模糊归零（两套材质语言不打架） */
+  --glass: #ffffff;
+  --glass-strong: #ffffff;
+  --glass-edge: #d9d9d6;
+  --hairline: #d9d9d6;
+  --dock-fill: #ffffff;
+  --dock-face: #fafaf8;
+  --dock-inset: #f1f1ee;
+  --dock-edge: #d9d9d6;
+  --pr-glass-blur: 0px;
+  --pr-glass-saturate: 100%;
+
+  /* ── 信号层（新增）──────────────────────────────────── */
+  --signal: #fffa00;
+  --on-signal: #161616;
+  /* 「当前位置的线」：浅色下黄不可见，用墨；深色下换黄。组件只读 --trace */
+  --trace: #161616;
+
+  /* ── 装饰层（新增）──────────────────────────────────── */
+  /* 色标：印刷 CMYK 色条的抽象，只出现两处 —— 窗口顶边 2px 与开屏底部 */
+  --ef-tri-1: #ff00f0;
+  --ef-tri-3: #00ffa2;
+  /* 等高线：墨 5.5%，永远在内容之下。合成对比度约 1.1:1，只做「有张纸」的暗示 */
+  --ef-contour: rgb(22 22 22 / 0.055);
+
+  /* ── 几何：全直角 ───────────────────────────────────── */
+  --pr-radius-xs: 0px;
+  --pr-radius-sm: 0px;
+  --pr-radius-md: 0px;
+  --pr-radius-lg: 0px;
+  --pr-radius-xl: 0px;
+  --radius: 0px;
+  --workbench-radius: 0px;
+  --workbench-radius-sm: 0px;
+
+  /* ── 阴影：纸靠 1px 线分层，不靠投影 ─────────────────── */
+  --pr-shadow-1: none;
+  --pr-shadow-2: none;
+  --pr-shadow-3: 0 10px 30px rgb(22 22 22 / 0.1);
+  --pr-shadow-float: 0 14px 36px rgb(22 22 22 / 0.12);
+  --pr-shadow-glow: 0 0 0 1px rgb(22 22 22 / 0.35);
+
+  --chart-1: #161616;
+  --chart-2: #2f6b33;
+  --chart-3: #7a5c00;
+  --chart-4: #2a4a66;
+  --chart-5: #b3261e;
+  --surface-hover: rgb(22 22 22 / 0.04);
+  --surface-active: rgb(22 22 22 / 0.08);
+  --scrollbar-thumb: #c9c9c5;
+  --backdrop: rgb(10 10 10 / 0.5);
+  --selection: #fffa00;
+
+  --brand: #161616;
+  --brand-strong: #000000;
+  --brand-soft: #d9d9d6;
+
+  --font-sans: "Saira", "Segoe UI Variable Text", "Segoe UI", "Microsoft YaHei UI",
+    "Microsoft YaHei", "PingFang SC", "Noto Sans SC", sans-serif;
+  --font-heading: var(--font-sans);
+  --workbench-font: var(--font-sans);
+
+  /* ── 动效：三条曲线，够用 ───────────────────────────── */
+  --ef-ease: cubic-bezier(0.2, 0.7, 0.1, 1);
+  --ef-snap: cubic-bezier(0.16, 1, 0.3, 1);
+  --ef-mech: cubic-bezier(0.7, 0, 0.2, 1);
+
+  --titlebar-h: 44px;
+  --page-pad: 22px;
+}
+
+/* ============================================================
+   深色 = 炭黑 HUD（游戏内那套）。不是浅色的反相。
+   ============================================================ */
+html[data-skin="endfield"].dark {
+  color-scheme: dark;
+
+  /* 深色里品牌位是纸白，不是黄：黄只留给 --signal / --trace。
+     品牌一旦是黄，导航选中块、「项目/工具」分区标签、图标全被染成芥末黄 ——
+     那是「黄色铺屏」，不是「黄色做信号」。 */
+  --pr-brand-50: #232323;
+  --pr-brand-100: #2e2e2e;
+  --pr-brand-200: #3d3d3d;
+  --pr-brand-300: #6b6b6b;
+  --pr-brand-400: #ededed;
+  --pr-brand-500: #ededed;
+  --pr-brand-600: #d4d4d4;
+  --pr-brand-700: #b8b8b8;
+  --pr-brand-800: #9a9a9a;
+  --pr-brand-900: #7a7a7a;
+  --pr-brand-950: #4a4a4a;
+
+  --pr-mat-window: #191919;
+  --pr-mat-surface: #222222;
+  --pr-mat-panel: #2e2e2e;
+  --pr-mat-glass: #222222;
+  --pr-mat-glass-strong: #262626;
+  --pr-mat-glass-edge: #3a3a3a;
+  --pr-mat-hairline: #353535;
+  --pr-mat-dock-fill: #1e1e1e;
+  --pr-mat-dock-face: #242424;
+  --pr-mat-dock-inset: #151515;
+  --pr-mat-dock-edge: #353535;
+
+  --background: #191919;
+  --foreground: #ededed; /* 15.0:1 */
+  --surface: #222222;
+  --surface-foreground: #ededed;
+  --card: #222222;
+  --card-foreground: #ededed;
+  --popover: #262626;
+  --popover-foreground: #ededed;
+  /* 深色里黄能当实心底：黑字压黄 16.3:1 */
+  --primary: #fffa00;
+  --primary-foreground: #161616;
+  --secondary: #2e2e2e;
+  --secondary-foreground: #ededed;
+  --muted: #262626;
+  --muted-foreground: #a3a3a3; /* 7.0:1 */
+  /* 选中行不做黄底：16% 的黄压在炭黑上是橄榄色，脏。
+     深色里「你在这」由左缘 3px 的 --trace 刻度承担，底色只做中性提亮。 */
+  --accent: rgb(255 255 255 / 0.07);
+  --accent-foreground: #ededed;
+  --destructive: #ff8a7a;
+  --destructive-foreground: #191919;
+  --success: #5fbf6a;
+  --warning: #ffb700;
+  --info: #7fb0d9;
+  --border: #353535;
+  --input: #3d3d3d;
+  --ring: rgb(255 250 0 / 0.5);
+
+  --sidebar: #1e1e1e;
+  --sidebar-foreground: #a3a3a3;
+  --sidebar-primary: #ededed;
+  --sidebar-primary-foreground: #161616;
+  --sidebar-accent: #2e2e2e;
+  --sidebar-accent-foreground: #ededed;
+  --sidebar-border: #353535;
+  --sidebar-ring: rgb(255 250 0 / 0.5);
+
+  --glass: #222222;
+  --glass-strong: #262626;
+  --glass-edge: #3a3a3a;
+  --hairline: #353535;
+  --dock-fill: #1e1e1e;
+  --dock-face: #242424;
+  --dock-inset: #151515;
+  --dock-edge: #353535;
+
+  --trace: #fffa00; /* 深色里「当前位置的线」才是黄 */
+
+  --ef-contour: rgb(255 255 255 / 0.05);
+
+  --pr-shadow-3: 0 10px 30px rgb(0 0 0 / 0.55);
+  --pr-shadow-float: 0 14px 36px rgb(0 0 0 / 0.6);
+  --pr-shadow-glow: 0 0 0 1px rgb(255 250 0 / 0.4);
+
+  --chart-1: #fffa00;
+  --chart-2: #5fbf6a;
+  --chart-3: #ffb700;
+  --chart-4: #7fb0d9;
+  --chart-5: #ff8a7a;
+  --surface-hover: rgb(255 255 255 / 0.05);
+  --surface-active: rgb(255 255 255 / 0.09);
+  --scrollbar-thumb: #3d3d3d;
+  --backdrop: rgb(0 0 0 / 0.62);
+  --selection: rgb(255 250 0 / 0.28);
+
+  --brand: #ededed;
+  --brand-strong: #ffffff;
+  --brand-soft: #3d3d3d;
+}
+
+/* ============================================================
+   Shell：一片纸，不分层浮起
+   ============================================================ */
+html[data-skin="endfield"] .app-stage {
+  gap: 0;
+  padding: 0;
+}
+html[data-skin="endfield"] .app-sidebar {
+  border-radius: 0;
+  border-width: 0 1px 0 0;
+  border-color: var(--border);
+  background: var(--sidebar);
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+html[data-skin="endfield"] .app-main {
+  border-radius: 0;
+  background: var(--surface);
+}
+html[data-skin="endfield"] .titlebar-glass {
+  background: var(--sidebar);
+  border-bottom: 1px solid var(--border);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+html[data-skin="endfield"] .mat-glass {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: none;
+}
+html[data-skin="endfield"] .mat-surface {
+  box-shadow: none;
+}
+
+/* 数字等宽：读数跳动时不产生横向抖动 */
+html[data-skin="endfield"] body {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Tailwind 的 rounded-* 把半径内联成字面量（@theme inline 不留 var），
+   改 --pr-radius-* 拦不住它 —— 只能按类名子串清零。形状本身就是圆的
+   元件（rounded-full：状态点、头像、开关、药丸）保留，那不是「圆角」。 */
+html[data-skin="endfield"] [class*="rounded-"]:not([class*="rounded-full"]):not([class*="rounded-none"]) {
+  border-radius: 0;
+}
+
+/* ============================================================
+   HUD 取景框
+   ------------------------------------------------------------
+   四角括线 + 右缘刻度，锚在内容列（.app-main）而不是窗口：
+   侧栏收起、窗口缩放都不需要重算，纯 CSS 没有 JS。
+   只是「取景」不是「装饰」—— 所以 1px、只有线，不发光。
+   ============================================================ */
+html[data-skin="endfield"] .app-main::before,
+html[data-skin="endfield"] .app-main::after {
+  content: "";
+  position: absolute;
+  pointer-events: none;
+  z-index: 30;
+  /* 只是取景，不是画框：0.35、12px 的角，眯眼几乎看不见，但界面会「有边界」 */
+  opacity: 0.35;
+}
+html[data-skin="endfield"] .app-main::before {
+  inset: 6px 6px auto 6px;
+  height: 14px;
+  background:
+    linear-gradient(var(--trace), var(--trace)) 0 0 / 14px 1px no-repeat,
+    linear-gradient(var(--trace), var(--trace)) 0 0 / 1px 14px no-repeat,
+    linear-gradient(var(--trace), var(--trace)) 100% 0 / 14px 1px no-repeat,
+    linear-gradient(var(--trace), var(--trace)) 100% 0 / 1px 14px no-repeat;
+}
+html[data-skin="endfield"] .app-main::after {
+  inset: auto 6px 6px 6px;
+  height: 14px;
+  background:
+    linear-gradient(var(--trace), var(--trace)) 0 100% / 14px 1px no-repeat,
+    linear-gradient(var(--trace), var(--trace)) 0 100% / 1px 14px no-repeat,
+    linear-gradient(var(--trace), var(--trace)) 100% 100% / 14px 1px no-repeat,
+    linear-gradient(var(--trace), var(--trace)) 100% 100% / 1px 14px no-repeat,
+    /* 右缘刻度：每 12px 一格，读数尺的味道 */
+    repeating-linear-gradient(
+        to bottom,
+        var(--trace) 0 1px,
+        transparent 1px 12px
+      )
+      right 40% / 5px 120px no-repeat;
+}
+
+/* ============================================================
+   版面装饰
+   ------------------------------------------------------------
+   只剩侧栏等高线：200px 宽的一条读作「纸的肌理」，铺满内容面就成噪点。
+   窗口顶边的色标已撤 —— 四色条压在 44px 标题栏上只会变成杂讯，
+   色标留在开屏里（那儿有大片留白撑得住）。
+   ============================================================ */
+html[data-skin="endfield"] .app-main {
+  background-color: var(--surface);
+}
+/* 等高线只铺侧栏：200px 宽的一条读作「纸的肌理」，铺满内容面就变成噪点。
+   间隔 60px、墨 5.5% —— 低于这个值看不见，高于这个值抢正文。 */
+html[data-skin="endfield"] .app-sidebar {
+  background-image: repeating-radial-gradient(
+    circle at 50% -20%,
+    transparent 0 60px,
+    var(--ef-contour) 60px 61px
+  );
+}
+
+/* ============================================================
+   浮层：直角 + 1px 线 + 一层短影，不做毛玻璃
+   ============================================================ */
+html[data-skin="endfield"] :is(
+  [data-slot="popover-content"],
+  [data-slot="dialog-content"],
+  [data-slot="alert-dialog-content"],
+  [data-slot="dropdown-menu-content"],
+  [data-slot="dropdown-menu-sub-content"],
+  [data-slot="context-menu-content"],
+  [data-slot="context-menu-sub-content"],
+  [data-slot="select-content"],
+  [data-slot="command"],
+  [data-slot="tooltip-content"]
+) {
+  border-radius: 0;
+  border: 1px solid var(--border);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: var(--pr-shadow-3);
+}
+html[data-skin="endfield"] :is(
+  [data-slot="dialog-overlay"],
+  [data-slot="alert-dialog-overlay"]
+) {
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  background: var(--backdrop);
+}
+
+/* ============================================================
+   控件：页签 / 开关 / 复选 / 滑块 / 进度 / 徽标
+   ------------------------------------------------------------
+   圆形的那些（rounded-full 的圆点、头像、开关）被上面那条「清零」规则
+   豁免，所以这里要单独把它们拉回直角 —— 开关是「刻度条」，不是药丸。
+   ============================================================ */
+html[data-skin="endfield"] [data-slot="tabs-list"] {
+  border-radius: 0;
+  box-shadow: none;
+}
+html[data-skin="endfield"] [data-slot="tabs-trigger"] {
+  border-radius: 0;
+  box-shadow: none;
+}
+/* 选中态：这套组件用的是 data-active（不是 Radix 的 data-state），压错了等于没写 */
+html[data-skin="endfield"] [data-slot="tabs-trigger"][data-active] {
+  font-weight: 600;
+  box-shadow: none;
+}
+/* line 变体的下划线本来是前景色，这里换成信号 */
+html[data-skin="endfield"] [data-slot="tabs-trigger"][data-active]::after {
+  background: var(--signal);
+}
+
+html[data-skin="endfield"] :is([data-slot="switch"], [data-slot="switch-thumb"]) {
+  border-radius: 0;
+}
+html[data-skin="endfield"] [data-slot="switch"] {
+  border: 1px solid var(--input);
+  background: var(--surface);
+}
+html[data-skin="endfield"] [data-slot="switch"][data-state="checked"] {
+  border-color: var(--trace);
+  background: color-mix(in srgb, var(--trace) 18%, transparent);
+}
+html[data-skin="endfield"] [data-slot="switch-thumb"] {
+  background: var(--muted-foreground);
+}
+html[data-skin="endfield"] [data-slot="switch"][data-state="checked"] [data-slot="switch-thumb"] {
+  background: var(--trace);
+}
+
+html[data-skin="endfield"] [data-slot="checkbox"] {
+  border-radius: 0;
+  border-color: var(--input);
+}
+html[data-skin="endfield"] [data-slot="checkbox"][data-state="checked"] {
+  background: var(--trace);
+  border-color: var(--trace);
+  color: var(--on-signal);
+}
+html[data-skin="endfield"] [data-slot="slider-track"] {
+  border-radius: 0;
+  background: var(--muted);
+}
+html[data-skin="endfield"] [data-slot="slider-range"] {
+  border-radius: 0;
+  background: var(--trace);
+}
+html[data-skin="endfield"] [data-slot="slider-thumb"] {
+  border-radius: 0;
+  border: 1px solid var(--trace);
+  background: var(--surface);
+}
+html[data-skin="endfield"] [data-slot="progress"] {
+  border-radius: 0;
+  background: var(--muted);
+}
+html[data-skin="endfield"] [data-slot="progress-indicator"] {
+  border-radius: 0;
+  background: var(--trace);
+}
+html[data-skin="endfield"] [data-slot="badge"] {
+  border-radius: 0;
+  font-variant-numeric: tabular-nums;
+}
+html[data-skin="endfield"] [data-slot="separator"] {
+  background: var(--border);
+}
+html[data-skin="endfield"] [data-slot="tooltip-content"] {
+  background: var(--foreground);
+  color: var(--background);
+  border-color: var(--foreground);
+}
+
+/* 焦点环：浅色下黄看不见，深色下才用黄 —— 一律读 --trace */
+html[data-skin="endfield"] :focus-visible {
+  outline: 2px solid var(--trace);
+  outline-offset: 1px;
+}
+
+/* 表格与代码块：列表行只换底色，不整行位移（宽表里整行位移会抖） */
+html[data-skin="endfield"] tbody tr:hover {
+  background: var(--surface-hover);
+}
+html[data-skin="endfield"] [data-slot="code-block"] {
+  border-radius: 0;
+  border: 1px solid var(--border);
+  background: var(--muted);
+}
+html[data-skin="endfield"] :is(
+  [data-slot="code-block-header"],
+  [data-slot="code-block-footer"]
+) {
+  border-radius: 0;
+}
+html[data-skin="endfield"] [data-slot="code-block-code"] {
+  background: transparent;
+}
+/* 对话气泡：纸上的方块，靠 1px 线分左右，不靠圆角与阴影 */
+html[data-skin="endfield"] :is(
+  [data-slot="bubble-content"],
+  [data-slot="message-content"]
+) {
+  border-radius: 0;
+  border: 1px solid var(--border);
+  box-shadow: none;
+}
+
+/* ============================================================
+   组件：直角 + 1px 线，没有投影
+   ============================================================ */
+html[data-skin="endfield"] [data-slot="card"] {
+  border-radius: 0;
+  border: 1px solid var(--border);
+  box-shadow: none;
+}
+html[data-skin="endfield"] [data-slot="button"] {
+  border-radius: 0;
+  transition:
+    background-color 160ms var(--ef-ease),
+    color 160ms var(--ef-ease),
+    border-color 160ms var(--ef-ease);
+}
+/* 悬停时墨色灌满信号黄：颜色变化本身就是反馈，不加位移与缩放 */
+html[data-skin="endfield"] [data-slot="button"][data-variant="default"]:hover {
+  background: var(--signal);
+  color: var(--on-signal);
+}
+html[data-skin="endfield"].dark [data-slot="button"][data-variant="default"]:hover {
+  background: var(--signal);
+  color: var(--on-signal);
+}
+html[data-skin="endfield"] :is(input:not([type="checkbox"]), textarea, select) {
+  border-radius: 0;
+  border-color: var(--input);
+  background: var(--surface);
+  box-shadow: none;
+}
+html[data-skin="endfield"] :is(input, textarea):focus-visible {
+  outline: none;
+  border-color: var(--trace);
+  box-shadow: inset 0 0 0 1px var(--trace);
+}
+html[data-skin="endfield"] ::selection {
+  background: var(--selection);
+  color: var(--on-signal);
+}
+html[data-skin="endfield"].dark ::selection {
+  color: #161616;
+}
+html[data-skin="endfield"] a:hover {
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 2px;
+  text-decoration-color: var(--signal);
+}
+html[data-skin="endfield"] ::-webkit-scrollbar-thumb {
+  border-radius: 0;
+  background: var(--scrollbar-thumb);
+}
+html[data-skin="endfield"] ::-webkit-scrollbar-thumb:hover {
+  background: var(--trace);
+}
+
+/* 导航：左缘一道信号刻度（HUD 里的「你现在在这」），不铺满整行 */
+html[data-skin="endfield"] .app-nav-item {
+  border: 0;
+  border-radius: 0;
+  position: relative;
+}
+html[data-skin="endfield"] .app-nav-item::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 3px;
+  height: 60%;
+  background: var(--signal);
+  transform: translateY(-50%) scaleY(0);
+  transform-origin: center;
+  transition: transform 220ms var(--ef-mech);
+  pointer-events: none;
+}
+html[data-skin="endfield"] .app-nav-item[data-active="true"]::before {
+  transform: translateY(-50%) scaleY(1);
+}
+html[data-skin="endfield"] .app-nav-item[data-active="true"] {
+  font-weight: 600;
+  color: var(--foreground);
+}
+html[data-skin="endfield"] .app-page-title {
+  font-size: 26px;
+  line-height: 1.2;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+html[data-skin="endfield"] .app-section-title {
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+/* ============================================================
+   动效
+   ------------------------------------------------------------
+   三条曲线各管一段：ease 普通过渡、snap 出现后稳住、mech 慢起硬停。
+   不做位移类花样 —— 该 IP 的动感来自「到位后钉住」，不是弹跳。
+   ============================================================ */
+/* 只做位移，不做透明度：卡片在后台窗口被节流时若不播完，透明度 0 会让
+   整页内容不可见 —— 位移停在原处最多是「没动」，永远可读。 */
+@keyframes ef-rise {
+  from {
+    transform: translateY(6px);
+  }
+  to {
+    transform: none;
+  }
+}
+@keyframes ef-frame-in {
+  from {
+    transform: scale(0.985);
+  }
+  to {
+    transform: none;
+  }
+}
+
+html[data-skin="endfield"] [data-slot="card"] {
+  animation: ef-rise 320ms var(--ef-snap) both;
+}
+html[data-skin="endfield"] .app-main::before,
+html[data-skin="endfield"] .app-main::after {
+  animation: ef-frame-in 480ms var(--ef-snap) both;
+}
+/* 列表行悬停只右移 2px：机械读数游标的味道，不是卡片浮起 */
+html[data-skin="endfield"] [data-slot="card"] > * > tr:hover {
+  transition: transform 160ms var(--ef-ease);
+  transform: translateX(2px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html[data-skin="endfield"] [data-slot="card"],
+  html[data-skin="endfield"] .app-main::before,
+  html[data-skin="endfield"] .app-main::after,
+  html[data-skin="endfield"] .app-nav-item::before,
+  html[data-skin="endfield"] [data-slot="card"] > * > tr:hover {
+    animation: none;
+    transition: none;
+    transform: none;
+  }
+  html[data-skin="endfield"] .app-nav-item[data-active="true"]::before {
+    transform: translateY(-50%) scaleY(1);
+  }
+  /* 开屏整块不出现：少一次「等它演完」，比「演得快一点」更尊重这个设置 */
+  .ef-splash {
+    display: none;
+  }
+}
+
+/* ============================================================
+   开屏（EndfieldSplash）
+   ------------------------------------------------------------
+   1.2 秒：测量网格 → 扫描光带 → 字标擦入 → 淡出。点击或按键立即结束。
+   只演一次（会话内），减少动态效果下完全不出现（组件侧也直接不挂载）。
+   ============================================================ */
+.ef-splash {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background: var(--background);
+  color: var(--foreground);
+  animation: ef-splash-out 220ms var(--ef-ease) 1050ms forwards;
+}
+.ef-splash__grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    repeating-linear-gradient(to right, var(--ef-contour) 0 1px, transparent 1px 32px),
+    repeating-linear-gradient(to bottom, var(--ef-contour) 0 1px, transparent 1px 32px);
+  animation: ef-grid-in 380ms var(--ef-ease) both;
+}
+.ef-splash__scan {
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 2px;
+  background: var(--signal);
+  box-shadow: 0 0 24px color-mix(in srgb, var(--signal) 60%, transparent);
+  animation: ef-scan 820ms var(--ef-mech) 120ms both;
+}
+.ef-splash__mark {
+  position: relative;
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  font-size: clamp(20px, 2.2vw, 28px);
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  animation: ef-wipe 560ms var(--ef-snap) 200ms both;
+}
+.ef-splash__mark span {
+  font-size: 0.52em;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--muted-foreground);
+}
+.ef-splash__band {
+  position: absolute;
+  inset: auto 0 0 0;
+  height: 3px;
+  background: linear-gradient(
+    90deg,
+    var(--ef-tri-1) 0 25%,
+    var(--signal) 25% 50%,
+    var(--ef-tri-3) 50% 75%,
+    var(--foreground) 75% 100%
+  );
+}
+@keyframes ef-grid-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes ef-scan {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(100vh);
+  }
+}
+@keyframes ef-wipe {
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+@keyframes ef-splash-out {
+  to {
+    opacity: 0;
+    visibility: hidden;
+  }
+}
+
+/* ============================================================
+   以下两块曾被并行会话的提交回滚过两次，重建时连同注释一起留着：
+   断言它们存在的是仓库里的 grep（"ef-eyebrow" / "counter-increment: ef-no"）。
+   ============================================================ */
+
+/* ── 按钮：擦入 + 下沉 + 忙碌 ─────────────────────────────── */
+html[data-skin="endfield"] [data-slot="button"][data-variant="default"] {
+  background-color: var(--primary);
+  background-image: linear-gradient(var(--signal), var(--signal));
+  background-position: left center;
+  background-repeat: no-repeat;
+  background-size: 0% 100%;
+  transition:
+    background-size 280ms var(--ef-mech),
+    color 160ms var(--ef-ease),
+    border-color 160ms var(--ef-ease);
+}
+html[data-skin="endfield"] [data-slot="button"][data-variant="default"]:hover,
+html[data-skin="endfield"] [data-slot="button"][data-variant="default"]:focus-visible {
+  background-size: 100% 100%;
+  color: var(--on-signal);
+}
+/* 按下 100ms 下沉 1px、缩 1.5%：像按在实体键上 */
+html[data-skin="endfield"] [data-slot="button"]:active {
+  transform: translateY(1px) scale(0.985);
+  transition-duration: 100ms;
+}
+/* 正在处理：铺斜线纹、暂停响应 —— 这套语言不用转圈表示「忙」 */
+html[data-skin="endfield"] [data-slot="button"][aria-busy="true"] {
+  background-image: repeating-linear-gradient(
+    45deg,
+    color-mix(in srgb, currentColor 24%, transparent) 0 1.5px,
+    transparent 1.5px 6.5px
+  );
+  background-size: 100% 100%;
+  pointer-events: none;
+}
+
+/* ── 列表行：逐行亮起（38ms 一档） ───────────────────────────
+   不带 fill-mode：后台窗口被节流时动画停在原处是「没动」，
+   不会变成「行不见了」。 */
+html[data-skin="endfield"] tbody tr {
+  animation: ef-come 320ms var(--ef-snap);
+}
+html[data-skin="endfield"] tbody tr:nth-child(2) {
+  animation-delay: 38ms;
+}
+html[data-skin="endfield"] tbody tr:nth-child(3) {
+  animation-delay: 76ms;
+}
+html[data-skin="endfield"] tbody tr:nth-child(4) {
+  animation-delay: 114ms;
+}
+html[data-skin="endfield"] tbody tr:nth-child(5) {
+  animation-delay: 152ms;
+}
+html[data-skin="endfield"] tbody tr:nth-child(6) {
+  animation-delay: 190ms;
+}
+
+/* ── 弹层退出：160ms mech 反向收走（比进入短） ────────────── */
+html[data-skin="endfield"] :is(
+  [data-slot="popover-content"],
+  [data-slot="dropdown-menu-content"],
+  [data-slot="select-content"],
+  [data-slot="dialog-content"],
+  [data-slot="tooltip-content"]
+)[data-state="closed"] {
+  animation: ef-out 160ms var(--ef-mech) forwards;
+}
+
+/* ── 进度条：24 格分段，HUD 读数条的味道 ──────────────────── */
+html[data-skin="endfield"] [data-slot="progress-indicator"] {
+  background: repeating-linear-gradient(
+    to right,
+    var(--trace) 0 calc(100% / 24 - 1.5px),
+    var(--surface) calc(100% / 24 - 1.5px) calc(100% / 24)
+  );
+}
+
+/* ── 骨架屏不闪光：静默等着硬切 ───────────────────────────── */
+html[data-skin="endfield"] .animate-pulse {
+  animation: none;
+  opacity: 0.55;
+}
+
+@keyframes ef-come {
+  from {
+    clip-path: inset(0 100% 0 0);
+    transform: translateX(-6px);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+    transform: none;
+  }
+}
+@keyframes ef-out {
+  from {
+    opacity: 1;
+    transform: none;
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
+/* 侧栏的英文眉标与分区编号已撤除：数据（NAV_EN）、markup、样式都不再存在。
+   原因见 docs/endfield-skin.md —— 密排导航里每项顶一行英文会把 40px 的行撑成两行，
+   固定四格导航上的序号也不承担功能。记录列表里的 No.01 ◢ 保留。 */
+
+/* 当前所在的项：编号已撤，只剩「你在这」的信号刻度（见 .app-nav-item::before） */
+
+/* ── 频道条（页头眉标）──────────────────────────────────────
+   每页顶部一条 `// SECTION · 日期`，由 PageTransition 按路由生成。 */
+.ef-eyebrow {
+  display: none;
+}
+html[data-skin="endfield"] .ef-eyebrow {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  height: 20px;
+  flex-shrink: 0;
+  padding: 0 22px 0 20px;
+  font-size: 8.5px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted-foreground);
+  opacity: 0.85;
+}
+
+/* ── 任务行编号：No.024 ◢ ───────────────────────────────────
+   挂在 data-work-item 上，纯 CSS 计数器；看板卡片（draggable）不算列表。 */
+html[data-skin="endfield"] .app-main {
+  counter-reset: ef-no;
+}
+html[data-skin="endfield"] [data-work-item]:not([draggable="true"])::before {
+  counter-increment: ef-no;
+  content: "No." counter(ef-no, decimal-leading-zero) " ◢";
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted-foreground);
+  opacity: 0.75;
+}
+html[data-skin="endfield"] [data-work-item]:has(button[aria-pressed="true"])::before {
+  color: var(--trace);
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html[data-skin="endfield"] tbody tr,
+  html[data-skin="endfield"] [data-slot="button"]:active,
+  html[data-skin="endfield"] :is(
+    [data-slot="popover-content"],
+    [data-slot="dropdown-menu-content"],
+    [data-slot="select-content"],
+    [data-slot="dialog-content"],
+    [data-slot="tooltip-content"]
+  )[data-state="closed"] {
+    animation: none;
+    transition: none;
+    transform: none;
+  }
+  html[data-skin="endfield"] [data-slot="button"][data-variant="default"]:hover,
+  html[data-skin="endfield"] [data-slot="button"][data-variant="default"]:focus-visible {
+    background-size: 100% 100%;
+    transition: none;
+  }
+}

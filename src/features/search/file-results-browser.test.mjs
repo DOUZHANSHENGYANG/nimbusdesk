@@ -10,7 +10,7 @@ try {
   const input=page.getByRole('combobox');await input.waitFor();
   await page.evaluate(()=>{
     window.searchReview.nativeIconData='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><rect width="20" height="20" fill="blue"/></svg>';
-    const hit=(id,kind,path,score)=>({id,kind,path,score,title:id,subtitle:'',snippet:'',route:'/knowledge'});
+    const hit=(id,kind,path,score)=>({id,kind,path,score,title:id,subtitle:'',snippet:'',route:'/ai/knowledge'});
     window.searchReview.resultOverride=[hit('说明.txt','file','C:/tools/说明.txt',1000),hit('工具.exe','file','C:/tools/工具.exe',10),hit('文件夹','folder','C:/tools/文件夹',9),hit('笔记','knowledge','C:/notes/笔记.md',8)];
   });
   await input.fill('native');

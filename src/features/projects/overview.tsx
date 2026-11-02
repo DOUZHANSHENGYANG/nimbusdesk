@@ -6,7 +6,8 @@ import { ProjectSelect, type ItemRecord } from "./forms";
 import { itemDeadline, StatusMark } from "./details";
 import { useProjectsCopy } from "./copy";
 import { useProjects } from "./store";
-import { completionRate, groupProgress, needsAttention, recentlyUpdated, statusCounts } from "./overview-core";
+import { completionRate, needsAttention, recentlyUpdated, statusCounts } from "./overview-core";
+import { projectProgress } from "./core";
 
 /**
  * 总览：一屏把「现在什么状况」摊开——状态分布、迭代进度、需要关注、项目进度、最近改动。
@@ -23,20 +24,21 @@ export function ProjectsOverview(props: {
   iterationFilter: string;
   onIterationFilter: (value: string) => void;
   iterationOptions: { value: string; label: string }[];
-  /** 点「项目进度」里的一行，把范围收到那一组：项目 id / area:<id> / none */
-  onOpenGroup: (key: string) => void;
+  /** 点「项目进度」里的一行，把范围收到那个项目 */
+  onOpenGroup: (projectId: string) => void;
 }) {
   const c = useProjectsCopy(), state = useProjects();
   const today = todayStr();
   const counts = statusCounts(props.items);
   const rate = completionRate(counts);
   const attention = needsAttention(props.items.map(item => ({ ...item, deadline: itemDeadline(item, state.iterations) })), today);
-  const areaName = (id: string | null) => id ? state.areas.find(area => area.id === id)?.name ?? c.unclassified : c.unclassified;
   const where = (item: ItemRecord) => item.projectId
     ? state.projects.find(project => project.id === item.projectId)?.name ?? c.noProject
-    : areaName(item.areaId);
-  const progress = groupProgress(props.items, item => item.projectId ?? (item.areaId ? `area:${item.areaId}` : "none"));
-  const groupName = (key: string) => key === "none" ? c.noProject : key.startsWith("area:") ? areaName(key.slice(5)) : state.projects.find(project => project.id === key)?.name ?? c.noProject;
+    : c.noProject;
+  const projectRows = state.projects
+    .filter(project => project.status !== "archived")
+    .map(project => ({ project, progress: projectProgress(project, props.items, today) }))
+    .sort((a, b) => b.progress.value - a.progress.value);
   const recent = recentlyUpdated(props.items, 5);
   const iteration = props.iterationFilter === "current"
     ? state.iterations.find(entry => entry.start <= today && entry.end >= today)
@@ -44,15 +46,14 @@ export function ProjectsOverview(props: {
   const daysLeft = iteration ? Math.round((Date.parse(iteration.end) - Date.parse(today)) / 86_400_000) : undefined;
   const segments = [
     { key: "todo", count: counts.todo, className: "bg-muted-foreground/45" },
-    { key: "doing", count: counts.doing, className: "bg-primary" },
+    { key: "doing", count: counts.doing, className: "bg-primary/45" },
     { key: "done", count: counts.done, className: "bg-emerald-500" },
     { key: "cancelled", count: counts.cancelled, className: "bg-foreground/15" },
   ] as const;
-  const barSegments = segments.filter(segment => segment.key !== "todo");
 
   const itemRow = (item: ItemRecord, date?: string | null, extra?: string, danger?: boolean) => <div key={item.id} data-work-item={item.id} className="flex min-w-0 items-center gap-1">
     <button type="button" onClick={() => props.onSelect(item.id)} aria-pressed={props.selectedId === item.id}
-      className={cn("flex min-w-0 flex-1 items-center gap-2 rounded-md px-1.5 py-1 text-left outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring", props.selectedId === item.id && "bg-accent/60")}>
+      className={cn("flex min-w-0 flex-1 items-center gap-2 rounded-md px-1.5 py-1 text-left hover:bg-muted", props.selectedId === item.id && "bg-accent/60")}>
       <StatusMark status={item.status} className="shrink-0" />
       <span className={cn("min-w-0 flex-1 truncate text-[12.5px]", item.status === "done" && "text-muted-foreground line-through decoration-muted-foreground/40")}>{item.title}</span>
       <span className="max-w-[96px] shrink-0 truncate text-[11px] text-muted-foreground">{where(item)}</span>
@@ -75,7 +76,7 @@ export function ProjectsOverview(props: {
     </div>}>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
         <div className="min-w-[240px] flex-1">
-          <SegmentBar segments={segments} total={counts.total} />
+          <SegmentBar segments={segments} total={counts.total} className="h-1.5 w-full" />
           <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] text-muted-foreground">
             {segments.map(segment => <span key={segment.key} className="flex items-center gap-1"><span className={cn("size-2 rounded-full", segment.className)} />{c[segment.key]}<span className="tabular-nums text-foreground/80">{segment.count}</span></span>)}
             <span className="tabular-nums text-muted-foreground/80">{counts.total} {c.count}</span>
@@ -97,13 +98,13 @@ export function ProjectsOverview(props: {
         </div>)}
       </DashboardCard>
 
-      <DashboardCard title={c.overviewProjects} action={<span className="pr-0.5 text-[11px] tabular-nums text-muted-foreground">{progress.length}</span>}>
-        {!progress.length && <p className="py-1 text-[11.5px] text-muted-foreground">{c.overviewProjectsEmpty}</p>}
-        {progress.slice(0, 6).map(row => <button key={row.key} type="button" onClick={() => props.onOpenGroup(row.key)}
-          className="flex w-full min-w-0 items-center gap-2 rounded-md px-1.5 py-1 text-left outline-none hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring">
-          <span className="min-w-0 flex-1 truncate text-[12.5px]">{groupName(row.key)}</span>
-          <SegmentBar className="h-1.5 w-16 shrink-0" total={row.counts.total} segments={barSegments.map(segment => ({ ...segment, count: row.counts[segment.key] }))} />
-          <span className="w-11 shrink-0 text-right text-[11px] tabular-nums text-muted-foreground">{row.counts.open}/{row.counts.total}</span>
+      <DashboardCard title={c.overviewProjects} action={<span className="pr-0.5 text-[11px] tabular-nums text-muted-foreground">{projectRows.length}</span>}>
+        {!projectRows.length && <p className="py-1 text-[11.5px] text-muted-foreground">{c.overviewProjectsEmpty}</p>}
+        {projectRows.slice(0, 8).map(({ project, progress }) => <button key={project.id} type="button" onClick={() => props.onOpenGroup(project.id)}
+          className="flex w-full min-w-0 items-center gap-2 rounded-md px-1.5 py-1 text-left hover:bg-muted">
+          <span className="min-w-0 flex-1 truncate text-[12.5px]">{project.name}</span>
+          <span className="h-1.5 w-16 shrink-0 overflow-hidden rounded-full bg-border/60"><span className="block h-full rounded-full bg-primary transition-[width] duration-500" style={{ width: `${progress.value}%` }} /></span>
+          <span className="w-9 shrink-0 text-right text-[11px] tabular-nums text-muted-foreground">{progress.value}%</span>
           <ChevronRight className="size-3 shrink-0 text-muted-foreground/50" />
         </button>)}
       </DashboardCard>

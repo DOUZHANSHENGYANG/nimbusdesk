@@ -16,6 +16,20 @@ export async function setDataDir(newDir: string): Promise<SetDataDirResult> {
   return invoke<SetDataDirResult>("set_data_dir", { newDir });
 }
 
+export interface FilePreview {
+  kind: "text" | "image" | "unsupported";
+  text: string | null;
+  dataUrl: string | null;
+}
+
+/**
+ * 文件预览（搜索窗同款 Rust 命令）。
+ * 文本最多 128 KiB、图片最多 5 MiB，超过返回错误；调用方失败时回退类型图标。
+ */
+export async function filePreview(path: string): Promise<FilePreview> {
+  return invoke<FilePreview>("search_preview", { path });
+}
+
 /** 读取 SQLite 模块状态；不存在返回 null。 */
 export async function readJson<T>(key: string): Promise<T | null> {
   return invoke<T | null>("read_json", { key });
@@ -69,6 +83,19 @@ export async function probePaths(paths: string[]): Promise<PathKind[]> {
   return invoke<PathKind[]>("probe_paths", { paths });
 }
 
+/** 条目元信息：文件字节数 / 修改时间；目录 size 为 null（不递归统计） */
+export interface PathMeta {
+  path: string;
+  kind: "folder" | "file" | "missing";
+  name: string;
+  size: number | null;
+  modified: number | null;
+}
+
+export async function pathMeta(paths: string[]): Promise<PathMeta[]> {
+  return invoke<PathMeta[]>("path_meta", { paths });
+}
+
 /** Complete immediate-child snapshot. Failed scans preserve the caller's last good cache. */
 export interface DirectorySnapshot {
   root: string;
@@ -103,6 +130,11 @@ export async function pickFolder(): Promise<string | null> {
 /** 系统文件选择（OS 级对话框） */
 export async function pickFile(): Promise<string | null> {
   return invoke<string | null>("pick_file");
+}
+
+/** 多选文件（上传用） */
+export async function pickFiles(): Promise<string[]> {
+  return invoke<string[]>("pick_files");
 }
 
 /** 用系统默认程序打开路径（文件/文件夹/URL） */

@@ -1,19 +1,11 @@
-import { useRef, useState, useEffect } from "react";
-import { DesktopFenceSettings } from "@/features/files/desktop-settings";
-import { useReminderSettings } from "@/stores/reminders";
-import { advanceLabel } from "@/features/plans/reminder";
-import {
-  requestNotificationPermission,
-  notificationPermission,
-  sendNotification,
-} from "@/lib/notify";
+import { useState, useEffect } from "react";
+import { DesktopFenceSettings, CollectSettings } from "@/features/files/desktop-settings";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import { invoke } from "@tauri-apps/api/core";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
-import { FolderOpen, FolderInput, ExternalLink, Database, Palette, Info, Bot, SlidersHorizontal, ArrowLeft, Download, Upload, Bell, TriangleAlert, ListChecks, BookOpen, CalendarCheck, LayoutGrid } from "lucide-react";
-import { useNavigate, useSearchParams } from "react-router-dom";
-import { useModal } from "@/components/shell/modal-host";
+import { FolderOpen, FolderInput, ExternalLink, Database, Palette, Info, Bot, Download, Upload, ListChecks, LayoutGrid } from "lucide-react";
+import { Navigate, useSearchParams } from "react-router-dom";import { useModal } from "@/components/shell/modal-host";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -21,176 +13,150 @@ import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/motion/button/base";
 import { useSettings } from "@/stores/settings";
 import { useAiSettings } from "@/stores/ai";
-import { toggleThemeRadial, type ThemeMode } from "@/lib/theme";
+import { toggleThemeRadial, type ThemeMode, type VisualStyle } from "@/lib/theme";
 import { changeLang, type Lang } from "@/lib/i18n";
 import { flushAllStorage } from "@/lib/storage";
 import { setDataDir as invokeSetDataDir, pickFolder, revealInExplorer } from "@/lib/tauri";
 import { exportBackup, importBackup } from "@/features/settings/backup";
-import { gsap, useGSAP } from "@/lib/gsap";
 import { cn } from "@/lib/utils";
 import { KnowledgeSettings } from "@/features/knowledge/settings";
-import { ShortcutRecorder } from "@/features/knowledge/shortcut-recorder";
 import { ProviderSettings } from "@/features/ai/provider-settings";
 import { FeedNetworkSettings } from "@/features/feeds/network-settings";
 import { eosHealthSummary } from "@/search/eos";
 import { useEosHealth } from "@/search/eos/health";
 import { HomeFeedSection } from "./home-feed-section";
-import { useProviderCopy } from "@/features/ai/provider-copy";
 import { SearchSettings } from "@/features/search";
+import { useAiDirty } from "./ai-dirty";
 
 import { FeaturesSection } from "./features-section";
+import { ShortcutsSettings } from "./shortcuts";
 
-type SettingsTab = "system" | "plans" | "knowledge" | "feeds" | "ai" | "features" | "about" | "search";
+/**
+ * 设置侧栏的落点：一个 section 一个独立路由（路由表见 `settings/layout.tsx`）。
+ * 内容渲染在本文件，壳（侧栏、边距、返回）在 layout 里。
+ */
+export type SettingsSection =
+  | "system"
+  | "plans"
+  | "ai-models"
+  | "ai-knowledge"
+  | "search"
+  | "feeds"
+  | "desktop"
+  | "shortcuts"
+  | "about";
+
+/** 旧深链 `?tab=xxx` → 新路由。标题栏入口、通知、书签都还指向旧形状，不能断。 */
+const TAB_ROUTES: Record<string, string> = {
+  system: "/settings",
+  plans: "/settings/plans",
+  ai: "/settings/ai/models",
+  knowledge: "/settings/ai/knowledge",
+  search: "/settings/tools/search",
+  feeds: "/settings/tools/feeds",
+  features: "/settings",
+  about: "/settings/about",
+};
 
 /** 设置页：独立路由 + 左侧功能分类侧栏 + 右侧内容 */
-export function SettingsPage() {
-  const { t } = useTranslation();
-  const navigate = useNavigate();
-  const { confirm } = useModal();
-  const aiCopy = useProviderCopy();
-  const [aiDirty, setAiDirty] = useState(false);
+/**
+ * 设置页的**内容**：按传入的 section 渲染对应区块。
+ * 侧栏、页面边距、返回入口都由 `settings/layout.tsx` 提供 —— 这里只管内容，
+ * 所以每个 section 都能是独立路由（/settings、/settings/plans、/settings/ai/models …）。
+ */
+export function SettingsPage({ section }: { section: SettingsSection }) {
   const [searchParams] = useSearchParams();
-  const [tab, setTab] = useState<SettingsTab>(searchParams.get("tab") === "search" ? "search" : searchParams.get("tab") === "ai" ? "ai" : searchParams.get("tab") === "knowledge" ? "knowledge" : "system");
-  const contentRef = useRef<HTMLDivElement>(null);
-  async function leaveAi() {
-    if (tab !== "ai" || !aiDirty) return true;
-    return confirm({ title: aiCopy.discardTitle, description: aiCopy.discardHint, confirmText: aiCopy.discard, cancelText: aiCopy.stay });
-  }
+  // 旧深链 ?tab=xxx 仍在用（标题栏入口、通知、书签）：一律重定向到新路由
+  const legacy = TAB_ROUTES[searchParams.get("tab") ?? ""];
+  if (legacy) return <Navigate to={legacy} replace />;
 
-  const TABS: { key: SettingsTab; icon: React.ComponentType<{ className?: string }>; label: string }[] = [
-    { key: "system", icon: SlidersHorizontal, label: t("settings.tabs.system") },
-    { key: "plans", icon: CalendarCheck, label: t("nav.workbench") },
-    { key: "ai", icon: Bot, label: t("settings.tabs.ai") },
-    { key: "knowledge", icon: BookOpen, label: t("nav.library") },
-    { key: "about", icon: Info, label: t("settings.tabs.about") },
-  ];
-
-  /** 右侧 TOC：只给「一页里好几块卡片」的页面用（现在只有工作台），单节页面不摆 */
-  const toc =
-    tab === "plans"
-      ? [
-          { id: "set-plans", label: t("settings.tabs.plans") },
-          { id: "set-search", label: t("settings.tabs.search") },
-          { id: "set-feeds", label: t("nav.feeds") },
-          { id: "set-features", label: t("settings.tabs.features") },
-        ]
-      : [];
-
-  // 分类切换：内容淡入
-  useGSAP(
-    () => {
-      gsap.fromTo(
-        contentRef.current,
-        { autoAlpha: 0, x: 10 },
-        { autoAlpha: 1, x: 0, duration: 0.28, ease: "power2.out", clearProps: "all" },
-      );
-    },
-    { dependencies: [tab], scope: contentRef },
-  );
-
+  const wide = section === "ai-models";
   return (
-    <div className="flex h-full min-h-0">
-      {/* ── 设置分类侧栏 ── */}
-      <nav className="flex w-48 shrink-0 flex-col border-r border-sidebar-border bg-sidebar">
-        {/* 顶部返回（与标题栏 ⚙️ 入口同侧，符合操作动线） */}
-        <div className="px-2.5 pt-3">
-          <button
-            type="button"
-            onClick={() => { void leaveAi().then((allowed) => { if (allowed) navigate(-1); }); }}
-            className="flex h-9 w-full items-center gap-2.5 rounded-lg px-3 text-[13px] font-medium text-sidebar-foreground/80 transition-colors hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground"
-          >
-            <ArrowLeft className="size-4" />
-            {t("common.back")}
-          </button>
-        </div>
-
-        <div className="px-4 pb-2 pt-3 text-[12px] font-semibold tracking-wide text-sidebar-foreground/60">
-          {t("settings.title")}
-        </div>
-        <div className="flex flex-col gap-0.5 px-2.5">
-          {TABS.map(({ key, icon: Icon, label }) => (
-            <button
-              key={key}
-              type="button"
-              aria-current={tab === key ? "page" : undefined}
-              onClick={() => { if (key !== tab) void leaveAi().then((allowed) => { if (allowed) { setAiDirty(false); setTab(key); } }); }}
-              className={cn(
-                "flex h-9 items-center gap-2.5 rounded-lg px-3 text-[13px] font-medium transition-colors duration-150",
-                tab === key
-                  ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                  : "text-sidebar-foreground hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground",
-              )}
-            >
-              <Icon className={cn("size-4", tab === key && "text-brand")} />
-              {label}
-            </button>
-          ))}
-        </div>
-
-        <div className="flex-1" />
-      </nav>
-
-      {/* ── 内容区 ── */}
-      <div ref={contentRef} className="min-w-0 flex-1 overflow-y-auto">
-        <div className={cn("mx-auto flex w-full flex-col gap-5 p-6 pb-10", tab === "ai" ? "max-w-6xl" : "max-w-2xl")}>
-          {tab === "system" && <SystemSection />}
-          {/* 工作台：原来四个独立导航项（计划/搜索/资讯/功能）现在并成一页，各自一块卡片 */}
-          {tab === "plans" && (
-            <>
-              <div id="set-plans">
-                <PlansSection />
-              </div>
-              <div id="set-search">
-                <SearchSettings />
-              </div>
-              <div id="set-feeds">
-                <HomeFeedSection />
-                <FeedNetworkSettings />
-              </div>
-              <div id="set-features">
-                <FeaturesSection />
-              </div>
-            </>
-          )}
-          {tab === "search" && <SearchSettings />}
-          {tab === "knowledge" && <KnowledgeSettings />}
-          {tab === "feeds" && <><HomeFeedSection /><FeedNetworkSettings /></>}
-          {tab === "ai" && <AiSection onDirtyChange={setAiDirty} />}
-          {tab === "features" && <FeaturesSection />}
-          {tab === "about" && <AboutSection />}
-        </div>
-      </div>
-
-      {toc.length > 0 && (
-        <nav aria-label={t("settings.tabs.plans")} className="hidden w-36 shrink-0 self-start py-6 pr-4 xl:block">
-          <ul className="flex flex-col gap-0.5 border-l border-border pl-2">
-            {toc.map((item) => (
-              <li key={item.id}>
-                <button
-                  type="button"
-                  onClick={() =>
-                    document.getElementById(item.id)?.scrollIntoView({ behavior: "smooth", block: "start" })
-                  }
-                  className="w-full rounded-md px-2 py-1 text-left text-[12px] text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                >
-                  {item.label}
-                </button>
-              </li>
-            ))}
-          </ul>
-        </nav>
+    <div className={cn("mx-auto flex w-full flex-col gap-5", wide ? "max-w-6xl" : "max-w-2xl")}>
+      {section === "system" && (
+        <>
+          <SystemSection />
+          <DesktopDockCard />
+          <FeaturesSection />
+          <BackupCard />
+        </>
       )}
+      {section === "desktop" && (
+        <>
+          <DesktopFenceSettings />
+          <CollectSettings />
+        </>
+      )}
+      {section === "plans" && <PlansSection />}
+      {section === "search" && <SearchSettings />}
+      {section === "feeds" && (
+        <>
+          <HomeFeedSection />
+          <FeedNetworkSettings />
+        </>
+      )}
+      {section === "ai-models" && <AiSection />}
+      {section === "ai-knowledge" && <KnowledgeSettings />}
+      {section === "shortcuts" && <ShortcutsSettings />}
+      {section === "about" && <AboutSection />}
     </div>
   );
 }
 
+
 /* ── 系统：外观 + 数据 ────────────────────────────────── */
+
+function ResearchDirField() {
+  const { t } = useTranslation();
+  const researchRoot = useSettings((s) => s.researchRoot);
+  const setResearchRoot = useSettings((s) => s.setResearchRoot);
+  const [defaultDir, setDefaultDir] = useState("");
+  useEffect(() => {
+    void invoke<string>("research_default_dir").then(setDefaultDir).catch(() => undefined);
+  }, []);
+  const pick = async () => {
+    try {
+      const dir = await pickFolder();
+      if (!dir) return;
+      setResearchRoot(dir);
+      toast.success(t("settings.researchRootSaved"));
+    } catch (cause) {
+      toast.error(String(cause));
+    }
+  };
+  return (
+    <div className="flex flex-col gap-2 border-t border-border pt-4">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 space-y-1">
+          <p className="text-[14px] font-medium">{t("settings.researchRoot")}</p>
+          <p className="text-[12px] leading-5 text-muted-foreground">{t("settings.researchRootHint")}</p>
+        </div>
+        <div className="flex shrink-0 gap-2">
+          <Button variant="secondary" size="sm" onClick={() => void pick()}>
+            <FolderInput className="size-4" />
+            {t("settings.pickDir")}
+          </Button>
+          {researchRoot && (
+            <Button variant="ghost" size="sm" onClick={() => setResearchRoot(null)}>
+              {t("settings.researchRootReset")}
+            </Button>
+          )}
+        </div>
+      </div>
+      <code className="truncate rounded-lg border border-border bg-muted/40 px-3 py-2 font-mono text-[12px] text-muted-foreground">
+        {researchRoot || defaultDir || "…"}
+      </code>
+    </div>
+  );
+}
 
 function SystemSection() {
   const { t } = useTranslation();
   const { confirm } = useModal();
   const theme = useSettings((s) => s.theme);
   const setTheme = useSettings((s) => s.setTheme);
+  const visualStyle = useSettings((s) => s.visualStyle);
+  const setVisualStyle = useSettings((s) => s.setVisualStyle);
   const lang = useSettings((s) => s.lang);
   const setLang = useSettings((s) => s.setLang);
   const dataDir = useSettings((s) => s.dataDir);
@@ -241,7 +207,7 @@ function SystemSection() {
 
   return (
     <>
-      <DesktopFenceSettings />
+      {/* 桌面栅格与收纳盒搬到「工具 › 桌面与收纳」，这里只留系统本身 */}
       {/* 外观 */}
       <Card>
         <CardHeader>
@@ -267,6 +233,34 @@ function SystemSection() {
               />
             </div>
           </Field>
+
+          <Field label={t("settings.visualStyle")}>
+            <div className="flex flex-wrap gap-3">
+              <StylePreview
+                visual="pogget"
+                selected={visualStyle === "pogget"}
+                label={t("settings.stylePogget")}
+                hint={t("settings.stylePoggetHint")}
+                onClick={setVisualStyle}
+              />
+              <StylePreview
+                visual="nimbus"
+                selected={visualStyle === "nimbus"}
+                label={t("settings.styleNimbus")}
+                hint={t("settings.styleNimbusHint")}
+                onClick={setVisualStyle}
+              />
+              <StylePreview
+                visual="endfield"
+                selected={visualStyle === "endfield"}
+                label={t("settings.styleEndfield")}
+                hint={t("settings.styleEndfieldHint")}
+                onClick={setVisualStyle}
+              />
+            </div>
+          </Field>
+
+          {/* 快速面板快捷键已统一到「设置 › 快捷键」 */}
 
           <Field label={t("settings.language")}>
             <div className="flex gap-2">
@@ -319,6 +313,7 @@ function SystemSection() {
               {t("settings.openDir")}
             </Button>
           </div>
+          <ResearchDirField />
         </CardContent>
       </Card>
 
@@ -343,11 +338,9 @@ function SystemSection() {
    显示开关只决定「现在露不露面」；边向改动会重开窗口以应用。 */
 function DesktopDockCard() {
   const { t } = useTranslation();
-  const en = useSettings((s) => s.lang) === "en";
   const dockEnabled = useSettings((s) => s.dockEnabled);
   const dockOpen = useSettings((s) => s.dockOpen);
   const dockEdge = useSettings((s) => s.dockEdge);
-  const dockShortcut = useSettings((s) => s.dockShortcut);
   const dockAutoHide = useSettings((s) => s.dockAutoHide);
   const setDockEnabled = useSettings((s) => s.setDockEnabled);
   const setDockOpen = useSettings((s) => s.setDockOpen);
@@ -372,21 +365,7 @@ function DesktopDockCard() {
   const accentPreset = useSettings((s) => s.accentPreset);
   const setAccentPreset = useSettings((s) => s.setAccentPreset);
   const setDockCompactStyle = useSettings((s) => s.setDockCompactStyle);
-  const setDockShortcut = useSettings((s) => s.setDockShortcut);
   const setDockAutoHide = useSettings((s) => s.setDockAutoHide);
-  const [shortcutDraft, setShortcutDraft] = useState<string | null>(null);
-  const [recording, setRecording] = useState(false);
-  const [shortcutError, setShortcutError] = useState("");
-
-  const saveShortcut = async (value: string) => {
-    setShortcutError("");
-    try {
-      await invoke("set_dock_shortcut", { shortcut: value.trim() });
-      setDockShortcut(value.trim());
-      setShortcutDraft(null);
-      toast.success(en ? "Dock shortcut saved" : "Dock 快捷键已保存");
-    } catch (cause) { setShortcutError(String(cause)); }
-  };
 
   return (
     <Card>
@@ -500,20 +479,7 @@ function DesktopDockCard() {
           </div>
         </Field>
                   <p className="text-[11px] leading-5 text-muted-foreground">{t("settings.dockStyleHint")}</p>
-          <Field label={t("settings.dockShortcut")}>
-            <ShortcutRecorder placeholder="Ctrl+Alt+D" value={shortcutDraft ?? dockShortcut}
-              onChange={(value) => { setShortcutDraft(value); setShortcutError(""); }} en={en}
-              disabled={recording} onRecordingChange={setRecording} />
-          </Field>
-          {shortcutError && <p role="alert" className="text-xs leading-5 text-destructive">{shortcutError}</p>}
-          <div className="flex flex-wrap gap-2">
-            <Button size="sm" disabled={recording || (shortcutDraft ?? dockShortcut) === dockShortcut}
-              onClick={() => void saveShortcut(shortcutDraft ?? dockShortcut)}>
-              {en ? "Save shortcut" : "保存快捷键"}
-            </Button>
-            {!!dockShortcut && <Button size="sm" variant="ghost" disabled={recording}
-              onClick={() => void saveShortcut("")}>{en ? "Clear" : "清除"}</Button>}
-          </div>
+          {/* Dock 快捷键已统一到「设置 › 快捷键」 */}
           <label className="flex cursor-pointer items-center justify-between gap-3">
             <span className="text-[13px] font-medium text-foreground/90">{t("settings.dockAutoHide")}</span>
             <Switch checked={dockAutoHide} onCheckedChange={setDockAutoHide} aria-label={t("settings.dockAutoHide")} />
@@ -526,7 +492,7 @@ function DesktopDockCard() {
 }
 
 function PlansSection() {
-  return <><ReminderCard /><CompletionCard /></>;
+  return <CompletionCard />;
 }
 
 /*
@@ -574,106 +540,6 @@ function CompletionCard() {
             aria-label={t("plans.autoClearDone")}
           />
         </label>
-      </CardContent>
-    </Card>
-  );
-}
-
-function ReminderCard() {
-  const { t } = useTranslation();
-  const enabled = useReminderSettings((s) => s.enabled);
-  const advance = useReminderSettings((s) => s.advance);
-  const setEnabled = useReminderSettings((s) => s.setEnabled);
-  const setAdvance = useReminderSettings((s) => s.setAdvance);
-  const clearNotified = useReminderSettings((s) => s.clearNotified);
-  const [denied, setDenied] = useState(false);
-
-  /** 开启提醒时顺带申请系统通知权限；被拒就如实说明 */
-  const onToggle = async () => {
-    if (enabled) {
-      setEnabled(false);
-      return;
-    }
-    const state = await requestNotificationPermission();
-    if (state === "denied") {
-      setDenied(true);
-      return;
-    }
-    setDenied(false);
-    setEnabled(true);
-  };
-
-  const onTest = async () => {
-    const ok = await sendNotification(t("settings.reminder"), t("settings.reminderTestSent"));
-    if (ok) toast.success(t("settings.reminderTestSent"));
-    else {
-      const state = await notificationPermission();
-      if (state === "denied") setDenied(true);
-      toast.error(t("common.error"));
-    }
-  };
-
-  /** 改设置后清空去重集合：否则「改成提前 30 分钟」不会让已通知过的任务再提醒 */
-  const onAdvance = (v: number) => {
-    setAdvance(v);
-    clearNotified();
-  };
-
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-[15px]">
-          <Bell className="size-4 text-brand" />
-          {t("settings.reminder")}
-        </CardTitle>
-        <CardDescription>{t("settings.reminderHint")}</CardDescription>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-4">
-        <label className="flex cursor-pointer items-center justify-between gap-3">
-          <span className="text-[13px] font-medium text-foreground/90">
-            {t("settings.reminderEnable")}
-          </span>
-          <Switch
-            checked={enabled}
-            onCheckedChange={() => void onToggle()}
-            aria-label={t("settings.reminderEnable")}
-          />
-        </label>
-
-        <Field label={t("settings.reminderAdvance")}>
-          <div className="flex flex-wrap gap-2">
-            {[0, 5, 10, 15, 30, 60].map((m) => (
-              <button
-                key={m}
-                type="button"
-                aria-pressed={advance === m}
-                onClick={() => onAdvance(m)}
-                className={cn(
-                  "h-8 rounded-full border px-3 text-[12px] font-medium transition-colors duration-150",
-                  advance === m
-                    ? "border-brand bg-brand/10 text-brand"
-                    : "border-border text-muted-foreground hover:bg-surface-hover hover:text-foreground",
-                )}
-              >
-                {advanceLabel(m, t)}
-              </button>
-            ))}
-          </div>
-        </Field>
-
-        {denied && (
-          <p className="flex items-start gap-2 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-2 text-[12px] text-destructive">
-            <TriangleAlert className="mt-px size-3.5 shrink-0" />
-            {t("settings.reminderDenied")}
-          </p>
-        )}
-
-        <div>
-          <Button variant="secondary" size="sm" onClick={() => void onTest()}>
-            <Bell className="size-4" />
-            {t("settings.reminderTest")}
-          </Button>
-        </div>
       </CardContent>
     </Card>
   );
@@ -807,7 +673,8 @@ function EosSourceStatus() {
   );
 }
 
-function AiSection({ onDirtyChange }: { onDirtyChange: (dirty: boolean) => void }) {
+function AiSection() {
+  const { setDirty: onDirtyChange } = useAiDirty();
   const { t } = useTranslation();
   const ai = useAiSettings();
   const setAi = useAiSettings((s) => s.setAi);
@@ -912,6 +779,107 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
       <span className="text-[13px] font-medium text-foreground/90">{label}</span>
       {children}
     </div>
+  );
+}
+
+function StylePreview({
+  visual,
+  selected,
+  label,
+  hint,
+  onClick,
+}: {
+  visual: VisualStyle;
+  selected: boolean;
+  label: string;
+  hint: string;
+  onClick: (style: VisualStyle) => void;
+}) {
+  const pogget = visual === "pogget";
+  const endfield = visual === "endfield";
+  return (
+    <button
+      type="button"
+      onClick={() => onClick(visual)}
+      aria-pressed={selected}
+      aria-label={`${label} — ${hint}`}
+      className={cn(
+        "group flex w-[168px] flex-col overflow-hidden rounded-xl border-2 text-left transition-colors duration-150",
+        selected ? "border-brand" : "border-border hover:border-muted-foreground/40",
+      )}
+    >
+      <span
+        className="relative block h-[74px] w-full overflow-hidden"
+        style={{
+          background: pogget
+            ? "linear-gradient(90deg, #f3f4f6 0 34%, #ffffff 34% 100%)"
+            : endfield
+              ? "linear-gradient(90deg, #ededea 0 34%, #f4f4f2 34% 100%)"
+              : "radial-gradient(120% 140% at 20% 0%, #dbeafe 0%, #f8fafc 55%, #e2e8f0 100%)",
+        }}
+      >
+        {/* 侧栏三条杠 / 玻璃层一块：只画轮廓，不复制真实页面 */}
+        <span className="absolute top-3 left-2 flex flex-col gap-1">
+          {pogget ? (
+            <>
+              <span className="h-1.5 w-9 rounded-full bg-[#d1d5db]" />
+              <span className="h-3 w-8 rounded-[4px] border border-[#e5e7eb] bg-white shadow-[0_1px_1px_rgba(0,0,0,0.05)]" />
+              <span className="h-1.5 w-7 rounded-full bg-[#e5e7eb]" />
+              <span className="h-1.5 w-8 rounded-full bg-[#e5e7eb]" />
+            </>
+          ) : endfield ? (
+            <>
+              <span className="h-1.5 w-9 bg-[#161616]" />
+              <span className="relative h-3 w-8 bg-[#e4e4e0]">
+                <span className="absolute inset-y-0 left-0 w-[2px] bg-[#fffa00]" />
+              </span>
+              <span className="h-1 w-7 bg-[#c9c9c5]" />
+              <span className="h-1 w-8 bg-[#c9c9c5]" />
+            </>
+          ) : (
+            <>
+              <span className="h-1.5 w-9 rounded-full bg-white/70" />
+              <span className="h-3 w-8 rounded-[4px] bg-white/45" />
+              <span className="h-1.5 w-7 rounded-full bg-white/40" />
+              <span className="h-1.5 w-8 rounded-full bg-white/40" />
+            </>
+          )}
+        </span>
+        <span
+          className={cn(
+            "absolute top-3 right-2 h-10 w-[96px] rounded-lg border",
+            pogget && "border-[#e5e7eb] bg-white shadow-[inset_0_-1.5px_0_rgba(0,0,0,0.06)]",
+            endfield && "rounded-none border-[#d9d9d6] bg-white",
+            !pogget && !endfield && "border-white/50 bg-white/35 shadow-lg backdrop-blur",
+          )}
+        >
+          <span
+            className={cn(
+              "absolute top-2 left-2 h-1 w-10 rounded-full",
+              pogget && "bg-[#d1d5db]",
+              endfield && "rounded-none bg-[#161616]",
+              !pogget && !endfield && "bg-white/60",
+            )}
+          />
+          <span
+            className={cn(
+              "absolute top-4 left-2 h-1 w-14 rounded-full",
+              pogget && "bg-[#e5e7eb]",
+              endfield && "rounded-none bg-[#c9c9c5]",
+              !pogget && !endfield && "bg-white/45",
+            )}
+          />
+          <span
+            className={cn("absolute right-2 bottom-2 size-3 rounded-[4px]", endfield && "rounded-none")}
+            style={{ background: pogget ? "#5279fb" : endfield ? "#fffa00" : "#3f63e0" }}
+          />
+        </span>
+      </span>
+      <span className="flex flex-col gap-0.5 border-t border-border bg-card px-2.5 py-2">
+        <span className="text-[12px] font-semibold text-foreground">{label}</span>
+        <span className="text-[10.5px] leading-tight text-muted-foreground">{hint}</span>
+      </span>
+    </button>
   );
 }
 

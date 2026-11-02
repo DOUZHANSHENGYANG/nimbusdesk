@@ -25,9 +25,9 @@ function setup(invokeOverride) {
 test('sync is nonblocking, suppresses duplicate requests and preserves local edits made during network IO',async()=>{
  let complete;const s=setup((cmd)=>cmd==='zentao_fetch_tasks'?new Promise(r=>complete=r):{});
  const job=s.api.syncZenConnection('c');await new Promise(r=>setImmediate(r));assert.equal(s.api.useZentaoRuntimeState.getState().busy.c,true);
- await assert.rejects(s.api.syncZenConnection('c'),/progress/);s.projects.getState().areas.push({id:'a',name:'新增分类',createdAt:1,updatedAt:1});
+ await assert.rejects(s.api.syncZenConnection('c'),/progress/);s.projects.getState().projects.push({id:'a',name:'新增项目',status:'active',folder:null,note:'',createdAt:1,updatedAt:1});
  complete({apiVersion:'v1',tasks:[],executions:[],unavailableIds:[],fetchedAt:20});await job;
- assert.equal(s.projects.getState().areas.length,1);assert.equal(s.api.useZentaoRuntimeState.getState().busy.c,false);assert.equal(s.zen.getState().syncStates.c.lastSyncAt,20);
+ assert.equal(s.projects.getState().projects.length,1);assert.equal(s.api.useZentaoRuntimeState.getState().busy.c,false);assert.equal(s.zen.getState().syncStates.c.lastSyncAt,20);
 });
 test('failed authentication pauses automatic sync, sanitizes errors and leaves last good cache',async()=>{
  const s=setup(()=>{throw 'ZENTAO_AUTH_REQUIRED: secret-response';});s.projects.getState().items.push({id:'cached'});
@@ -61,6 +61,6 @@ test('immediate undo restores the original bundle when commit matches the propos
  const result=await s.api.bindZenTask('local','c:task:7');assert.equal(typeof result.undo,'function');await result.undo();assert.deepEqual(s.projects.getState(),before);
 });
 test('binding does not offer destructive snapshot undo when native merge includes another window edit',async()=>{
- const s=setup((cmd,args)=>{if(cmd==='project_apply_remote_binding'){const canonical=structuredClone(args);canonical.projects.state.areas.push({id:'concurrent',name:'Other window edit',createdAt:1,updatedAt:1});return{projects:canonical.projects,plans:canonical.plans,archive:canonical.archive};}return{};});bindingFixture(s);
- const result=await s.api.bindZenTask('local','c:task:7');assert.equal(result.undo,undefined);assert.equal(s.projects.getState().areas[0].name,'Other window edit');
+ const s=setup((cmd,args)=>{if(cmd==='project_apply_remote_binding'){const canonical=structuredClone(args);canonical.projects.state.projects.push({id:'concurrent',name:'Other window edit',status:'active',folder:null,note:'',createdAt:1,updatedAt:1});return{projects:canonical.projects,plans:canonical.plans,archive:canonical.archive};}return{};});bindingFixture(s);
+ const result=await s.api.bindZenTask('local','c:task:7');assert.equal(result.undo,undefined);assert.equal(s.projects.getState().projects[0].name,'Other window edit');
 });

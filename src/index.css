@@ -3,6 +3,8 @@
 @import "@fontsource-variable/geist";
 @import "./styles/tokens.css";
 @import "./styles/workspace.css";
+@import "./styles/pogget-skin.css";
+@import "./styles/endfield-skin.css";
 
 @custom-variant dark (&:is(.dark *));
 
@@ -392,4 +394,35 @@ html.popup-root body,
 html.popup-root #root {
   background: transparent !important;
   overflow: hidden;
+}
+
+/* 技能更新中心的阈值滑杆。
+   WebView2 里原生 range 的轨道几乎不可见（只剩一个孤零零的圆点），
+   所以轨道和滑块都显式画出来。 */
+.range-input {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 20px;
+  background: transparent;
+  cursor: pointer;
+}
+.range-input::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--border);
+}
+.range-input::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 18px;
+  height: 18px;
+  margin-top: -6px;
+  border-radius: 999px;
+  border: 2px solid var(--card);
+  background: var(--primary);
+  box-shadow: 0 1px 4px rgb(0 0 0 / 0.28);
+}
+.range-input:focus-visible::-webkit-slider-thumb {
+  box-shadow: 0 0 0 4px var(--ah-primary-soft);
 }

@@ -7,13 +7,11 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
-import { ShortcutRecorder } from "@/features/knowledge/shortcut-recorder";
 import { searchCopy, searchExtensionCopy } from "./copy";
 import { detectEverything, openSearchWindow, pauseSearchIndex, refreshSearch, searchDocumentDefaults, startEverything } from "./api";
 import { hydrateSearchSettings, saveSearchSettings, updateSearchStatus, useSearchStore } from "./store";
 import type { EverythingStatus, SearchSettingsValue } from "./types";
 import { SearchAppsSettings } from "./apps-settings";
-import { QuickToolsSettings } from "./quick-tools-settings";
 import "./search.css";
 
 export function SearchSettings() {
@@ -21,7 +19,7 @@ export function SearchSettings() {
   const en = i18n.language.startsWith("en"), c = searchCopy(en), e = searchExtensionCopy(en);
   const { settings, hydrated, status, error } = useSearchStore();
   const [draft, setDraft] = useState<SearchSettingsValue>(settings);
-  const [dirty, setDirty] = useState(false), [saving, setSaving] = useState(false), [recording, setRecording] = useState(false);
+  const [dirty, setDirty] = useState(false), [saving, setSaving] = useState(false);
   const [message, setMessage] = useState(""), [localError, setLocalError] = useState("");
   const [defaults, setDefaults] = useState<string[]>([]), [defaultsError, setDefaultsError] = useState("");
   const [everything, setEverything] = useState<EverythingStatus | null>(null);
@@ -111,7 +109,6 @@ export function SearchSettings() {
   return <section className="search-settings workbench-ui" aria-label={c.settingsTitle}>
     <header className="search-settings-header"><div><h2><Search className="size-4" />{c.settingsTitle}</h2><p>{c.settingsHint}</p></div><Button variant="outline" onClick={() => void openSearchWindow().catch(error => setLocalError(String(error)))}>{c.launch}</Button></header>
     {!hydrated && error && <div role="alert" className="search-settings-error"><p>{c.loadError}</p><Button variant="outline" size="sm" onClick={() => void hydrateSearchSettings().catch(() => undefined)}>{c.retry}</Button></div>}
-    <div className="search-settings-section"><ShortcutRecorder value={draft.shortcut} onChange={shortcut => patch({ shortcut })} en={en} disabled={disabled} onRecordingChange={setRecording} placeholder="Ctrl+Alt+K" /><p className="search-settings-hint">{c.shortcutHint}</p></div>
     <SearchAppsSettings en={en} />
     <section className="search-settings-section" aria-label={e.program}>
       <div className="search-settings-section-heading"><h3>{e.program}</h3><span className="search-service-status" role="status">{!detecting && everything?.state === "ready" ? <CheckCircle2 /> : <Circle />}{detecting ? action === "start" ? e.launching : e.probing : everything ? e.states[everything.state] : e.unknown}</span></div>
@@ -148,7 +145,6 @@ export function SearchSettings() {
       <dl className="search-index-meta"><dt>{c.indexed}</dt><dd>{status ? status.count.toLocaleString() : "—"}</dd><dt>{c.lastIndexed}</dt><dd>{timestamp && !Number.isNaN(timestamp.getTime()) ? timestamp.toLocaleString(en ? "en-US" : "zh-CN") : c.never}</dd><dt>{c.backend}</dt><dd>{status?.backend || "—"}</dd></dl>
       {status?.error && <p role="status" className="search-settings-hint">{status.error}</p>}
     </section>
-    <footer className="search-settings-save"><div><p role="status">{message || (dirty ? e.unsaved : e.unchanged)}</p>{localError && <p role="alert" className="search-settings-error">{localError}</p>}</div><Button onClick={() => void save()} disabled={busy || !dirty || recording}>{saving ? c.saving : c.save}</Button></footer>
-    <QuickToolsSettings />
+    <footer className="search-settings-save"><div><p role="status">{message || (dirty ? e.unsaved : e.unchanged)}</p>{localError && <p role="alert" className="search-settings-error">{localError}</p>}</div><Button onClick={() => void save()} disabled={busy || !dirty}>{saving ? c.saving : c.save}</Button></footer>
   </section>;
 }

@@ -354,20 +354,6 @@ export async function mergeBackup(
     useProviders.setState({ providers: merged, defaultTextId, defaultVisionId, defaultVisionModel });
   }
 
-  const reminders = unwrapState(file.data.reminders);
-  if (reminders) {
-    const { useReminderSettings } = await import("@/stores/reminders");
-    const current = useReminderSettings.getState();
-    const notified = [...new Set([...current.notified, ...(Array.isArray(reminders.notified) ? reminders.notified.filter((item): item is string => typeof item === "string") : [])])].slice(-500);
-    const preference = opts.overwriteSettings ? {
-      ...(typeof reminders.enabled === "boolean" ? { enabled: reminders.enabled } : {}),
-      ...(Number.isFinite(reminders.advance) && Number(reminders.advance) >= 0 ? { advance: Math.round(Number(reminders.advance)) } : {}),
-    } : {};
-    useReminderSettings.setState({ notified, ...preference });
-    stats.added += notified.filter((item) => !current.notified.includes(item)).length;
-    stats.updated += Object.keys(preference).length;
-  }
-
   const knowledge = unwrapState(file.data["knowledge-settings"]);
   if (knowledge && opts.overwriteSettings && typeof knowledge.shortcut === "string") {
     const { useKnowledge } = await import("@/features/knowledge/store");

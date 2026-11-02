@@ -65,7 +65,7 @@ export function applyZenSnapshot(data: ProjectData, connectionId: string, result
     const fields = remoteFields(task), link = next.remoteLinks.find(l => l.id === task.id);
     if (!link) {
       const id = crypto.randomUUID();
-      next.items.push({ id, createdAt: now, updatedAt: now, ...fields, areaId: null, projectId: null, activeIterationId: null });
+      next.items.push({ id, createdAt: now, updatedAt: now, ...fields, projectId: null, activeIterationId: null });
       next.remoteLinks.push({ id: task.id, connectionId, remoteId: task.remoteId, itemId: id, baseline: fields, divergedFields: [], updatedAt: now }); added++;
     } else {
       const item = next.items.find(i => i.id === link.itemId); assert(item && !item.mergedIntoId, "Missing bound task");

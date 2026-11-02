@@ -59,7 +59,6 @@ export function ToolsPage() {
   const optionsKey = JSON.stringify(options);
   const resultKey = JSON.stringify({ options, lang });
   const stale = Boolean(draft.result && (draft.result.source !== draft.input || draft.resultKey !== resultKey));
-  const Icon = icons[tool];
 
   useEffect(() => { alive.current = true; return () => { alive.current = false; }; }, []);
   const change = useCallback((id: ToolId, patch: Partial<Draft>) => {
@@ -97,11 +96,12 @@ export function ToolsPage() {
   const runLabel = c[`${tool}Run`];
 
   return <div className="developer-tools workbench-ui">
-    <header className="tools-header"><h1>{c.title}</h1><button className="tools-quick-panel" onClick={() => void openQuickToolsWindow().catch(() => toast.error(c.failed))}><Sparkles />{lang === "zh" ? "快捷工具" : "Quick tools"}</button><button className="tools-provider" onClick={() => navigate("/settings?tab=ai")} title={c.configure}><span className="tools-model-dot" data-connected={Boolean(provider)} /><span><small>{c.shared}</small><strong>{provider?.model || c.unconfigured}</strong></span><Settings2 /></button></header>
+    <div className="tools-topbar">
+      <nav className="tools-nav" aria-label={c.title}>{toolIds.map((id) => { const ToolIcon = icons[id]; return <button key={id} title={c[`${id}Hint`]} aria-current={tool === id ? "page" : undefined} onClick={() => setTool(id)}>{job === id ? <LoaderCircle className="animate-spin" /> : <ToolIcon />}<span>{c[id]}</span></button>; })}</nav>
+      <div className="tools-header-actions"><button className="tools-quick-panel" onClick={() => void openQuickToolsWindow().catch(() => toast.error(c.failed))}><Sparkles />{lang === "zh" ? "快捷工具" : "Quick tools"}</button><button className="tools-provider" onClick={() => navigate("/settings?tab=ai")} title={c.configure}><span className="tools-model-dot" data-connected={Boolean(provider)} /><span><small>{c.shared}</small><strong>{provider?.model || c.unconfigured}</strong></span><Settings2 /></button></div>
+    </div>
     <div className="tools-layout">
-      <nav className="tools-nav" aria-label={c.title}>{toolIds.map((id) => { const ToolIcon = icons[id]; return <button key={id} aria-current={tool === id ? "page" : undefined} onClick={() => setTool(id)}>{job === id ? <LoaderCircle className="animate-spin" /> : <ToolIcon />}<span>{c[id]}</span></button>; })}</nav>
       <section className="tools-workspace" aria-label={c[tool]}>
-        <div className="tools-heading"><div className="tools-heading-icon"><Icon /></div><div><h2>{c[tool]}</h2><p>{c[`${tool}Hint`]}</p></div></div>
         <div className="tool-configuration">
           <ToolOptionsBar tool={tool} options={options} update={(patch) => updateOptions(tool, patch)} c={c} />
           <div className="tool-configuration-actions">

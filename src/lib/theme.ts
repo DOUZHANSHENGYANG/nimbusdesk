@@ -1,4 +1,10 @@
 export type ThemeMode = "light" | "dark";
+/**
+ * 视觉风格。`pogget` = 参考 Pogget 的扁平浅色工作台（灰底、白面、彩色图标），
+ * `nimbus` = 原「石墨天青 · Liquid Layer」玻璃层。两套都只切 token 与壳层结构，
+ * 页面组件不需要知道当前是哪一套。
+ */
+export type VisualStyle = "pogget" | "nimbus" | "endfield";
 /*
  * 应用主题类到 <html>，并同步 <meta name="theme-color">。
  *
@@ -10,10 +16,11 @@ export type ThemeMode = "light" | "dark";
 export type AccentPreset = "sky" | "ocean" | "graphite" | "warm";
 
 /** 主题模式：跟随系统 / 浅色 / 深色 */
-export function applyTheme(mode: ThemeMode, accent?: AccentPreset) {
+export function applyTheme(mode: ThemeMode, accent?: AccentPreset, style?: VisualStyle) {
   document.documentElement.classList.toggle("dark", mode === "dark");
   // 配色预设：只改品牌色相（见 tokens.css 的 [data-accent]），黑白灰与对比度不动
   if (accent) document.documentElement.dataset.accent = accent;
+  if (style) document.documentElement.dataset.skin = style;
   const bg = getComputedStyle(document.documentElement).backgroundColor;
   if (bg && bg !== "rgba(0, 0, 0, 0)") {
     document.querySelector('meta[name="theme-color"]')?.setAttribute("content", bg);

@@ -5,6 +5,7 @@ import { filesTableStorage } from "./files-storage";
 import type { DirectorySnapshot, MovedFenceEntry } from "@/lib/tauri";
 import { stickyAppearancePatch, type StickyAppearance } from "@/features/desktop/sticky-presentation";
 import { normalizedMappingPath, reconcileDirectoryItems } from "@/features/files/directory-mapping-core";
+import type { BoxAppearance } from "@/features/files/box-appearance";
 
 /* ── 文件条目库：files.json ───────────────────────────── */
 
@@ -31,6 +32,12 @@ export interface FileCategory {
   parentId?: string;
   /** 展示顺序（Dock 飞出面板的标签从左到右按此升序）。缺省排最后 */
   sortOrder?: number;
+  /** 盒子配色（token 变量名，如 chart-2）。缺省按创建位置自动分配 */
+  color?: string;
+  /** 盒子的展示参数（图标尺寸 / 列表 / 预览 / 字号 / 标题栏 / 透明度 / 圆角） */
+  appearance?: Partial<BoxAppearance>;
+  /** 编组颜色（#rrggbb，白色/空 = 未编组）。同色盒子可磁吸并合并成一个宿主窗口 */
+  groupColor?: string;
   /** 最后修改时间 —— 仅供备份合并判断「同 id 谁更新」 */
   updatedAt?: number;
 }
@@ -42,9 +49,17 @@ export interface FileCategory {
  * shortcut。不在读取时回写 —— 推导是纯函数、零风险；等用户真正编辑分类
  * 时再把 kind 落盘。
  */
+/**
+ * 分类的真实语义。现在只有两类：普通盒与映射盒。
+ *
+ * `storage` 是历史取值：那时拖入会搬进 stash。现在所有盒子拖入都是移动，
+ * 两者行为一致，所以读的时候直接并入 shortcut（老数据零迁移）。
+ * 没有 kind 的老数据仍是 syncDir → mapped、其余 shortcut。
+ */
 export function categoryKind(category: Pick<FileCategory, "kind" | "syncDir">): CategoryKind {
-  if (category.kind) return category.kind;
-  return category.syncDir ? "mapped" : "shortcut";
+  if (category.kind === "mapped") return "mapped";
+  if (!category.kind && category.syncDir) return "mapped";
+  return "shortcut";
 }
 /** 顶级分类按展示顺序排列：sortOrder 升序，缺省按创建时间兜底（兼容旧数据） */
 export function sortedTopCategories(categories: FileCategory[]): FileCategory[] {
@@ -70,27 +85,46 @@ export interface FileItem {
   createdAt: number;
   /** 最后修改时间 —— 仅供备份合并判断「同 id 谁更新」 */
   updatedAt?: number;
+  /**
+   * 缓存的文件字节数（目录/取不到为 null）。
+   * 删前风险分级与列表体积展示都用它，免得每次渲染都去 stat 一次磁盘。
+   */
+  size?: number | null;
+  /** 缓存的文件修改时间（epoch ms）。扫描来的条目用它排序比 createdAt 更有意义。 */
+  mtime?: number | null;
+  /** 上次写缓存的时刻，决定这条要不要刷新（见 presence/meta-cache） */
+  metaAt?: number;
 }
 
 interface FilesState {
   categories: FileCategory[];
   items: FileItem[];
   /** 新建分类；parentId 给定时建为子分类 */
-  addCategory: (name: string, parentId?: string, kind?: CategoryKind) => string;
+  addCategory: (name: string, parentId?: string, kind?: CategoryKind, color?: string) => string;
   renameCategory: (id: string, name: string) => void;
   removeCategory: (id: string) => void;
   /** 把分类移到另一个父分类下（null = 提升为顶级） */
   setCategoryParent: (id: string, parentId: string | null) => void;
   /** 绑定/更换分类的真实磁盘目录（null = 解绑） */
   setCategoryDir: (id: string, dir: string | null) => void;
+  /** 换盒子配色（只影响呈现） */
+  setCategoryColor: (id: string, color: string) => void;
+  /** 更新盒子展示参数（只影响呈现；文件页 / 栅栏 / 快速面板共用） */
+  setCategoryAppearance: (id: string, patch: Partial<BoxAppearance>) => void;
+  /** 设置编组颜色（空 = 未编组） */
+  setCategoryGroupColor: (id: string, color: string | undefined) => void;
   /** 顶级分类展示排序：与相邻分类交换 sortOrder（Dock 飞出面板标签从左到右升序） */
   moveCategory: (id: string, dir: -1 | 1) => void;
+  /** 墙上拖拽排序：把 id 放到 beforeId 前面（null = 排到最后） */
+  moveCategoryBefore: (id: string, beforeId: string | null) => void;
   setCategoryMapping: (id: string, root: string | null) => void;
   reconcileDirectory: (categoryId: string, requestedRoot: string, snapshot: DirectorySnapshot) => boolean;
   addItem: (item: Omit<FileItem, "id" | "createdAt">) => void;
   addItems: (items: Omit<FileItem, "id" | "createdAt">[]) => void;
   applyMovedEntries: (categoryId: string, entries: MovedFenceEntry[]) => void;
   updateItem: (id: string, patch: Partial<Omit<FileItem, "id" | "createdAt">>) => void;
+  /** 批量写回缓存元信息（size / mtime）：一次 set，避免逐条触发持久化 */
+  patchItemMeta: (updates: { id: string; size: number | null; mtime: number | null }[]) => void;
   removeItem: (id: string) => void;
   /** 拖拽排序：把 itemId 移到 anchorId 之前（anchorId=null 表示移到自己分类末尾） */
   moveItemBefore: (itemId: string, anchorId: string | null) => void;
@@ -151,7 +185,7 @@ export const useFiles = create<FilesState>()(
         return { items, categories };
       }),
 
-      addCategory: (name, parentId, kind) => {
+      addCategory: (name, parentId, kind, color) => {
         const clean = name.trim();
         // 同名防重：同一层级内已存在（忽略大小写）直接返回既有 id
         const dup = get().categories.find(
@@ -164,12 +198,30 @@ export const useFiles = create<FilesState>()(
         set((s) => ({
           categories: [
             ...s.categories,
-            { id, name: clean, kind: kind ?? "shortcut", createdAt: Date.now(), updatedAt: Date.now(), parentId,
+            { id, name: clean, kind: kind ?? "shortcut", ...(color ? { color } : {}), createdAt: Date.now(), updatedAt: Date.now(), parentId,
               ...(parentId ? {} : { sortOrder: sortedTopCategories(s.categories).length }) },
           ],
         }));
         return id;
       },
+
+      setCategoryColor: (id, color) => set((s) => ({
+        categories: s.categories.map((c) => (c.id === id ? { ...c, color, updatedAt: Date.now() } : c)),
+      })),
+
+      setCategoryAppearance: (id, patch) => set((s) => ({
+        categories: s.categories.map((c) => c.id === id
+          ? { ...c, appearance: { ...c.appearance, ...patch }, updatedAt: Date.now() }
+          : c),
+      })),
+
+      setCategoryGroupColor: (id, color) => set((s) => {
+        const normalized = color?.toLowerCase();
+        const groupColor = normalized && normalized !== "#ffffff" && /^#[\da-f]{6}$/.test(normalized) ? normalized : undefined;
+        return {
+          categories: s.categories.map((c) => c.id === id ? { ...c, groupColor, updatedAt: Date.now() } : c),
+        };
+      }),
 
       renameCategory: (id, name) => {
         const clean = name.trim();
@@ -241,6 +293,29 @@ export const useFiles = create<FilesState>()(
         };
       }),
 
+      moveCategoryBefore: (id, beforeId) => set((s) => {
+        const tops = sortedTopCategories(s.categories);
+        const moving = tops.find((category) => category.id === id);
+        if (!moving) return s;
+        const rest = tops.filter((category) => category.id !== id);
+        const insertAt = beforeId ? rest.findIndex((category) => category.id === beforeId) : rest.length;
+        const ordered = [
+          ...rest.slice(0, insertAt < 0 ? rest.length : insertAt),
+          moving,
+          ...rest.slice(insertAt < 0 ? rest.length : insertAt),
+        ];
+        const rank = new Map(ordered.map((category, position) => [category.id, position]));
+        const now = Date.now();
+        return {
+          categories: s.categories.map((category) => {
+            const next = rank.get(category.id);
+            return next === undefined || category.sortOrder === next
+              ? category
+              : { ...category, sortOrder: next, updatedAt: now };
+          }),
+        };
+      }),
+
       setCategoryMapping: (id, root) => set(state => {
         const category = state.categories.find(entry => entry.id === id);
         if (!category) return state;
@@ -305,7 +380,36 @@ export const useFiles = create<FilesState>()(
 
 
       removeItem: (id) =>
-        set((s) => ({ items: s.items.filter((i) => i.id !== id) })),
+        set((s) => {
+          const gone = s.items.find((item) => item.id === id);
+          const items = s.items.filter((i) => i.id !== id);
+          // 只有「删条目」会把空盒带走；移出盒子（updateItem 改归属）保留空盒
+          if (gone) {
+            const category = s.categories.find((entry) => entry.id === gone.categoryId);
+            const remains = items.some((item) => item.categoryId === gone.categoryId);
+            if (category && categoryKind(category) !== "mapped" && !remains
+              && !s.categories.some((entry) => entry.parentId === category.id)) {
+              return { items, categories: s.categories.filter((entry) => entry.id !== category.id) };
+            }
+          }
+          return { items };
+        }),
+
+      patchItemMeta: (updates) => set((s) => {
+        if (!updates.length) return s;
+        const byId = new Map(updates.map((u) => [u.id, u]));
+        const now = Date.now();
+        let touched = false;
+        const items = s.items.map((item) => {
+          const patch = byId.get(item.id);
+          if (!patch) return item;
+          if (item.size === patch.size && item.mtime === patch.mtime) return item;
+          touched = true;
+          return { ...item, size: patch.size, mtime: patch.mtime, metaAt: now };
+        });
+        // 一条都没变就不产生新数组 —— 否则每次刷新都会触发一次整份持久化
+        return touched ? { items } : s;
+      }),
 
       moveItemBefore: (itemId, anchorId) =>
         set((s) => {
@@ -331,7 +435,7 @@ export const useFiles = create<FilesState>()(
       name: "files",
       // 行级表 + 增量写入：见 `./files-storage.ts`（不再是「整份文档一个 key」）
       storage: filesTableStorage,
-      version: 2,
+      version: 3,
       /**
        * v1 → v2：补 `updatedAt`（备份合并要「同 id 比时间新者胜」）。
        *
@@ -339,6 +443,23 @@ export const useFiles = create<FilesState>()(
        * 在同一次启动里「一起变新」，之后从备份恢复时把所有旧版本都判成过时。
        */
       migrate: (persisted, version) => {
+        const legacy = persisted as
+          | { categories?: { id: string; name: string; parentId?: string }[]; items?: { categoryId?: string }[] }
+          | undefined;
+        /*
+         * v2 → v3：删掉遗留的空「默认分类」。
+         * 以前首次打开会自动建一个；机制去掉了，但老数据里那个空盒子还挂在墙上，
+         * 用户看到「都没有分类了怎么还有这个」。只删**空**的（有条目就留着，别替用户丢东西）。
+         */
+        if (legacy && version < 3 && Array.isArray(legacy.categories)) {
+          const used = new Set((legacy.items ?? []).map((item) => item.categoryId));
+          const drop = new Set(
+            legacy.categories
+              .filter((c) => !c.parentId && /^(默认分类|default|inbox)$/i.test(c.name.trim()) && !used.has(c.id))
+              .map((c) => c.id),
+          );
+          if (drop.size) legacy.categories = legacy.categories.filter((c) => !drop.has(c.id));
+        }
         const state = persisted as
           | { categories?: { createdAt?: number; updatedAt?: number }[]; items?: { createdAt?: number; updatedAt?: number }[] }
           | undefined;
@@ -355,6 +476,9 @@ export const useFiles = create<FilesState>()(
 );
 
 /* ── 栅栏几何/开关：fences.json ───────────────────────── */
+
+/** 盒内排序：manual = 手拖顺序，name = 名称升序，time = 最近创建在前 */
+export type FenceSortMode = "manual" | "name" | "time";
 
 export interface FenceState extends StickyAppearance {
   /** Edge mode is independent of the saved normal rectangle. Missing values are legacy paper mode. */
@@ -375,11 +499,34 @@ export interface FenceState extends StickyAppearance {
   scale?: number;
   /** Per-fence presentation; legacy records retain icon view and remain movable. */
   viewMode?: "icons" | "list";
+  /** 盒内排序：manual = 条目数组顺序（手拖）/ name / time = 最近创建在前 */
+  sortMode?: FenceSortMode;
+  /** 条目名的显示方式（只影响显示，不动磁盘文件名） */
+  fileNameMode?: "full" | "noExt" | "extOnly";
   locked?: boolean;
+}
+
+/** 同色编组的宿主窗口状态；id 直接使用小写 #rrggbb。 */
+export interface FenceGroupState {
+  id: string;
+  color: string;
+  layout: "sections" | "tabs";
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  open: boolean;
+  activeCategoryId?: string;
 }
 
 interface FencesStoreState {
   fences: Record<string, FenceState>;
+  groups: Record<string, FenceGroupState>;
+  ensureGroup: (id: string) => void;
+  setGroupLayout: (id: string, layout: FenceGroupState["layout"]) => void;
+  setGroupGeometry: (id: string, geo: { x: number; y: number; w: number; h: number }) => void;
+  setGroupOpen: (id: string, open: boolean) => void;
+  setGroupActive: (id: string, categoryId: string) => void;
   setForm: (categoryId: string, form: "paper" | "capsule") => void;
   setEdge: (categoryId: string, edge: "left" | "right" | "top") => void;
   setEdgeY: (categoryId: string, edgeY: number) => void;
@@ -390,22 +537,53 @@ interface FencesStoreState {
   setPinned: (categoryId: string, pinned: boolean) => void;
   setScale: (categoryId: string, scale: number) => void;
   setViewMode: (categoryId: string, mode: "icons" | "list") => void;
+  setSortMode: (categoryId: string, mode: FenceSortMode) => void;
+  setFileNameMode: (categoryId: string, mode: FenceState["fileNameMode"]) => void;
   setLocked: (categoryId: string, locked: boolean) => void;
   setStickyAppearance: (categoryId: string, patch: Partial<StickyAppearance>) => void;
 }
 
 export const DEFAULT_FENCE: FenceState = { x: 180, y: 160, w: 280, h: 340, ghost: true, open: false, viewMode: "icons", locked: false };
+export const DEFAULT_GROUP_GEOMETRY = { x: 240, y: 180, w: 460, h: 520 };
 
 export const useFences = create<FencesStoreState>()(
   persist(
     (set) => ({
       fences: {},
+      groups: {},
+
+      ensureGroup: (id) => set((s) => {
+        const key = id.toLowerCase();
+        if (s.groups[key]) return s;
+        return {
+          groups: {
+            ...s.groups,
+            [key]: { id: key, color: key, layout: "sections", ...DEFAULT_GROUP_GEOMETRY, open: true },
+          },
+        };
+      }),
+      setGroupLayout: (id, layout) => set((s) => ({
+        groups: { ...s.groups, [id]: { ...(s.groups[id] ?? { id, color: id, layout: "sections", ...DEFAULT_GROUP_GEOMETRY, open: true }), layout } },
+      })),
+      setGroupGeometry: (id, geo) => set((s) => ({
+        groups: { ...s.groups, [id]: { ...(s.groups[id] ?? { id, color: id, layout: "sections", ...DEFAULT_GROUP_GEOMETRY, open: true }), ...geo } },
+      })),
+      setGroupOpen: (id, open) => set((s) => ({
+        groups: { ...s.groups, [id]: { ...(s.groups[id] ?? { id, color: id, layout: "sections", ...DEFAULT_GROUP_GEOMETRY, open: true }), open } },
+      })),
+      setGroupActive: (id, activeCategoryId) => set((s) => ({
+        groups: { ...s.groups, [id]: { ...(s.groups[id] ?? { id, color: id, layout: "sections", ...DEFAULT_GROUP_GEOMETRY, open: true }), activeCategoryId } },
+      })),
 
       setStickyAppearance: (categoryId, patch) => set(s => ({ fences: { ...s.fences,
         [categoryId]: { ...(s.fences[categoryId] ?? DEFAULT_FENCE), ...stickyAppearancePatch(patch) } } })),
 
       setViewMode: (categoryId, viewMode) => set(s => ({ fences: { ...s.fences,
         [categoryId]: { ...(s.fences[categoryId] ?? DEFAULT_FENCE), viewMode } } })),
+      setSortMode: (categoryId, sortMode) => set(s => ({ fences: { ...s.fences,
+        [categoryId]: { ...(s.fences[categoryId] ?? DEFAULT_FENCE), sortMode } } })),
+      setFileNameMode: (categoryId, fileNameMode) => set(s => ({ fences: { ...s.fences,
+        [categoryId]: { ...(s.fences[categoryId] ?? DEFAULT_FENCE), fileNameMode } } })),
       setLocked: (categoryId, locked) => set(s => ({ fences: { ...s.fences,
         [categoryId]: { ...(s.fences[categoryId] ?? DEFAULT_FENCE), locked } } })),
 
@@ -458,6 +636,15 @@ export const useFences = create<FencesStoreState>()(
           },
         })),
     }),
-    { name: "fences", storage: createJSONStorage(() => tauriJsonStorage), version: 1 },
+    {
+      name: "fences",
+      storage: createJSONStorage(() => tauriJsonStorage),
+      version: 2,
+      /** v1 → v2：新增同色编组宿主；保留所有旧 fence 字段与几何。 */
+      migrate: (persisted) => {
+        const state = persisted && typeof persisted === "object" ? persisted as Partial<FencesStoreState> : {};
+        return { ...state, groups: state.groups ?? {} } as FencesStoreState;
+      },
+    },
   ),
 );
