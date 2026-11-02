@@ -2,11 +2,22 @@
 
 云台 / NimbusDesk：Tauri 2 + React 19 + Vite + Tailwind v4 的本机工作台。先读 `architecture.md`（技术栈与已定的设计决策）和 `goal-and-requirements.md`（为什么这么做），再动手。
 
+## 启动应用（唯一入口）
+
+**要给人看界面、要验证交互，一律 `npm run tauri dev`，不要只 `npm run dev`。**
+
+- `npm run dev` 只起 Vite 网页（127.0.0.1:17800）。纯浏览器里没有 Tauri IPC：`@tauri-apps/api` 是 undefined，存储、`plugin-http` 抓取、窗口控制全是残的，界面上会写「数据读取失败 / 数据未能保存」，外部抓取还会被 CORS 拦。**那不是应用，不能拿来交付。**
+- `npm run tauri dev` 才会编译 Rust 壳并开出真正的桌面窗口；Vite 由 `beforeDevCommand` 自己拉起，端口固定 17800（`strictPort: true`），不要再手动起第二个。
+- 遇到「看不到软件 / 界面 404 / 127.0.0.1 拒绝连接」：先看 17800 有没有在监听、`.vite-dev*.log` 末尾有没有 `[ELIFECYCLE]`——连接被拒是 dev server 死了（WebView2 的错误页长得很像 404），不是路由问题。
+- 只有跑 `scripts/check-*-browser.mjs` 那批夹具回归时才单独用 `npm run dev`：夹具自己 mock 了 IPC，不需要 Tauri 壳。
+
 ## 五条硬约束
 
 1. **一次改动一次 commit**，提交信息说清「为什么」而不只是「改了什么」。
-2. **结束前 `npm run verify` 必须退出 0**，工作区干净（`git status --short` 为空）。它串起：i18n 对齐 → 对比度 → 预览同步 → `tsc --noEmit` → 各功能单测 → `cargo test`。
-   **提交前/发版前再跑 `npm run verify:dist`**：构建 + 入口闭包体积 + 四个浏览器回归（分包边界、轮询门控、长列表分片与深链、搜索窗批加载与跨批滚动）。这些只有把真产物/真夹具跑起来才验得到，`verify` 那道快闸不覆盖。
+2. **结束前门禁必须退出 0**，工作区干净（`git status --short` 为空）。两档：
+   - **日常用 `npm run verify:fast`**：i18n 对齐 → 对比度 → 预览同步 → `tsc --noEmit`，约 20 秒。改界面、改文案、改路由这类不碰被测逻辑的改动就跑这档。
+   - **`npm run verify`（全套）留给提交前与发布前**：在上面之外还有各功能单测与 `cargo test`（Rust 那段增量也就十几秒，大头是 19 组 node 测试）。碰了有测试覆盖的逻辑（storage、项目核心、桌面文件、搜索索引…）就一定要跑它。
+   - **`npm run verify:dist`**：构建 + 入口闭包体积 + 四个浏览器回归（分包边界、轮询门控、长列表分片与深链、搜索窗批加载与跨批滚动）。这些只有把真产物/真夹具跑起来才验得到，前两档都不覆盖。
 3. **i18n 双语同时加**：应用词表在 `src/lib/i18n.ts`，ahub 的单独在 `src/ahub/i18n/index.ts`；项目页文案在 `src/features/projects/copy.ts`（缺 en key 直接编译报错）。`npm run check:i18n` 会拦住 key 对不齐或占位符不一致。
 4. **改了行为就改文档**：`docs/` 下按功能分篇，写清用法 + 怎么验证，并附 `docs/screenshots/` 里的截图名。
 5. **视觉只消费 token**：组件里不许写死颜色，新颜色先进 `src/styles/tokens.css` 的 primitive 层；对比度由 `npm run check:contrast` 兜底。

@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>知识库 · B1 三栏书房</title>
+<style>
+  :root {
+    /* Bear 原样：深色侧栏 + 浅色列表与阅读区 */
+    --rail: #141A22;
+    --rail-ink: #ECEDEE;
+    --rail-dim: #B4BAC2;
+    --rail-dim2: #9198A1;
+    --rail-line: rgb(255 255 255 / .08);
+    --list: #E4EBF5;
+    --pane: #FFFFFF;
+    --ink: #22252A;
+    --dim: #4E545C;
+    --dim2: #61676F;
+    --line: rgb(0 0 0 / .08);
+    --line-strong: rgb(0 0 0 / .14);
+    --blue: #2F5FE0;
+    --green: #2F8F68;
+    --amber: #8A5D0C;
+    --red: #B23A22;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--list); color: var(--ink);
+    font: 14px/1.55 "Inter", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    height: 100vh; overflow: hidden;
+    display: grid; grid-template-columns: 236px 384px 1fr;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ── 左：分类（深色，像书架的木框） ───────── */
+  .rail {
+    background: var(--rail); color: var(--rail-ink); border-right: 1px solid var(--rail-line);
+    padding: 22px 14px 16px; display: flex; flex-direction: column; gap: 6px;
+  }
+  .who { padding: 0 8px 16px; }
+  .who b { display: block; font-size: 15px; letter-spacing: .01em; }
+  .who span { font-size: 12px; color: var(--rail-dim2); }
+  .kicker { font-size: 12px; color: var(--rail-dim2); padding: 10px 8px 6px; letter-spacing: .04em; }
+  .nav {
+    display: grid; grid-template-columns: 22px 1fr auto; align-items: center; gap: 9px;
+    padding: 8px; border-radius: 8px; cursor: pointer; color: var(--rail-dim);
+    background: transparent; border: 0; font: inherit; text-align: left; width: 100%;
+  }
+  .nav:hover { background: rgb(255 255 255 / .04); }
+  .nav[aria-current="true"] { background: rgb(110 139 255 / .14); color: #FFF; }
+  .nav .ic { width: 18px; height: 18px; border-radius: 5px; display: grid; place-items: center; font-size: 11px; font-weight: 700; color: #0E1013; }
+  .nav .n { font-size: 12px; color: var(--rail-dim2); font-variant-numeric: tabular-nums; }
+  .nav[aria-current="true"] .n { color: #C6D2FF; }
+  .rail .bottom { margin-top: auto; display: flex; flex-direction: column; gap: 2px; }
+  .rail .bottom .nav .ic { background: transparent; color: var(--rail-dim); }
+
+  /* ── 中：条目 ───────────────────────────── */
+  .list { background: var(--list); border-right: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; }
+  .list header { padding: 20px 20px 12px; border-bottom: 1px solid var(--line); }
+  .list h1 { font-size: 19px; font-weight: 600; letter-spacing: -.01em; }
+  .list header p { font-size: 12.5px; color: var(--dim); margin-top: 3px; }
+  .items { overflow-y: auto; padding: 6px 0; }
+  .item {
+    display: block; width: 100%; text-align: left; border: 0; font: inherit; cursor: pointer;
+    background: transparent; color: inherit; padding: 12px 18px 12px 16px;
+    border-left: 3px solid transparent; border-bottom: 1px solid rgb(0 0 0 / .06);
+  }
+  .item:hover { background: rgb(0 0 0 / .035); }
+  .item[aria-selected="true"] { background: rgb(0 0 0 / .06); border-left-color: var(--blue); }
+  .item b { font-size: 14px; font-weight: 500; display: block; letter-spacing: -.005em; }
+  .item small { display: block; font-size: 12.5px; color: var(--dim); margin-top: 3px; }
+  .item .zone { display: inline-block; font-size: 12px; color: var(--dim2); margin-top: 6px; }
+  .item .flag { float: right; font-size: 12px; color: var(--amber); }
+  .item.done b { color: var(--dim2); text-decoration: line-through; }
+  .item.done .flag { color: var(--green); }
+
+  /* ── 右：解释器 ─────────────────────────── */
+  .pane { background: var(--pane); padding: 26px 34px; overflow-y: auto; display: flex; flex-direction: column; gap: 18px; }
+  .pane h2 { font-size: 24px; font-weight: 600; letter-spacing: -.02em; line-height: 1.3; }
+  .meta { display: flex; flex-wrap: wrap; gap: 8px; }
+  .tag { font-size: 12px; color: var(--dim); border: 1px solid var(--line-strong); border-radius: 999px; padding: 2px 10px; }
+  .block { border-top: 1px solid var(--line); padding-top: 14px; }
+  .block h3 { font-size: 12px; color: var(--dim2); font-weight: 500; margin-bottom: 6px; letter-spacing: .03em; }
+  .block p { font-size: 14px; color: #33373D; line-height: 1.65; }
+  .block code { font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 12.5px; background: rgb(0 0 0 / .06); padding: 1px 5px; border-radius: 4px; }
+  .actions { display: flex; gap: 10px; align-items: center; }
+  .primary { border: 0; font: inherit; font-size: 13.5px; font-weight: 500; cursor: pointer; padding: 9px 18px; border-radius: 8px; background: var(--blue); color: #FFFFFF; }
+  .primary:hover { filter: brightness(1.08); }
+  .primary:disabled { background: rgb(0 0 0 / .07); color: var(--dim2); cursor: default; }
+  .ghost { border: 1px solid var(--line-strong); background: transparent; color: var(--ink); font: inherit; font-size: 13.5px; padding: 9px 16px; border-radius: 8px; cursor: pointer; }
+  .ghost:hover { background: rgb(0 0 0 / .04); }
+  .empty { margin: auto; text-align: center; color: var(--dim2); font-size: 14px; max-width: 30em; }
+  .empty b { display: block; color: var(--dim); font-size: 15px; margin-bottom: 6px; }
+  .concept { display: flex; align-items: center; gap: 14px; }
+  .dial { width: 46px; height: 46px; position: relative; }
+  .dial svg { transform: rotate(-90deg); }
+</style>
+</head>
+<body>
+
+  <aside class="rail">
+    <div class="who"><b>knowledge base</b><span>267 篇笔记</span></div>
+    <div class="kicker">我的知识库</div>
+    <button class="nav" data-cat="fix" aria-current="true"><span class="ic" style="background:#E0644A">修</span><span>要修</span><span class="n" id="n-fix">10</span></button>
+    <button class="nav" data-cat="archive"><span class="ic" style="background:#43C08F">归</span><span>待归档</span><span class="n" id="n-archive">0</span></button>
+    <button class="nav" data-cat="learn"><span class="ic" style="background:#D8A548">经</span><span>经验</span><span class="n">1</span></button>
+    <button class="nav" data-cat="all"><span class="ic" style="background:#8A9099">全</span><span>全部笔记</span><span class="n">267</span></button>
+    <div class="bottom">
+      <button class="nav"><span class="ic">记</span><span>笔记视图</span></button>
+      <button class="nav"><span class="ic">设</span><span>知识库设置</span></button>
+    </div>
+  </aside>
+
+  <section class="list">
+    <header>
+      <h1 id="cat-title">要修</h1>
+      <p id="cat-sub">10 处 · 6 处我能直接修好</p>
+    </header>
+    <div class="items" id="items"></div>
+  </section>
+
+  <main class="pane" id="pane"></main>
+
+<script>
+  const items = {
+    fix: [
+      { id: "s1", t: "docx 格式校验工具链推荐", why: "状态写了「进行中」", zone: "02-IT / 09-UIUX", flag: "状态",
+        what: "这篇笔记的「状态」字段写了「进行中」。整套规则只认两个值：草稿、已发布。",
+        why2: "写错的值不会被任何自动目录认出来 —— 你在 Obsidian 的索引里搜不到这篇，等于它隐身了。",
+        act: "改成「草稿」" },
+      { id: "s2", t: "搜索引擎科学方法论", why: "状态写了「进行中」", zone: "02-IT / 09-UIUX", flag: "状态",
+        what: "状态字段是词表外的写法。", why2: "自动目录按词表筛选，认不出来就漏掉。", act: "改成「草稿」" },
+      { id: "s3", t: "调研信息渠道注册表", why: "状态写了「进行中」", zone: "02-IT / 09-UIUX", flag: "状态",
+        what: "状态字段是词表外的写法。", why2: "自动目录按词表筛选，认不出来就漏掉。", act: "改成「草稿」" },
+      { id: "s4", t: "opencode 全局提示词清单", why: "状态写了「已完成」", zone: "02-IT / 09-UIUX", flag: "状态",
+        what: "状态写成了「已完成」，词表里对应的值是「已发布」。", why2: "只有「已发布」会被当成定稿排在检索前面。", act: "改成「已发布」" },
+      { id: "t1", t: "docx-form-demo / README", why: "没写这是什么类型的笔记", zone: "02-IT / 09-UIUX", flag: "类型",
+        what: "文件头的「类型」是空的。规则里的 12 个类型决定它归到哪个目录、出现在哪个总览里。",
+        why2: "没有类型的笔记不会进任何分类页，也不会被建议归档。", act: "补成「技术知识」" },
+      { id: "t2", t: "docx-form-demo / 使用说明", why: "没写这是什么类型的笔记", zone: "02-IT / 09-UIUX", flag: "类型",
+        what: "类型是空的。", why2: "没有类型就不会出现在分类页。", act: "补成「技术知识」" },
+      { id: "t3", t: "docx-form-demo / README-form", why: "没写这是什么类型的笔记", zone: "02-IT / 09-UIUX", flag: "类型",
+        what: "类型是空的。", why2: "没有类型就不会出现在分类页。", act: "补成「技术知识」" },
+      { id: "b1", t: "render.js", why: "文件开头多了个隐藏字符", zone: "09-UIUX / docx-form-demo", flag: "编码",
+        what: "文件最前面有个看不见的字符（BOM）。程序读配置和脚本时会以为第一行不是它该有的样子。",
+        why2: "这个库踩过：解析器静默跳过整段设置，不报错。", act: "去掉隐藏字符" },
+      { id: "b2", t: "分页信息.json", why: "文件开头多了个隐藏字符", zone: "docx-form-demo / out", flag: "编码",
+        what: "同样是 BOM。", why2: "程序读它时可能整段解析失败。", act: "去掉隐藏字符" },
+      { id: "d1", t: "知识库入口", why: "自动目录指向了不存在的文件夹", zone: "99-系统 / 索引", flag: "目录",
+        what: "这个目录页里写着「从 00-Agent工作区/Inbox 取内容」，但那个文件夹已经改成别的位置了。",
+        why2: "路径写错不报警，只会安静地返回空列表 —— 比没有索引更危险。", act: "改成新位置" }
+    ],
+    archive: [],
+    learn: [
+      { id: "c1", t: "系统代理", why: "1 个案例支持 · 还要 2 个", zone: "00-Agent工作区 / wiki / concepts", flag: "经验",
+        what: "一条从真实案例里长出来的经验：系统代理相关的坑。现在只有 1 个案例在支持它。",
+        why2: "攒够 3 个案例才会变成正式的一条经验；到那时它才会出现在这里被我推荐给你。", act: "看看这个案例" }
+    ],
+    all: [
+      { id: "n1", t: "pnpm monorepo 的 dev 脚本必须显式构建内部包", why: "技术知识 · 已发布", zone: "02-IT / 05-工具", flag: "",
+        what: "内部包的 exports 指向 dist，而 dist 在 .gitignore 里 —— 所以必须先 build。", why2: "这篇是正式区的笔记，检索时排在前面。", act: "在 Obsidian 打开" },
+      { id: "n2", t: "mitmproxy 与 reverse-skill 安装记录", why: "技术知识 · 已发布", zone: "02-IT / 05-工具", flag: "",
+        what: "两个工具的安装步骤与踩坑记录。", why2: "", act: "在 Obsidian 打开" },
+      { id: "n3", t: "Vue 路由守卫踩坑", why: "技术知识 · 草稿", zone: "02-IT / 01-前端", flag: "",
+        what: "路由守卫里异步判断的坑。", why2: "", act: "在 Obsidian 打开" },
+      { id: "n4", t: "AGENTS — 知识库顶层规范", why: "MOC · 已发布", zone: "00-Agent工作区", flag: "",
+        what: "给 AI 的操作总纲。", why2: "", act: "在 Obsidian 打开" }
+    ]
+  };
+  const catMeta = {
+    fix: ["要修", "10 处 · 6 处我能直接修好"],
+    archive: ["待归档", "把笔记放进「已审核」就会出现在这里"],
+    learn: ["经验", "案例攒够了才会变成一条经验"],
+    all: ["全部笔记", "267 篇 · 按修改时间"]
+  };
+
+  const itemsEl = document.getElementById("items");
+  const pane = document.getElementById("pane");
+  let cat = "fix", current = "s1";
+
+  function renderList() {
+    const [t, s] = catMeta[cat];
+    document.getElementById("cat-title").textContent = t;
+    document.getElementById("cat-sub").textContent = s;
+    if (!items[cat].length) {
+      itemsEl.innerHTML = '<div class="empty" style="padding:60px 24px"><b>没有待归档的笔记</b>把笔记拖进 00-Human工作区/已审核 文件夹，我就会搬走。</div>';
+      return;
+    }
+    itemsEl.innerHTML = items[cat].map(it => `
+      <button class="item" data-id="${it.id}" aria-selected="${it.id === current}">
+        ${it.flag ? `<span class="flag">${it.flag}</span>` : ""}
+        <b>${it.t}</b><small>${it.why}</small><span class="zone">${it.zone}</span>
+      </button>`).join("");
+    itemsEl.querySelectorAll(".item").forEach(b => b.addEventListener("click", () => { current = b.dataset.id; renderList(); renderPane(); }));
+  }
+
+  function renderPane() {
+    const it = (items[cat] || []).find(x => x.id === current);
+    if (!it) { pane.innerHTML = '<div class="empty"><b>选一条看看</b>左边每条都会解释它哪里不对、为什么要紧。</div>'; return; }
+    pane.innerHTML = `
+      <h2>${it.t}</h2>
+      <div class="meta"><span class="tag">${it.zone}</span><span class="tag">${it.flag || it.why}</span></div>
+      <div class="block"><h3>这里是什么问题</h3><p>${it.what}</p></div>
+      ${it.why2 ? `<div class="block"><h3>为什么要紧</h3><p>${it.why2}</p></div>` : ""}
+      <div class="actions">
+        <button class="primary" id="act">${it.act}</button>
+        <button class="ghost">在 Obsidian 打开</button>
+      </div>
+      <div class="block"><h3>这条规则是哪来的</h3><p>来自库里的 <code>config.yaml</code> 与 <code>kb.py report</code>。改词表就改那一份，界面跟着变。</p></div>`;
+    const act = document.getElementById("act");
+    act && act.addEventListener("click", () => {
+      if (cat !== "fix") return;
+      const el = itemsEl.querySelector(`[data-id="${it.id}"]`);
+      el && el.classList.add("done");
+      const left = itemsEl.querySelectorAll(".item:not(.done)").length;
+      document.getElementById("n-fix").textContent = left;
+      document.getElementById("cat-sub").textContent = left + " 处 · 修一条少一条";
+      act.disabled = true; act.textContent = "已处理";
+    });
+  }
+
+  document.querySelectorAll(".rail .nav[data-cat]").forEach(b => b.addEventListener("click", () => {
+    document.querySelectorAll(".rail .nav[data-cat]").forEach(x => x.setAttribute("aria-current", "false"));
+    b.setAttribute("aria-current", "true");
+    cat = b.dataset.cat;
+    current = (items[cat][0] || {}).id;
+    renderList(); renderPane();
+  }));
+
+  renderList(); renderPane();
+</script>
+</body>
+</html>

@@ -40,7 +40,12 @@ design-preview.html.check
 # Local browser fixtures, screenshots, logs and verification scratch files
 /Temp/
 /output/
+.openchamber/
 
 # 内部实现计划与验证记录（不随仓库公开）
 docs/superpowers/
 docs/reviews/
+
+# 会话记忆（按全局 MEMORY.md 写入，只存本地）
+.opencode/
+.taste-skill/

@@ -13,6 +13,7 @@
 | 操作 | 结果 |
 |---|---|
 | 点某一天 | 跳到那一天（`onPick`） |
+| 点格子里的任务名 | **只看这一条**：深链到 `/plans?date=…&task=…`，大纲里选中它并开备注；那天若已归档就带上 `archived=1`，不会掉进归档列表再自己找。点条目**不连带**触发格子点击（`stopPropagation`），条目本身可 Tab 到、回车/空格同效（`role="link"`） |
 | 悬停某个任务名 | 显示完整标题（格子窄，标题会被截断） |
 | 悬停某一格 | 显示 `日期 · 完成/总数` |
 | 今天 | 描品牌色边、日号变品牌色 |
@@ -109,6 +110,7 @@ node scripts/shot-plan-calendar.mjs
 
 它**没有**接进 `verify:dist`（和 `check-plan-binding-browser.mjs` 一样是人工跑的），
 改日历后手动跑一次。颜色与农历的口径已经进 `verify`（`check:contrast` 的事件色段）。
+点条目这条路径由 `scripts/check-plans-browser.mjs` 断言（同时覆盖备注栏与详情浮层）。
 
 ## 已知边界
 

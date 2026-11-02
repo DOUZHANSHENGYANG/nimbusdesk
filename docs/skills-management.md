@@ -11,6 +11,22 @@ OpenCode / WorkBuddy / CodeBuddy / DeepSeek），并把扫到的条目**默认�
 > 之前只有 MCP 默认全选、skills 留空勾选，于是「一键收集全部」看着像没激活。
 > 现在两边同一套语义：能收的先勾上，用户只做减法。
 
+## 技能市场（SkillHub / DeepSkill / GitHub）
+
+「添加技能 → Git 仓库 → 技能市场」里有三个来源，卡片、勾选、批量安装共用同一套：
+
+- **SkillHub**（腾讯）：官方 `api.skillhub.cn`，可按分类、来源（企业 / 社区 / clawhub）、热度排序，
+  下载走 `api/v1/download?slug=`，交给 `import_skill_zip`（zip-slip / zip-bomb 防护与本地导入一致）；
+- **DeepSkill**：`api/v1/skills/search/deep` 按场景分组返回，这里压平成一页卡片；
+  安装走 `download/public?name=`，ZIP 或单文件 SKILL.md 都能吃；
+- **GitHub**：仓库搜索（`q=<关键词> skill`，按星排序），安装时 `git clone --depth 1` 一次，
+  把仓库里含 `SKILL.md` 的目录逐个装进来（限深 4、最多 20 个）。
+
+装完顺手落上游指纹：GitHub 系写 `revision` + 子目录树 sha（`git-scan`），DeepSkill 写市场页地址（`web`），
+所以从市场装进来的技能**一开始就可跟踪**，不用再走「补全上游」。
+
+限额：单包 64 MB；GitHub 未登录搜索 10 次/分钟，超限会把 GitHub 的原话显示在市场弹窗里。
+
 ## 导入向导里的四件事
 
 | 能力 | 说明 |
@@ -69,12 +85,13 @@ OpenCode / WorkBuddy / CodeBuddy / DeepSeek），并把扫到的条目**默认�
 
 ## 工具维度（harness）
 
-技能卡片底部会列出这份技能**已经接进了哪些工具**（Claude Code / Codex / Gemini CLI…），
-左栏标签仓下面是「工具」区块：每行是该工具下的技能条数，点一下就把列表收窄；
-「未接入工具」把所有工具目录里都没有副本的技能挑出来 —— 这些是最适合清理的一批。
+接入与移出都在弹框里，没有独立的批量弹框：
 
-批量接入已从批量模式里移走：改用页头「批量配置」（见下文「按工具管理」），
-按工具集中接入 / 解绑，与 MCP 页同一套交互。
+- **接入**：页头「扫描本机」→ 弹框切到「应用到本机」页签 → 勾要分发的技能（按标签分组，
+  可一次「全选」）→ 每个工具一行「应用」；旁边「覆盖已存在同名」决定是否盖掉工具里的旧副本。
+- **移出**：列表「批量删除」的二次确认里勾「同时从工具移出副本」（默认勾选，只在这批技能确实
+  有工具副本时出现）—— 只删工具目录里的副本，中枢库里的原技能不受影响。
+- 早前左栏那个「工具」区块（按工具收窄 + 「未接入工具」）已随 `HarnessFilterRail` 删除。
 
 技能列表只有**网格视图**（一行三张），不再提供「分组」视图。
 卡片分四层：**标题 + 右上角状态徽标**（生命周期只在非 active 时出现，中文界面显示
@@ -93,13 +110,17 @@ OpenCode / WorkBuddy / CodeBuddy / DeepSeek），并把扫到的条目**默认�
 `SKILL.md` 的修改时间作为「上次同步到该工具」的时间；详情页头部会列出每个工具与日期，
 卡片徽标 hover 也能看到。从未出现在任何工具目录里的技能显示「未接入任何工具」。
 
-空态：0 个技能时给出 **ZIP / 文件夹 / Git 仓库** 三张入口卡（直接打开添加对话框的对应
-入口），另有「扫描本机」。
+空态：0 个技能时只留一句话（「点击『扫描本机』收集已安装的技能，或新建一个标准技能」）
+和一个「扫描本机」按钮 —— 原来那三张 ZIP / 文件夹 / Git 入口卡已删：它们的落点
+（添加技能对话框的对应页签）现在由页头「＋ 添加技能」直接给出，空态再摆一遍是重复入口。
 
-截图：`docs/screenshots/tag-shelf.png`（徽标 + 工具区块）、
-`docs/screenshots/harness-groups.png`（按工具分组）、
-`docs/screenshots/harness-filter.png`（按「未接入工具」收窄）、
-`docs/screenshots/harness-batch.png`、`harness-batch-remove.png`、`tag-empty.png`。
+截图：`docs/screenshots/tag-shelf.png`（列表 + 左栏）、`tag-empty.png`（空态）、
+`harness-batch.png`（「应用到本机」页签，六份技能全选）、
+`harness-batch-remove.png`（批量删除里勾「同时从工具移出副本」）。
+`harness-batch.png` / `harness-batch-remove.png` 由 `node scripts/shot-harness-batch.mjs` 现拍，
+`tag-shelf.png` / `tag-empty.png` 由 `shot-tag-shelf.mjs` 现拍（同一套夹具）。
+
+> `harness-groups.png` / `harness-filter.png` 还是左栏「工具」区块在时的图，已过时，别再引用。
 
 ## Harness 工具总览（技能 + MCP）
 
@@ -140,18 +161,70 @@ MCP 页用的是同一套抽象：左栏标签仓下面同样有「工具」区�
 
 ## 批量检查上游更新
 
-页头「检查更新」：勾了技能就只查勾选的，没勾就查全部，逐个跑 `check_upstream`
-（每个技能一次 `git ls-remote <remote> HEAD`），结果显示在「上游检查结果」弹窗里，
+页头「检查更新」：勾了技能就只查勾选的，没勾就查全部，结果显示在「上游检查结果」弹窗里，
 按 **有新版本 → 检查失败 → 未跟踪 → 已是最新** 排序，点任意一行直接打开那个技能。
 
-看到「有新版本」后不用再跳出去：弹窗每行有「拉取更新」，底部有「全部更新（n）」。
-更新时按远端地址分组，同一个仓库只 `git clone --depth 1` 一次；按目录名/技能名匹配
-同名技能，`import_skill_folder(overwrite=true)` 覆盖，旧正文自动进版本历史；
-覆盖后把 `[source.upstream]` 写回并重新 `check_upstream`，所以不会更新完反而变「未跟踪」。
-覆盖导入会**合并标签**（旧标签保留 + 上游 frontmatter 新标签去重），不会把用户加的标签抹掉。
+### 怎么判定「有更新」
+
+不再拿仓库 HEAD 当内容版本（那是「仓库动过」，不是「我的文件旧了」）。判定分三层：
+
+1. **装的是哪一版**：安装/更新时把 `revision`（提交）、`subtree_path`（技能在仓库里的子目录）、
+   `subtree_sha`（该子目录的树对象 sha）、`content_hash`（聚合指纹）以及
+   `[source.upstream.files]`（逐文件 SHA-256，超过 200 个文件时只留聚合指纹）写进 `[source.upstream]`；
+2. **远端现在是什么版本**：同一个 remote 一批技能只跑一次 `git ls-remote`，结果分发给该仓库下所有技能；
+3. **仓库动了、我这一份动没动**：只有在 HEAD 变了且本地记了 `subtree_sha` 时，才做一次
+   `git clone --filter=blob:none --no-checkout --depth 1`，用 `git rev-parse <head>:<path>` 比子树 sha。
+   相等就记「仓库有新提交，本技能目录未变」，不算更新。
+
+`remote_head` 只在**确认过这份内容就是最新**时才写回；发现更新却不改它，下一轮才不会把
+「有新版本」误报成「已是最新」。老技能没有安装指纹时退回按仓库 HEAD 判定，并在 note 里写明。
+
+AI 搜源（`skill_update_discover`）落库的 git 技能没有克隆过程：`apply` 时会补一次
+`ls-remote` 把 `revision` 记上，但它没有子树指纹，所以仓库 HEAD 一动就算更新。
+
+### 更新时怎么落地
+
+按远端地址分组，同一个仓库只 `git clone --depth 1` 一次；按目录名/技能名匹配同名技能。
+覆盖前先 `skill_update_preview` 对账：
+
+- **内容一致** → 不覆盖，只把安装指纹记上（提示「与上游一致，已记录安装版本」）；
+- **本地改过**（当前内容指纹 ≠ 安装时记的）→ 不碰，弹「本地改过，上游也变了」三选一：
+  **保留我的 / 用上游覆盖 / 两个都留**（后者把上游另存为 `<目录名>-upstream`）。弹窗里列出
+  改动/新增/删除的文件，点开任一文件就是**逐行差异**（`react-diff-viewer-continued`，与版本
+  时间轴同一套视图），并按逐文件指纹标出「你改过」的那几个；
+- **其余** → 覆盖，旧正文自动进版本历史，并把 revision + 子树 sha + 内容指纹重新落下。
+  覆盖导入会**合并标签**（旧标签保留 + 上游 frontmatter 新标签去重）。
+
+自动更新队列（「更新中心」）走同一条对账：本地改过的任务直接记为「已跳过」，不静默覆盖。
+
+### 定时检查与角标
+
+侧栏启动后 1 分钟跑一次后台检查，之后每 6 小时一次，只更新「N 个技能有上游更新」角标，
+**不做自动应用**（自动应用默认关，目前没有开关）。手动「检查更新」会同时刷新角标。
+
+### 上游补全（不用 AI 也能挂上）
+
+很多技能装进来时只留了 `kind = "local"` 和一句已失效的临时目录路径，看着「未跟踪」，其实本地就有线索。
+检查结果里对这类技能会给出候选地址和出处，点「补全上游」就挂上（只写 `[source.upstream]`，不动正文、不联网下载）：
+
+| 证据 | 强度 | 例子 |
+|---|---|---|
+| 技能目录本身是 git 仓库，或 `[source].ref` 指向的目录在 git 里 | 强 | `本地 git 工作区` |
+| `SKILL.md` frontmatter 里的 `homepage:` / `repository:` 是仓库地址 | 强 | `homepage: https://github.com/x/mono/tree/main/skills/x` |
+| 文档里的安装说明（`npx skills add` / `git clone` / 「安装」「来源」段落里的仓库地址） | 强 | `README.md: npx skills add …` |
+| `_skillhub_meta.json` 或 `_meta.json`（ownerId+slug）→ `skillhub search <slug> --json` 拿到 `repo_url` | 强（要联网，单行点才用） | `SkillHub 市场：diagram-builder` |
+| 正文里顺手提到的链接（参考实现、示例 URL、徽章） | 弱 | 默认不挂，单行点「用这个」才采纳 |
+
+判定顺序：本地 git 远端 → frontmatter/安装说明 → SkillHub 市场 → 弱证据。
+**不会**往上找外层仓库根：开发时数据目录常落在某个项目仓库里（`src-tauri/target/debug/data/...`），
+那样会把本项目认成所有技能的上游（实测 16/20 全错，所以这里刻意只认 `.git` 就在技能目录、或显式记录的导入来源）。
+
+补全后第一次检查会显示「有新版本（未记录安装修订，按仓库 HEAD 判定）」——这是正常的：
+点「拉取更新」，内容一致时只补安装指纹、不覆盖，从此以后就是按子树 sha 精确判定了。
 
 跟踪开关与上游地址在技能详情 →「来源与更新」里配置（`[source.upstream].watch = true` +
 `mode = "git-scan"` + `remote`）。没开跟踪的技能会显示「未跟踪上游」，不会被当成检查失败。
+网页/书籍型来源没 commit，仍用正文 SHA-256 当版本指纹。
 
 截图：`docs/screenshots/upstream-check.png`（拉取入口）、`upstream-updated.png`（更新完成）。
 

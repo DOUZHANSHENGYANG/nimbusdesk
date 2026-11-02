@@ -4,7 +4,9 @@
 光标直接落在备注里；离开焦点即存，没有保存按钮。
 
 完整的任务详情卡片（日期 / 时间 / 关联 / 项目 / 附件 / 子任务 / 删除）收在行上的 `⋯` 里，
-点开是带背板的浮层，Esc / × / 点别处关闭。右栏不再承载这些字段。
+点开是**贴着那个 `⋯` 向右下展开的浮层**（Radix `Popover`，`align="start" side="bottom"`），
+Esc / × / 点别处关闭；下方空间不够时它会自动翻到按钮上方。右栏不再承载这些字段。
+右栏备注一直铺到窗口底部（`h-full` 一路撑开，列表列自己滚），不再是固定 288px 的小盒子。
 
 ![列表与详情栏](screenshots/plan-outline-detail.png)
 
@@ -24,8 +26,11 @@
 | 操作 | 结果 |
 |---|---|
 | 点标题 | 选中这一条，右栏开备注栏并聚焦备注；再点一次收起（× / Esc 同效） |
+| 点行的空白处 | 同样选中这条、右栏开备注栏（`onSelect(id, "note")`，不会误触按钮） |
 | 点标题下那行备注 | 同样开备注栏并聚焦备注（点它就是为了看/续写备注） |
 | 行上的 ⋯ | 打开完整详情卡片浮层：日期 / 时间 / 关联 / 项目 / 附件 / 子任务 / 删除 |
+| 行上的 📎 | 在 `+` 左边：附件的增删看这里，不占详情卡片的位置 |
+| 双击标题或备注行 | 同样打开详情浮层 —— 右手不用先去够行尾的 `⋯` |
 | 行上的 + | 就在这一行下面长出子任务输入框，回车即落库（详情卡片里也有同一入口） |
 | 日期 | 详情卡片里点一天改期；今天 / 明天两个快捷键。**连同子任务一起挪**（`moveTaskToDate`）；挪到别的日子后行与备注栏一起消失 |
 | 时间 / 关联 / 项目 | 详情卡片里的原有选择器，改完即生效 |
@@ -94,8 +99,12 @@ Rust 的 `open_todo_paper` / `close_todo_paper` / `list_todo_papers` 三个命�
 npm run dev
 $env:PLAYWRIGHT_MODULE="…/playwright/index.mjs"   # Playwright 不是项目依赖
 node scripts/check-plan-outline-browser.mjs
+node scripts/check-plans-browser.mjs                # 备注栏高度 / 详情浮层位置 / 双击
 node scripts/shot-plan-outline.mjs                # 重新生成两张截图
 ```
+
+`check-plans-browser.mjs` 覆盖这一栏的三件事：点开备注后文本域高度接近视口（不是原来的 288px 小盒）、
+`⋯` 的详情浮层出现在按钮**右下方**、Esc 关得掉、双击备注行也能开。
 
 夹具 `src/features/plans/fixtures/plan-outline.html`（mock 原生 IPC + 真 `OutlineView`）
 断言的都是看得见的东西：开详情栏前后行的纵向几何一致、行上不再有「更多」按钮、页面上零浮层、

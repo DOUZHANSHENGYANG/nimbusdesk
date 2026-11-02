@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>知识库 · A1 一屏一件事</title>
+<style>
+  :root {
+    --paper: #EADFCB;
+    --card: #FBF4E7;
+    --ink: #2B2723;
+    --muted: #6B6259;
+    --line: #D6C7AE;
+    --accent: #2F5D57;
+    --accent-soft: #DCE7E3;
+    --radius: 18px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font: 15px/1.6 "Inter", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    display: flex;
+    justify-content: center;
+  }
+  .page { width: 100%; max-width: 940px; padding: 26px 40px 40px; display: flex; flex-direction: column; gap: 22px; }
+
+  /* 顶栏：只有库名、两个模式、检查时间 */
+  .bar { display: flex; align-items: center; gap: 16px; }
+  .lib { font-size: 15px; font-weight: 600; letter-spacing: .01em; }
+  .lib small { display: block; font-size: 12px; font-weight: 400; color: var(--muted); letter-spacing: 0; }
+  .tabs { margin-left: auto; display: flex; gap: 2px; background: #EAE3D7; border-radius: 999px; padding: 3px; }
+  .tabs button { border: 0; background: transparent; font: inherit; font-size: 13px; color: var(--muted); padding: 5px 16px; border-radius: 999px; cursor: pointer; }
+  .tabs button[aria-pressed="true"] { background: var(--card); color: var(--ink); box-shadow: 0 1px 2px rgb(70 58 44 / .1); }
+  .when { font-size: 12px; color: var(--muted); }
+
+  /* 一句话说清今天 */
+  .today { display: flex; align-items: baseline; gap: 14px; margin-top: 6px; }
+  .today .big { font-family: "Songti SC", "Noto Serif SC", Georgia, serif; font-size: 64px; line-height: 1; font-weight: 600; letter-spacing: -.04em; font-variant-numeric: tabular-nums; }
+  .today p { font-size: 16px; color: #4A443D; max-width: 30em; }
+  .today p b { font-weight: 600; }
+
+  /* 三张动作卡：按下去有实感 */
+  .acts { display: flex; flex-direction: column; gap: 14px; }
+  .act {
+    background: var(--card);
+    border-radius: var(--radius);
+    padding: 20px 22px;
+    display: grid;
+    grid-template-columns: 72px 1fr auto;
+    align-items: center;
+    gap: 18px;
+    box-shadow: 0 3px 0 #E6DDCE, 0 10px 24px rgb(92 78 60 / .06);
+    transition: box-shadow .18s ease, transform .18s ease;
+  }
+  .act .count { font-size: 40px; font-weight: 600; line-height: 1; letter-spacing: -.03em; font-variant-numeric: tabular-nums; text-align: center; }
+  .act .count small { display: block; font-size: 11px; font-weight: 400; color: var(--muted); letter-spacing: 0; margin-top: 4px; }
+  .act h2 { font-family: "Songti SC", "Noto Serif SC", Georgia, serif; font-size: 18px; font-weight: 600; letter-spacing: -.01em; }
+  .act h2 span { font-weight: 400; color: var(--muted); font-size: 14px; }
+  .act .why { font-size: 14.5px; color: var(--muted); margin-top: 4px; }
+  .btn {
+    border: 0; font: inherit; font-size: 14px; cursor: pointer;
+    padding: 10px 22px; border-radius: 12px;
+    background: var(--accent); color: #F7F4EE;
+    box-shadow: 0 2px 0 #23463F;
+    transition: transform .1s ease, box-shadow .1s ease, background .2s ease;
+  }
+  .btn:hover { background: #35695f; }
+  .btn:active { transform: translateY(2px); box-shadow: none; }
+  .btn.quiet { background: transparent; color: var(--ink); box-shadow: none; border: 1px solid var(--line); }
+  .btn.quiet:hover { background: #F1EBE0; }
+  .btn:disabled { background: var(--accent-soft); color: var(--accent); box-shadow: none; cursor: default; }
+
+  .act.done { box-shadow: none; background: transparent; padding: 10px 22px; border: 1px dashed var(--line); }
+  .act.done .count { font-size: 22px; color: var(--accent); }
+  .act.done .why { display: none; }
+
+  /* 逐条看 */
+  .list { margin-top: 4px; display: none; flex-direction: column; }
+  .act.open .list { display: flex; }
+  .act.open { grid-template-columns: 72px 1fr; align-items: start; }
+  .act.open .btn { align-self: start; }
+  .row { display: grid; grid-template-columns: 1fr auto auto; gap: 12px; align-items: center; padding: 12px 0; border-top: 1px solid #EFE7DA; }
+  .row:first-child { border-top: 0; }
+  .row .t { font-size: 14.5px; }
+  .row .t small { display: block; font-size: 12.5px; color: var(--muted); margin-top: 2px; }
+  .row .mini { border: 1px solid var(--line); background: transparent; color: var(--ink); font: inherit; font-size: 12.5px; padding: 5px 12px; border-radius: 9px; cursor: pointer; }
+  .row .mini:hover { background: #F1EBE0; }
+  .row.fixed .t { color: #9A9288; text-decoration: line-through; }
+  .row.fixed .mini { visibility: hidden; }
+
+  /* 找一篇 */
+  .search { display: flex; gap: 10px; align-items: center; margin-top: 2px; }
+  .search input {
+    flex: 1; font: inherit; font-size: 14px; padding: 11px 14px;
+    border-radius: 12px; border: 1px solid var(--line); background: #FBF7EF; color: var(--ink);
+  }
+  .search input:focus { outline: 2px solid var(--accent-soft); outline-offset: 1px; }
+  .hits { display: flex; flex-direction: column; gap: 2px; }
+  .hit { display: grid; grid-template-columns: 1fr auto; gap: 10px; padding: 9px 2px; border-bottom: 1px solid #EFE7DA; font-size: 14px; }
+  .hit small { color: var(--muted); font-size: 12px; }
+  .hit a { color: var(--accent); text-decoration: none; font-size: 12.5px; }
+  .hit a:hover { text-decoration: underline; }
+  .empty { font-size: 13.5px; color: var(--muted); padding: 10px 2px; }
+
+  /* 页脚：归档 + 经验 */
+  .foot { margin-top: auto; display: grid; grid-template-columns: 1fr 1fr; gap: 18px; padding-top: 18px; border-top: 1px solid var(--line); }
+  .foot h3 { font-size: 12px; font-weight: 500; color: var(--muted); letter-spacing: .02em; margin-bottom: 8px; }
+  .foot p { font-size: 14px; }
+  .foot p b { font-weight: 600; }
+  .ring { display: flex; align-items: center; gap: 10px; }
+  .ring svg { width: 34px; height: 34px; }
+  .foot .hint { font-size: 12.5px; color: var(--muted); margin-top: 3px; }
+</style>
+</head>
+<body>
+<div class="page">
+  <header class="bar">
+    <div class="lib">knowledge base<small>267 篇笔记 · 本地</small></div>
+    <nav class="tabs" aria-label="页面模式">
+      <button type="button" aria-pressed="true">管理</button>
+      <button type="button" aria-pressed="false">笔记</button>
+    </nav>
+    <span class="when">2 分钟前检查过</span>
+  </header>
+
+  <div class="today">
+    <span class="big" id="total">10</span>
+    <p><b>处小问题。</b>6 处我自己能修好，4 处需要你看一眼 —— 今天不用全清，先看这两件。</p>
+  </div>
+
+  <section class="acts" aria-label="今天要做的事">
+    <article class="act" id="fix">
+      <div class="count">6<small>可自动修</small></div>
+      <div>
+        <h2>这三类我直接修好</h2>
+        <p class="why">3 篇没写类型、2 个文件开头多了个隐藏字符、1 个自动目录指向了空文件夹。修完笔记还在原地。</p>
+      </div>
+      <button class="btn" id="fixBtn" type="button">修好这 6 处</button>
+    </article>
+
+    <article class="act" id="judge">
+      <div class="count">4<small>要你决定</small></div>
+      <div>
+        <h2>这几篇的状态写法不对</h2>
+        <p class="why">状态只认「草稿」和「已完成」。写了「进行中」的笔记会自动目录失效 —— 你在 Obsidian 里也搜不到它。</p>
+        <div class="list" id="rows">
+          <div class="row"><span class="t">docx 格式校验工具链推荐<small>写的是「进行中」</small></span><button class="mini" type="button">改成草稿</button><button class="mini" type="button">跳过</button></div>
+          <div class="row"><span class="t">搜索引擎科学方法论<small>写的是「进行中」</small></span><button class="mini" type="button">改成草稿</button><button class="mini" type="button">跳过</button></div>
+          <div class="row"><span class="t">调研信息渠道注册表<small>写的是「进行中」</small></span><button class="mini" type="button">改成草稿</button><button class="mini" type="button">跳过</button></div>
+          <div class="row"><span class="t">opencode 全局提示词清单<small>写的是「已完成」，应改成已发布</small></span><button class="mini" type="button">改成已发布</button><button class="mini" type="button">跳过</button></div>
+        </div>
+      </div>
+      <button class="btn quiet" id="judgeBtn" type="button">一篇篇看</button>
+    </article>
+
+    <article class="act" id="find">
+      <div class="count" aria-hidden="true"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#7A7268" stroke-width="1.6" style="display:block;margin:0 auto"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5 20 20"/></svg></div>
+      <div>
+        <h2>找一篇笔记</h2>
+        <p class="why">搜标题、正文、标签都行，正式区的笔记排在前面。</p>
+        <div class="search">
+          <input id="q" type="search" placeholder="试试「K8s」「路由」「monorepo」" aria-label="搜索笔记" />
+        </div>
+        <div class="hits" id="hits" aria-live="polite"></div>
+      </div>
+      <span></span>
+    </article>
+  </section>
+
+  <footer class="foot">
+    <div>
+      <h3>待归档</h3>
+      <p><b>现在没有要搬的。</b></p>
+      <p class="hint">把笔记拖进「已审核」文件夹，我会搬到对应分类，并把出处写回去。</p>
+    </div>
+    <div>
+      <h3>最近学到的</h3>
+      <div class="ring">
+        <svg viewBox="0 0 36 36" aria-hidden="true">
+          <circle cx="18" cy="18" r="15" fill="none" stroke="#E3DACB" stroke-width="4"></circle>
+          <path d="M18 3 a15 15 0 0 1 0 30" fill="none" stroke="#2F5D57" stroke-width="4" stroke-linecap="round"></path>
+        </svg>
+        <div>
+          <p><b>系统代理</b> · 1 个案例</p>
+          <p class="hint">再攒 2 个案例，我就把它写成一条经验。</p>
+        </div>
+      </div>
+    </div>
+  </footer>
+</div>
+
+<script>
+  const notes = [
+    { t: "pnpm monorepo 的 dev 脚本必须显式构建内部包", p: "02-IT / 05-工具", tag: "monorepo" },
+    { t: "mitmproxy 与 reverse-skill 安装记录", p: "02-IT / 05-工具", tag: "K8s 代理" },
+    { t: "AGENTS — 知识库顶层规范", p: "00-Agent工作区", tag: "K8s 规范 规则" },
+    { t: "Vue 路由守卫踩坑", p: "02-IT / 01-前端", tag: "路由 Vue" }
+  ];
+  const q = document.getElementById("q");
+  const hits = document.getElementById("hits");
+
+  function render(list) {
+    if (!q.value.trim()) { hits.innerHTML = ""; return; }
+    if (!list.length) { hits.innerHTML = '<p class="empty">没有找到。换个说法试试，比如只搜一个人名或工具名。</p>'; return; }
+    hits.innerHTML = list.map(n =>
+      `<div class="hit"><span>${n.t}<small>${n.p}</small></span><a href="#" onclick="return false">在 Obsidian 打开</a></div>`
+    ).join("");
+  }
+  q.addEventListener("input", () => {
+    const k = q.value.trim().toLowerCase();
+    render(notes.filter(n => !k || (n.t + n.tag).toLowerCase().includes(k)));
+  });
+
+  const fix = document.getElementById("fix");
+  const total = document.getElementById("total");
+  let issues = 10;
+  const showIssues = () => { total.textContent = String(Math.max(0, issues)); };
+  document.getElementById("fixBtn").addEventListener("click", (e) => {
+    const btn = e.currentTarget;
+    btn.disabled = true; btn.textContent = "正在修…";
+    setTimeout(() => {
+      fix.classList.add("done");
+      fix.querySelector(".count").innerHTML = "✓<small>已修好</small>";
+      fix.querySelector("h2").textContent = "6 处已经修好了";
+      fix.querySelector(".why").textContent = "";
+      btn.remove();
+      issues -= 6; showIssues();
+    }, 900);
+  });
+
+  const judge = document.getElementById("judge");
+  document.getElementById("judgeBtn").addEventListener("click", (e) => {
+    judge.classList.toggle("open");
+    e.currentTarget.textContent = judge.classList.contains("open") ? "收起" : "一篇篇看";
+  });
+  judge.querySelectorAll(".row .mini").forEach(btn => {
+    btn.addEventListener("click", () => {
+      const row = btn.closest(".row");
+      if (row.classList.contains("fixed")) return;
+      row.classList.add("fixed");
+      const left = Array.from(document.querySelectorAll(".row")).filter(r => !r.classList.contains("fixed")).length;
+      judge.querySelector(".count").innerHTML = left + "<small>要你决定</small>";
+      issues -= 1; showIssues();
+      if (!left) {
+        judge.querySelector("h2").textContent = "这 4 篇都看完了";
+        judge.querySelector(".why").textContent = "没有别的事了。";
+        judge.classList.remove("open");
+        document.getElementById("judgeBtn").remove();
+      }
+    });
+  });
+</script>
+</body>
+</html>

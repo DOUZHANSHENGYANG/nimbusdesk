@@ -122,8 +122,10 @@ react-i18next 缺键**不报错**，只把 key 原样画在界面上 —— 词�
 - 桌面便签的提醒调度：不可见也必须按时触发；
 - GitHub 设备码登录轮询：用户正是要切到浏览器去授权，此时本窗口不可见。
 
-回归：`npm run check:visibility`（需要构建产物 + preview）—— 把文档标成 hidden，断言
-`search_status` 在 4.2 秒内一次都不再出现；恢复 visible 后 600 毫秒内补上一拍。
+回归：`npm run check:visibility`（需要 dev server，跑的是 GitHub 夹具这一真实轮询面）—— 用
+`githubReview.setVisibility()` 改真实 `document.visibilityState`：不可见时 1.5 秒内不再发起请求；
+恢复 visible 后立刻补一拍（`startForegroundInterval` 的 catchUp），不必等满 5 分钟间隔。
+（原先是观察搜索窗的 `search_status` 轮询；搜索搬到独立窗口后那个观察面不存在了。）
 
 ### 存储：内容没变就不重写
 `src/lib/storage.ts` 的 `tauriJsonStorage` 里有一张 `sent` 表：每个 key 最后一次**确认已在磁盘上**的
@@ -212,8 +214,8 @@ npm run verify:dist
 ```
 
 它依次做：构建 → `check:bundle`（闭包体积 + AI SDK 是否漏进首屏）→ 起 `vite preview`（4179）
-跑 `check:split` / `check:visibility` → 起 `vite`（17800）跑 `check:files-list` /
-`check:search-window` / `check:modal`。已经开着的服务会**复用而不是杀掉**，只清理自己起的；
+跑 `check:split` → 起 `vite`（17800）跑 `check:files-list` /
+`check:search-window` / `check:modal` / `check:github` / `check:visibility`。已经开着的服务会**复用而不是杀掉**，只清理自己起的；
 任一环节失败即非零退出并打印该环节输出。`VERIFY_SKIP_DEV=1` 可只验产物阶段。
 
 单跑某一条（手边已有服务时最方便）：
@@ -230,7 +232,7 @@ npm run check:modal           # 对话框按需挂载 + 三种弹窗的结算
 为什么这些不在 `npm run verify` 里：`verify` 是本地快闸（单测 + 类型 + i18n，不构建、不起服务），
 塞进生产构建和两个服务会让它慢好几倍。分工是「`verify` 每次改动都跑；`verify:dist` 提交前/发版前跑」。
 
-`check:split` / `check:visibility` 在普通浏览器里跑，桩了一个最小 `__TAURI_INTERNALS__`
+`check:split` 在普通浏览器里跑，桩了一个最小 `__TAURI_INTERNALS__`
 （IPC 一律返回空），所以它们只回答「chunk 该不该来、页面该不该渲染、轮询该不该跑」；
 业务行为仍由 `src/features/*/fixtures` 那套夹具负责。桩自身造成的报错（事件解绑、
 命令返回 null 后读属性）在脚本里显式豁免。

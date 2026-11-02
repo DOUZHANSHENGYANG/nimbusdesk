@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>知识库 · C1 内容主角</title>
+<style>
+  :root {
+    --bg: #0A0A0B;
+    --ink: #EDEDEE;
+    --dim: #A0A0A8;
+    --dim2: #8A8A92;
+    --hair: #1A1A1D;
+    --accent: #C1452E;
+    --green: #4FB283;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg); color: var(--ink);
+    font: 15px/1.6 "Inter", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    height: 100vh; overflow: hidden; display: flex; flex-direction: column;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* 一条 44px 的状态带：管理退到这里，不抢内容 */
+  .strip {
+    height: 44px; flex: 0 0 auto; display: flex; align-items: center; gap: 18px;
+    padding: 0 34px; border-bottom: 1px solid var(--hair); font-size: 12.5px; color: var(--dim);
+  }
+  .strip .lib { color: var(--ink); font-size: 13.5px; font-weight: 600; letter-spacing: .01em; }
+  .strip .sep { width: 1px; height: 12px; background: var(--hair); }
+  .strip .q { margin-left: auto; display: flex; align-items: center; gap: 8px; color: var(--dim2); }
+  .strip input {
+    width: 210px; background: transparent; border: 0; border-bottom: 1px solid var(--hair);
+    color: var(--ink); font: inherit; font-size: 12.5px; padding: 4px 2px;
+  }
+  .strip input:focus { outline: 0; border-bottom-color: var(--dim); }
+  .strip input::placeholder { color: var(--dim2); }
+  .fixbtn {
+    border: 1px solid var(--hair); background: transparent; color: var(--dim);
+    font: inherit; font-size: 12.5px; padding: 4px 12px; border-radius: 999px; cursor: pointer;
+    display: flex; align-items: center; gap: 7px;
+  }
+  .fixbtn:hover { color: var(--ink); border-color: #2C2C31; }
+  .fixbtn .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+
+  .body { flex: 1; display: grid; grid-template-columns: 1fr 344px; min-height: 0; }
+  .body.hide-drawer { grid-template-columns: 1fr 0; }
+  .body.hide-drawer .drawer { display: none; }
+
+  /* 内容：笔记是主角 */
+  .feed { overflow-y: auto; padding: 40px 34px 80px; column-gap: 0; }
+  .grp { max-width: 760px; margin: 0 0 42px; }
+  .grp h2 { font-size: 12px; font-weight: 500; color: var(--dim2); letter-spacing: .08em; margin-bottom: 14px; }
+  .note { display: block; text-decoration: none; color: inherit; padding: 9px 0; border-bottom: 1px solid var(--hair); }
+  .note:hover { color: #fff; }
+  .note:hover .open { opacity: 1; }
+  .note b { font-size: 16px; font-weight: 450; letter-spacing: -.011em; display: block; }
+  .note.lead b { font-size: 26px; font-weight: 500; letter-spacing: -.025em; line-height: 1.3; }
+  .note .meta { font-size: 12px; color: var(--dim2); margin-top: 3px; display: flex; gap: 10px; }
+  .note .open { opacity: 0; transition: opacity .15s ease; color: var(--dim); font-size: 12px; margin-left: auto; }
+  .note .row { display: flex; align-items: baseline; gap: 10px; }
+  .note.lead { padding: 12px 0 22px; }
+
+  /* 抽屉：管理动作收在这里 */
+  .drawer { border-left: 1px solid var(--hair); padding: 34px 24px 24px; overflow-y: auto; display: flex; flex-direction: column; gap: 18px; }
+  .drawer h2 { font-size: 13px; font-weight: 600; }
+  .drawer h2 span { color: var(--dim2); font-weight: 400; margin-left: 6px; }
+  .drawer p { font-size: 12.5px; color: var(--dim); line-height: 1.6; }
+  .fixlist { display: flex; flex-direction: column; }
+  .fix { display: grid; grid-template-columns: 1fr auto; gap: 8px; padding: 9px 0; border-bottom: 1px solid var(--hair); align-items: center; }
+  .fix span { font-size: 13px; }
+  .fix small { display: block; font-size: 12px; color: var(--dim2); margin-top: 1px; }
+  .fix button {
+    border: 1px solid var(--hair); background: transparent; color: var(--dim);
+    font: inherit; font-size: 12px; padding: 3px 9px; border-radius: 6px; cursor: pointer;
+  }
+  .fix button:hover { color: var(--ink); border-color: #2C2C31; }
+  .fix.done span { color: var(--dim2); text-decoration: line-through; }
+  .fix.done button { visibility: hidden; }
+  .drawer .all {
+    border: 0; background: var(--accent); color: #FFF; font: inherit; font-size: 12.5px; font-weight: 500;
+    padding: 8px 14px; border-radius: 8px; cursor: pointer; align-self: flex-start;
+  }
+  .drawer .all:hover { filter: brightness(1.08); }
+  .drawer .learn { border-top: 1px solid var(--hair); padding-top: 16px; }
+  .drawer .learn b { font-size: 13.5px; display: block; margin-bottom: 3px; }
+</style>
+</head>
+<body>
+
+  <div class="strip">
+    <span class="lib">knowledge base</span>
+    <span>267 篇</span>
+    <span class="sep"></span>
+    <button class="fixbtn" id="toggle"><span class="dot"></span><span id="count">10 处要修</span></button>
+    <span class="q"><input id="q" type="search" placeholder="搜标题、正文、标签" aria-label="搜索" /></span>
+  </div>
+
+  <div class="body" id="body">
+    <main class="feed" id="feed"></main>
+
+    <aside class="drawer" id="drawer">
+      <div>
+        <h2>要修<span>共 10 处，其中 6 处可自动修</span></h2>
+        <p style="margin-top:6px">这些不影响你写笔记，但会让自动目录漏掉它们。修完就消失。</p>
+      </div>
+      <button class="all" id="all">修好能自动修的 6 处</button>
+      <div class="fixlist" id="fixlist"></div>
+      <div class="learn">
+        <b>系统代理</b>
+        <p>1 个案例，攒够 3 个我把它写成一条经验</p>
+      </div>
+    </aside>
+  </div>
+
+<script>
+  const groups = [
+    { name: "02-IT / 技术笔记", notes: [
+      { t: "pnpm monorepo 的 dev 脚本必须显式构建内部包", m: ["2026-10-28", "技术知识", "已发布"], lead: true },
+      { t: "mitmproxy 与 reverse-skill 安装记录", m: ["2026-10-30", "技术知识", "已发布"] },
+      { t: "Vue 路由守卫踩坑", m: ["2026-10-24", "技术知识", "草稿"] },
+      { t: "docx 格式校验工具链推荐", m: ["2026-10-28", "技术知识", "进行中"] },
+      { t: "搜索引擎科学方法论与 Chrome 搜索技巧", m: ["2026-10-28", "技术知识", "进行中"] }
+    ]},
+    { name: "01-工作 / 业务知识", notes: [
+      { t: "调研信息渠道注册表", m: ["2026-10-28", "项目研究", "进行中"] },
+      { t: "开发知识的管理范围", m: ["2026-10-21", "技术知识", "已发布"] }
+    ]},
+    { name: "00-Agent工作区 / 规范与经验", notes: [
+      { t: "AGENTS — 知识库顶层规范", m: ["2026-07-01", "MOC", "已发布"] },
+      { t: "pnpm monorepo 的 dev 脚本必须显式构建内部包", m: ["案例", "wiki / cases"] }
+    ]}
+  ];
+  const fixes = [
+    { t: "状态写法不对", n: 4, d: "写了「进行中」「已完成」", auto: true },
+    { t: "缺类型", n: 3, d: "不知道归到哪个分类", auto: true },
+    { t: "文件带隐藏字符", n: 2, d: "程序读它会静默出错", auto: true },
+    { t: "自动目录失效", n: 1, d: "指向了不存在的文件夹", auto: true },
+    { t: "没标谁写的", n: 9, d: "正式区里不知道是不是你写的", auto: false },
+    { t: "重复主题", n: 2, d: "同一主题写了两三篇", auto: false }
+  ];
+
+  const feed = document.getElementById("feed");
+  function render(k = "") {
+    const key = k.trim().toLowerCase();
+    feed.innerHTML = groups.map(g => {
+      const notes = g.notes.filter(n => !key || n.t.toLowerCase().includes(key));
+      if (!notes.length) return "";
+      return `<section class="grp"><h2>${g.name}</h2>` + notes.map(n => `
+        <a class="note${n.lead ? " lead" : ""}" href="#" onclick="return false">
+          <span class="row"><b>${n.t}</b><span class="open">在 Obsidian 打开</span></span>
+          <span class="meta">${n.m.map(x => `<span>${x}</span>`).join("")}</span>
+        </a>`).join("") + `</section>`;
+    }).join("") || '<p style="color:#5F5F66;font-size:14px">没有匹配的笔记。</p>';
+  }
+  document.getElementById("q").addEventListener("input", e => render(e.target.value));
+
+  const list = document.getElementById("fixlist");
+  list.innerHTML = fixes.map((f, i) => `
+    <div class="fix" data-i="${i}"><span>${f.n} 处${f.t}<small>${f.d}</small></span><button>${f.auto ? "修好" : "看看"}</button></div>`).join("");
+  list.querySelectorAll(".fix button").forEach(b => b.addEventListener("click", () => {
+    const row = b.closest(".fix");
+    const isAuto = fixes[Number(row.dataset.i)].auto;
+    if (!isAuto || row.classList.contains("done")) return;
+    row.classList.add("done");
+    document.getElementById("count").textContent = Math.max(0, parseInt(document.getElementById("count").textContent, 10) - 1) + " 处要修";
+  }));
+
+  document.getElementById("all").addEventListener("click", () => {
+    list.querySelectorAll(".fix").forEach((row, i) => { if (fixes[i].auto) row.classList.add("done"); });
+    document.getElementById("count").textContent = "3 处要修";
+  });
+
+  document.getElementById("toggle").addEventListener("click", () => document.getElementById("body").classList.toggle("hide-drawer"));
+  render();
+</script>
+</body>
+</html>

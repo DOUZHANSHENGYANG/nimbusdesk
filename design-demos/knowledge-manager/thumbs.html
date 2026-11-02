@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<title>知识库管理页 · 六个候选</title>
+<style>
+  :root { --gap: 30px 18px; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: "Inter", "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    background: #DCDEE2; color: #111; padding: 28px;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1 { font-size: 14px; font-weight: 600; letter-spacing: .02em; margin-bottom: 4px; }
+  .sub { font-size: 12px; color: #5c6169; margin-bottom: 20px; }
+  .grid { display: grid; grid-template-columns: repeat(3, 480px); gap: var(--gap); }
+  .cell { width: 480px; }
+  .shot { width: 480px; height: 300px; border-radius: 10px; overflow: hidden; box-shadow: 0 8px 24px rgb(0 0 0 / .12); }
+  .cap { display: flex; gap: 8px; align-items: baseline; margin-top: 8px; font-size: 12px; }
+  .cap b { font-size: 12px; }
+  .cap span { color: #5c6169; }
+
+  /* ---------- A1 深澤直人：暖纸、一屏一件事 ---------- */
+  .a1 { background: #F5F1EA; color: #2A2622; padding: 18px 20px; height: 100%; display: flex; flex-direction: column; gap: 12px; }
+  .a1 .top { display: flex; justify-content: space-between; align-items: baseline; }
+  .a1 .lib { font-size: 12px; color: #6F6862; }
+  .a1 .state { font-size: 13px; }
+  .a1 .state b { font-size: 30px; font-weight: 600; letter-spacing: -.02em; }
+  .a1 .cards { display: flex; flex-direction: column; gap: 8px; }
+  .a1 .card { background: #FFFDF9; border-radius: 16px; padding: 10px 12px; display: flex; align-items: center; gap: 10px; box-shadow: 0 2px 0 #E4DCD0, 0 6px 16px rgb(90 78 62 / .06); }
+  .a1 .card .n { font-size: 20px; font-weight: 600; width: 34px; }
+  .a1 .card .t { font-size: 12.5px; flex: 1; }
+  .a1 .card .t small { display: block; color: #857C73; font-size: 11px; margin-top: 2px; }
+  .a1 .card .go { font-size: 11px; padding: 4px 10px; border-radius: 999px; background: #2F5D57; color: #F7F4EE; }
+  .a1 .card.ghost { background: transparent; box-shadow: none; border: 1px dashed #D8CFC2; }
+  .a1 .foot { margin-top: auto; font-size: 11px; color: #857C73; }
+
+  /* ---------- A2 Rams：仪表带 + 2×2 ---------- */
+  .a2 { background: #EFEEEB; color: #1C1C1B; height: 100%; padding: 18px 20px; display: flex; flex-direction: column; gap: 14px; }
+  .a2 .bar { display: flex; align-items: flex-end; gap: 18px; border-bottom: 1px solid #CFCECA; padding-bottom: 10px; }
+  .a2 .num { font-size: 32px; font-weight: 600; letter-spacing: -.03em; line-height: 1; }
+  .a2 .lbl { font-size: 11px; color: #6B6B68; }
+  .a2 .ticks { display: flex; gap: 3px; margin-left: auto; align-items: flex-end; }
+  .a2 .ticks i { width: 3px; background: #1C1C1B; display: block; }
+  .a2 .mods { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .a2 .mod { background: #F7F6F4; border: 1px solid #DBDAD6; border-radius: 2px; padding: 10px; display: flex; flex-direction: column; gap: 6px; }
+  .a2 .mod b { font-size: 12.5px; }
+  .a2 .mod small { font-size: 11px; color: #6B6B68; line-height: 1.4; }
+  .a2 .mod .rule { height: 1px; background: #D2D1CD; }
+  .a2 .mod .act { font-size: 11px; color: #1C1C1B; text-decoration: underline; text-underline-offset: 3px; }
+
+  /* ---------- B1 Bear：深色三栏 ---------- */
+  .b1 { background: #17181A; color: #E8E8E6; height: 100%; display: grid; grid-template-columns: 120px 168px 1fr; font-size: 11px; }
+  .b1 .col { border-right: 1px solid #2A2C2F; padding: 12px 10px; }
+  .b1 .col.detail { border: 0; padding: 12px 14px; }
+  .b1 .head { color: #8A8F96; font-size: 10px; letter-spacing: .06em; margin-bottom: 8px; }
+  .b1 .nav { display: flex; align-items: center; gap: 6px; padding: 5px 6px; border-radius: 5px; color: #C9CDD2; }
+  .b1 .nav.on { background: #2C2F33; color: #FFF; }
+  .b1 .nav .dot { width: 8px; height: 8px; border-radius: 2px; background: #4C7AFF; }
+  .b1 .nav .c { margin-left: auto; color: #7D838A; font-size: 10px; }
+  .b1 .item { padding: 7px 8px; border-left: 2px solid transparent; border-radius: 3px; }
+  .b1 .item.on { background: #24262A; border-left-color: #4C7AFF; }
+  .b1 .item b { font-size: 11.5px; font-weight: 500; display: block; }
+  .b1 .item small { color: #8A8F96; font-size: 10px; }
+  .b1 .dt { font-size: 14px; font-weight: 600; }
+  .b1 .why { font-size: 11px; color: #A9AEB5; margin-top: 6px; line-height: 1.5; }
+  .b1 .btn { display: inline-block; margin-top: 10px; padding: 5px 12px; border-radius: 6px; background: #4C7AFF; color: #fff; font-size: 11px; }
+  .b1 .btn.s { background: transparent; border: 1px solid #3A3D42; color: #C9CDD2; }
+
+  /* ---------- B2 Craft：卡片首页 ---------- */
+  .b2 { background: #F3F4F6; color: #1A1C1F; height: 100%; padding: 16px 18px; display: flex; flex-direction: column; gap: 12px; }
+  .b2 .top { display: flex; align-items: center; gap: 10px; font-size: 13px; font-weight: 600; }
+  .b2 .top .pill { margin-left: auto; font-size: 11px; font-weight: 400; color: #5B6068; border: 1px solid #D7D9DE; border-radius: 999px; padding: 3px 10px; }
+  .b2 .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .b2 .big { border-radius: 12px; padding: 12px; min-height: 96px; display: flex; flex-direction: column; gap: 4px; }
+  .b2 .big.warm { background: #FDEBE4; }
+  .b2 .big.cool { background: #E6EEFB; }
+  .b2 .big b { font-size: 13px; }
+  .b2 .big .n { font-size: 22px; font-weight: 600; }
+  .b2 .big small { font-size: 11px; color: #5B6068; line-height: 1.4; }
+  .b2 .row { display: flex; gap: 8px; margin-top: auto; }
+  .b2 .mini { flex: 1; background: #fff; border-radius: 8px; padding: 8px; font-size: 10.5px; color: #41454B; box-shadow: 0 1px 2px rgb(0 0 0 / .05); }
+
+  /* ---------- C1 Gallery Dark：内容主角 ---------- */
+  .c1 { background: #0B0B0C; color: #ECECEA; height: 100%; display: flex; flex-direction: column; }
+  .c1 .strip { display: flex; align-items: center; gap: 10px; height: 30px; padding: 0 16px; border-bottom: 1px solid #1D1D1F; font-size: 10.5px; color: #84848A; }
+  .c1 .strip b { color: #ECECEA; font-weight: 500; }
+  .c1 .body { display: grid; grid-template-columns: 1fr 132px; flex: 1; min-height: 0; }
+  .c1 .feed { padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
+  .c1 .grp { font-size: 10px; color: #6E6E74; letter-spacing: .08em; }
+  .c1 .note { font-size: 14.5px; line-height: 1.25; letter-spacing: -.01em; }
+  .c1 .note.sm { font-size: 12.5px; color: #B9B9BE; }
+  .c1 .drawer { border-left: 1px solid #1D1D1F; padding: 12px 10px; font-size: 10.5px; color: #9A9AA0; }
+  .c1 .drawer b { display: block; color: #ECECEA; font-size: 11px; margin-bottom: 6px; }
+  .c1 .drawer .fix { padding: 5px 0; border-bottom: 1px solid #17171A; color: #C8C8CD; }
+  .c1 .drawer .fix i { color: #E0563F; font-style: normal; }
+
+  /* ---------- C2 香港街招 ---------- */
+  .c2 { background: #14110F; height: 100%; display: grid; grid-template-columns: 128px 1fr; padding: 10px; gap: 10px; }
+  .c2 .signs { display: flex; gap: 4px; }
+  .c2 .sign { flex: 1; writing-mode: vertical-rl; text-orientation: upright; display: flex; align-items: center; justify-content: center; font-weight: 900; font-size: 15px; letter-spacing: .12em; border: 2px solid #F4E7D0; border-radius: 3px; box-shadow: 0 0 12px rgb(255 200 120 / .25); }
+  .c2 .sign.s1 { background: #B5231B; color: #FDF6E8; }
+  .c2 .sign.s2 { background: #E8B325; color: #1A1512; }
+  .c2 .sign.s3 { background: #1E4E8C; color: #FDF6E8; }
+  .c2 .sign.s4 { background: #2C6B4F; color: #FDF6E8; }
+  .c2 .wall { background: #1C1815; border-radius: 4px; padding: 12px; color: #F4E7D0; display: flex; flex-direction: column; gap: 8px; }
+  .c2 .wall .wt { font-size: 16px; font-weight: 900; border-bottom: 2px solid #B5231B; padding-bottom: 6px; }
+  .c2 .wall .li { font-size: 11px; color: #E4D6C0; display: flex; gap: 6px; }
+  .c2 .wall .li i { color: #E8B325; font-style: normal; }
+</style>
+</head>
+<body>
+  <h1>知识库管理页 · 六个候选（480×300 缩略）</h1>
+  <p class="sub">挑最上面一排的 A1 / B1 / C1 做完整版，A2 / B2 / C2 留作备选。</p>
+  <div class="grid">
+
+    <div class="cell">
+      <div class="shot a1">
+        <div class="top"><span class="lib">knowledge base · 267 篇</span><span class="lib">管理</span></div>
+        <div class="state"><b>10</b> 处要修 · <b style="font-size:17px">0</b> 篇待归档</div>
+        <div class="cards">
+          <div class="card"><span class="n">6</span><span class="t">能自动修好<small>3 篇缺类型 · 2 个文件编码 · 1 个目录失效</small></span><span class="go">修好</span></div>
+          <div class="card"><span class="n">4</span><span class="t">要你判断<small>4 篇状态写法不对 · 9 篇没标谁写的</small></span><span class="go">一篇篇看</span></div>
+          <div class="card ghost"><span class="n">—</span><span class="t">找一篇笔记<small>搜标题、正文、标签</small></span><span class="go" style="background:#8A8378">搜索</span></div>
+        </div>
+        <div class="foot">最近学到的：系统代理 · 1 例（攒够 3 例成为一条经验）</div>
+      </div>
+      <div class="cap"><b>A1 深澤直人</b><span>一屏一件事 · 暖纸面</span></div>
+    </div>
+
+    <div class="cell">
+      <div class="shot a2">
+        <div class="bar">
+          <div><div class="num">267</div><div class="lbl">篇笔记</div></div>
+          <div><div class="num">10</div><div class="lbl">要修</div></div>
+          <div><div class="num">0</div><div class="lbl">待归档</div></div>
+          <div class="ticks">
+            <i style="height:6px"></i><i style="height:12px"></i><i style="height:8px"></i><i style="height:16px"></i><i style="height:10px"></i><i style="height:20px"></i><i style="height:14px"></i><i style="height:9px"></i>
+          </div>
+        </div>
+        <div class="mods">
+          <div class="mod"><b>自动修</b><small>6 处不需要你判断</small><div class="rule"></div><span class="act">全部修好</span></div>
+          <div class="mod"><b>逐条看</b><small>4 处状态 + 9 篇归属</small><div class="rule"></div><span class="act">开始</span></div>
+          <div class="mod"><b>待归档</b><small>两个已审核区都是空的</small><div class="rule"></div><span class="act">看看规则</span></div>
+          <div class="mod"><b>经验</b><small>4 案例 · 1 概念</small><div class="rule"></div><span class="act">查看</span></div>
+        </div>
+      </div>
+      <div class="cap"><b>A2 Dieter Rams</b><span>仪表带 + 2×2 模块</span></div>
+    </div>
+
+    <div class="cell">
+      <div class="shot b1">
+        <div class="col">
+          <div class="head">知识库</div>
+          <div class="nav on"><span class="dot"></span>要修<span class="c">10</span></div>
+          <div class="nav"><span class="dot" style="background:#3FBF8F"></span>待归档<span class="c">0</span></div>
+          <div class="nav"><span class="dot" style="background:#C9A24A"></span>经验<span class="c">1</span></div>
+          <div class="nav"><span class="dot" style="background:#8A8F96"></span>全部<span class="c">267</span></div>
+        </div>
+        <div class="col">
+          <div class="head">要修 · 10</div>
+          <div class="item on"><b>4 篇状态写法不对</b><small>写了「进行中」</small></div>
+          <div class="item"><b>9 篇没标谁写的</b><small>正式区</small></div>
+          <div class="item"><b>3 篇缺类型</b><small>能自动补</small></div>
+          <div class="item"><b>2 个文件编码有问题</b><small>能自动修</small></div>
+        </div>
+        <div class="col detail">
+          <div class="dt">4 篇状态写法不对</div>
+          <div class="why">状态只认「草稿」和「已完成」。写了「进行中」的笔记，自动目录会漏掉它 — 你在 Obsidian 里也搜不到。</div>
+          <span class="btn">改成「草稿」</span> <span class="btn s">我自己看</span>
+        </div>
+      </div>
+      <div class="cap"><b>B1 Bear 式三栏</b><span>分类 / 条目 / 解释器</span></div>
+    </div>
+
+    <div class="cell">
+      <div class="shot b2">
+        <div class="top">knowledge base<span class="pill">267 篇 · 上次检查 2 分钟前</span></div>
+        <div class="cards">
+          <div class="big warm"><b>要修</b><div class="n">10</div><small>其中 6 处我能直接修好</small></div>
+          <div class="big cool"><b>待归档</b><div class="n">0</div><small>拖进「已审核」我就搬走</small></div>
+        </div>
+        <div class="row">
+          <div class="mini">学到的东西<br><b>系统代理</b> · 1 例</div>
+          <div class="mini">最近笔记<br><b>pnpm monorepo…</b></div>
+          <div class="mini">找一篇<br>搜「K8s」</div>
+        </div>
+      </div>
+      <div class="cap"><b>B2 Craft 式卡片</b><span>大卡片入口</span></div>
+    </div>
+
+    <div class="cell">
+      <div class="shot c1">
+        <div class="strip"><b>knowledge base</b><span>267 篇</span><span>·</span><span><b>10</b> 处要修</span><span style="margin-left:auto">搜索</span></div>
+        <div class="body">
+          <div class="feed">
+            <div class="grp">02-IT · 技术笔记</div>
+            <div class="note">pnpm monorepo 的 dev 脚本必须显式构建内部包</div>
+            <div class="note sm">mitmproxy 与 reverse-skill 安装记录</div>
+            <div class="note sm">Vue 路由守卫踩坑</div>
+            <div class="grp">01-工作 · 业务知识</div>
+            <div class="note sm">调研信息渠道注册表</div>
+          </div>
+          <div class="drawer"><b>要修 · 10</b><div class="fix"><i>4</i> 状态写法不对</div><div class="fix"><i>9</i> 没标谁写的</div><div class="fix"><i>6</i> 能自动修</div></div>
+        </div>
+      </div>
+      <div class="cap"><b>C1 Gallery Dark</b><span>内容主角，管理退成一条带</span></div>
+    </div>
+
+    <div class="cell">
+      <div class="shot c2">
+        <div class="signs">
+          <div class="sign s1">要修十</div>
+          <div class="sign s2">待归档零</div>
+          <div class="sign s3">经验一</div>
+          <div class="sign s4">找一篇</div>
+        </div>
+        <div class="wall">
+          <div class="wt">要修 · 10</div>
+          <div class="li"><i>①</i> 4 篇状态写法不对</div>
+          <div class="li"><i>②</i> 9 篇没标谁写的</div>
+          <div class="li"><i>③</i> 3 篇缺类型</div>
+          <div class="li"><i>④</i> 2 个文件编码有问题</div>
+        </div>
+      </div>
+      <div class="cap"><b>C2 香港街招</b><span>竖排招牌列 + 内容墙</span></div>
+    </div>
+
+  </div>
+</body>
+</html>

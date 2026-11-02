@@ -70,7 +70,7 @@ tags: [architecture, tauri2, shell, data-layer]
 - 悬浮栅栏窗口（多窗口 transparent/always_on_bottom）、OLE 拖出：Task 3 实现。
 - 开机自启、FeatherFence 高级特性（亚克力/图标避让/自动清扫）。
 
-## 模块：文件管理 + 桌面栅栏（Task 3 已实现）
+## 模块：文件收纳 + 桌面栅栏（Task 3 已实现）
 
 - **数据模型**（`src/stores/files.ts`）：`FileCategory {id,name}` + `FileItem {id,categoryId,type:folder|file|url,title,path,tags[],createdAt}`，存 `files.json`；标签直接挂在条目上（无独立注册表，筛选从条目派生）；按 `categoryId|path` 去重收集。栅栏几何/开关/幽灵存 `fences.json`（`Record<catId,{x,y,w,h,ghost,open}>`）。
 - **主界面**：分类 chips（全部/各分类 + 计数 + 栅栏开关 Monitor 图标）、选中分类的重命名/删除（有条目时禁删）、搜索（标题/路径）、多标签 AND 筛选、卡片网格（点击打开、悬停 显示/编辑/删除）、添加/编辑用 shadcn Dialog（类型三选段、路径、分类、逗号分隔标签）。
