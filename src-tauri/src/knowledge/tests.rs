@@ -23,20 +23,20 @@ fn organize_input(root: &str, path: &str, kind: &str) -> OrganizeInput {
 #[test]
 fn source_organization_moves_once_preserves_metadata_and_retries_without_copies() {
     let vault = Vault::new();
-    fs::create_dir_all(vault.0.join("08-收件箱")).unwrap();
+    fs::create_dir_all(vault.0.join("00-Human工作区/Inbox")).unwrap();
     let original = "---\nauthor: someone\ntags: [old]\ncustom:\n  enabled: true\n---\n\n# 原始标题\n\noriginal";
-    fs::write(vault.0.join("08-收件箱/原始.md"), original).unwrap();
-    let request = organize_input(&vault.root(), "08-收件箱/原始.md", "resource");
+    fs::write(vault.0.join("00-Human工作区/Inbox/原始.md"), original).unwrap();
+    let request = organize_input(&vault.root(), "00-Human工作区/Inbox/原始.md", "resource");
     let saved = organize_with_folders(&vault.root(), request.clone(), &KnowledgeFolders::default())
         .unwrap();
-    assert_eq!(saved.path, "04-资源收藏/原始.md");
+    assert_eq!(saved.path, "04-资源/原始.md");
     assert!(saved.organized);
-    assert!(!vault.0.join("08-收件箱/原始.md").exists());
+    assert!(!vault.0.join("00-Human工作区/Inbox/原始.md").exists());
     let text = read(&vault.root(), &saved.path).unwrap().content;
     assert!(text.contains("author: someone\n"));
     assert!(text.contains("custom:\n  enabled: true"));
     assert!(text.contains("![[assets/images/example.png]]"));
-    assert!(text.contains("[附件](../08-收件箱/附件.txt)"));
+    assert!(text.contains("[附件](../00-Human工作区/Inbox/附件.txt)"));
     assert_eq!(
         organize_with_folders(&vault.root(), request, &KnowledgeFolders::default())
             .unwrap()
@@ -62,21 +62,21 @@ fn source_organization_moves_once_preserves_metadata_and_retries_without_copies(
 #[test]
 fn source_organization_never_overwrites_conflicts_or_external_edits() {
     let vault = Vault::new();
-    fs::create_dir_all(vault.0.join("08-收件箱")).unwrap();
-    fs::create_dir_all(vault.0.join("04-资源收藏")).unwrap();
-    fs::write(vault.0.join("08-收件箱/原始.md"), "# original").unwrap();
-    let request = organize_input(&vault.root(), "08-收件箱/原始.md", "resource");
-    fs::write(vault.0.join("04-资源收藏/原始.md"), "# other note").unwrap();
+    fs::create_dir_all(vault.0.join("00-Human工作区/Inbox")).unwrap();
+    fs::create_dir_all(vault.0.join("04-资源")).unwrap();
+    fs::write(vault.0.join("00-Human工作区/Inbox/原始.md"), "# original").unwrap();
+    let request = organize_input(&vault.root(), "00-Human工作区/Inbox/原始.md", "resource");
+    fs::write(vault.0.join("04-资源/原始.md"), "# other note").unwrap();
     assert!(
         organize_with_folders(&vault.root(), request.clone(), &KnowledgeFolders::default())
             .is_err()
     );
     assert_eq!(
-        fs::read_to_string(vault.0.join("04-资源收藏/原始.md")).unwrap(),
+        fs::read_to_string(vault.0.join("04-资源/原始.md")).unwrap(),
         "# other note"
     );
-    fs::remove_file(vault.0.join("04-资源收藏/原始.md")).unwrap();
-    fs::write(vault.0.join("08-收件箱/原始.md"), "# external edit").unwrap();
+    fs::remove_file(vault.0.join("04-资源/原始.md")).unwrap();
+    fs::write(vault.0.join("00-Human工作区/Inbox/原始.md"), "# external edit").unwrap();
     assert!(organize_with_folders(&vault.root(), request, &KnowledgeFolders::default()).is_err());
     assert_eq!(scan(&vault.root()).unwrap().len(), 1);
 }
@@ -111,22 +111,22 @@ fn source_organization_updates_in_place_and_capture_metadata_tracks_canonical_no
 #[test]
 fn source_organization_preserves_original_embeds_and_independent_notes() {
     let vault = Vault::new();
-    fs::create_dir_all(vault.0.join("08-收件箱/sub")).unwrap();
+    fs::create_dir_all(vault.0.join("00-Human工作区/Inbox/sub")).unwrap();
     fs::write(
-        vault.0.join("08-收件箱/sub/first.md"),
+        vault.0.join("00-Human工作区/Inbox/sub/first.md"),
         "# first\n![[assets/images/one.png]]\n![[../images/two.png|preview]]",
     )
     .unwrap();
-    fs::write(vault.0.join("08-收件箱/sub/second.md"), "# second").unwrap();
-    let mut request = organize_input(&vault.root(), "08-收件箱/sub/first.md", "resource");
+    fs::write(vault.0.join("00-Human工作区/Inbox/sub/second.md"), "# second").unwrap();
+    let mut request = organize_input(&vault.root(), "00-Human工作区/Inbox/sub/first.md", "resource");
     request.content = "# 整理后的标题\n\ncleaned".into();
     let saved =
         organize_with_folders(&vault.root(), request, &KnowledgeFolders::default()).unwrap();
     let content = read(&vault.root(), &saved.path).unwrap().content;
     assert_eq!(content.matches("# 整理后的标题").count(), 1);
     assert!(content.contains("![[assets/images/one.png]]"));
-    assert!(content.contains("![[08-收件箱/images/two.png|preview]]"));
-    let next = organize_input(&vault.root(), "08-收件箱/sub/second.md", "resource");
+    assert!(content.contains("![[00-Human工作区/Inbox/images/two.png|preview]]"));
+    let next = organize_input(&vault.root(), "00-Human工作区/Inbox/sub/second.md", "resource");
     organize_with_folders(&vault.root(), next, &KnowledgeFolders::default()).unwrap();
     assert_eq!(scan(&vault.root()).unwrap().len(), 2);
 }
@@ -138,7 +138,7 @@ fn source_organization_recovers_after_output_publish_and_capture_metadata_failur
     let request = organize_input(&vault.root(), &captured.note_path, "recipe");
     let blocker = vault
         .0
-        .join("08-收件箱/工作台/recover-organize/条目.json.tmp");
+        .join("00-Agent工作区/Inbox/工作台/recover-organize/条目.json.tmp");
     fs::create_dir(&blocker).unwrap();
     assert!(
         organize_with_folders(&vault.root(), request.clone(), &KnowledgeFolders::default())
@@ -157,10 +157,10 @@ fn source_organization_recovers_after_output_publish_and_capture_metadata_failur
 #[test]
 fn source_organization_does_not_rewrite_or_collect_links_inside_code() {
     let vault = Vault::new();
-    fs::create_dir_all(vault.0.join("08-收件箱")).unwrap();
+    fs::create_dir_all(vault.0.join("00-Human工作区/Inbox")).unwrap();
     let code = "```md\n[code](./keep.txt)\n![[../code.png]]\n```\n\n`[inline](./keep.txt)`";
-    fs::write(vault.0.join("08-收件箱/code.md"), format!("# code\n{code}")).unwrap();
-    let mut request = organize_input(&vault.root(), "08-收件箱/code.md", "resource");
+    fs::write(vault.0.join("00-Human工作区/Inbox/code.md"), format!("# code\n{code}")).unwrap();
+    let mut request = organize_input(&vault.root(), "00-Human工作区/Inbox/code.md", "resource");
     request.content = code.into();
     let result =
         organize_with_folders(&vault.root(), request, &KnowledgeFolders::default()).unwrap();
@@ -178,13 +178,13 @@ fn source_organization_preserves_quoted_yaml_keys_tags_and_comments() {
         "'tags':\n  - 'old, comma' # comment\n  - old\nother: value",
     ] {
         let vault = Vault::new();
-        fs::create_dir_all(vault.0.join("08-收件箱")).unwrap();
+        fs::create_dir_all(vault.0.join("00-Human工作区/Inbox")).unwrap();
         fs::write(
-            vault.0.join("08-收件箱/tags.md"),
+            vault.0.join("00-Human工作区/Inbox/tags.md"),
             format!("---\n{metadata}\n---\n# source"),
         )
         .unwrap();
-        let request = organize_input(&vault.root(), "08-收件箱/tags.md", "resource");
+        let request = organize_input(&vault.root(), "00-Human工作区/Inbox/tags.md", "resource");
         let result =
             organize_with_folders(&vault.root(), request, &KnowledgeFolders::default()).unwrap();
         let content = read(&vault.root(), &result.path).unwrap().content;
@@ -222,27 +222,27 @@ fn source_organization_rejects_unsupported_yaml_and_multiple_sources_before_writ
         "tags: [old]\n' tags ': other\n\"tags\": [second]",
     ] {
         let vault = Vault::new();
-        fs::create_dir_all(vault.0.join("08-收件箱")).unwrap();
+        fs::create_dir_all(vault.0.join("00-Human工作区/Inbox")).unwrap();
         let original = format!("---\n{metadata}\n---\n# source");
-        fs::write(vault.0.join("08-收件箱/tags.md"), &original).unwrap();
-        let request = organize_input(&vault.root(), "08-收件箱/tags.md", "resource");
+        fs::write(vault.0.join("00-Human工作区/Inbox/tags.md"), &original).unwrap();
+        let request = organize_input(&vault.root(), "00-Human工作区/Inbox/tags.md", "resource");
         assert!(
             organize_with_folders(&vault.root(), request, &KnowledgeFolders::default()).is_err()
         );
         assert_eq!(
-            read(&vault.root(), "08-收件箱/tags.md").unwrap().content,
+            read(&vault.root(), "00-Human工作区/Inbox/tags.md").unwrap().content,
             original
         );
         assert!(!vault.0.join(".workbench").exists());
     }
     let vault = Vault::new();
-    fs::create_dir_all(vault.0.join("08-收件箱")).unwrap();
-    fs::write(vault.0.join("08-收件箱/a.md"), "# a").unwrap();
-    fs::write(vault.0.join("08-收件箱/b.md"), "# b").unwrap();
-    let mut request = organize_input(&vault.root(), "08-收件箱/a.md", "resource");
+    fs::create_dir_all(vault.0.join("00-Human工作区/Inbox")).unwrap();
+    fs::write(vault.0.join("00-Human工作区/Inbox/a.md"), "# a").unwrap();
+    fs::write(vault.0.join("00-Human工作区/Inbox/b.md"), "# b").unwrap();
+    let mut request = organize_input(&vault.root(), "00-Human工作区/Inbox/a.md", "resource");
     request
         .sources
-        .extend(organize_input(&vault.root(), "08-收件箱/b.md", "resource").sources);
+        .extend(organize_input(&vault.root(), "00-Human工作区/Inbox/b.md", "resource").sources);
     assert!(organize_with_folders(&vault.root(), request, &KnowledgeFolders::default()).is_err());
     assert!(!vault.0.join(".workbench").exists());
     assert_eq!(scan(&vault.root()).unwrap().len(), 2);
@@ -251,22 +251,22 @@ fn source_organization_rejects_unsupported_yaml_and_multiple_sources_before_writ
 #[test]
 fn source_organization_rebases_angle_space_and_title_destinations_or_rejects_ambiguity() {
     let vault = Vault::new();
-    fs::create_dir_all(vault.0.join("08-收件箱")).unwrap();
-    fs::write(vault.0.join("08-收件箱/links.md"), "# source").unwrap();
-    let mut request = organize_input(&vault.root(), "08-收件箱/links.md", "resource");
+    fs::create_dir_all(vault.0.join("00-Human工作区/Inbox")).unwrap();
+    fs::write(vault.0.join("00-Human工作区/Inbox/links.md"), "# source").unwrap();
+    let mut request = organize_input(&vault.root(), "00-Human工作区/Inbox/links.md", "resource");
     request.content = "![one](<./my image.png> \"caption text\")\n[two](./readme.md \"title text\")\n[web](https://example.com \"title text\")".into();
     let result =
         organize_with_folders(&vault.root(), request, &KnowledgeFolders::default()).unwrap();
     let content = read(&vault.root(), &result.path).unwrap().content;
-    assert!(content.contains("![one](<../08-收件箱/my image.png> \"caption text\")"));
-    assert!(content.contains("[two](../08-收件箱/readme.md \"title text\")"));
+    assert!(content.contains("![one](<../00-Human工作区/Inbox/my image.png> \"caption text\")"));
+    assert!(content.contains("[two](../00-Human工作区/Inbox/readme.md \"title text\")"));
     assert!(content.contains("[web](https://example.com \"title text\")"));
-    fs::write(vault.0.join("08-收件箱/ambiguous.md"), "# source").unwrap();
-    let mut request = organize_input(&vault.root(), "08-收件箱/ambiguous.md", "resource");
+    fs::write(vault.0.join("00-Human工作区/Inbox/ambiguous.md"), "# source").unwrap();
+    let mut request = organize_input(&vault.root(), "00-Human工作区/Inbox/ambiguous.md", "resource");
     request.content = "[ambiguous](./my image.png)".into();
     assert!(organize_with_folders(&vault.root(), request, &KnowledgeFolders::default()).is_err());
-    assert!(vault.0.join("08-收件箱/ambiguous.md").exists());
-    assert!(!vault.0.join("04-资源收藏/ambiguous.md").exists());
+    assert!(vault.0.join("00-Human工作区/Inbox/ambiguous.md").exists());
+    assert!(!vault.0.join("04-资源/ambiguous.md").exists());
 }
 struct Vault(PathBuf);
 impl Vault {
@@ -320,7 +320,7 @@ fn archive_input(root: &str, ids: &[&str], kind: &str) -> ArchiveInput {
             .map(|id| {
                 (
                     id.to_string(),
-                    read(root, &format!("08-收件箱/工作台/{id}/条目.md"))
+                    read(root, &format!("00-Agent工作区/Inbox/工作台/{id}/条目.md"))
                         .unwrap()
                         .fingerprint,
                 )
@@ -329,27 +329,29 @@ fn archive_input(root: &str, ids: &[&str], kind: &str) -> ArchiveInput {
     }
 }
 #[test]
-fn managed_scope_excludes_unbound_work_and_technology_notes() {
+fn scan_covers_every_area_by_top_folder() {
     let vault = Vault::new();
     for folder in [
         "01-技术",
-        "02-工作/开发经验",
-        "02-工作/开发配方",
-        "04-资源收藏",
-        "08-收件箱",
+        "01-工作/开发经验",
+        "04-资源",
+        "00-Human工作区/Inbox",
     ] {
         fs::create_dir_all(vault.0.join(folder)).unwrap();
         fs::write(vault.0.join(folder).join("笔记.md"), "# 范围测试\nneedle").unwrap();
     }
-    fs::write(vault.0.join("02-工作/私人项目.md"), "# 私人\nneedle").unwrap();
+    fs::create_dir_all(vault.0.join("03-生活")).unwrap();
+    fs::write(vault.0.join("03-生活/私人项目.md"), "# 私人\nneedle").unwrap();
     let notes = scan(&vault.root()).unwrap();
+    assert_eq!(notes.len(), 5);
+    let mut kinds: Vec<_> = notes.iter().map(|note| note.kind.as_str()).collect();
+    kinds.sort_unstable();
     assert_eq!(
-        notes.len(),
-        4,
-        "only three bound categories and inbox belong to workbench"
+        kinds,
+        ["01-工作", "01-技术", "03-生活", "04-资源", "inbox"],
+        "分类就是顶层目录，收件箱单列"
     );
-    assert!(notes.iter().all(|note| note.kind != "note"));
-    assert_eq!(search(&vault.root(), "needle").unwrap().len(), 4);
+    assert_eq!(search(&vault.root(), "needle").unwrap().len(), 5);
 }
 
 fn custom_folders() -> KnowledgeFolders {
@@ -360,15 +362,15 @@ fn custom_folders() -> KnowledgeFolders {
     }
 }
 #[test]
-fn custom_bindings_control_scan_search_and_kind() {
+fn bindings_do_not_limit_the_scanned_scope() {
     let vault = Vault::new();
     let folders = custom_folders();
     for folder in [
         &folders.experience,
         &folders.recipe,
         &folders.resource,
-        "02-工作/开发经验",
-        "08-收件箱",
+        "01-工作/开发经验",
+        "00-Human工作区/Inbox",
     ] {
         fs::create_dir_all(vault.0.join(folder)).unwrap();
         fs::write(
@@ -378,11 +380,13 @@ fn custom_bindings_control_scan_search_and_kind() {
         .unwrap();
     }
     let notes = scan_with_folders(&vault.root(), &folders).unwrap();
-    assert_eq!(notes.len(), 4);
+    assert_eq!(notes.len(), 5);
     for (folder, kind) in [
-        (&folders.experience, "experience"),
-        (&folders.recipe, "recipe"),
-        (&folders.resource, "resource"),
+        (&folders.experience, "我的文档"),
+        (&folders.recipe, "我的文档"),
+        (&folders.resource, "收藏"),
+        (&"01-工作/开发经验".to_string(), "01-工作"),
+        (&"00-Human工作区/Inbox".to_string(), "inbox"),
     ] {
         assert_eq!(
             notes
@@ -397,7 +401,7 @@ fn custom_bindings_control_scan_search_and_kind() {
         search_with_folders(&vault.root(), "custom needle", &folders)
             .unwrap()
             .len(),
-        4
+        5
     );
 }
 #[test]
@@ -424,7 +428,8 @@ fn custom_archive_remains_readable_and_retryable_after_binding_changes() {
         scan_with_folders(&vault.root(), &changed)
             .unwrap()
             .iter()
-            .all(|note| note.path != saved.path)
+            .any(|note| note.path == saved.path),
+        "换绑之后这条笔记仍然在笔记栏里（范围是库本身，不是绑定）"
     );
     assert!(read(&vault.root(), &saved.path).is_ok());
 }
@@ -435,7 +440,7 @@ fn custom_archive_recovers_old_target_after_binding_changes() {
     let request = archive_input(&vault.root(), &["custom-recover"], "experience");
     let blocker = vault
         .0
-        .join("08-收件箱/工作台/custom-recover/条目.json.tmp");
+        .join("00-Agent工作区/Inbox/工作台/custom-recover/条目.json.tmp");
     fs::create_dir(&blocker).unwrap();
     assert!(archive_with_folders(&vault.root(), request.clone(), &custom_folders()).is_err());
     fs::remove_dir(blocker).unwrap();
@@ -466,8 +471,8 @@ fn folder_validation_normalizes_without_creating_or_moving_files() {
         "a/.secret",
         "assets",
         "assets/images",
-        "08-收件箱",
-        "08-收件箱/其他",
+        "00-Human工作区/Inbox",
+        "00-Human工作区/Inbox/其他",
         ".obsidian",
         "safe/CON",
         "safe/AUX.md",
@@ -555,7 +560,7 @@ fn capture_owns_image_and_markdown_without_body_in_metadata() {
         data_base64: png(),
     });
     let saved = capture(&vault.root(), item).unwrap();
-    assert_eq!(saved.note_path, "08-收件箱/工作台/capture-1/条目.md");
+    assert_eq!(saved.note_path, "00-Agent工作区/Inbox/工作台/capture-1/条目.md");
     assert!(
         saved.attachments[0]
             .path
@@ -568,7 +573,7 @@ fn capture_owns_image_and_markdown_without_body_in_metadata() {
     );
     assert!(note.content.contains("type: inbox"));
     let metadata =
-        fs::read_to_string(vault.0.join("08-收件箱/工作台/capture-1/条目.json")).unwrap();
+        fs::read_to_string(vault.0.join("00-Agent工作区/Inbox/工作台/capture-1/条目.json")).unwrap();
     assert!(!metadata.contains("查找占用端口的进程"));
     assert!(
         image(&vault.root(), &saved.attachments[0].path)
@@ -580,9 +585,9 @@ fn capture_owns_image_and_markdown_without_body_in_metadata() {
 fn archive_preserves_originals_and_maps_user_directories() {
     let vault = Vault::new();
     for (i, kind, folder) in [
-        (1, "experience", "02-工作/开发经验"),
-        (2, "recipe", "02-工作/开发配方"),
-        (3, "resource", "04-资源收藏"),
+        (1, "experience", "01-工作/开发经验"),
+        (2, "recipe", "01-工作/开发配方"),
+        (3, "resource", "04-资源"),
     ] {
         let id = format!("item-{i}");
         let mut source = input(&id);
@@ -659,7 +664,7 @@ fn rejects_mismatched_image_and_existing_capture_without_overwrite() {
     assert!(
         !vault
             .0
-            .join("08-收件箱/工作台/bad-image/条目.json")
+            .join("00-Agent工作区/Inbox/工作台/bad-image/条目.json")
             .exists()
     );
 }
@@ -670,9 +675,9 @@ fn external_edits_conflict_before_archive_and_bad_metadata_is_visible() {
     let request = archive_input(&vault.root(), &["conflict"], "experience");
     fs::write(vault.0.join(&saved.note_path), "external edit").unwrap();
     assert!(archive(&vault.root(), request).is_err());
-    assert!(!vault.0.join("02-工作/开发经验").exists());
+    assert!(!vault.0.join("01-工作/开发经验").exists());
     fs::write(
-        vault.0.join("08-收件箱/工作台/conflict/条目.json"),
+        vault.0.join("00-Agent工作区/Inbox/工作台/conflict/条目.json"),
         "bad json",
     )
     .unwrap();
@@ -681,21 +686,23 @@ fn external_edits_conflict_before_archive_and_bad_metadata_is_visible() {
 #[test]
 fn scanning_limits_scope_and_reports_failures() {
     let vault = Vault::new();
-    fs::create_dir_all(vault.0.join("02-工作/开发经验/skills")).unwrap();
-    fs::create_dir_all(vault.0.join("02-工作/开发经验/.hidden")).unwrap();
+    fs::create_dir_all(vault.0.join("01-工作/开发经验/skills")).unwrap();
+    fs::create_dir_all(vault.0.join("01-工作/开发经验/.hidden")).unwrap();
     fs::create_dir_all(vault.0.join("private")).unwrap();
     for path in [
-        "02-工作/开发经验/skills/skip.md",
-        "02-工作/开发经验/.hidden/skip.md",
+        "01-工作/开发经验/skills/skip.md",
+        "01-工作/开发经验/.hidden/skip.md",
         "private/skip.md",
-        "02-工作/开发经验/经验.md",
+        "01-工作/开发经验/经验.md",
     ] {
         fs::write(vault.0.join(path), "# 标题\n正文").unwrap();
     }
     let notes = scan(&vault.root()).unwrap();
-    assert_eq!(notes.len(), 1);
-    assert_eq!(notes[0].title, "标题");
-    fs::write(vault.0.join("02-工作/开发经验/broken.md"), [0xff, 0xff]).unwrap();
+    assert_eq!(notes.len(), 2, "skills 与隐藏目录里的笔记不算");
+    assert!(notes.iter().all(|note| !note.path.contains("skills/") && !note.path.contains(".hidden/")));
+    assert!(notes.iter().any(|note| note.kind == "private"));
+    assert!(notes.iter().any(|note| note.kind == "01-工作"));
+    fs::write(vault.0.join("01-工作/开发经验/broken.md"), [0xff, 0xff]).unwrap();
     assert!(scan(&vault.root()).is_err());
 }
 
@@ -705,7 +712,7 @@ fn archive_recovers_status_after_target_was_written() {
     let saved = capture(&vault.root(), input("recover")).unwrap();
     let original = read(&vault.root(), &saved.note_path).unwrap().content;
     let request = archive_input(&vault.root(), &["recover"], "experience");
-    let blocker = vault.0.join("08-收件箱/工作台/recover/条目.json.tmp");
+    let blocker = vault.0.join("00-Agent工作区/Inbox/工作台/recover/条目.json.tmp");
     fs::create_dir(&blocker).unwrap();
     assert!(archive(&vault.root(), request.clone()).is_err());
     assert_eq!(
@@ -713,7 +720,7 @@ fn archive_recovers_status_after_target_was_written() {
         original
     );
     assert_eq!(
-        fs::read_dir(vault.0.join("02-工作/开发经验"))
+        fs::read_dir(vault.0.join("01-工作/开发经验"))
             .unwrap()
             .filter(|e| e
                 .as_ref()
@@ -746,7 +753,7 @@ fn capture_retry_preserves_staged_material_after_image_publish_failure() {
     assert!(
         vault
             .0
-            .join("08-收件箱/工作台/.staging-retry-images/条目.md")
+            .join("00-Agent工作区/Inbox/工作台/.staging-retry-images/条目.md")
             .exists()
     );
     assert!(captures(&vault.root()).unwrap().is_empty());
@@ -770,7 +777,7 @@ fn rejects_oversized_image_and_disallowed_content_type() {
     request.attachments[0].mime = "image/png".into();
     request.attachments[0].data_base64 = "A".repeat(28 * 1024 * 1024);
     assert!(capture(&vault.root(), request).is_err());
-    assert!(!vault.0.join("08-收件箱").exists());
+    assert!(!vault.0.join("00-Human工作区/Inbox").exists());
 }
 
 #[test]
@@ -778,9 +785,9 @@ fn refuses_junction_or_symlink_escape() {
     let vault = Vault::new();
     let outside = Vault::new();
     fs::write(outside.0.join("secret.md"), "outside vault").unwrap();
-    fs::create_dir_all(vault.0.join("02-工作/开发经验")).unwrap();
-    fs::write(vault.0.join("02-工作/开发经验/正常笔记.md"), "# 正常笔记").unwrap();
-    let link = vault.0.join("02-工作/开发经验/linked");
+    fs::create_dir_all(vault.0.join("01-工作/开发经验")).unwrap();
+    fs::write(vault.0.join("01-工作/开发经验/正常笔记.md"), "# 正常笔记").unwrap();
+    let link = vault.0.join("01-工作/开发经验/linked");
     #[cfg(windows)]
     {
         let status = std::process::Command::new("cmd")
@@ -797,12 +804,12 @@ fn refuses_junction_or_symlink_escape() {
     }
     #[cfg(not(windows))]
     std::os::unix::fs::symlink(&outside.0, &link).unwrap();
-    assert!(read(&vault.root(), "02-工作/开发经验/linked/secret.md").is_err());
+    assert!(read(&vault.root(), "01-工作/开发经验/linked/secret.md").is_err());
     assert!(
         update(
             &vault.root(),
             UpdateNoteInput {
-                path: "02-工作/开发经验/linked/secret.md".into(),
+                path: "01-工作/开发经验/linked/secret.md".into(),
                 content: "must stay inside".into(),
                 fingerprint: read(&outside.root(), "secret.md").unwrap().fingerprint,
             }
@@ -812,7 +819,7 @@ fn refuses_junction_or_symlink_escape() {
     // A discovered link must not hide all the ordinary notes in the vault.
     let notes = scan(&vault.root()).unwrap();
     assert_eq!(notes.len(), 1);
-    assert_eq!(notes[0].path, "02-工作/开发经验/正常笔记.md");
+    assert_eq!(notes[0].path, "01-工作/开发经验/正常笔记.md");
     assert!(search(&vault.root(), "outside vault").unwrap().is_empty());
     #[cfg(windows)]
     fs::remove_dir(&link).unwrap();
@@ -827,9 +834,9 @@ fn refuses_junction_or_symlink_escape() {
 #[test]
 fn full_text_search_matches_after_preview_and_binding_is_shell_usable() {
     let vault = Vault::new();
-    fs::create_dir_all(vault.0.join("02-工作/开发经验")).unwrap();
+    fs::create_dir_all(vault.0.join("01-工作/开发经验")).unwrap();
     fs::write(
-        vault.0.join("02-工作/开发经验/普通标题.md"),
+        vault.0.join("01-工作/开发经验/普通标题.md"),
         format!(
             "# 普通标题\n{}\nVeryUniqueSearchTerm",
             "前置正文".repeat(150)
@@ -847,7 +854,7 @@ fn full_text_search_matches_after_preview_and_binding_is_shell_usable() {
 fn capture_recovers_missing_or_partial_metadata_without_discarding_material() {
     for partial in [false, true] {
         let vault = Vault::new();
-        let stage = vault.0.join("08-收件箱/工作台/.staging-incomplete");
+        let stage = vault.0.join("00-Agent工作区/Inbox/工作台/.staging-incomplete");
         fs::create_dir_all(&stage).unwrap();
         fs::write(stage.join("条目.md"), "previous partial material").unwrap();
         if partial {
@@ -860,7 +867,7 @@ fn capture_recovers_missing_or_partial_metadata_without_discarding_material() {
                 .content
                 .contains("查找占用")
         );
-        let preserved: Vec<_> = fs::read_dir(vault.0.join("08-收件箱/工作台"))
+        let preserved: Vec<_> = fs::read_dir(vault.0.join("00-Agent工作区/Inbox/工作台"))
             .unwrap()
             .filter_map(|entry| {
                 let entry = entry.unwrap();
@@ -884,10 +891,10 @@ fn archive_recovers_complete_staged_target_without_published_target() {
     let vault = Vault::new();
     capture(&vault.root(), input("recover-stage")).unwrap();
     let request = archive_input(&vault.root(), &["recover-stage"], "experience");
-    let blocker = vault.0.join("08-收件箱/工作台/recover-stage/条目.json.tmp");
+    let blocker = vault.0.join("00-Agent工作区/Inbox/工作台/recover-stage/条目.json.tmp");
     fs::create_dir(&blocker).unwrap();
     assert!(archive(&vault.root(), request.clone()).is_err());
-    let journal_path = fs::read_dir(vault.0.join("08-收件箱/工作台/.transactions"))
+    let journal_path = fs::read_dir(vault.0.join("00-Agent工作区/Inbox/工作台/.transactions"))
         .unwrap()
         .next()
         .unwrap()
@@ -912,8 +919,8 @@ fn capture_recovers_half_written_body_with_complete_request_journal() {
     let vault = Vault::new();
     let request = input("half-body");
     let saved = capture(&vault.root(), request.clone()).unwrap();
-    let stage = vault.0.join("08-收件箱/工作台/.staging-half-body");
-    fs::rename(vault.0.join("08-收件箱/工作台/half-body"), &stage).unwrap();
+    let stage = vault.0.join("00-Agent工作区/Inbox/工作台/.staging-half-body");
+    fs::rename(vault.0.join("00-Agent工作区/Inbox/工作台/half-body"), &stage).unwrap();
     fs::write(stage.join("条目.md"), "---\ntype: inbox\npartial").unwrap();
     let retry = capture(&vault.root(), request).unwrap();
     assert_eq!(saved.created_at, retry.created_at);
@@ -923,7 +930,7 @@ fn capture_recovers_half_written_body_with_complete_request_journal() {
             .content
             .contains("查找占用端口")
     );
-    let recovery = fs::read_dir(vault.0.join("08-收件箱/工作台"))
+    let recovery = fs::read_dir(vault.0.join("00-Agent工作区/Inbox/工作台"))
         .unwrap()
         .find(|entry| {
             entry
@@ -958,7 +965,7 @@ fn archive_escapes_windows_device_names_before_first_dot() {
         assert!(
             result
                 .path
-                .starts_with(&format!("02-工作/开发经验/_{title}-"))
+                .starts_with(&format!("01-工作/开发经验/_{title}-"))
         );
         assert!(read(&vault.root(), &result.path).is_ok());
     }
@@ -968,7 +975,7 @@ fn archive_escapes_windows_device_names_before_first_dot() {
 fn summaries_ignore_frontmatter_with_lf_or_crlf_without_changing_content() {
     for newline in ["\n", "\r\n"] {
         let vault = Vault::new();
-        fs::create_dir_all(vault.0.join("02-工作/开发经验")).unwrap();
+        fs::create_dir_all(vault.0.join("01-工作/开发经验")).unwrap();
         let content = [
             "---",
             "description: |",
@@ -980,12 +987,12 @@ fn summaries_ignore_frontmatter_with_lf_or_crlf_without_changing_content() {
             "",
         ]
         .join(newline);
-        fs::write(vault.0.join("02-工作/开发经验/笔记.md"), &content).unwrap();
+        fs::write(vault.0.join("01-工作/开发经验/笔记.md"), &content).unwrap();
         let notes = scan(&vault.root()).unwrap();
         assert_eq!(notes[0].title, "正文标题");
         assert_eq!(notes[0].preview, "正文摘要");
         assert_eq!(
-            read(&vault.root(), "02-工作/开发经验/笔记.md")
+            read(&vault.root(), "01-工作/开发经验/笔记.md")
                 .unwrap()
                 .content,
             content
@@ -998,20 +1005,20 @@ fn summaries_return_raw_frontmatter_with_lf_crlf_and_bom() {
     for newline in ["\n", "\r\n"] {
         for bom in ["", "\u{feff}"] {
             let vault = Vault::new();
-            fs::create_dir_all(vault.0.join("02-工作/开发经验")).unwrap();
+            fs::create_dir_all(vault.0.join("01-工作/开发经验")).unwrap();
             let yaml = format!(
                 "tags: [开发, '测试']{newline}description: |{newline}  # 元数据标题{newline}"
             );
             let body = format!("# 正文标题{newline}正文摘要{newline}");
             let content = format!("{bom}---{newline}{yaml}---{newline}{body}");
-            fs::write(vault.0.join("02-工作/开发经验/笔记.md"), &content).unwrap();
+            fs::write(vault.0.join("01-工作/开发经验/笔记.md"), &content).unwrap();
             let notes = scan(&vault.root()).unwrap();
             let serialized = serde_json::to_value(&notes[0]).unwrap();
             assert_eq!(serialized["frontmatter"], yaml);
             assert_eq!(notes[0].title, "正文标题");
             assert_eq!(notes[0].preview, "正文摘要");
             assert_eq!(
-                read(&vault.root(), "02-工作/开发经验/笔记.md")
+                read(&vault.root(), "01-工作/开发经验/笔记.md")
                     .unwrap()
                     .content,
                 content
@@ -1023,7 +1030,7 @@ fn summaries_return_raw_frontmatter_with_lf_crlf_and_bom() {
 #[test]
 fn summaries_require_a_complete_leading_frontmatter_block() {
     let vault = Vault::new();
-    fs::create_dir_all(vault.0.join("02-工作/开发经验")).unwrap();
+    fs::create_dir_all(vault.0.join("01-工作/开发经验")).unwrap();
     for content in [
         "# 普通标题\ntags: [正文]\n",
         "\u{feff}# 普通标题\n正文\n",
@@ -1031,12 +1038,12 @@ fn summaries_require_a_complete_leading_frontmatter_block() {
         "# 普通标题\n---\ntags: [正文]\n---\n",
         "---suffix\ntags: [正文]\n---\n# 普通标题\n",
     ] {
-        fs::write(vault.0.join("02-工作/开发经验/笔记.md"), content).unwrap();
+        fs::write(vault.0.join("01-工作/开发经验/笔记.md"), content).unwrap();
         let notes = scan(&vault.root()).unwrap();
         assert_eq!(serde_json::to_value(&notes[0]).unwrap()["frontmatter"], "");
         assert_eq!(notes[0].title, "普通标题");
         assert_eq!(
-            read(&vault.root(), "02-工作/开发经验/笔记.md")
+            read(&vault.root(), "01-工作/开发经验/笔记.md")
                 .unwrap()
                 .content,
             content
@@ -1047,19 +1054,19 @@ fn summaries_require_a_complete_leading_frontmatter_block() {
 #[test]
 fn summaries_accept_empty_frontmatter_and_a_closing_delimiter_at_eof() {
     let vault = Vault::new();
-    fs::create_dir_all(vault.0.join("02-工作/开发经验")).unwrap();
+    fs::create_dir_all(vault.0.join("01-工作/开发经验")).unwrap();
     for (content, expected) in [
         ("---\n---\n# 正文", ""),
         ("---\r\ntags: []\r\n---", "tags: []\r\n"),
     ] {
-        fs::write(vault.0.join("02-工作/开发经验/笔记.md"), content).unwrap();
+        fs::write(vault.0.join("01-工作/开发经验/笔记.md"), content).unwrap();
         let notes = scan(&vault.root()).unwrap();
         assert_eq!(
             serde_json::to_value(&notes[0]).unwrap()["frontmatter"],
             expected
         );
         assert_eq!(
-            read(&vault.root(), "02-工作/开发经验/笔记.md")
+            read(&vault.root(), "01-工作/开发经验/笔记.md")
                 .unwrap()
                 .content,
             content
@@ -1083,7 +1090,7 @@ fn templates_list_only_ordinary_markdown_in_the_template_scope() {
         "07-模板/写作",
         "07-模板/.hidden",
         "07-模板/skills",
-        "02-工作/开发经验",
+        "01-工作/开发经验",
     ] {
         fs::create_dir_all(vault.0.join(folder)).unwrap();
     }
@@ -1102,7 +1109,7 @@ fn templates_list_only_ordinary_markdown_in_the_template_scope() {
     ] {
         fs::write(vault.0.join(path), [0xff, 0xff]).unwrap();
     }
-    fs::write(vault.0.join("02-工作/开发经验/普通.md"), "# 普通笔记").unwrap();
+    fs::write(vault.0.join("01-工作/开发经验/普通.md"), "# 普通笔记").unwrap();
     let notes = templates(&vault.root()).unwrap();
     assert_eq!(notes.len(), 2);
     assert!(
@@ -1364,4 +1371,84 @@ fn update_rejects_linked_atomic_write_auxiliary_paths() {
         );
         assert_eq!(fs::read_dir(&outside.0).unwrap().count(), 1);
     }
+}
+
+#[test]
+fn imports_creates_and_moves_notes_without_overwriting() {
+    let vault = Vault::new();
+    let outside = Vault::new();
+    let source = outside.0.join("资料.md");
+    fs::write(&source, "# 原始资料").unwrap();
+    let source_text = source.to_str().unwrap();
+
+    let imported = import_file(&vault.root(), source_text, "00-Human工作区/Inbox").unwrap();
+    assert_eq!(imported, "00-Human工作区/Inbox/资料.md");
+    assert!(vault.0.join(&imported).exists());
+    assert!(
+        import_file(&vault.root(), source_text, "00-Human工作区/Inbox").is_err(),
+        "同名不覆盖"
+    );
+
+    let created = create_note(&vault.root(), "00-Agent工作区/Inbox", "系统代理复盘", "# 系统代理复盘\n").unwrap();
+    assert!(vault.0.join(&created).exists());
+    assert!(create_note(&vault.root(), "00-Agent工作区/Inbox", "系统代理复盘", "x").is_err());
+    assert!(create_note(&vault.root(), "00-Agent工作区/Inbox", "带/斜杠", "x").is_err());
+
+    let moved = move_note(&vault.root(), &created, "00-Agent工作区/wiki/cases").unwrap();
+    assert!(vault.0.join(&moved).exists());
+    assert!(!vault.0.join(&created).exists());
+    assert!(move_note(&vault.root(), "../escape.md", "00-Agent工作区").is_err());
+    assert!(move_note(&vault.root(), &moved, "../../etc").is_err());
+}
+#[test]
+fn rename_and_move_rewrite_wikilinks() {
+    let vault = Vault::new();
+    fs::create_dir_all(vault.0.join("02-IT/工具")).unwrap();
+    fs::write(vault.0.join("02-IT/工具/旧名.md"), "# 旧名").unwrap();
+    fs::write(
+        vault.0.join("02-IT/引用.md"),
+        "见 [[旧名]] 和 [[02-IT/工具/旧名|标注]] 与 [[02-IT/工具/旧名#小节]]",
+    )
+    .unwrap();
+    let renamed = rename_note(&vault.root(), "02-IT/工具/旧名.md", "新名").unwrap();
+    assert_eq!(renamed, "02-IT/工具/新名.md");
+    let refs = fs::read_to_string(vault.0.join("02-IT/引用.md")).unwrap();
+    assert!(refs.contains("[[新名]]"), "{refs}");
+    assert!(refs.contains("[[02-IT/工具/新名|标注]]"), "{refs}");
+    assert!(refs.contains("[[02-IT/工具/新名#小节]]"), "{refs}");
+
+    let moved = move_note(&vault.root(), &renamed, "02-IT").unwrap();
+    assert_eq!(moved, "02-IT/新名.md");
+    let refs = fs::read_to_string(vault.0.join("02-IT/引用.md")).unwrap();
+    assert!(refs.contains("[[02-IT/新名|标注]]"), "{refs}");
+    assert!(rename_note(&vault.root(), &moved, "带/斜杠").is_err());
+}
+#[test]
+fn scan_only_reads_areas_declared_in_config() {
+    let vault = Vault::new();
+    fs::create_dir_all(vault.0.join("99-系统")).unwrap();
+    fs::write(
+        vault.0.join("99-系统/config.yaml"),
+        "areas:\n  - name: \"01-工作\"\n    tier: formal\n  - name: \"02-IT\"\n    tier: formal\nsystem_dir: \"99-系统\"\n",
+    )
+    .unwrap();
+    fs::create_dir_all(vault.0.join("01-工作")).unwrap();
+    fs::write(vault.0.join("01-工作/要的.md"), "# 要的").unwrap();
+    fs::create_dir_all(vault.0.join("隔壁库")).unwrap();
+    fs::write(vault.0.join("隔壁库/不要的.md"), "# 不要的").unwrap();
+
+    let notes = scan(&vault.root()).unwrap();
+    assert_eq!(notes.len(), 1, "未声明的目录不进列表");
+    assert_eq!(notes[0].path, "01-工作/要的.md");
+}
+#[test]
+fn root_level_files_are_not_notes() {
+    let vault = Vault::new();
+    fs::write(vault.0.join("AGENTS.md"), "# AGENTS").unwrap();
+    fs::write(vault.0.join("README.md"), "# README").unwrap();
+    fs::create_dir_all(vault.0.join("01-工作")).unwrap();
+    fs::write(vault.0.join("01-工作/正文.md"), "# 正文").unwrap();
+    let notes = scan(&vault.root()).unwrap();
+    assert_eq!(notes.len(), 1, "库根散文件不算笔记");
+    assert_eq!(notes[0].path, "01-工作/正文.md");
 }

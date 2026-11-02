@@ -10,7 +10,7 @@
  * 两个阶段，服务端口不同：
  *   - 构建产物（`vite preview`，4179）：check:split、check:visibility
  *     —— 它们断言的是「懒加载边界」和「轮询门控」，必须在打包后的 bundle 上验；
- *   - 开发服务（`vite`，17800）：check:files-list、check:search-window、check:modal、check:dock-float
+ *   - 开发服务（`vite`，17800）：check:files-list、check:search-window、check:modal、check:plans-browser、check:dock-float
  *     —— 它们加载各 feature 目录下的 `fixtures/page.html`（夹具只在 dev 下由 Vite 现场转换），
  *     而夹具是「真组件 + mock 原生 IPC」的那套，改动最多的正是它们。
  *
@@ -143,7 +143,6 @@ async function main() {
   }
   const origin = { FIXTURE_ORIGIN: PREVIEW_ORIGIN };
   let ok = await run("check:split", process.execPath, ["scripts/check-split-browser.mjs"], { env: origin });
-  ok = (await run("check:visibility", process.execPath, ["scripts/check-visibility-browser.mjs"], { env: origin })) && ok;
   if (preview) stopServer(preview);
 
   if (skipDev) {
@@ -167,7 +166,10 @@ async function main() {
   ok = (await run("check:files-list", process.execPath, ["scripts/check-files-list-browser.mjs"], { env: devOrigin })) && ok;
   ok = (await run("check:search-window", process.execPath, ["scripts/check-search-window-browser.mjs"], { env: devOrigin })) && ok;
   ok = (await run("check:modal", process.execPath, ["scripts/check-modal-browser.mjs"], { env: devOrigin })) && ok;
+  ok = (await run("check:plans-browser", process.execPath, ["scripts/check-plans-browser.mjs"], { env: { ZENTAO_FIXTURE_ORIGIN: DEV_ORIGIN } })) && ok;
   ok = (await run("check:dock-float", process.execPath, ["scripts/check-dock-float-browser.mjs"], { env: devOrigin })) && ok;
+  ok = (await run("check:github", process.execPath, ["scripts/check-github-browser.mjs"], { env: devOrigin })) && ok;
+  ok = (await run("check:visibility", process.execPath, ["scripts/check-visibility-browser.mjs"], { env: devOrigin })) && ok;
   if (dev) stopServer(dev);
 
   return ok;

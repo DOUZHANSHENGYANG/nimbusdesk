@@ -12,9 +12,9 @@ pub struct KnowledgeFolders {
 impl Default for KnowledgeFolders {
     fn default() -> Self {
         Self {
-            experience: "02-工作/开发经验".into(),
-            recipe: "02-工作/开发配方".into(),
-            resource: "04-资源收藏".into(),
+            experience: "01-工作/开发经验".into(),
+            recipe: "01-工作/开发配方".into(),
+            resource: "04-资源".into(),
         }
     }
 }
@@ -119,9 +119,16 @@ pub struct OrganizeInput {
 
 mod storage;
 pub use storage::{
-    archive_with_folders, bind, capture, captures, image, organize_with_folders, read,
-    scan_with_folders, search_with_folders, templates, update, validate_folders,
+    archive_with_folders, bind, capture, captures, create_note, image, import_file, move_note, rename_note,
+    organize_with_folders, read, scan_with_folders, search_with_folders, templates, update,
+    validate_folders,
 };
+
+/// 采集条目与文件搜索共用的收件箱根：库的规范是收件箱归人（`00-Human工作区/Inbox`）。
+pub const INBOX_ROOT: &str = "00-Human工作区/Inbox";
+
+mod tool;
+pub use tool::run_tool;
 
 #[cfg(test)]
 pub use storage::{archive, scan, search};

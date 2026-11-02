@@ -80,3 +80,38 @@ pub async fn knowledge_organize(
 pub async fn knowledge_image(root: String, path: String) -> Result<String, String> {
     blocking(move || knowledge::image(&root, &path)).await
 }
+
+#[tauri::command]
+pub async fn knowledge_import(root: String, source: String, folder: String) -> Result<String, String> {
+    blocking(move || knowledge::import_file(&root, &source, &folder)).await
+}
+
+#[tauri::command]
+pub async fn knowledge_create_note(
+    root: String,
+    folder: String,
+    name: String,
+    content: String,
+) -> Result<String, String> {
+    blocking(move || knowledge::create_note(&root, &folder, &name, &content)).await
+}
+
+#[tauri::command]
+pub async fn knowledge_rename(root: String, path: String, name: String) -> Result<String, String> {
+    blocking(move || knowledge::rename_note(&root, &path, &name)).await
+}
+
+#[tauri::command]
+pub async fn knowledge_move(root: String, path: String, folder: String) -> Result<String, String> {
+    blocking(move || knowledge::move_note(&root, &path, &folder)).await
+}
+
+/// 跑知识库自己的 py 工具（体检 / 分诊 / 闭环 / 检索），返回脚本的 JSON 文本。
+#[tauri::command]
+pub async fn knowledge_vault_tool(
+    root: String,
+    action: String,
+    argument: Option<String>,
+) -> Result<String, String> {
+    blocking(move || knowledge::run_tool(&root, &action, &argument.unwrap_or_default())).await
+}

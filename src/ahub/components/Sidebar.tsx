@@ -7,6 +7,7 @@ import { cn } from "@/ahub/lib/utils";
 import { useData } from "@/ahub/stores/data";
 import { useSettings } from "@/ahub/stores/settings";
 import { useUi, type Page } from "@/ahub/stores/ui";
+import { useUpstreamWatch } from "@/ahub/stores/upstream-watch";
 
 const items: { id: Page; icon: typeof FileText; key: string }[] = [
   { id: "prompts", icon: FileText, key: "nav.prompts" },
@@ -25,12 +26,15 @@ export function Sidebar() {
   const skills = useData((s) => s.skills.length);
   const dataDirs = useSettings((s) => s.info?.dataDirs.root ?? "");
   const [harnessCount, setHarnessCount] = useState<number | undefined>(undefined);
+  const updates = useUpstreamWatch((s) => s.count);
 
   useEffect(() => {
     void api
       .vaultInstalledCount()
       .then(setHarnessCount)
       .catch(() => setHarnessCount(undefined));
+    // 后台按 6 小时一轮检查技能上游；只报数，不自动应用
+    useUpstreamWatch.getState().start();
   }, []);
 
   const counts: Partial<Record<Page, number>> = { prompts, mcp, skills, vault: harnessCount };
@@ -59,16 +63,26 @@ export function Sidebar() {
               ) : null}
               <Icon className={cn("relative z-10 size-4 shrink-0", active && "text-primary")} />
               <span className={cn("relative z-10 font-medium", active && "text-primary")}>{t(key)}</span>
-              {counts[id] !== undefined ? (
-                <span
-                  className={cn(
-                    "relative z-10 ml-auto rounded-full px-1.5 py-0.5 text-[10px] font-medium tabular-nums",
-                    active ? "bg-primary/15 text-primary" : "bg-surface-2 text-ink-3",
-                  )}
-                >
-                  {counts[id]}
-                </span>
-              ) : null}
+              <span className="relative z-10 ml-auto flex items-center gap-1">
+                {id === "skills" && updates > 0 ? (
+                  <span
+                    title={t("skills.upBadgeTitle", { n: updates })}
+                    className="rounded-full bg-warning/15 px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-warning"
+                  >
+                    ↑{updates}
+                  </span>
+                ) : null}
+                {counts[id] !== undefined ? (
+                  <span
+                    className={cn(
+                      "rounded-full px-1.5 py-0.5 text-[10px] font-medium tabular-nums",
+                      active ? "bg-primary/15 text-primary" : "bg-surface-2 text-ink-3",
+                    )}
+                  >
+                    {counts[id]}
+                  </span>
+                ) : null}
+              </span>
             </button>
           );
         })}

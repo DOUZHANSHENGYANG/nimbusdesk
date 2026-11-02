@@ -21,6 +21,7 @@ pub mod prompt_vars;
 pub mod registry;
 pub mod skill_toml;
 pub mod skillhub;
+pub mod skillupdate;
 pub mod skillimport;
 pub mod skills;
 pub mod skillsummary;

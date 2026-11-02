@@ -166,7 +166,7 @@ pub fn from_states(states: &BTreeMap<String, Value>, files_items: &[Value]) -> V
                     "feed",
                     text(entry, "title"),
                     name,
-                    route("/feeds", &[("source", source), ("article", &url)]),
+                    route("/tools/feeds", &[("source", source), ("article", &url)]),
                 );
                 row.url = Some(url.clone());
                 let body = format!(
@@ -214,7 +214,7 @@ pub fn from_states(states: &BTreeMap<String, Value>, files_items: &[Value]) -> V
             "feed",
             text(entry, "title"),
             format!("收藏 · {}", text(entry, "sourceName")),
-            route("/feeds", &[("source", "__favorites__"), ("article", &url)]),
+            route("/tools/feeds", &[("source", "__favorites__"), ("article", &url)]),
         );
         row.url = Some(url.clone());
         let body = format!(
@@ -246,7 +246,7 @@ pub fn from_states(states: &BTreeMap<String, Value>, files_items: &[Value]) -> V
             "bookmark",
             text(item, "title"),
             path.clone(),
-            route("/files", &[("item", &id)]),
+            route("/tools/files", &[("item", &id)]),
         );
         if text(item, "type") == "url" {
             row.url = Some(path);
@@ -360,7 +360,7 @@ pub fn note_files(
         folders.experience,
         folders.recipe,
         folders.resource,
-        "08-收件箱".into(),
+        crate::knowledge::INBOX_ROOT.into(),
     ] {
         walk(&root, &root.join(folder), 0, &mut files, &mut seen)?;
     }
@@ -471,7 +471,7 @@ pub fn note_document(root: &str, file: &NoteFile) -> Result<SearchDocument, Stri
         "knowledge",
         title,
         file.relative.clone(),
-        route("/knowledge", &[("note", &file.relative)]),
+        route("/ai/knowledge", &[("note", &file.relative)]),
     );
     row.path = Some(file.path.to_string_lossy().into_owned());
     Ok(SearchDocument { hit: row, body })

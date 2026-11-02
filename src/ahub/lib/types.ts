@@ -110,6 +110,44 @@ export interface VetReportRow {
   reviewNote: string;
 }
 
+/** 技能更新中心：本地技能的上游状态 */
+export interface SkillUpdateProbe {
+  dirName: string;
+  name: string;
+  hasUpstream: boolean;
+  tracked: boolean;
+  remote: string;
+  mode: string;
+  sourceKind: string;
+  sourceRef: string;
+  sourceConfidence: string;
+}
+
+export interface SkillUpdateCandidate {
+  channel: string;
+  title: string;
+  url: string;
+  snippet: string;
+  downloadName: string;
+}
+
+/** AI 搜源/审校结果。status=candidate 时 localPath 才可交给 apply。 */
+export interface SkillUpdateReport {
+  status: "existing" | "candidate" | "rejected" | "error";
+  confidence: number;
+  reason: string;
+  sourceKind: string;
+  sourceUrl: string;
+  mode: string;
+  localPath: string;
+  candidateName: string;
+  query: string;
+  channels: string[];
+  candidates: SkillUpdateCandidate[];
+  threshold: number;
+  workDir: string;
+}
+
 export interface SkillMeta {
   name: string;
   dirName: string;
@@ -125,6 +163,8 @@ export interface SkillMeta {
   status: "draft" | "active" | "deprecated" | "archived" | string;
   stale: boolean;
   hasToml: boolean;
+  /** 是否记录了可追踪的上游地址（卡片角标用） */
+  hasUpstream: boolean;
   vetVerdict: string;
   vetCritical: number;
   vetHigh: number;
@@ -473,6 +513,8 @@ export interface MarketInstallTarget {
   namespace: string;
   version: string;
   name: string;
+  /** 空 = SkillHub；deepskill / github 走各自下载路径 */
+  source?: string;
 }
 
 export interface MarketInstallReport {

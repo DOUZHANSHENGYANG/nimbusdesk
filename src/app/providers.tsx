@@ -9,6 +9,7 @@ import { onStorageSynced } from "@/lib/storage";
 import { isPopupWindow } from "@/features/files/popup";
 import { useSettings, useSettingsHydrated } from "@/stores/settings";
 import { useFiles, useFences } from "@/stores/files";
+import { useNotifications } from "@/stores/notifications";
 import { applyRemoteFilesDelta, type FilesPersisted } from "@/stores/files-storage";
 import type { FilesDelta } from "@/lib/files-diff";
 import { ModalProvider } from "@/components/shell/modal-host";
@@ -59,21 +60,34 @@ function StorageSync() {
       // rehydrate 是整体替换，会覆盖本窗口尚未落盘的本地改动（写入有 250ms 防抖）。
       // 这里只回灌「数据字段」，不覆盖本窗口的 action 函数。
       if (key === "fences") {
-        const { fences } = data as { fences?: unknown };
+        const { fences, groups } = data as { fences?: unknown; groups?: unknown };
         if (fences && typeof fences === "object") {
-          useFences.setState({ fences } as never);
+          useFences.setState({
+            fences,
+            ...(groups && typeof groups === "object" ? { groups } : {}),
+          } as never);
         }
       } else if (key === "settings") {
         // 只同步跨窗口有意义的字段，避免覆盖本窗口正在编辑的设置
-        const { theme, lang, filesRoot } = data as {
+        const { theme, visualStyle, lang, filesRoot } = data as {
           theme?: unknown;
+          visualStyle?: unknown;
           lang?: unknown;
           filesRoot?: unknown;
         };
         useSettings.setState({
           ...(typeof theme === "string" ? { theme } : {}),
+          ...(visualStyle === "pogget" || visualStyle === "nimbus" || visualStyle === "endfield"
+            ? { visualStyle }
+            : {}),
           ...(typeof lang === "string" ? { lang } : {}),
           ...(filesRoot === null || typeof filesRoot === "string" ? { filesRoot } : {}),
+        } as never);
+      } else if (key === "notifications") {
+        const { items, systemEnabled } = data as { items?: unknown; systemEnabled?: unknown };
+        useNotifications.setState({
+          ...(Array.isArray(items) ? { items } : {}),
+          ...(typeof systemEnabled === "boolean" ? { systemEnabled } : {}),
         } as never);
       }
     });
@@ -113,6 +127,7 @@ function StorageSync() {
 function SettingsSync() {
   const hydrated = useSettingsHydrated();
   const theme = useSettings((s) => s.theme);
+  const visualStyle = useSettings((s) => s.visualStyle);
   const lang = useSettings((s) => s.lang);
   const setDataDir = useSettings((s) => s.setDataDir);
   const bootstrapped = useRef(false);
@@ -123,7 +138,11 @@ function SettingsSync() {
     if (bootstrapped.current) return;
     bootstrapped.current = true;
 
-    applyTheme(useSettings.getState().theme, useSettings.getState().accentPreset);
+    applyTheme(
+      useSettings.getState().theme,
+      useSettings.getState().accentPreset,
+      useSettings.getState().visualStyle,
+    );
     changeLang(useSettings.getState().lang);
 
     // 直接通知显示（别用 rAF：窗口 visible:false 时 WebView2 不派发
@@ -144,10 +163,9 @@ function SettingsSync() {
   // 水合后（或用户切换时）应用最新设置。
   // 主题：切换动画进行中冻结 —— 真实切换由 toggleThemeRadial 在幕布盖满/收拢时机执行
   useEffect(() => {
-    if (!isThemeSwitching()) applyTheme(theme, useSettings.getState().accentPreset);
-      if (!isThemeSwitching()) applyTheme(theme, useSettings.getState().accentPreset);
+    if (!isThemeSwitching()) applyTheme(theme, useSettings.getState().accentPreset, visualStyle);
     changeLang(lang);
-  }, [theme, lang]);
+  }, [theme, visualStyle, lang]);
 
   /*
    * 主窗口置顶：挂载即应用一次（默认不置顶），之后跟着设置走。

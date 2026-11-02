@@ -15,7 +15,7 @@ try {
   await page.screenshot({ path: `${dir}/plan-outline-rows.png` });
   // 详情：点标题（或 ⋯）把这一条放到右边那一栏
   await page.locator('[data-search-task-id="task-1"] button[title="打开任务详情"]').click();
-  await page.getByRole("complementary", { name: "任务详情" }).waitFor();
+  await page.locator("[data-note-title]").waitFor();
   await page.waitForTimeout(400);
   await page.screenshot({ path: `${dir}/plan-outline-detail.png` });
   console.log("errors", errors);

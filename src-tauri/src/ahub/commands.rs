@@ -94,6 +94,103 @@ pub fn delete_mcp(app: AppH, id: String) -> Result<(), String> {
     items::delete_mcp(&app, &id)
 }
 
+/// 打包导出的一端：技能出 `skills.zip`，提示词出 `prompts.zip`（每篇一个 .md），
+/// MCP 出 `mcp.json`。用户自己拿去装，这一步不碰任何宿主配置。
+#[derive(serde::Deserialize)]
+pub struct BundleFile {
+    pub name: String,
+    pub body: String,
+}
+
+#[tauri::command]
+pub fn export_bundle(
+    app: AppH,
+    kind: String,
+    ids: Vec<String>,
+    files: Vec<BundleFile>,
+    out_dir: String,
+) -> Result<String, String> {
+    use std::io::Write as _;
+
+    let out = std::path::PathBuf::from(&out_dir);
+    if !out.is_dir() {
+        return Err("输出目录不存在".into());
+    }
+    let opts = zip::write::FileOptions::default().compression_method(zip::CompressionMethod::Deflated);
+
+    match kind.as_str() {
+        "skills" => {
+            if ids.is_empty() {
+                return Err("没有选中任何技能".into());
+            }
+            let root = store::data_root(&app).join("skills");
+            let path = out.join("skills.zip");
+            let file = std::fs::File::create(&path).map_err(store::es)?;
+            let mut zip = zip::ZipWriter::new(file);
+            for dir in &ids {
+                let src = root.join(dir);
+                if !src.is_dir() {
+                    return Err(format!("技能不存在：{dir}"));
+                }
+                crate::ahub::presets::add_dir_to_zip(&mut zip, &src, dir, opts)?;
+            }
+            zip.finish().map_err(|e| e.to_string())?;
+            Ok(path.to_string_lossy().into_owned())
+        }
+        "prompts" => {
+            if files.is_empty() {
+                return Err("没有选中任何提示词".into());
+            }
+            let path = out.join("prompts.zip");
+            let file = std::fs::File::create(&path).map_err(store::es)?;
+            let mut zip = zip::ZipWriter::new(file);
+            let mut used: std::collections::HashSet<String> = std::collections::HashSet::new();
+            for entry in &files {
+                let mut name = sanitize_filename(&entry.name);
+                if name.is_empty() {
+                    name = "prompt".to_string();
+                }
+                let mut candidate = format!("{name}.md");
+                let mut n = 2;
+                while !used.insert(candidate.clone()) {
+                    candidate = format!("{name}-{n}.md");
+                    n += 1;
+                }
+                zip.start_file(candidate, opts).map_err(|e| e.to_string())?;
+                zip.write_all(entry.body.as_bytes()).map_err(store::es)?;
+            }
+            zip.finish().map_err(|e| e.to_string())?;
+            Ok(path.to_string_lossy().into_owned())
+        }
+        "mcp" => {
+            let all = items::list_mcp(&app)?;
+            let selected: Vec<McpServer> = if ids.is_empty() {
+                all
+            } else {
+                all.into_iter().filter(|s| ids.contains(&s.id)).collect()
+            };
+            let value = items::export_config(&selected);
+            let text = serde_json::to_string_pretty(&value).map_err(|e| e.to_string())?;
+            let path = out.join("mcp.json");
+            std::fs::write(&path, text).map_err(store::es)?;
+            Ok(path.to_string_lossy().into_owned())
+        }
+        other => Err(format!("未知的导出类型：{other}")),
+    }
+}
+
+/// 文件名里去掉 Windows 不允许的字符，免得导出的 zip 在解压时才报错。
+fn sanitize_filename(raw: &str) -> String {
+    raw.trim()
+        .chars()
+        .map(|c| if matches!(c, '\\' | '/' | ':' | '*' | '?' | '"' | '<' | '>' | '|') || (c as u32) < 0x20 { '_' } else { c })
+        .collect::<String>()
+        .trim_matches(['.', ' '])
+        .chars()
+        .take(80)
+        .collect()
+}
+
 #[tauri::command]
 pub fn export_mcp_config(app: AppH, ids: Vec<String>) -> Result<Value, String> {
     let all = items::list_mcp(&app)?;
@@ -561,6 +658,173 @@ pub fn check_upstream(app: AppH, dir_name: String) -> Result<crate::ahub::upstre
     crate::ahub::upstream::check(&dir)
 }
 
+/// 批量检查：同一个 remote 只连一次，按安装修订 + 子树指纹判定。
+/// 单条失败只记在那一条上（note 里写原因），不中断整批。
+#[tauri::command]
+pub async fn check_upstream_batch(
+    app: AppH,
+    dir_names: Vec<String>,
+) -> Result<Vec<serde_json::Value>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let root = store::data_root(&app).join("skills");
+        let dirs: Vec<std::path::PathBuf> = dir_names
+            .iter()
+            .map(|name| root.join(name))
+            .filter(|dir| dir.is_dir())
+            .collect();
+        let wanted: Vec<String> = dirs
+            .iter()
+            .map(|dir| dir.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default())
+            .collect();
+        let mut rows = Vec::new();
+        for (index, (path, report)) in crate::ahub::upstream::check_batch(dirs).into_iter().enumerate() {
+            let dir_name = wanted.get(index).cloned().unwrap_or_default();
+            let value = match report {
+                Ok(report) => serde_json::json!({
+                    "dirName": dir_name,
+                    "ok": true,
+                    "report": report,
+                }),
+                Err(error) => serde_json::json!({
+                    "dirName": dir_name,
+                    "ok": false,
+                    "note": error,
+                }),
+            };
+            let _ = path;
+            rows.push(value);
+        }
+        Ok(rows)
+    })
+    .await
+    .map_err(|e| format!("任务失败: {e}"))?
+}
+
+/// 给未跟踪的技能补上本地可推导的上游（只读本地文档 / git 远端，不联网、不覆盖内容）。
+#[tauri::command]
+pub async fn upstream_backfill(
+    app: AppH,
+    dir_names: Option<Vec<String>>,
+    apply_weak: bool,
+    resolve_marketplace: bool,
+) -> Result<crate::ahub::upstream::BackfillReport, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let root = store::data_root(&app).join("skills");
+        let names = match dir_names {
+            Some(names) if !names.is_empty() => names,
+            _ => std::fs::read_dir(&root)
+                .into_iter()
+                .flatten()
+                .flatten()
+                .filter(|entry| entry.path().is_dir())
+                .map(|entry| entry.file_name().to_string_lossy().into_owned())
+                .collect(),
+        };
+        crate::ahub::upstream::backfill(&root, &names, apply_weak, resolve_marketplace)
+    })
+    .await
+    .map_err(|e| format!("任务失败: {e}"))
+}
+
+#[tauri::command]
+pub async fn skill_update_probe(
+    app: AppH,
+    dir_name: String,
+) -> Result<crate::ahub::skillupdate::UpdateProbe, String> {
+    tauri::async_runtime::spawn_blocking(move || crate::ahub::skillupdate::probe(&app, &dir_name))
+        .await
+        .map_err(|e| format!("任务失败: {e}"))?
+}
+
+#[tauri::command]
+pub fn skill_update_ai_ready(app: AppH) -> bool {
+    // 用后端真实解析结果回答，别让界面自己猜：
+    // 默认提供商可能来自设置页、也可能是云台那条桥接（ai-providers），
+    // 前端只看 `aiProviders` 会把已配置的情况误报成「没有默认 AI 提供商」。
+    crate::ahub::aiprovider::resolve_default(&app).is_ok()
+}
+
+#[tauri::command]
+pub async fn skill_update_discover(
+    app: AppH,
+    dir_name: String,
+    work_dir: String,
+    threshold: f64,
+    preferred_url: Option<String>,
+) -> Result<crate::ahub::skillupdate::DiscoverReport, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::ahub::skillupdate::discover(
+            &app,
+            &dir_name,
+            &work_dir,
+            threshold,
+            preferred_url.as_deref().unwrap_or(""),
+        )
+    })
+    .await
+    .map_err(|e| format!("任务失败: {e}"))?
+}
+
+#[tauri::command]
+pub async fn skill_update_apply(
+    app: AppH,
+    dir_name: String,
+    candidate_path: String,
+    source_url: String,
+    mode: String,
+    confidence: f64,
+    revision: Option<String>,
+    subtree_path: Option<String>,
+    subtree_sha: Option<String>,
+    strategy: Option<String>,
+) -> Result<SkillMeta, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::ahub::skillupdate::apply(
+            &app,
+            &dir_name,
+            &candidate_path,
+            &source_url,
+            &mode,
+            confidence,
+            revision.as_deref().unwrap_or(""),
+            subtree_path.as_deref().unwrap_or(""),
+            subtree_sha.as_deref().unwrap_or(""),
+            strategy.as_deref().unwrap_or(""),
+        )
+    })
+    .await
+    .map_err(|e| format!("任务失败: {e}"))?
+}
+
+/// 覆盖前对账：本地改没改过、差哪些文件、SKILL.md 两边各是什么。
+#[tauri::command]
+pub async fn skill_update_preview(
+    app: AppH,
+    dir_name: String,
+    candidate_path: String,
+) -> Result<crate::ahub::skillupdate::UpdatePreview, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::ahub::skillupdate::preview(&app, &dir_name, &candidate_path)
+    })
+    .await
+    .map_err(|e| format!("任务失败: {e}"))?
+}
+
+/// 冲突弹窗里逐行看差异：按需读单个文件，不把整目录正文塞进预览。
+#[tauri::command]
+pub async fn skill_update_file_diff(
+    app: AppH,
+    dir_name: String,
+    candidate_path: String,
+    rel_path: String,
+) -> Result<crate::ahub::skillupdate::FileDiff, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        crate::ahub::skillupdate::preview_file(&app, &dir_name, &candidate_path, &rel_path)
+    })
+    .await
+    .map_err(|e| format!("任务失败: {e}"))?
+}
+
 #[tauri::command]
 pub fn update_skill_ext(
     app: AppH,
@@ -588,9 +852,15 @@ pub async fn skillhub_search(
     sort: String,
     page: u32,
     page_size: u32,
+    market: Option<String>,
 ) -> Result<crate::ahub::skillhub::MarketPage, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        crate::ahub::skillhub::search(&keyword, &category, &source, &sort, page, page_size)
+        let market = market.unwrap_or_default();
+        if market == "deepskill" || market == "github" {
+            crate::ahub::skillhub::search_source(&keyword, page, page_size, &market)
+        } else {
+            crate::ahub::skillhub::search(&keyword, &category, &source, &sort, page, page_size)
+        }
     })
     .await
     .map_err(|e| format!("任务失败: {e}"))?
@@ -661,6 +931,11 @@ fn git_fetch_skills_blocking(url: String) -> Result<serde_json::Value, String> {
     if url.is_empty() || !(url.starts_with("https://") || url.starts_with("http://") || url.starts_with("git@")) {
         return Err("请输入有效的 https:// 或 git@ 仓库地址".into());
     }
+    // 网页 / 单文件地址（.md、well-known 清单）不是仓库，别让 git 去 clone 一个文件
+    let lower = url.to_ascii_lowercase();
+    if lower.ends_with(".md") || lower.contains(".well-known/") {
+        return Err(format!("这不是 git 仓库地址：{url}（单个文件应走网页更新）"));
+    }
     let id = crate::ahub::models::new_id();
     let tmp = std::env::temp_dir().join(format!("agenthub-git-{id}"));
     let _ = std::fs::remove_dir_all(&tmp);
@@ -680,7 +955,13 @@ fn git_fetch_skills_blocking(url: String) -> Result<serde_json::Value, String> {
     }
 
     // 自动发现技能目录（含 SKILL.md；跳过 .git；限制深度与数量）
-    fn walk(dir: &std::path::Path, base: &std::path::Path, depth: u32, out: &mut Vec<serde_json::Value>) {
+    fn walk(
+        repo: &std::path::Path,
+        dir: &std::path::Path,
+        base: &std::path::Path,
+        depth: u32,
+        out: &mut Vec<serde_json::Value>,
+    ) {
         if depth > 5 || out.len() >= 200 {
             return;
         }
@@ -704,20 +985,46 @@ fn git_fetch_skills_blocking(url: String) -> Result<serde_json::Value, String> {
                         n
                     }
                 };
+                // 记下它在仓库里的相对路径与子树 sha，更新时用来只比这一个目录。
+                let repo_path = p
+                    .strip_prefix(repo)
+                    .map(|rel| rel.to_string_lossy().replace('\\', "/"))
+                    .unwrap_or_default();
+                let subtree_sha = crate::ahub::store::silent_command("git")
+                    .args(["-C"])
+                    .arg(repo)
+                    .args(["rev-parse", &format!("HEAD:{repo_path}")])
+                    .output()
+                    .ok()
+                    .filter(|out| out.status.success())
+                    .map(|out| String::from_utf8_lossy(&out.stdout).trim().to_string())
+                    .unwrap_or_default();
                 out.push(serde_json::json!({
                     "path": p.to_string_lossy(),
                     "name": skill_name,
                     "description": crate::ahub::skills::fm_get_str(&fm, "description"),
+                    "repoPath": repo_path,
+                    "subtreeSha": subtree_sha,
                 }));
             } else {
-                walk(&p, &base.join(&name), depth + 1, out);
+                walk(repo, &p, &base.join(&name), depth + 1, out);
             }
         }
     }
     let mut skills: Vec<serde_json::Value> = Vec::new();
-    walk(&tmp, std::path::Path::new(""), 0, &mut skills);
+    walk(&tmp, &tmp, std::path::Path::new(""), 0, &mut skills);
+    let revision = crate::ahub::store::silent_command("git")
+        .args(["-C"])
+        .arg(&tmp)
+        .args(["rev-parse", "HEAD"])
+        .output()
+        .ok()
+        .filter(|out| out.status.success())
+        .map(|out| String::from_utf8_lossy(&out.stdout).trim().to_string())
+        .unwrap_or_default();
     Ok(serde_json::json!({
         "tempDir": tmp.to_string_lossy(),
+        "revision": revision,
         "skills": skills,
     }))
 }

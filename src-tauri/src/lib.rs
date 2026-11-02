@@ -1,6 +1,7 @@
 use tauri::Manager;
 
 mod atomic;
+mod credential_vault;
 mod database;
 mod files_table;
 mod project_database;
@@ -15,8 +16,14 @@ mod search;
 mod quick_tools;
 mod schedule;
 mod display;
+// 资讯订阅（源/条目/五种采集器/后台心跳）与信息调研（检索/抓正文/存报告）。
+mod feeds;
+mod research;
 // AgentHub（源侧工具箱后端）原样搬进来的模块，独立在 ahub/ 下。
 mod ahub;
+
+// Cross-harness session management (OpenCode / DSH / WorkBuddy).
+mod sessions;
 
 /// Entry used by the executable before initializing any UI or background tasks.
 pub fn run_quick_tools_selection_worker() -> bool { quick_tools::worker::run_if_worker() }
@@ -43,9 +50,11 @@ pub fn run() {
         .manage(commands::desktop_shortcut::FenceShortcut::default())
         .manage(commands::search::SearchShortcut::default())
         .manage(commands::quick_tools::QuickToolsShortcut::default())
+        .manage(commands::quick_panel::QuickPanelShortcut::default())
         .manage(commands::dock::DockShortcut::default())
         .invoke_handler(tauri::generate_handler![
             commands::data::write_plan_pair,
+            commands::git::git_repo_status,
             commands::data::project_apply_remote_binding,
             commands::dock::dock_open,
             commands::dock::dock_close,
@@ -73,6 +82,12 @@ pub fn run() {
             commands::zentao::zentao_fetch_tasks,
             commands::zentao::zentao_read_task,
             commands::zentao::zentao_write_task,
+            commands::github::github_token_status,
+            commands::github::github_token,
+            commands::github::github_save_token,
+            commands::github::github_forget_token,
+            commands::github::github_default_download_dir,
+            commands::github::github_download_zip,
             commands::projects::project_create_root,
             commands::projects::project_list_files,
             commands::projects::project_read_file,
@@ -91,6 +106,9 @@ pub fn run() {
             commands::quick_tools::quick_tools_set_shortcut,
             commands::quick_tools::quick_tools_shortcut_error,
             commands::quick_tools::quick_tools_open_main,
+            commands::quick_panel::quick_panel_open_window,
+            commands::quick_panel::quick_panel_shortcut_error,
+            commands::quick_panel::set_quick_panel_shortcut,
             commands::search::search_home,
             commands::search::search_pin,
             commands::search::search_clear_recent,
@@ -131,6 +149,10 @@ pub fn run() {
             commands::knowledge::knowledge_archive,
             commands::knowledge::knowledge_organize,
             commands::knowledge::knowledge_image,
+    commands::knowledge::knowledge_vault_tool,
+    commands::knowledge::knowledge_import,
+    commands::knowledge::knowledge_create_note,
+    commands::knowledge::knowledge_move,
             commands::data::get_data_dir,
             commands::data::set_data_dir,
             commands::schedule::schedule_snapshot,
@@ -166,14 +188,18 @@ pub fn run() {
             commands::sys::set_developer_mode,
             commands::sys::open_fence,
             commands::sys::close_fence,
+            commands::sys::open_fence_group,
             commands::sys::pick_folder,
             commands::sys::pick_file,
+    commands::sys::pick_files,
+    commands::knowledge::knowledge_rename,
             commands::sys::open_path,
             commands::sys::reveal_in_explorer,
             commands::sys::show_popup_menu,
             commands::sys::hide_popup_menu,
             commands::sys::prepare_popup_menu,
             commands::fs::probe_paths,
+            commands::fs::path_meta,
             commands::directory_map::file_directory_snapshot,
             commands::fileops::create_entry,
             commands::fileops::rename_entry,
@@ -204,6 +230,14 @@ pub fn run() {
             ahub::commands::auth_status,
             ahub::commands::check_pack_ready,
             ahub::commands::check_upstream,
+            ahub::commands::check_upstream_batch,
+            ahub::commands::upstream_backfill,
+            ahub::commands::skill_update_probe,
+            ahub::commands::skill_update_ai_ready,
+            ahub::commands::skill_update_discover,
+            ahub::commands::skill_update_apply,
+            ahub::commands::skill_update_preview,
+            ahub::commands::skill_update_file_diff,
             ahub::commands::cleanup_git_temp,
             ahub::commands::clear_skill_versions,
             ahub::commands::cli_explain,
@@ -219,6 +253,7 @@ pub fn run() {
             ahub::commands::disk_scan_cached,
             ahub::commands::ensure_skill_protocol,
             ahub::commands::export_mcp_config,
+            ahub::commands::export_bundle,
             ahub::commands::get_env_root,
             ahub::commands::get_settings,
             ahub::commands::git_fetch_skills,
@@ -319,6 +354,40 @@ pub fn run() {
             ahub::commands::vault_status,
             ahub::commands::vet_skill,
             ahub::commands::write_harness_config,
+            sessions::commands::sessions_runtimes,
+            sessions::commands::sessions_list,
+            sessions::commands::sessions_read,
+            sessions::commands::sessions_migrate,
+            sessions::commands::sessions_export_to_canvas,
+            sessions::commands::sessions_thought_graph,
+            sessions::commands::sessions_import_thought_graph,
+            sessions::commands::sessions_commit_thought_graph,
+            commands::canvas::canvas_open_window,
+            commands::canvas::canvas_session_roots,
+            commands::canvas::canvas_session_list,
+            commands::canvas::canvas_session_read,
+            commands::canvas::canvas_session_head,
+            commands::canvas::canvas_session_read_range,
+            feeds::feeds_sources,
+            feeds::feeds_items,
+            feeds::feeds_save_source,
+            feeds::feeds_delete_source,
+            feeds::feeds_reorder,
+            feeds::feeds_move,
+            feeds::feeds_run_source,
+            feeds::feeds_collect_all,
+            feeds::feeds_patch_item,
+            feeds::feeds_mark_all_read,
+            feeds::feeds_import_opml,
+            feeds::feeds_stats,
+            research::research_search,
+            research::research_fetch,
+            research::research_save,
+            research::research_list,
+            research::research_read,
+            research::research_meta,
+            research::research_default_dir,
+            research::research_delete,
         ])
         .setup(|app| {
             // 主窗口必须有图标，否则任务栏按钮上是一块空白：窗口是隐藏创建、稍后 show 的，
@@ -330,8 +399,9 @@ pub fn run() {
             tray::create(app)?;
             organization_clock::start(app.handle().clone())?;
             schedule::engine::start(app.handle().clone());
-            commands::search::start(app.handle().clone());
+            feeds::engine::start(app.handle().clone());            commands::search::start(app.handle().clone());
             commands::quick_tools::start(app.handle().clone());
+            commands::quick_panel::start(app.handle().clone());
             // 多屏热插拔监听：显示器接拔/改分辨率时广播 display://changed，
             // 桌面挂件（dock/fence/快速收集）据此重算自己的位置
             display::start_watch(app.handle().clone());
@@ -372,7 +442,7 @@ pub fn run() {
                 if window.label() == "main" {
                     let _ = window.hide();
                     api.prevent_close();
-                } else if window.label() == "search" || window.label() == "quick-tools" {
+                } else if window.label() == "search" || window.label() == "quick-tools" || window.label() == "quick-panel" {
                     let _ = window.hide();
                     api.prevent_close();
                 } else if window.label() == "capture" {

@@ -1,6 +1,7 @@
 import { useTranslation } from "react-i18next";
 import { HarnessToolsSection } from "@/ahub/components/HarnessToolsSection";
 import { PageShell } from "@/ahub/components/PageShell";
+import { ToolboxTabs } from "@/ahub/components/ToolboxTabs";
 
 /**
  * Harness 页：**只有工具卡**，一个工具一张卡，一张卡就是它的全部。
@@ -19,7 +20,7 @@ export function ToolManagerPage() {
   const { t } = useTranslation();
 
   return (
-    <PageShell title={t("nav.harness")}>
+    <PageShell title={t("nav.harness")} tabs={<ToolboxTabs group="runtime" />}>
       <HarnessToolsSection />
     </PageShell>
   );

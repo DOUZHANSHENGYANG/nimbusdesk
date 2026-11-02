@@ -349,7 +349,7 @@ pub(crate) fn allowed_route(route: &str) -> bool {
     if route.chars().any(char::is_control) || route.contains('\\') {
         return false;
     }
-    ["/plans", "/knowledge", "/feeds", "/files", "/projects"]
+    ["/plans", "/ai/knowledge", "/tools/feeds", "/tools/files", "/projects"]
         .contains(&route.split('?').next().unwrap_or_default())
 }
 #[tauri::command]
@@ -483,9 +483,9 @@ mod tests {
     fn search_routes_only_target_workbench_content() {
         for route in [
             "/plans?date=2026-10-18&task=1",
-            "/knowledge?note=a.md",
-            "/feeds?article=https%3A%2F%2Fa.test",
-            "/files?item=1",
+            "/ai/knowledge?note=a.md",
+            "/tools/feeds?article=https%3A%2F%2Fa.test",
+            "/tools/files?item=1",
             "/projects?project=1",
             "/projects?item=1",
         ] {
@@ -494,7 +494,7 @@ mod tests {
         for route in [
             "https://evil.test",
             "//evil.test",
-            "/knowledge/../../settings",
+            "/ai/knowledge/../../settings",
             "/settings",
             "/plans\\x",
             "/plans\n",

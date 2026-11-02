@@ -1,9 +1,6 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Check, Plus, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { cn } from "@/ahub/lib/utils";
-import { groupTags } from "@/ahub/lib/tag-groups";
-import { useTagGroups } from "@/ahub/stores/tag-groups";
 import { Dialog, DialogBody, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/ahub/components/ui/dialog";
 import { Button } from "@/ahub/components/ui/button";
 
@@ -25,17 +22,15 @@ export function TagPicker({
   id?: string;
 }) {
   const { t } = useTranslation();
-  const groups = useTagGroups((s) => s.groups);
   const [text, setText] = useState("");
   const [open, setOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const view = useMemo(() => {
+  // 标签不再分组，候选就是一列可搜的平铺列表
+  const visibleTags = useMemo(() => {
     const q = text.trim().toLowerCase();
-    const pool = allTags.filter((tag) => !value.includes(tag));
-    const visible = q ? pool.filter((tag) => tag.toLowerCase().includes(q)) : pool;
-    return groupTags(visible, groups);
-  }, [allTags, groups, text, value]);
+    return allTags.filter((tag) => !value.includes(tag) && (!q || tag.toLowerCase().includes(q)));
+  }, [allTags, text, value]);
 
   const add = (tag: string) => {
     const next = tag.trim();
@@ -102,41 +97,19 @@ export function TagPicker({
               {t("tagPicker.create", { tag: text.trim() })}
             </button>
           ) : null}
-          {view.groups.map((group) => (
-            <div key={group.id}>
-              {group.tags.length > 0 ? <p className="px-2 pt-1 text-[10px] text-ink-3">{group.name}</p> : null}
-              {group.tags.map((tag) => (
-                <button
-                  key={tag}
-                  type="button"
-                  onMouseDown={(event) => event.preventDefault()}
-                  onClick={() => add(tag)}
-                  className={cn("flex w-full items-center gap-1.5 rounded px-2 py-1.5 text-left text-[11.5px] text-ink-2 hover:bg-muted")}
-                >
-                  <Check className="size-3 opacity-0" />
-                  {tag}
-                </button>
-              ))}
-            </div>
+          {visibleTags.map((tag) => (
+            <button
+              key={tag}
+              type="button"
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => add(tag)}
+              className="flex w-full items-center gap-1.5 rounded px-2 py-1.5 text-left text-[11.5px] text-ink-2 hover:bg-muted"
+            >
+              <Check className="size-3 opacity-0" />
+              {tag}
+            </button>
           ))}
-          {view.ungrouped.length > 0 ? (
-            <div>
-              <p className="px-2 pt-1 text-[10px] text-ink-3">{t("tagShelf.ungrouped")}</p>
-              {view.ungrouped.map((tag) => (
-                <button
-                  key={tag}
-                  type="button"
-                  onMouseDown={(event) => event.preventDefault()}
-                  onClick={() => add(tag)}
-                  className="flex w-full items-center gap-1.5 rounded px-2 py-1.5 text-left text-[11.5px] text-ink-2 hover:bg-muted"
-                >
-                  <Check className="size-3 opacity-0" />
-                  {tag}
-                </button>
-              ))}
-            </div>
-          ) : null}
-          {!text.trim() && view.groups.every((group) => group.tags.length === 0) && view.ungrouped.length === 0 ? (
+          {!text.trim() && visibleTags.length === 0 ? (
             <p className="px-2 py-3 text-center text-[11px] text-ink-3">{t("tagPicker.empty")}</p>
           ) : null}
         </div>
@@ -152,15 +125,19 @@ export function BatchTagDialog({
   count,
   allTags,
   onApply,
+  initialTags,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   count: number;
   allTags: string[];
   onApply: (mode: "add" | "remove" | "clear", tags: string[]) => Promise<void> | void;
+  /** 打开时预填的标签（AI 建议值从这里进来，用户仍可增删） */
+  initialTags?: string[];
 }) {
   const { t } = useTranslation();
-  const [tags, setTags] = useState<string[]>([]);
+  const [tags, setTags] = useState<string[]>(initialTags ?? []);
+  useEffect(() => { if (open) setTags(initialTags ?? []); }, [open, initialTags]);
   const [busy, setBusy] = useState(false);
 
   const run = async (mode: "add" | "remove" | "clear") => {

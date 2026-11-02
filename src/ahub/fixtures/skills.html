@@ -3,7 +3,7 @@ import React from 'react';
 import {createRoot} from 'react-dom/client';
 import {mockIPC,mockWindows} from '@tauri-apps/api/mocks';
 const calls=[];
-const skills=[{dirName:'code-review',name:'代码评审',description:'按团队规范过一遍 diff',frontmatter:{name:'代码评审',description:'按团队规范过一遍 diff'},body:'## 用途',versions:[],tags:[],status:'active'}];
+const skills=Array.from({length:24},(_,i)=>({dirName:`skill-${i+1}`,name:`示例技能 ${i+1}`,description:"按团队规范过一遍 diff，覆盖边界与错误路径",frontmatter:{name:`示例技能 ${i+1}`,description:"按团队规范过一遍 diff"},body:"## 用途",versions:[],tags:["评审","测试"],status:"active"}));
 window.skillsReview={calls};
 const settingsInfo={settings:{dataDir:'E:/SkillsFixture',envRoot:'',language:'zh',theme:'dark',skillSourceDirs:[],harnessOrder:[],aiBaseUrl:'',aiApiKey:'',aiModel:'',autoSummaryOnImport:false,aiProviders:[],aiDefaultProviderId:'',aiLegacyMigrated:true},dataDirs:{root:'E:/SkillsFixture',prompts:'E:/SkillsFixture/prompts',mcp:'E:/SkillsFixture/mcp',skills:'E:/SkillsFixture/skills'}};
 mockIPC(async(cmd,args)=>{
@@ -19,7 +19,8 @@ mockWindows('main');
 await import('/src/index.css');
 const {i18n,I18nextProvider}=await import('/src/lib/i18n.ts');
 const {AhubSkillsPage}=await import('/src/features/agenthub/ahub-host-skills.tsx');
+const {MemoryRouter}=await import('react-router-dom');
 const {Toaster}=await import('/src/components/ui/sonner.tsx');
 document.documentElement.classList.add('dark');
-createRoot(document.getElementById('root')).render(React.createElement(I18nextProvider,{i18n},React.createElement('div',{className:'flex min-h-0 flex-1 flex-col',style:{height:'100vh'}},React.createElement(AhubSkillsPage)),React.createElement(Toaster)));
+createRoot(document.getElementById('root')).render(React.createElement(I18nextProvider,{i18n},React.createElement('div',{className:'flex min-h-0 flex-1 flex-col',style:{height:'100vh'}},React.createElement(MemoryRouter,null,React.createElement(AhubSkillsPage))),React.createElement(Toaster)));
 </script></body></html>

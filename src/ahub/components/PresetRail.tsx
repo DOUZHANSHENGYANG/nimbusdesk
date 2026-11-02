@@ -1,4 +1,4 @@
-import { Layers, Settings2 } from "lucide-react";
+import { Settings2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/ahub/lib/utils";
 
@@ -20,8 +20,11 @@ export interface PresetRailItem {
  * 还没有预设时整块不渲染 —— 空的栏只会让人疑惑，首个预设由批量工具条的
  * 「保存为预设」创建，出现后这里自然亮起。
  *
- * 排版与标签栏保持一致：一层外框 + 扁平行（h-7，计数用 tabular mono 靠右），
- * 不做卡片套卡片 —— 两栏并排时嵌套盒子会把留白吃光。
+ * 排版与标签栏共用同一套「栏」规则（Linear / GitHub 侧栏的路子）：
+ * **整栏不画外框**，靠 12px 间距与分区标题分层；行高 h-7、正文 12px、
+ * 分区标题 10.5px 灰，计数走 tabular-nums 靠右。
+ * 早先是「两张带边框的卡叠着」，右栏内容区一根框都没有 —— 视觉重量全压在
+ * 212px 的窄栏上，两栏并排时像两个便签贴在页边。
  */
 export function PresetRail({
   items,
@@ -51,7 +54,7 @@ export function PresetRail({
         title={title}
         onClick={() => onSelect(active && id ? null : id)}
         className={cn(
-          "flex h-7 w-full items-center gap-1.5 rounded-md px-1.5 text-left text-[11px] transition-colors",
+          "flex h-7 w-full items-center gap-1.5 rounded-md px-1.5 text-left text-[12px] outline-none transition-colors",
           active
             ? "bg-primary-soft font-medium text-primary"
             : "text-ink-2 hover:bg-surface-2 hover:text-foreground",
@@ -66,29 +69,28 @@ export function PresetRail({
             {stale}
           </span>
         ) : null}
-        <span className="shrink-0 font-mono text-[10px] text-ink-3">{count}</span>
+        <span className={cn("shrink-0 text-[10.5px] tabular-nums", active ? "text-primary/70" : "text-ink-3")}>{count}</span>
       </button>
     );
   };
 
   return (
-    <section className="rounded-xl border border-border bg-surface/40">
-      <header className="flex items-center gap-1.5 px-2 py-1.5">
-        <Layers className="size-3 shrink-0 text-ink-3" />
-        <span className="truncate text-[11px] font-medium text-ink-2">{t("preset.title")}</span>
-        <span className="shrink-0 font-mono text-[10px] text-ink-3">{items.length}</span>
+    <section className="flex flex-col gap-0.5">
+      <header className="flex h-6 items-center gap-1.5 px-1.5">
+        <span className="truncate text-[10.5px] font-medium text-ink-3">{t("preset.title")}</span>
+        <span className="shrink-0 text-[10.5px] tabular-nums text-ink-3">{items.length}</span>
         <button
           type="button"
           title={t("preset.manage")}
           aria-label={t("preset.manage")}
           onClick={onManage}
-          className="ml-auto shrink-0 rounded p-0.5 text-ink-3 hover:bg-surface-2 hover:text-foreground"
+          className="ml-auto shrink-0 rounded p-0.5 text-ink-3 outline-none transition-colors hover:text-foreground"
         >
           <Settings2 className="size-3" />
         </button>
       </header>
 
-      <div className="flex flex-col gap-0.5 border-t border-border/60 p-1">
+      <div className="flex flex-col gap-px">
         {row(null, t("preset.all"), total)}
         {items.map((p) => row(p.id, p.name, p.count, p.stale, p.description || p.name))}
       </div>

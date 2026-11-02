@@ -41,6 +41,7 @@ fn namespace(key: &str) -> (&str, &str) {
         "plans-archive" => ("plans", "archive"),
         "projects" => ("projects", "state"),
         "zentao" => ("projects", "zentao"),
+        "github" => ("projects", "github"),
         "reminders" => ("plans", "reminders"),
         "fences" => ("files", "fences"),
         "favorites" => ("favorites", "items"),
@@ -626,13 +627,10 @@ mod tests {
 
     fn project_envelope() -> Value {
         json!({"version":1,"state":{
-            "areas":[{"id":"area","name":"Area","createdAt":1,"updatedAt":1}],
-            "projects":[{"id":"project","areaId":"area","name":"Project","note":"","status":"active","folder":null,"createdAt":1,"updatedAt":1}],
+            "projects":[{"id":"project","name":"Project","note":"","status":"active","folder":null,"createdAt":1,"updatedAt":1}],
             "iterations":[{"id":"iteration","name":"Cycle","start":"2026-10-18","end":"2026-10-31","createdAt":1,"updatedAt":1}],
-            "items":[{"id":"item","projectId":"project","areaId":null,"title":"Work","note":"","status":"todo","deadline":"2026-10-31","activeIterationId":"iteration","createdAt":1,"updatedAt":1}],
-            "memberships":[{"id":"membership","itemId":"item","iterationId":"iteration","joinedAt":1,"leftAt":null,"carriedFrom":null,"snapshot":null,"updatedAt":1}],
-            "reminderRule":{"enabled":true,"times":["09:00","16:50"],"advanceDays":0,"weekdays":[1,2,3,4,5],"nonWorkingDay":"same","timezone":"Asia/Shanghai"},
-            "deliveries":[]
+            "items":[{"id":"item","projectId":"project","title":"Work","note":"","status":"todo","deadline":"2026-10-31","activeIterationId":"iteration","createdAt":1,"updatedAt":1}],
+            "memberships":[{"id":"membership","itemId":"item","iterationId":"iteration","joinedAt":1,"leftAt":null,"carriedFrom":null,"snapshot":null,"updatedAt":1}]
         }})
     }
 
@@ -1284,25 +1282,6 @@ mod tests {
     }
 
     #[test]
-    fn project_reminder_rules_reject_empty_slots_and_invalid_limits_without_overwriting() {
-        let root = Fixture::new();
-        let valid = project_envelope();
-        write_at(&root.0, "projects", &valid).unwrap();
-        for (field, value) in [
-            ("times", json!([])),
-            ("weekdays", json!([])),
-            ("advanceDays", json!(366)),
-            ("times", json!(["24:00"])),
-        ] {
-            let mut bad = valid.clone();
-            bad["state"]["reminderRule"][field] = value;
-            assert!(
-                write_at(&root.0, "projects", &bad).is_err(),
-                "accepted reminder {field}"
-            );
-        }
-        assert_eq!(read_at(&root.0, "projects").unwrap(), Some(valid));
-    }
 
     #[test]
     fn project_malformed_v1_migration_retains_json_version_and_can_retry() {

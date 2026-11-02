@@ -709,8 +709,8 @@ pub fn organize_with_folders(
     }
     let mut originals = vec![];
     for source in &input.sources {
-        let kind = note_kind(&source.path, &folders);
-        if source.path.starts_with('.') || !source.path.ends_with(".md") || kind == "note" {
+        let kind = note_kind(&source.path);
+        if source.path.starts_with('.') || !source.path.ends_with(".md") || kind == "note" || kind == "99-系统" {
             return Err("只能整理已绑定管理目录和收件箱内的 Markdown 笔记".into());
         }
         let content = vault.text(&source.path)?;

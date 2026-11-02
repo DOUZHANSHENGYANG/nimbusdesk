@@ -456,7 +456,7 @@ fn write_preset_zip(
 }
 
 /// 递归把一个目录的内容写进 zip（zip 内路径统一用 `/`）。
-fn add_dir_to_zip(
+pub(crate) fn add_dir_to_zip(
     zip: &mut zip::ZipWriter<std::fs::File>,
     src: &Path,
     zip_prefix: &str,

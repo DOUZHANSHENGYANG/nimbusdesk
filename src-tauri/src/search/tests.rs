@@ -11,7 +11,7 @@ fn doc(id: &str, kind: &str, title: &str, body: &str) -> SearchDocument {
             snippet: String::new(),
             path: None,
             url: None,
-            route: Some("/knowledge".into()),
+            route: Some("/ai/knowledge".into()),
             score: 0.0,
         },
         body: body.into(),

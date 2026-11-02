@@ -109,9 +109,13 @@ fn test_http(url: &str, start: Instant) -> McpTestResult {
 /// 旧字段 aiBaseUrl / aiApiKey / aiModel 只在首次迁移时读取。
 pub fn suggest_tags(app: &crate::ahub::store::AppH, name: &str, description: &str) -> Result<Vec<String>, String> {
     let prompt = format!(
-        "你是标签助手。根据下面这个 MCP 服务的名称与描述，生成 3-5 个简短标签：\
-每个标签 2-8 个字，概括它的功能领域（如：搜索、浏览器、文件系统、代码、数据库）。\
-不要照抄名称。只输出一个 JSON 字符串数组，不要输出任何其他文字。\n名称：{name}\n描述：{description}"
+        "你是标签助手。根据下面这个 MCP 服务/技能的名称与描述，生成 1-4 个标签。\n\
+要求：\n\
+1. 每个标签 2-8 个字；\n\
+2. 每个标签描述**不同的方面**（领域 / 对象 / 动作 / 平台 各取一个），不要重复同一个维度；\n\
+3. **禁止近义或包含关系的重复**：有了「邮件」就不要再给「邮箱」「电子邮件」「邮件操作」「邮件管理」；\n\
+4. 不要照抄名称；标签要能帮人快速定位，宁少勿滥。\n\
+只输出一个 JSON 字符串数组，不要输出任何其他文字。\n名称：{name}\n描述：{description}"
     );
 
     let content = crate::ahub::aihelper::chat(app, "", &prompt)?;
@@ -137,19 +141,51 @@ fn parse_tags(content: &str) -> Vec<String> {
         (Some(a), Some(b)) if b > a => &s[a..=b],
         _ => s,
     };
-    let mut seen = std::collections::BTreeSet::new();
-    serde_json::from_str::<Vec<String>>(arr)
-        .unwrap_or_default()
-        .into_iter()
-        .map(|t| t.trim().to_string())
-        .filter(|t| !t.is_empty() && seen.insert(t.clone()))
-        .take(5)
-        .collect()
+    let mut kept: Vec<String> = Vec::new();
+    for tag in serde_json::from_str::<Vec<String>>(arr).unwrap_or_default() {
+        let tag = tag.trim().to_string();
+        if tag.is_empty() || kept.iter().any(|kept_tag| too_similar(kept_tag, &tag)) {
+            continue;
+        }
+        kept.push(tag);
+        if kept.len() >= 4 {
+            break;
+        }
+    }
+    kept
+}
+
+/// 两个标签是不是在说同一件事。
+///
+/// 中文标签没有词形变化，"邮件 / 邮箱 / 邮件操作 / 邮件管理" 会一起冒出来，
+/// 光去重相同字符串没用。这里用「共享字数 / 较短标签长度」做粗判：
+/// 邮件 vs 邮箱 = 1/2，邮件 vs 邮件操作 = 1，都会被判成同一维度。
+fn too_similar(a: &str, b: &str) -> bool {
+    let na: Vec<char> = a.chars().filter(|c| !c.is_whitespace()).collect();
+    let nb: Vec<char> = b.chars().filter(|c| !c.is_whitespace()).collect();
+    if na.is_empty() || nb.is_empty() {
+        return true;
+    }
+    if a.eq_ignore_ascii_case(b) {
+        return true;
+    }
+    let shared = na.iter().filter(|c| nb.contains(c)).count();
+    let shorter = na.len().min(nb.len());
+    shared * 2 >= shorter
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn tag_dedupe_keeps_distinct_dimensions() {
+        let raw = r#"["电子邮件","邮件","邮件操作","邮件管理","邮箱","附件","OAuth 授权"]"#;
+        let tags = parse_tags(raw);
+        assert!(tags.len() <= 4, "最多 4 个：{tags:?}");
+        assert_eq!(tags.iter().filter(|t| t.contains('邮')).count(), 1, "邮件维度只留一个：{tags:?}");
+        assert!(tags.iter().any(|t| t.contains("OAuth")), "不同维度要留下：{tags:?}");
+    }
 
     #[test]
     fn parse_tags_handles_fenced_and_embedded_json() {
@@ -167,8 +203,8 @@ mod tests {
     }
 
     #[test]
-    fn parse_tags_caps_at_five() {
+    fn parse_tags_caps_at_four() {
         let tags = parse_tags("[\"1\",\"2\",\"3\",\"4\",\"5\",\"6\",\"7\"]");
-        assert_eq!(tags.len(), 5);
+        assert_eq!(tags.len(), 4);
     }
 }

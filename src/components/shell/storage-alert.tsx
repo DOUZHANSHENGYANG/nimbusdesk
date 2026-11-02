@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { useTranslation } from "react-i18next";
 import { AlertTriangle, X } from "lucide-react";
 import { toast } from "sonner";
+import { notify } from "@/lib/notifications";
 import { useStorageHealth } from "@/stores/storage-health";
 import { useSettings } from "@/stores/settings";
 import { revealInExplorer } from "@/lib/tauri";
@@ -28,7 +29,16 @@ export function StorageAlert() {
     if (!problem || at == null || toastedAt.current === at) return;
     toastedAt.current = at;
     toast.error(t("storage.failedToast"), { description: detail ?? undefined });
-  }, [problem, at, detail, t]);
+    notify({
+      source: "storage",
+      level: "error",
+      title: t("notifications.storageFailed"),
+      body: detail ?? t("storage.failedToast"),
+      dedupeKey: `storage:${problem}:${key ?? ""}:${at}`,
+      route: "/settings",
+      system: true,
+    });
+  }, [problem, at, detail, key, t]);
 
   if (!problem) return null;
 

@@ -126,6 +126,45 @@ pub async fn close_fence(app: AppHandle, category_id: String) -> Result<(), Stri
     Ok(())
 }
 
+fn group_label(group_id: &str) -> Result<String, String> {
+    if group_id.is_empty() || group_id.len() > 32 || !group_id.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        return Err("Fence group id is invalid".into());
+    }
+    Ok(format!("fence-group-{group_id}"))
+}
+
+/// 同色编组的宿主窗口。成员盒子仍归各自的 fence-* 窗口；宿主只做
+/// 多分区/Tab 的展示，所以这里只负责创建一个普通桌面窗口。
+#[tauri::command]
+pub async fn open_fence_group(
+    app: AppHandle,
+    group_id: String,
+    title: String,
+    x: i32,
+    y: i32,
+    w: i32,
+    h: i32,
+) -> Result<(), String> {
+    let label = group_label(&group_id)?;
+    if let Some(win) = app.get_webview_window(&label) {
+        let _ = win.show();
+        let _ = win.set_focus();
+        return Ok(());
+    }
+    tauri::WebviewWindowBuilder::new(&app, &label, tauri::WebviewUrl::App("index.html".into()))
+        .title(title)
+        .position(x as f64, y as f64)
+        .inner_size(w as f64, h as f64)
+        .decorations(false)
+        .transparent(true)
+        .shadow(false)
+        .skip_taskbar(true)
+        .visible(false)
+        .build()
+        .map_err(|error| error.to_string())?;
+    Ok(())
+}
+
 /// 弹出菜单窗口的 label（全局唯一，复用一个窗口，避免反复创建 WebView）。
 const POPUP_LABEL: &str = "popup-menu";
 
@@ -240,7 +279,24 @@ pub async fn pick_folder(app: AppHandle) -> Result<Option<String>, String> {
     .map_err(|e| format!("task join error: {e}"))?
 }
 
-/// 系统文件选择对话框（OS 级，用于添加文件条目）。
+/// 多选文件对话框（一次上传多个）。
+#[tauri::command]
+pub async fn pick_files(app: AppHandle) -> Result<Vec<String>, String> {
+    use tauri_plugin_dialog::DialogExt;
+    tauri::async_runtime::spawn_blocking(move || {
+        Ok(app
+            .dialog()
+            .file()
+            .blocking_pick_files()
+            .unwrap_or_default()
+            .into_iter()
+            .map(|p| p.to_string())
+            .collect::<Vec<_>>())
+    })
+    .await
+    .map_err(|e| format!("task join error: {e}"))?
+}
+
 #[tauri::command]
 pub async fn pick_file(app: AppHandle) -> Result<Option<String>, String> {
     use tauri_plugin_dialog::DialogExt;

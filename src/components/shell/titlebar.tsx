@@ -9,6 +9,7 @@ import { changeLang } from "@/lib/i18n";
 import { useSettings } from "@/stores/settings";
 import { cn } from "@/lib/utils";
 import { openSearchWindow } from "@/features/search";
+import { NotificationBell } from "@/features/notifications/notification-bell";
 import { toast } from "sonner";
 
 const appWindow = inTauri ? getCurrentWebviewWindow() : null;
@@ -21,6 +22,7 @@ export function Titlebar() {
   const [isMax, setIsMax] = useState(false);
   const theme = useSettings((s) => s.theme);
   const setTheme = useSettings((s) => s.setTheme);
+  const pogget = useSettings((s) => s.visualStyle) === "pogget";
   const lang = useSettings((s) => s.lang);
   const setLang = useSettings((s) => s.setLang);
   const alwaysOnTop = useSettings((s) => s.alwaysOnTop);
@@ -85,10 +87,13 @@ export function Titlebar() {
     >
       {/* 左：品牌区（可拖拽） */}
       <div data-tauri-drag-region className="flex items-center gap-2.5 pl-3.5 pr-2">
-        <img src="/app-icon.png" alt="" className="size-7 shrink-0" draggable={false} />
+        <img src="/app-icon.png" alt="" className={cn("shrink-0", pogget ? "size-6" : "size-7")} draggable={false} />
         <span
           data-tauri-drag-region
-          className="text-[13px] font-semibold tracking-wide text-sidebar-foreground"
+          className={cn(
+            "tracking-wide text-sidebar-foreground",
+            pogget ? "text-[15px] font-semibold tracking-normal" : "text-[13px] font-semibold",
+          )}
         >
           {t("app.name")}
         </span>
@@ -100,6 +105,7 @@ export function Titlebar() {
       {/* 右：工具组（语言/主题/设置）+ 窗口控制 */}
       <div className="flex items-stretch">
         <div className="flex items-center gap-0.5 pr-1.5">
+          <NotificationBell />
           <ToolbarButton title={lang === "en" ? "Global search" : "全局搜索"} onClick={() => void openSearchWindow().catch(error => toast.error(String(error)))}><Search className="size-4" /></ToolbarButton>
           <ToolbarButton title={t("topbar.language")} onClick={onLangClick}>
             <span className="text-[11px] font-bold tracking-wide">

@@ -742,18 +742,6 @@ fn project_state(conn: &Connection, envelope: Option<&Value>) -> Result<(), Stri
         .get("state")
         .filter(|v| v.is_object())
         .ok_or_else(|| error("invalid projects state envelope"))?;
-    reminder(
-        state
-            .get("reminderRule")
-            .ok_or_else(|| error("missing reminder rule"))?,
-    )?;
-    for (v, e) in entities(state, "areas")? {
-        conn.execute(
-            "INSERT INTO project_areas VALUES(?1,?2,?3,?4)",
-            params![e.id, name(&e)?, e.updated_at, v.to_string()],
-        )
-        .map_err(error)?;
-    }
     for (v, e) in entities(state, "projects")? {
         note(v)?;
         override_rule(v)?;
@@ -865,24 +853,6 @@ fn project_state(conn: &Connection, envelope: Option<&Value>) -> Result<(), Stri
     }
     if active != open {
         return Err(error("active iteration and membership disagree"));
-    }
-    let mut ids = HashSet::new();
-    for v in array(state, "deliveries")? {
-        let id = nonempty(v, "id")?;
-        if !ids.insert(id) || !item_ids.contains(&nonempty(v, "itemId")?) {
-            return Err(error("invalid reminder delivery reference"));
-        }
-        if !date(&nonempty(v, "date")?) {
-            return Err(error("invalid delivery date"));
-        }
-        epoch(v, "notifiedAt")?;
-        let slots = v
-            .get("slots")
-            .and_then(Value::as_array)
-            .ok_or_else(|| error("invalid delivery slots"))?;
-        if slots.iter().any(|s| !s.as_str().is_some_and(clock)) {
-            return Err(error("invalid delivery slot"));
-        }
     }
     Ok(())
 }

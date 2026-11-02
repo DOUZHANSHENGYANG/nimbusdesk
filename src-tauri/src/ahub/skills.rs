@@ -393,6 +393,21 @@ pub fn meta_for_dir(dir: &Path) -> Result<SkillMeta, String> {
     // SSEP v1.1：读 SKILL.toml（渐进增强；缺失 = 最小态）
     let toml_doc = crate::ahub::skill_toml::load(dir);
     let has_toml = toml_doc.is_some();
+    // 是否记录了可追踪的上游：卡片上要能一眼看出「这个技能纳入管理且有来源」
+    let has_upstream = {
+        let get = |path: &str| {
+            toml_doc
+                .as_ref()
+                .and_then(|d| crate::ahub::skill_toml::get_str(d, path))
+                .unwrap_or_default()
+        };
+        let remote = get("source.upstream.remote");
+        let kind = get("source.kind");
+        let source_ref = get("source.ref");
+        !remote.trim().is_empty()
+            || (kind == "url"
+                && (source_ref.starts_with("https://") || source_ref.starts_with("http://")))
+    };
     let version = toml_doc
         .as_ref()
         .and_then(|d| crate::ahub::skill_toml::get_str(d, "meta.version"))
@@ -451,6 +466,7 @@ pub fn meta_for_dir(dir: &Path) -> Result<SkillMeta, String> {
         status,
         stale,
         has_toml,
+        has_upstream,
         vet_verdict,
         vet_critical,
         vet_high,

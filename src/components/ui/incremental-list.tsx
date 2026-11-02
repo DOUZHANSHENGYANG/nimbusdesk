@@ -25,7 +25,7 @@ export interface IncrementalCount {
 
 export function useIncrementalCount(
   total: number,
-  options: { step?: number; resetKey?: string } = {},
+  options: { step?: number; resetKey?: string; root?: React.RefObject<Element | null> } = {},
 ): IncrementalCount {
   const step = options.step ?? DEFAULT_STEP;
   const resetKey = options.resetKey ?? "";
@@ -64,7 +64,9 @@ export function useIncrementalCount(
       (entries) => {
         if (entries.some((entry) => entry.isIntersecting)) grow();
       },
-      { rootMargin: "400px" },
+      // 列表在弹层里自己滚动时，必须把滚动容器当 root —— 否则哨兵会被弹层裁剪，
+      // 对着视口永远算「不可见」，滚到底也不会再放下一批。
+      { root: options.root?.current ?? null, rootMargin: "400px" },
     );
     observer.observe(node);
     return () => observer.disconnect();

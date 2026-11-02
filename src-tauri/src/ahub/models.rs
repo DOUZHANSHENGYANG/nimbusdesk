@@ -142,6 +142,9 @@ pub struct SkillMeta {
     pub stale: bool,
     #[serde(default)]
     pub has_toml: bool,
+    /// 是否记录了可追踪的上游（[source.upstream].remote，或 url 型 [source].ref）
+    #[serde(default)]
+    pub has_upstream: bool,
     /// AI 摘要（来自 .hub.json；None = 尚无摘要，界面显示空态）
     #[serde(default)]
     pub summary: Option<SkillSummary>,

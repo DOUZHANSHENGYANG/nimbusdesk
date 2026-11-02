@@ -27,8 +27,8 @@ pub async fn open_capture(app: AppHandle, x: Option<f64>, y: Option<f64>) -> Res
         .and_then(|window| window.additional_browser_args.clone());
     let mut builder = tauri::WebviewWindowBuilder::new(&app, "capture", tauri::WebviewUrl::App("index.html".into()))
         .title("收集知识 · 云台")
-        .inner_size(400.0, 600.0)
-        .min_inner_size(360.0, 420.0)
+        .inner_size(400.0, 420.0)
+        .min_inner_size(360.0, 400.0)
         .decorations(false)
         .disable_drag_drop_handler()
         .always_on_top(true)

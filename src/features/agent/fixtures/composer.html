@@ -108,7 +108,7 @@ const { AgentPage } = await import('/src/features/agent/panel.tsx');
 createRoot(document.getElementById('shell')).render(
   React.createElement(I18nextProvider, { i18n },
     React.createElement(TooltipProvider, { delayDuration: 300 },
-      React.createElement(MemoryRouter, { initialEntries: ['/agent'] },
+      React.createElement(MemoryRouter, { initialEntries: ['/ai/agent'] },
         React.createElement('div', { className: 'workbench-ui', style: { display: 'flex', flex: 1, minWidth: 0 } },
           React.createElement(AgentPage))))),
 );

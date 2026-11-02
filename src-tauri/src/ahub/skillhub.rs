@@ -70,6 +70,9 @@ pub struct InstallTarget {
     pub version: String,
     #[serde(default)]
     pub name: String,
+    /// 空 / `skillhub` = 腾讯 SkillHub；`deepskill` = DeepSkill 市场；`github` = GitHub 仓库
+    #[serde(default)]
+    pub source: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -242,6 +245,141 @@ pub fn categories() -> Result<Vec<MarketCategory>, String> {
         .collect())
 }
 
+/// 多来源搜索：统一返回 `MarketPage`，前端卡片与安装流程都不用分叉。
+/// `source`：空 / `skillhub` / `deepskill` / `github`。
+pub fn search_source(
+    keyword: &str,
+    page: u32,
+    page_size: u32,
+    source: &str,
+) -> Result<MarketPage, String> {
+    match source {
+        "deepskill" => search_deepskill(keyword, page, page_size),
+        "github" => search_github(keyword, page, page_size),
+        _ => search(keyword, "", "all", "score", page, page_size),
+    }
+}
+
+fn get_json_plain(url: &str) -> Result<serde_json::Value, String> {
+    let resp = agent()
+        .get(url)
+        .set("Accept", "application/json")
+        .call()
+        .map_err(|e| format!("请求失败：{e}"))?;
+    resp.into_json::<serde_json::Value>()
+        .map_err(|e| format!("返回内容无法解析：{e}"))
+}
+
+/// DeepSkill 市场：接口是「场景分组 → 技能」，这里压平成一页卡片；翻页在本地切。
+fn search_deepskill(keyword: &str, page: u32, page_size: u32) -> Result<MarketPage, String> {
+    let url = format!(
+        "https://www.deepskill.market/api/v1/skills/search/deep?query={}&ref=skillhub",
+        urlencode(keyword.trim())
+    );
+    let value = get_json_plain(&url)?;
+    let mut out: Vec<MarketSkill> = Vec::new();
+    for group in value
+        .pointer("/data/items")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default()
+    {
+        let scene = group.get("scene").and_then(|v| v.as_str()).unwrap_or("").to_string();
+        for skill in group
+            .get("skills")
+            .and_then(|v| v.as_array())
+            .cloned()
+            .unwrap_or_default()
+        {
+            let name = skill.get("name").and_then(|v| v.as_str()).unwrap_or("").trim().to_string();
+            if name.is_empty() || out.iter().any(|item| item.slug == name) {
+                continue;
+            }
+            let creator = skill.get("creator").and_then(|v| v.as_str()).unwrap_or("").to_string();
+            out.push(MarketSkill {
+                slug: name.clone(),
+                namespace: creator.clone(),
+                coordinate: name.clone(),
+                name,
+                description: skill
+                    .get("description")
+                    .and_then(|v| v.as_str())
+                    .or_else(|| skill.get("alias").and_then(|v| v.as_str()))
+                    .unwrap_or("")
+                    .to_string(),
+                version: String::new(),
+                category: scene.clone(),
+                source: "deepskill".into(),
+                downloads: skill.get("downloadCount").and_then(|v| v.as_u64()).unwrap_or(0),
+                stars: 0,
+                icon_url: String::new(),
+                verified: false,
+                publisher: creator,
+            });
+        }
+    }
+    let total = out.len() as u64;
+    let page_size = page_size.clamp(1, 50) as usize;
+    let start = ((page.max(1) - 1) as usize) * page_size;
+    let skills = out.into_iter().skip(start).take(page_size).collect();
+    Ok(MarketPage { total, page: page.max(1) as u64, page_size: page_size as u64, skills })
+}
+
+/// GitHub 仓库搜索：结果就是仓库坐标 `owner/repo`，安装时整仓 clone 再挑出技能目录。
+fn search_github(keyword: &str, page: u32, page_size: u32) -> Result<MarketPage, String> {
+    let query = if keyword.trim().is_empty() {
+        "claude skills".to_string()
+    } else {
+        format!("{} skill", keyword.trim())
+    };
+    let page = page.max(1);
+    let page_size = page_size.clamp(1, 50);
+    let url = format!(
+        "https://api.github.com/search/repositories?q={}&sort=stars&order=desc&per_page={page_size}&page={page}",
+        urlencode(&query)
+    );
+    let value = get_json_plain(&url)?;
+    if let Some(message) = value.get("message").and_then(|v| v.as_str()) {
+        return Err(format!("GitHub 搜索受限：{message}"));
+    }
+    let skills = value
+        .get("items")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|item| {
+            let full = item.get("full_name").and_then(|v| v.as_str())?.to_string();
+            let owner = item
+                .pointer("/owner/login")
+                .and_then(|v| v.as_str())
+                .unwrap_or("")
+                .to_string();
+            Some(MarketSkill {
+                slug: full.clone(),
+                namespace: owner.clone(),
+                coordinate: full.clone(),
+                name: full,
+                description: item.get("description").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+                version: String::new(),
+                category: "github".into(),
+                source: "github".into(),
+                downloads: 0,
+                stars: item.get("stargazers_count").and_then(|v| v.as_u64()).unwrap_or(0),
+                icon_url: item.pointer("/owner/avatar_url").and_then(|v| v.as_str()).unwrap_or("").to_string(),
+                verified: false,
+                publisher: owner,
+            })
+        })
+        .collect();
+    Ok(MarketPage {
+        total: value.get("total_count").and_then(|v| v.as_u64()).unwrap_or(0),
+        page: page as u64,
+        page_size: page_size as u64,
+        skills,
+    })
+}
+
 /// 下载一个技能包（ZIP 字节）。`namespace` / `version` 为空时由服务端取默认。
 fn download_zip(slug: &str, namespace: &str, version: &str) -> Result<Vec<u8>, String> {
     let mut url = format!("{API_BASE}/api/v1/download?slug={}", urlencode(slug));
@@ -285,7 +423,7 @@ fn download_zip(slug: &str, namespace: &str, version: &str) -> Result<Vec<u8>, S
     Ok(buf)
 }
 
-/// 批量安装。逐个下载到临时 ZIP，再交给 `import_skill_zip`（防护一致）。
+/// 批量安装。按来源分派：SkillHub 走官方 ZIP，DeepSkill 走公开下载，GitHub 走 clone。
 pub fn install(
     app: &AppH,
     targets: &[InstallTarget],
@@ -294,38 +432,232 @@ pub fn install(
     let stamp = crate::ahub::models::now_iso().replace([':', '-', '.'], "");
     targets
         .iter()
-        .map(|t| {
-            let mut rep = MarketInstallReport {
-                slug: t.slug.clone(),
-                name: t.name.clone(),
-                version: t.version.clone(),
-                dir_name: String::new(),
-                ok: false,
-                error: String::new(),
-            };
-            match download_zip(&t.slug, &t.namespace, &t.version) {
-                Ok(bytes) => {
-                    let tmp = std::env::temp_dir()
-                        .join(format!("agenthub-skillhub-{}-{stamp}-{}.zip", std::process::id(), t.slug));
-                    if let Err(e) = std::fs::write(&tmp, &bytes) {
-                        rep.error = format!("写入临时文件失败：{e}");
-                        return rep;
-                    }
-                    let r = crate::ahub::skills::import_skill_zip(app, &tmp.to_string_lossy(), overwrite);
-                    let _ = std::fs::remove_file(&tmp);
-                    match r {
-                        Ok(dir) => {
-                            rep.dir_name = dir;
-                            rep.ok = true;
-                        }
-                        Err(e) => rep.error = e,
-                    }
+        .map(|t| match t.source.as_str() {
+            "deepskill" => install_deepskill(app, t, overwrite),
+            "github" => install_github(app, t, overwrite),
+            _ => install_skillhub(app, t, overwrite, &stamp),
+        })
+        .collect()
+}
+
+fn install_skillhub(app: &AppH, t: &InstallTarget, overwrite: bool, stamp: &str) -> MarketInstallReport {
+    let mut rep = report_for(t);
+    match download_zip(&t.slug, &t.namespace, &t.version) {
+        Ok(bytes) => {
+            let tmp = std::env::temp_dir()
+                .join(format!("agenthub-skillhub-{}-{stamp}-{}.zip", std::process::id(), t.slug));
+            if let Err(e) = std::fs::write(&tmp, &bytes) {
+                rep.error = format!("写入临时文件失败：{e}");
+                return rep;
+            }
+            let r = crate::ahub::skills::import_skill_zip(app, &tmp.to_string_lossy(), overwrite);
+            let _ = std::fs::remove_file(&tmp);
+            match r {
+                Ok(dir) => {
+                    rep.dir_name = dir;
+                    rep.ok = true;
                 }
                 Err(e) => rep.error = e,
             }
-            rep
-        })
-        .collect()
+        }
+        Err(e) => rep.error = e,
+    }
+    rep
+}
+
+fn report_for(t: &InstallTarget) -> MarketInstallReport {
+    MarketInstallReport {
+        slug: t.slug.clone(),
+        name: t.name.clone(),
+        version: t.version.clone(),
+        dir_name: String::new(),
+        ok: false,
+        error: String::new(),
+    }
+}
+
+/// DeepSkill 市场：`download/public?name=` 给 ZIP 或单文件 SKILL.md。
+fn install_deepskill(app: &AppH, t: &InstallTarget, overwrite: bool) -> MarketInstallReport {
+    let mut rep = report_for(t);
+    let url = format!(
+        "https://www.deepskill.market/api/v1/skills/download/public?name={}",
+        urlencode(&t.slug)
+    );
+    let bytes = match download_bytes(&url) {
+        Ok(bytes) => bytes,
+        Err(e) => {
+            rep.error = e;
+            return rep;
+        }
+    };
+    let stamp = crate::ahub::models::now_iso().replace([':', '-', '.'], "");
+    let result = if bytes.starts_with(b"PK\x03\x04") {
+        let tmp = std::env::temp_dir()
+            .join(format!("agenthub-deepskill-{}-{stamp}-{}.zip", std::process::id(), t.slug.replace('/', "_")));
+        match std::fs::write(&tmp, &bytes) {
+            Ok(()) => {
+                let r = crate::ahub::skills::import_skill_zip(app, &tmp.to_string_lossy(), overwrite);
+                let _ = std::fs::remove_file(&tmp);
+                r
+            }
+            Err(e) => Err(format!("写入临时文件失败：{e}")),
+        }
+    } else {
+        let dir = std::env::temp_dir().join(format!(
+            "agenthub-deepskill-{}-{stamp}-{}",
+            std::process::id(),
+            t.slug.replace('/', "_")
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        let written = std::fs::create_dir_all(&dir)
+            .and_then(|_| std::fs::write(dir.join("SKILL.md"), &bytes));
+        match written {
+            Ok(()) => {
+                let r = crate::ahub::skills::import_skill_dir(app, &dir, overwrite);
+                let _ = std::fs::remove_dir_all(&dir);
+                r
+            }
+            Err(e) => Err(format!("写入临时技能目录失败：{e}")),
+        }
+    };
+    match result {
+        Ok(dir_name) => {
+            rep.dir_name = dir_name.clone();
+            rep.ok = true;
+            let root = crate::ahub::store::data_root(app).join("skills").join(&dir_name);
+            let page = format!("https://www.deepskill.market/skill/skill?name={}", urlencode(&t.slug));
+            let _ = crate::ahub::upstream::stamp(&root, &page, "web", "", "", "");
+        }
+        Err(e) => rep.error = e,
+    }
+    rep
+}
+
+/// GitHub：按 `owner/repo` 克隆一次，把里面所有含 SKILL.md 的目录都装进来，
+/// 并落下 revision / 子目录树指纹 —— 装完就是可跟踪的。
+fn install_github(app: &AppH, t: &InstallTarget, overwrite: bool) -> MarketInstallReport {
+    let mut rep = report_for(t);
+    let full = if t.slug.contains('/') {
+        t.slug.clone()
+    } else if !t.namespace.is_empty() {
+        format!("{}/{}", t.namespace, t.slug)
+    } else {
+        t.slug.clone()
+    };
+    let repo_url = format!("https://github.com/{full}");
+    let stamp = crate::ahub::models::now_iso().replace([':', '-', '.'], "");
+    let tmp = std::env::temp_dir().join(format!(
+        "agenthub-gh-{}-{stamp}-{}",
+        std::process::id(),
+        full.replace('/', "-")
+    ));
+    let _ = std::fs::remove_dir_all(&tmp);
+    let cloned = crate::ahub::store::silent_command("git")
+        .args(["clone", "--depth", "1", &repo_url])
+        .arg(&tmp)
+        .output();
+    let ok = matches!(&cloned, Ok(out) if out.status.success());
+    if !ok {
+        let note = match &cloned {
+            Ok(out) => format!("clone 失败：{}", String::from_utf8_lossy(&out.stderr).trim()),
+            Err(_) => "git 不可用（未安装或不在 PATH）".into(),
+        };
+        let _ = std::fs::remove_dir_all(&tmp);
+        rep.error = note;
+        return rep;
+    }
+    let revision = crate::ahub::store::silent_command("git")
+        .args(["-C"])
+        .arg(&tmp)
+        .args(["rev-parse", "HEAD"])
+        .output()
+        .ok()
+        .filter(|out| out.status.success())
+        .map(|out| String::from_utf8_lossy(&out.stdout).trim().to_string())
+        .unwrap_or_default();
+
+    let mut installed: Vec<String> = Vec::new();
+    let mut errors: Vec<String> = Vec::new();
+    for dir in skill_dirs(&tmp) {
+        let rel = dir
+            .strip_prefix(&tmp)
+            .map(|p| p.to_string_lossy().replace('\\', "/"))
+            .unwrap_or_default();
+        match crate::ahub::skills::import_skill_dir(app, &dir, overwrite) {
+            Ok(dir_name) => {
+                let root = crate::ahub::store::data_root(app).join("skills").join(&dir_name);
+                let subtree = if revision.is_empty() || rel.is_empty() {
+                    String::new()
+                } else {
+                    crate::ahub::store::silent_command("git")
+                        .args(["-C"])
+                        .arg(&tmp)
+                        .args(["rev-parse", &format!("{revision}:{rel}")])
+                        .output()
+                        .ok()
+                        .filter(|out| out.status.success())
+                        .map(|out| String::from_utf8_lossy(&out.stdout).trim().to_string())
+                        .unwrap_or_default()
+                };
+                let _ = crate::ahub::upstream::stamp(&root, &repo_url, "git-scan", &revision, &rel, &subtree);
+                installed.push(dir_name);
+            }
+            Err(e) => errors.push(format!("{rel}: {e}")),
+        }
+    }
+    let _ = std::fs::remove_dir_all(&tmp);
+    rep.ok = !installed.is_empty();
+    rep.dir_name = installed.join(", ");
+    rep.error = errors.join("；");
+    rep
+}
+
+/// 仓库里含 SKILL.md 的目录（跳过 .git，限深 4、最多 20 个）。
+fn skill_dirs(root: &std::path::Path) -> Vec<std::path::PathBuf> {
+    fn walk(dir: &std::path::Path, depth: u32, out: &mut Vec<std::path::PathBuf>) {
+        if depth > 4 || out.len() >= 20 {
+            return;
+        }
+        if dir.join("SKILL.md").is_file() {
+            out.push(dir.to_path_buf());
+            return;
+        }
+        for entry in std::fs::read_dir(dir).into_iter().flatten().flatten() {
+            let name = entry.file_name().to_string_lossy().into_owned();
+            if name == ".git" || name.starts_with('.') {
+                continue;
+            }
+            let path = entry.path();
+            if path.is_dir() {
+                walk(&path, depth + 1, out);
+            }
+        }
+    }
+    let mut out = Vec::new();
+    walk(root, 0, &mut out);
+    out
+}
+
+fn download_bytes(url: &str) -> Result<Vec<u8>, String> {
+    let resp = agent()
+        .get(url)
+        .set("Accept", "application/zip, application/octet-stream, text/markdown, */*")
+        .call()
+        .map_err(|e| match e {
+            ureq::Error::Status(404, _) => "该技能在市场里已不存在（404）".to_string(),
+            ureq::Error::Status(code, _) => format!("下载失败（HTTP {code}）"),
+            other => format!("下载失败：{other}"),
+        })?;
+    let mut buf = Vec::new();
+    let mut reader = resp.into_reader().take(MAX_DOWNLOAD + 1);
+    std::io::Read::read_to_end(&mut reader, &mut buf).map_err(|e| format!("读取下载内容失败：{e}"))?;
+    if buf.len() as u64 > MAX_DOWNLOAD {
+        return Err(format!("技能包过大，已超过 {} MB 上限", MAX_DOWNLOAD / 1_048_576));
+    }
+    if buf.is_empty() {
+        return Err("下载到空内容".into());
+    }
+    Ok(buf)
 }
 
 /// 最小 percent-encoding（只编码查询参数里真正需要转义的字符）
@@ -345,6 +677,53 @@ fn urlencode(s: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn skill_dirs_finds_nested_skills_and_skips_git() {
+        let root = std::env::temp_dir().join(format!(
+            "ah-skilldirs-{}-{}",
+            std::process::id(),
+            crate::ahub::models::new_id()
+        ));
+        std::fs::create_dir_all(root.join("skills/a")).unwrap();
+        std::fs::create_dir_all(root.join("plugins/x/skills/b")).unwrap();
+        std::fs::create_dir_all(root.join(".git/objects")).unwrap();
+        std::fs::create_dir_all(root.join("docs")).unwrap();
+        std::fs::write(root.join("skills/a/SKILL.md"), "a").unwrap();
+        std::fs::write(root.join("plugins/x/skills/b/SKILL.md"), "b").unwrap();
+        std::fs::write(root.join("SKILL.md"), "root").unwrap();
+        std::fs::write(root.join(".git/objects/SKILL.md"), "fake").unwrap();
+        let dirs = skill_dirs(&root);
+        assert_eq!(dirs.len(), 1, "根目录有 SKILL.md 就只算根：{dirs:?}");
+        assert_eq!(dirs[0], root);
+        let _ = std::fs::remove_file(root.join("SKILL.md"));
+        let dirs = skill_dirs(&root);
+        let names: Vec<String> = dirs
+            .iter()
+            .map(|d| d.strip_prefix(&root).unwrap().to_string_lossy().replace('\\', "/"))
+            .collect();
+        assert_eq!(names, vec!["plugins/x/skills/b".to_string(), "skills/a".to_string()]);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    #[ignore = "联网冒烟：cargo test --lib market_sources_smoke -- --ignored --nocapture"]
+    fn market_sources_smoke() {
+        for source in ["deepskill", "github"] {
+            match search_source("pdf", 1, 5, source) {
+                Ok(page) => println!(
+                    "{source}: total={} first={:?}",
+                    page.total,
+                    page.skills.first().map(|s| (s.slug.clone(), s.publisher.clone(), s.downloads))
+                ),
+                Err(error) => println!("{source}: 失败 {error}"),
+            }
+        }
+        match download_bytes("https://www.deepskill.market/api/v1/skills/download/public?name=pdf") {
+            Ok(bytes) => println!("deepskill 下载 {} 字节，zip={}", bytes.len(), bytes.starts_with(b"PK")),
+            Err(error) => println!("deepskill 下载失败：{error}"),
+        }
+    }
 
     #[test]
     fn urlencode_escapes_non_ascii() {

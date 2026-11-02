@@ -2,6 +2,8 @@ pub mod backup;
 pub mod dock;
 pub mod projects;
 pub mod zentao;
+pub mod github;
+pub mod git;
 pub mod task_attachments;
 pub mod ai;
 pub mod capture;
@@ -26,4 +28,8 @@ pub mod search;
 pub mod schedule;
 
 pub mod quick_tools;
+
+pub mod quick_panel;
+
+pub mod canvas;
 

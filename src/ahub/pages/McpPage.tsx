@@ -5,7 +5,10 @@ import { toast } from "sonner";
 import { ConfirmDialog } from "@/ahub/components/ConfirmDialog";
 import { matchTags, type TagMode } from "@/ahub/components/TagFilter";
 import { TagShelf } from "@/ahub/components/TagShelf";
-import { TagManagerView } from "@/ahub/components/TagManagerView";
+import { TagManagerDialog } from "@/ahub/components/TagManagerDialog";
+import { SceneRail } from "@/ahub/components/SceneRail";
+import { open as openDialog } from "@tauri-apps/plugin-dialog";
+import { useActiveScene } from "@/ahub/stores/scenes";
 import { SearchBar } from "@/ahub/components/SearchBar";
 import { HarnessConfigDialog } from "@/ahub/components/HarnessConfigDialog";
 import { HarnessBatchDialog } from "@/ahub/components/HarnessBatchDialog";
@@ -16,6 +19,7 @@ import { KeyValueEditor, recordFromRows, rowsFromRecord, type KvRow } from "@/ah
 import { EmptyState } from "@/ahub/components/EmptyState";
 import { HarnessDialog } from "@/ahub/components/HarnessDialog";
 import { PageShell } from "@/ahub/components/PageShell";
+import { ToolboxTabs } from "@/ahub/components/ToolboxTabs";
 import { TagInput } from "@/ahub/components/TagInput";
 import { Badge } from "@/ahub/components/ui/badge";
 import { Button } from "@/ahub/components/ui/button";
@@ -81,13 +85,13 @@ export function McpPage() {
   const [importJsonName, setImportJsonName] = useState("");
   const [newMode, setNewMode] = useState<"manual" | "json">("manual");
   const [batchSel, setBatchSel] = useState<Set<string>>(new Set());
+  const [tagMgrOpen, setTagMgrOpen] = useState(false);
   const [reports, setReports] = useState<HarnessReport[] | null>(null);
   const [harnessBatchOpen, setHarnessBatchOpen] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [cfgOpen, setCfgOpen] = useState(false);
   const [batchDeleteOpen, setBatchDeleteOpen] = useState(false);
   const [activeTags, setActiveTags] = useState<Set<string>>(new Set());
-  const [pageTab, setPageTab] = useState<"list" | "tags">("list");
   const [tagMode, setTagMode] = useState<TagMode>("or");
   // MCP 预设：左侧切换查看，成员是服务名
   const [presets, setPresets] = useState<McpPreset[]>([]);
@@ -182,17 +186,21 @@ export function McpPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // 场景 = 只看的过滤器（成员存 MCP id）
+  const activeScene = useActiveScene("mcp");
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     const presetNames = selectedPreset ? new Set(selectedPreset.serverNames) : null;
+    const sceneIds = activeScene ? new Set(activeScene.members) : null;
     return mcp.filter((s) => {
+      if (sceneIds && !sceneIds.has(s.id)) return false;
       if (presetNames && !presetNames.has(s.name)) return false;
       if (!matchTags(s.tags, activeTags, tagMode)) return false;
       // 只按名称搜索：和 Skills 那边保持同一套心智，不再夹带命令/描述/传输类型
       if (!q) return true;
       return s.name.toLowerCase().includes(q);
     });
-  }, [mcp, query, activeTags, tagMode, selectedPreset]);
+  }, [mcp, query, activeTags, tagMode, selectedPreset, activeScene]);
 
   const openNew = () => {
     setNewMode("manual");
@@ -357,6 +365,22 @@ export function McpPage() {
       .finally(() => setScanning(false));
   };
 
+  /** 场景导出：选一个目录，写出 mcp.json（内容就是标准的 mcpServers 配置） */
+  const exportMcpJson = async (ids: string[]) => {
+    if (!ids.length) {
+      toast.warning(t("harness.nothingSelected"));
+      return;
+    }
+    const picked = await openDialog({ directory: true, multiple: false, title: t("scene.pickOut") });
+    if (typeof picked !== "string" || !picked) return;
+    try {
+      const path = await api.exportBundle("mcp", ids, [], picked);
+      toast.success(t("scene.exported", { n: ids.length, path }));
+    } catch (error) {
+      toast.error(String(error));
+    }
+  };
+
   /** 连通性测试：stdio 跑 --help / http·sse GET，结果显示在卡片上。
       工具栏那枚按钮测的是「已选」，所以这里收一个列表。 */
   const runTestSelected = async () => {
@@ -502,6 +526,7 @@ export function McpPage() {
   return (
     <PageShell
       title={t("nav.mcp")}
+      tabs={<ToolboxTabs />}
       actions={
         <>
           <SearchBar value={query} onChange={setQuery} placeholder={t("mcp.searchPlaceholder")} className="w-56" />
@@ -526,49 +551,38 @@ export function McpPage() {
         </>
       }
     >
-      <div className="mb-3 flex w-fit items-center gap-1 rounded-lg border border-border bg-surface p-0.5">
-        {([
-          { id: "list" as const, label: t("nav.mcp") },
-          { id: "tags" as const, label: t("tagShelf.title") },
-        ]).map((item) => (
-          <button key={item.id} type="button" aria-pressed={pageTab === item.id} onClick={() => setPageTab(item.id)}
-            className={cn("flex h-7 items-center rounded-md px-2.5 text-[11.5px] font-medium",
-              pageTab === item.id ? "bg-primary-soft text-primary" : "text-ink-3 hover:text-foreground")}>
-            {item.label}
-          </button>
-        ))}
-      </div>
-
-      {pageTab === "tags" ? (
-        <TagManagerView allTags={allTags} counts={tagCounts} />
-      ) : (
-        <>
-      {/* 标签筛选常驻：即便当前没有标签也保留入口，否则用户不知道有这个能力，
-          与 Skills 页保持一致（那边是无条件显示的） */}
-          <div className="flex min-h-0 flex-1 items-start gap-3">
-            <aside className="flex w-[212px] shrink-0 flex-col gap-2">
-              <PresetRail
-                items={presetRailItems}
-                selectedId={selectedPresetId}
-                onSelect={setSelectedPresetId}
-                onManage={() => {
-                  void loadPresets();
-                  setPresetManagerOpen(true);
-                }}
-                total={mcp.length}
-              />
-              <TagShelf
-                        allTags={allTags}
-                        selected={activeTags}
-                        onChange={setActiveTags}
-                        mode={tagMode}
-                        onModeChange={setTagMode}
-                        counts={tagCounts}
-                        hideWhenEmpty={false}
-                        onManage={() => setPageTab("tags")}
-                      />
-            </aside>
-            <div className="min-w-0 flex-1">
+      {/* 标签筛选不是常驻入口：没有标签时整栏不渲染，避免空标签仓占着左列。
+          只有预设时保留预设栏，标签区单独隐藏。 */}
+      <div className="flex h-full min-h-0 items-stretch gap-3">
+            {(presetRailItems.length > 0 || allTags.length > 0) && (
+              <aside className="flex min-h-0 w-[212px] shrink-0 flex-col gap-3 overflow-hidden rounded-lg bg-surface/40 p-1.5">
+                {presetRailItems.length > 0 && (
+                  <PresetRail
+                    items={presetRailItems}
+                    selectedId={selectedPresetId}
+                    onSelect={setSelectedPresetId}
+                    onManage={() => {
+                      void loadPresets();
+                      setPresetManagerOpen(true);
+                    }}
+                    total={mcp.length}
+                  />
+                )}
+                <SceneRail kind="mcp" selected={[...batchSel]} onExport={exportMcpJson} />
+                {allTags.length > 0 && (
+                  <TagShelf
+                    allTags={allTags}
+                    selected={activeTags}
+                    onChange={setActiveTags}
+                    mode={tagMode}
+                    onModeChange={setTagMode}
+                    counts={tagCounts}
+                  onManage={() => setTagMgrOpen(true)}
+                  />
+                )}
+              </aside>
+            )}
+            <div className="min-h-0 min-w-0 flex-1 overflow-y-auto">
 
       {filtered.length > 0 ? (
         <div data-anim className="mb-3 flex flex-wrap items-center gap-2">
@@ -1117,9 +1131,26 @@ export function McpPage() {
         onDeleted={(id) => setSelectedPresetId((cur) => (cur === id ? null : cur))}
       />
             </div>
-          </div>
-        </>
-      )}
+      </div>
+
+          <TagManagerDialog
+        open={tagMgrOpen}
+        onOpenChange={setTagMgrOpen}
+        tags={allTags.map((tag) => ({ tag, count: tagCounts[tag] ?? 0 }))}
+        onRemove={async (tags) => {
+          for (const server of mcp) {
+            const next = server.tags.filter((tag) => !tags.includes(tag));
+            if (next.length !== server.tags.length) await saveMcp({ ...server, tags: next });
+          }
+          await loadMcp();
+        }}
+        onClear={async () => {
+          for (const server of mcp) {
+            if (server.tags.length) await saveMcp({ ...server, tags: [] });
+          }
+          await loadMcp();
+        }}
+      />
     </PageShell>
   );
 }

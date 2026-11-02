@@ -1,28 +1,34 @@
 import {
   Archive,
+  CheckSquare,
   CloudUpload,
   Columns2,
   Copy,
   Eye,
   FileText,
   History,
-  LayoutGrid,
   PencilLine,
   Plus,
-  Rows3,
+  Package,
+  Square,
   Trash2,
   Wand2,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { toast } from "sonner";
+import { open as openDialog } from "@tauri-apps/plugin-dialog";
+import { api } from "@/ahub/lib/api";
 import { ConfirmDialog } from "@/ahub/components/ConfirmDialog";
 import { EmptyState } from "@/ahub/components/EmptyState";
 import { matchTags, type TagMode } from "@/ahub/components/TagFilter";
 import { TagShelf } from "@/ahub/components/TagShelf";
-import { TagManagerView } from "@/ahub/components/TagManagerView";
+import { TagManagerDialog } from "@/ahub/components/TagManagerDialog";
+import { SceneRail } from "@/ahub/components/SceneRail";
+import { useActiveScene } from "@/ahub/stores/scenes";
 import { SearchBar } from "@/ahub/components/SearchBar";
 import { PageShell } from "@/ahub/components/PageShell";
+import { ToolboxTabs } from "@/ahub/components/ToolboxTabs";
 import { PromptFillDialog, PromptVarsPanel } from "@/ahub/components/PromptVars";
 import { TagInput } from "@/ahub/components/TagInput";
 import { Markdown } from "@/ahub/components/Markdown";
@@ -79,8 +85,9 @@ export function PromptsPage() {
   const deletePrompt = useData((s) => s.deletePrompt);
 
   const [query, setQuery] = useState("");
+  const [batchSel, setBatchSel] = useState<Set<string>>(new Set());
+  const [tagMgrOpen, setTagMgrOpen] = useState(false);
   const [activeTags, setActiveTags] = useState<Set<string>>(new Set());
-  const [pageTab, setPageTab] = useState<"list" | "tags">("list");
   const [tagMode, setTagMode] = useState<TagMode>("or");
   const [editorOpen, setEditorOpen] = useState(false);
   const [editing, setEditing] = useState<Prompt | null>(null);
@@ -117,9 +124,26 @@ export function PromptsPage() {
     return [...keys].sort((a, b) => (tagCounts[b] ?? 0) - (tagCounts[a] ?? 0) || a.localeCompare(b));
   }, [tagCounts, activeTags]);
 
+  /** 多选导出：每篇一个 .md，打进 prompts.zip */
+  const exportPrompts = async (ids: string[]) => {
+    const targets = prompts.filter((item) => ids.includes(item.id));
+    if (!targets.length) return;
+    const picked = await openDialog({ directory: true, multiple: false, title: t("scene.pickOut") });
+    if (typeof picked !== "string" || !picked) return;
+    try {
+      const path = await api.exportBundle("prompts", [], targets.map((item) => ({ name: item.title, body: item.content })), picked);
+      toast.success(t("scene.exported", { n: targets.length, path }));
+    } catch (error) {
+      toast.error(String(error));
+    }
+  };
+
+  const activeScene = useActiveScene("prompts");
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
+    const sceneIds = activeScene ? new Set(activeScene.members) : null;
     return prompts.filter((p) => {
+      if (sceneIds && !sceneIds.has(p.id)) return false;
       if (!matchTags(p.tags, activeTags, tagMode)) return false;
       if (!q) return true;
       return (
@@ -129,15 +153,7 @@ export function PromptsPage() {
         p.tags.some((tg) => tg.toLowerCase().includes(q))
       );
     });
-  }, [prompts, query, activeTags, tagMode]);
-
-  const [view, setView] = useState<"grid" | "preview">("grid");
-  const [paneMode, setPaneMode] = useState<"preview" | "edit">("preview");
-  const [editContent, setEditContent] = useState("");
-  const [tagsEditing, setTagsEditing] = useState(false);
-  const [draftTags, setDraftTags] = useState<string[]>([]);
-  const [activeId, setActiveId] = useState<string | null>(null);
-  const active = filtered.find((p) => p.id === activeId) ?? filtered[0] ?? null;
+  }, [prompts, query, activeTags, tagMode, activeScene]);
 
   const openNew = () => {
     setEditing(null);
@@ -149,10 +165,6 @@ export function PromptsPage() {
     setContentMode("edit");
     setEditorOpen(true);
   };
-
-  useEffect(() => {
-    setTagsEditing(false);
-  }, [activeId]);
 
   const openEdit = (p: Prompt) => {
     setEditing(p);
@@ -247,32 +259,9 @@ export function PromptsPage() {
   return (
     <PageShell
       title={t("nav.prompts")}
+      tabs={<ToolboxTabs />}
       actions={
         <>
-          <div className="flex items-center gap-0.5 rounded-lg border border-border bg-surface p-0.5">
-            <button
-              type="button"
-              title={t("prompts.viewGrid")}
-              onClick={() => setView("grid")}
-              className={cn(
-                "grid size-7 place-items-center rounded-md outline-none transition-colors",
-                view === "grid" ? "bg-primary-soft text-primary" : "text-ink-3 hover:text-foreground",
-              )}
-            >
-              <LayoutGrid className="size-4" />
-            </button>
-            <button
-              type="button"
-              title={t("prompts.viewPreview")}
-              onClick={() => setView("preview")}
-              className={cn(
-                "grid size-7 place-items-center rounded-md outline-none transition-colors",
-                view === "preview" ? "bg-primary-soft text-primary" : "text-ink-3 hover:text-foreground",
-              )}
-            >
-              <Rows3 className="size-4" />
-            </button>
-          </div>
           <SearchBar value={query} onChange={setQuery} placeholder={t("prompts.searchPlaceholder")} className="w-56" />
           <Button onClick={openNew}>
             <Plus />
@@ -281,37 +270,24 @@ export function PromptsPage() {
         </>
       }
     >
-      <div className="mb-3 flex w-fit items-center gap-1 rounded-lg border border-border bg-surface p-0.5">
-        {([
-          { id: "list" as const, label: t("nav.prompts") },
-          { id: "tags" as const, label: t("tagShelf.title") },
-        ]).map((item) => (
-          <button key={item.id} type="button" aria-pressed={pageTab === item.id} onClick={() => setPageTab(item.id)}
-            className={cn("flex h-7 items-center rounded-md px-2.5 text-[11.5px] font-medium",
-              pageTab === item.id ? "bg-primary-soft text-primary" : "text-ink-3 hover:text-foreground")}>
-            {item.label}
-          </button>
-        ))}
-      </div>
-
-      {pageTab === "tags" ? (
-        <TagManagerView allTags={allTags} counts={tagCounts} />
-      ) : (
-        <>
-          <div className="flex min-h-0 flex-1 items-start gap-3">
-            <aside className="flex w-[212px] shrink-0 flex-col gap-2">
-              <TagShelf
-                        allTags={allTags}
-                        selected={activeTags}
-                        onChange={setActiveTags}
-                        mode={tagMode}
-                        onModeChange={setTagMode}
-                        counts={tagCounts}
-                        hideWhenEmpty={false}
-                        onManage={() => setPageTab("tags")}
-                      />
-            </aside>
-            <div className="min-w-0 flex-1">
+      <div className="flex h-full min-h-0 items-stretch gap-3">
+            {/* 没有标签时整栏不渲染：空标签仓只会让用户以为这里坏了 */}
+            {allTags.length > 0 && (
+              <aside className="flex min-h-0 w-[212px] shrink-0 flex-col gap-3 overflow-hidden rounded-lg bg-surface/40 p-1.5">
+                {/* 提示词页没有多选，就用「正在编辑的那条」当成员来源 */}
+          <SceneRail kind="prompts" selected={[...batchSel]} onExport={exportPrompts} />
+          <TagShelf
+                          allTags={allTags}
+                          selected={activeTags}
+                          onChange={setActiveTags}
+                          mode={tagMode}
+                          onModeChange={setTagMode}
+                          counts={tagCounts}
+            onManage={() => setTagMgrOpen(true)}
+                        />
+              </aside>
+            )}
+            <div className="min-h-0 min-w-0 flex-1 overflow-y-auto">
 
       {filtered.length === 0 ? (
         <EmptyState
@@ -325,169 +301,23 @@ export function PromptsPage() {
             </Button>
           }
         />
-      ) : view === "preview" ? (
-        <div className="flex h-[calc(100vh-190px)] min-h-96 gap-4">
-          <aside className="flex w-56 shrink-0 flex-col overflow-hidden rounded-xl border border-border bg-card">
-            <div className="min-h-0 flex-1 overflow-y-auto p-1.5">
-              {filtered.map((p) => (
-                <button
-                  key={p.id}
-                  type="button"
-                  onClick={() => setActiveId(p.id)}
-                  className={cn(
-                    "flex w-full flex-col gap-0.5 rounded-lg px-3 py-2 text-left outline-none transition-colors",
-                    active?.id === p.id ? "bg-primary-soft" : "hover:bg-surface-2",
-                  )}
-                >
-                  <span className={cn("truncate text-[13px] font-medium", active?.id === p.id ? "text-primary" : "text-foreground")}>
-                    {p.title}
-                  </span>
-                  <span className="flex items-center gap-1 text-[10px] text-ink-3">
-                    {p.tags.slice(0, 2).map((tg) => (
-                      <span key={tg} className="rounded bg-surface-2 px-1">
-                        {tg}
-                      </span>
-                    ))}
-                    <span className="ml-auto">{fmt(p.updatedAt)}</span>
-                  </span>
-                </button>
-              ))}
-            </div>
-          </aside>
-          <div className="min-w-0 flex-1 overflow-y-auto rounded-xl border border-border bg-card p-5">
-            {active ? (
-              <>
-                <div className="flex items-start justify-between gap-3">
-                  <h2 className="min-w-0 text-base font-semibold text-foreground">{active.title}</h2>
-                  <div className="flex shrink-0 items-center gap-2">
-                    {/* 预览 / 编辑 切换 */}
-                    <div className="flex items-center gap-0.5 rounded-lg border border-border bg-surface p-0.5">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setPaneMode("preview");
-                          setEditContent(active.content);
-                        }}
-                        className={cn(
-                          "rounded-md px-2.5 py-1 text-[11px] font-medium outline-none transition-colors",
-                        )}
-                      >
-                        {t("prompts.tabPreview")}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setEditContent(active.content);
-                          setPaneMode("edit");
-                        }}
-                        className={cn(
-                          "rounded-md px-2.5 py-1 text-[11px] font-medium outline-none transition-colors",
-                          paneMode === "edit" ? "bg-primary-soft text-primary" : "text-ink-3 hover:text-foreground",
-                        )}
-                      >
-                        {t("prompts.tabEdit")}
-                      </button>
-                    </div>
-                    {paneMode === "preview" ? (
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        onClick={() => void copyText(active.content).then((ok) => ok && toast.success(t("common.copied")))}
-                      >
-                        <Copy />
-                        {t("common.copy")}
-                      </Button>
-                    ) : (
-                      <Button
-                        size="sm"
-                        disabled={editContent === active.content}
-                        onClick={() =>
-                          void savePrompt({ ...active, content: editContent }).then(() => {
-                            toast.success(t("prompts.saved"));
-                            setPaneMode("preview");
-                          })
-                        }
-                      >
-                        {t("common.save")}
-                      </Button>
-                    )}
-                  </div>
-                </div>
-                {active.description ? <p className="mt-1 text-xs text-ink-2">{active.description}</p> : null}
-                <div className="mt-2 flex flex-wrap items-center gap-1">
-                  {tagsEditing ? (
-                    <>
-                      <TagInput value={draftTags} onChange={setDraftTags} className="min-h-7 max-w-md flex-1" />
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        className="h-7 px-2.5 text-[11px]"
-                        onClick={() =>
-                          void savePrompt({ ...active, tags: draftTags }).then(() => {
-                            toast.success(t("prompts.saved"));
-                            setTagsEditing(false);
-                          })
-                        }
-                      >
-                        {t("common.save")}
-                      </Button>
-                      <Button size="sm" variant="ghost" className="h-7 px-2 text-[11px]" onClick={() => setTagsEditing(false)}>
-                        {t("common.cancel")}
-                      </Button>
-                    </>
-                  ) : active.tags.length ? (
-                    <>
-                      {active.tags.map((tg) => (
-                        <Badge key={tg} variant="default">
-                          {tg}
-                        </Badge>
-                      ))}
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setDraftTags(active.tags);
-                          setTagsEditing(true);
-                        }}
-                        className="ml-1 text-[11px] text-ink-3 outline-none hover:text-primary"
-                      >
-                        {t("common.edit")}
-                      </button>
-                    </>
-                  ) : (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setDraftTags([]);
-                        setTagsEditing(true);
-                      }}
-                      className="rounded-full border border-dashed border-border px-2.5 py-0.5 text-[11px] text-ink-3 outline-none hover:border-primary/40 hover:text-primary"
-                    >
-                      {t("prompts.tagsEmpty")}
-                    </button>
-                  )}
-                </div>
-                <div className="mt-4 min-h-0 flex-1 border-t border-border pt-4">
-                  {paneMode === "preview" ? (
-                    <Markdown source={active.content} />
-                  ) : (
-                    <div className="grid h-[58vh] grid-cols-2 gap-3">
-                      <textarea
-                        value={editContent}
-                        onChange={(e) => setEditContent(e.target.value)}
-                        className="h-full w-full resize-none rounded-lg border border-input bg-surface p-3 font-mono text-[13px] leading-relaxed text-foreground outline-none transition-[border-color,box-shadow] focus:border-primary focus:shadow-[0_0_0_3px_var(--ah-primary-soft)]"
-                        spellCheck={false}
-                      />
-                      <div className="min-h-0 overflow-y-auto rounded-lg border border-border bg-bg-subtle p-3">
-                        <Markdown source={editContent} />
-                      </div>
-                    </div>
-                  )}
-                </div>
-              </>
-            ) : null}
-          </div>
-        </div>
       ) : (
+        <>
+        {batchSel.size > 0 ? (
+          <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-border bg-surface/50 px-3 py-2">
+            <span className="text-xs text-muted-foreground">{t("prompts.selectedCount", { n: batchSel.size })}</span>
+            <Button size="sm" variant="secondary" onClick={() => void exportPrompts([...batchSel])}>
+              <Package />
+              {t("prompts.exportZip")}
+            </Button>
+            <Button size="sm" variant="secondary" onClick={() => setBatchSel(new Set(filtered.map((item) => item.id)))}>
+              {t("common.selectAll")}
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => setBatchSel(new Set())}>
+              {t("common.clear")}
+            </Button>
+          </div>
+        ) : null}
         <div className="grid grid-cols-3 gap-2">
           {filtered.map((p) => (
             <div
@@ -498,7 +328,24 @@ export function PromptsPage() {
             >
               <div className="flex items-start justify-between gap-2">
                 <h3 className="min-w-0 flex-1 truncate text-[12.5px] font-semibold text-foreground">{p.title}</h3>
-                <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+                <div className={cn("flex shrink-0 items-center gap-0.5 transition-opacity", batchSel.has(p.id) ? "opacity-100" : "opacity-0 group-hover:opacity-100")}>
+                  <Button
+                    size="iconSm"
+                    variant="ghost"
+                    aria-pressed={batchSel.has(p.id)}
+                    title={t("common.selectCard", { name: p.title })}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setBatchSel((prev) => {
+                        const next = new Set(prev);
+                        if (next.has(p.id)) next.delete(p.id);
+                        else next.add(p.id);
+                        return next;
+                      });
+                    }}
+                  >
+                    {batchSel.has(p.id) ? <CheckSquare /> : <Square />}
+                  </Button>
                   {/* 只有正文里真有占位符时才出现「填充」，否则这个按钮点进去是空的 */}
                   {hasVars(p) ? (
                     <Button
@@ -560,6 +407,7 @@ export function PromptsPage() {
             </div>
           ))}
         </div>
+        </>
       )}
 
       {/* editor */}
@@ -731,9 +579,24 @@ export function PromptsPage() {
         }}
       />
             </div>
-          </div>
-        </>
-      )}
+      </div>
+
+          <TagManagerDialog
+        open={tagMgrOpen}
+        onOpenChange={setTagMgrOpen}
+        tags={allTags.map((tag) => ({ tag, count: tagCounts[tag] ?? 0 }))}
+        onRemove={async (tags) => {
+          for (const prompt of prompts) {
+            const next = prompt.tags.filter((tag) => !tags.includes(tag));
+            if (next.length !== prompt.tags.length) await savePrompt({ ...prompt, tags: next });
+          }
+        }}
+        onClear={async () => {
+          for (const prompt of prompts) {
+            if (prompt.tags.length) await savePrompt({ ...prompt, tags: [] });
+          }
+        }}
+      />
     </PageShell>
   );
 }

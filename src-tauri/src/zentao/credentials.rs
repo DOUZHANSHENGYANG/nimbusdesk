@@ -43,81 +43,27 @@ pub fn delete(id: &str) -> Result<(), String> {
 
 #[cfg(windows)]
 mod vault {
-    use windows::Win32::Security::Credentials::{
-        CRED_MAX_CREDENTIAL_BLOB_SIZE, CRED_PERSIST_LOCAL_MACHINE, CRED_TYPE_GENERIC, CREDENTIALW,
-        CredDeleteW, CredFree, CredReadW, CredWriteW,
-    };
-    use windows::core::{PCWSTR, PWSTR};
+    //! 存取在 credential_vault 里，这里只把通用错误码翻成禅道边界上的码。
+    use crate::credential_vault;
 
-    fn target(id: &str) -> Vec<u16> {
-        format!("NimbusDesk/ZenTao/{id}\0").encode_utf16().collect()
-    }
+    const SERVICE: &str = "ZenTao";
 
     pub fn read(id: &str) -> Result<Option<String>, String> {
-        let target = target(id);
-        let mut credential: *mut CREDENTIALW = std::ptr::null_mut();
-        unsafe {
-            if let Err(error) = CredReadW(
-                PCWSTR(target.as_ptr()),
-                CRED_TYPE_GENERIC,
-                None,
-                &mut credential,
-            ) {
-                return if error.code().0 as u32 == 0x80070490 {
-                    Ok(None)
-                } else {
-                    Err("ZENTAO_CREDENTIAL_READ_FAILED".into())
-                };
-            }
-            let data = &*credential;
-            let result = if data.CredentialBlobSize == 0 {
-                Ok(None)
-            } else {
-                String::from_utf8(
-                    std::slice::from_raw_parts(
-                        data.CredentialBlob,
-                        data.CredentialBlobSize as usize,
-                    )
-                    .to_vec(),
-                )
-                .map(Some)
-                .map_err(|_| "ZENTAO_CREDENTIAL_READ_FAILED".into())
-            };
-            CredFree(credential.cast());
-            result
-        }
+        credential_vault::read(SERVICE, id).map_err(|_| "ZENTAO_CREDENTIAL_READ_FAILED".into())
     }
 
     pub fn save(id: &str, key: &str) -> Result<(), String> {
-        if key.is_empty()
-            || key.len() > CRED_MAX_CREDENTIAL_BLOB_SIZE as usize
-            || key.contains(['\r', '\n', '\0'])
-        {
-            return Err("ZENTAO_INVALID_SECRET".into());
-        }
-        let mut target = target(id);
-        let mut bytes = key.as_bytes().to_vec();
-        let credential = CREDENTIALW {
-            Type: CRED_TYPE_GENERIC,
-            TargetName: PWSTR(target.as_mut_ptr()),
-            CredentialBlobSize: bytes.len() as u32,
-            CredentialBlob: bytes.as_mut_ptr(),
-            Persist: CRED_PERSIST_LOCAL_MACHINE,
-            ..Default::default()
-        };
-        let result = unsafe { CredWriteW(&credential, 0) }
-            .map_err(|_| "ZENTAO_CREDENTIAL_WRITE_FAILED".into());
-        bytes.fill(0);
-        result
+        credential_vault::save(SERVICE, id, key).map_err(|code| {
+            if code == credential_vault::INVALID {
+                "ZENTAO_INVALID_SECRET".into()
+            } else {
+                "ZENTAO_CREDENTIAL_WRITE_FAILED".into()
+            }
+        })
     }
 
     pub fn delete(id: &str) -> Result<(), String> {
-        let target = target(id);
-        match unsafe { CredDeleteW(PCWSTR(target.as_ptr()), CRED_TYPE_GENERIC, None) } {
-            Ok(()) => Ok(()),
-            Err(error) if error.code().0 as u32 == 0x80070490 => Ok(()),
-            Err(_) => Err("ZENTAO_CREDENTIAL_DELETE_FAILED".into()),
-        }
+        credential_vault::delete(SERVICE, id).map_err(|_| "ZENTAO_CREDENTIAL_DELETE_FAILED".into())
     }
 }
 

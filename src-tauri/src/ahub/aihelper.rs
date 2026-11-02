@@ -15,18 +15,39 @@ use crate::ahub::store::AppH;
 #[allow(dead_code)]
 pub const ERR_NOT_CONFIGURED: &str = aiprovider::ERR_NOT_CONFIGURED;
 
-/// anthropic 协议单次回复的 token 上限
-const ANTHROPIC_MAX_TOKENS: u32 = 2048;
+/// anthropic 协议单次回复的 token 上限。
+/// Anthropic 的 `max_tokens` 是必填项，现代模型上限 64000；再大会被 400 拒。
+const ANTHROPIC_MAX_TOKENS: u32 = 64_000;
+
+/// 需要模型写回整份正文的调用（技能更新审校）用的上限。
+///
+/// 2048 只够写一千多个汉字 —— 遇到 10 KB 的 SKILL.md 会把 `updatedBody` 截断，
+/// JSON 字符串不闭合，解析层只能报「不是 JSON」，把真正的「输出太长被截断」藏掉。
+pub const LONG_FORM_MAX_TOKENS: u32 = 64_000;
+
+/// 短回复（判定 / 生成检索词）沿用默认预算。
+/// 推理模型会先把预算花在 reasoning 上，小预算连正文都留不下 → 统一给到模型上限。
+pub const DEFAULT_MAX_TOKENS: u32 = 64_000;
 
 /// 调用默认提供商的 AI 接口，返回助手回复的文本。
 ///
 /// 无默认提供商、默认已停用或缺 key 时返回明确错误（含"请先在设置页配置"），
 /// 不发起任何网络请求。
 pub fn chat(app: &AppH, system_prompt: &str, user_content: &str) -> Result<String, String> {
+    chat_with_budget(app, system_prompt, user_content, ANTHROPIC_MAX_TOKENS)
+}
+
+/// 同上，但显式指定输出上限（写回整份正文的调用要更大的预算）。
+pub fn chat_with_budget(
+    app: &AppH,
+    system_prompt: &str,
+    user_content: &str,
+    max_tokens: u32,
+) -> Result<String, String> {
     let (provider, key) = aiprovider::resolve_default(app)?;
     match aiprovider::normalize_kind(&provider.kind).as_str() {
-        "anthropic" => chat_anthropic(&provider, &key, system_prompt, user_content),
-        _ => chat_openai(&provider, &key, system_prompt, user_content),
+        "anthropic" => chat_anthropic(&provider, &key, system_prompt, user_content, max_tokens),
+        _ => chat_openai(&provider, &key, system_prompt, user_content, max_tokens),
     }
 }
 
@@ -99,10 +120,11 @@ fn extract_text(provider: &AiProvider, value: &serde_json::Value, pointer: &str)
 }
 
 /// openai 兼容：POST `{base}/chat/completions`，取 `choices[0].message.content`
-fn chat_openai(p: &AiProvider, key: &str, sys: &str, user: &str) -> Result<String, String> {
+fn chat_openai(p: &AiProvider, key: &str, sys: &str, user: &str, _max_tokens: u32) -> Result<String, String> {
     let base = aiprovider::effective_base_url(p);
     let url = aiprovider::openai_endpoint(&base);
     let model = aiprovider::resolve_model(p);
+    // 不传 max_tokens：交给提供商自己的默认上限，别再用我们拍的数字把正文截断。
     let body = aiprovider::openai_payload(&model, sys, user, None);
     let mut req = agent().post(&url);
     // 本地网关可不需要 key：空 key 就不发鉴权头
@@ -110,15 +132,61 @@ fn chat_openai(p: &AiProvider, key: &str, sys: &str, user: &str) -> Result<Strin
         req = req.set("Authorization", &format!("Bearer {key}"));
     }
     let value = send(p, req, body)?;
-    extract_text(p, &value, "/choices/0/message/content")
+    extract_openai_text(p, &value, _max_tokens)
+}
+
+/// 取 openai 兼容响应的正文。
+///
+/// 推理模型（deepseek 系 / o 系 / 各种 v4 预览）会先把预算花在 reasoning 上，
+/// `message.content` 可能是空串；这时要先看 `finish_reason`，再回退到
+/// `reasoning_content`，否则上层只能看到「AI 返回内容为空」，误以为是模型不听话。
+fn extract_openai_text(p: &AiProvider, value: &serde_json::Value, max_tokens: u32) -> Result<String, String> {
+    if value.pointer("/choices/0").is_none() {
+        return Err(format!(
+            "「{}」响应格式异常：{}",
+            p.name,
+            value.to_string().chars().take(200).collect::<String>()
+        ));
+    }
+    let message = value.pointer("/choices/0/message");
+    let content = message
+        .and_then(|m| m.get("content"))
+        .and_then(|c| c.as_str())
+        .unwrap_or("");
+    if !content.trim().is_empty() {
+        return Ok(content.to_string());
+    }
+    for key in ["reasoning_content", "reasoning"] {
+        if let Some(text) = message.and_then(|m| m.get(key)).and_then(|c| c.as_str()) {
+            if !text.trim().is_empty() {
+                return Ok(text.to_string());
+            }
+        }
+    }
+    let finish = value
+        .pointer("/choices/0/finish_reason")
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    match finish {
+        "length" => Err(format!(
+            "「{}」的输出被 max_tokens={max_tokens} 用完了（推理模型会先吃掉预算）：请换一个非推理模型，或把预算调大",
+            p.name
+        )),
+        "content_filter" => Err(format!("「{}」的回复被内容策略拦截", p.name)),
+        _ => Err(format!(
+            "「{}」返回了空内容（finish_reason={}）：换模型或调大 max_tokens 后重试",
+            p.name,
+            if finish.is_empty() { "未提供" } else { finish }
+        )),
+    }
 }
 
 /// anthropic：POST `{base}/v1/messages`（base 已含 /v1 不重复），取 `content[0].text`
-fn chat_anthropic(p: &AiProvider, key: &str, sys: &str, user: &str) -> Result<String, String> {
+fn chat_anthropic(p: &AiProvider, key: &str, sys: &str, user: &str, max_tokens: u32) -> Result<String, String> {
     let base = aiprovider::effective_base_url(p);
     let url = aiprovider::anthropic_endpoint(&base);
     let model = aiprovider::resolve_model(p);
-    let body = aiprovider::anthropic_payload(&model, sys, user, ANTHROPIC_MAX_TOKENS);
+    let body = aiprovider::anthropic_payload(&model, sys, user, max_tokens);
     let mut req = agent().post(&url).set("anthropic-version", ANTHROPIC_VERSION);
     if !key.is_empty() {
         req = req.set("x-api-key", key);
@@ -232,7 +300,7 @@ mod tests {
     fn openai_request_path_headers_and_body() {
         let (base, rx) = mock_server(200, r#"{"choices":[{"message":{"content":"你好"}}]}"#);
         let p = provider("openai", &format!("{base}/v1"), "deepseek-chat");
-        let text = chat_openai(&p, "sk-key", "你是助手", "打个招呼").unwrap();
+        let text = chat_openai(&p, "sk-key", "你是助手", "打个招呼", ANTHROPIC_MAX_TOKENS).unwrap();
         assert_eq!(text, "你好");
 
         let req = rx.recv().unwrap();
@@ -248,7 +316,7 @@ mod tests {
     fn anthropic_request_path_headers_and_body() {
         let (base, rx) = mock_server(200, r#"{"content":[{"type":"text","text":"hi there"}]}"#);
         let p = provider("anthropic", &base, "claude-sonnet-4-5");
-        let text = chat_anthropic(&p, "sk-ant", "你是助手", "打个招呼").unwrap();
+        let text = chat_anthropic(&p, "sk-ant", "你是助手", "打个招呼", ANTHROPIC_MAX_TOKENS).unwrap();
         assert_eq!(text, "hi there");
 
         let req = rx.recv().unwrap();
@@ -256,7 +324,7 @@ mod tests {
         assert_eq!(req.header("x-api-key"), "sk-ant");
         assert_eq!(req.header("anthropic-version"), "2023-06-01");
         assert_eq!(req.body["system"], "你是助手", "system 必须放顶层");
-        assert_eq!(req.body["max_tokens"], 2048);
+        assert_eq!(req.body["max_tokens"], 64_000);
         assert_eq!(req.body["messages"].as_array().unwrap().len(), 1);
         assert_eq!(req.body["messages"][0]["role"], "user");
     }
@@ -265,7 +333,7 @@ mod tests {
     fn anthropic_base_with_v1_does_not_double_it() {
         let (base, rx) = mock_server(200, r#"{"content":[{"type":"text","text":"ok"}]}"#);
         let p = provider("anthropic", &format!("{base}/v1"), "claude-sonnet-4-5");
-        chat_anthropic(&p, "k", "", "ping").unwrap();
+        chat_anthropic(&p, "k", "", "ping", ANTHROPIC_MAX_TOKENS).unwrap();
         assert_eq!(rx.recv().unwrap().path(), "/v1/messages", "不该出现 /v1/v1");
     }
 
@@ -273,7 +341,7 @@ mod tests {
     fn openai_http_error_contains_vendor_and_status() {
         let (base, _rx) = mock_server(401, r#"{"error":"invalid api key"}"#);
         let p = provider("openai", &base, "gpt-4o");
-        let e = chat_openai(&p, "bad", "", "ping").unwrap_err();
+        let e = chat_openai(&p, "bad", "", "ping", ANTHROPIC_MAX_TOKENS).unwrap_err();
         assert!(e.contains("DeepSeek"), "错误必须含厂商名：{e}");
         assert!(e.contains("401"), "错误必须含 HTTP 状态：{e}");
         assert!(e.contains("API key 无效"), "{e}");
@@ -283,7 +351,7 @@ mod tests {
     fn openai_malformed_response_is_reported() {
         let (base, _rx) = mock_server(200, r#"{"unexpected":true}"#);
         let p = provider("openai", &base, "gpt-4o");
-        let e = chat_openai(&p, "k", "", "ping").unwrap_err();
+        let e = chat_openai(&p, "k", "", "ping", ANTHROPIC_MAX_TOKENS).unwrap_err();
         assert!(e.contains("DeepSeek") && e.contains("响应格式异常"), "{e}");
     }
 
@@ -307,7 +375,7 @@ mod tests {
         // 本地网关场景：没有 key 也要能调通，只是不带鉴权头
         let (base, rx) = mock_server(200, r#"{"choices":[{"message":{"content":"ok"}}]}"#);
         let p = provider("openai", &base, "local-model");
-        assert_eq!(chat_openai(&p, "", "", "ping").unwrap(), "ok");
+        assert_eq!(chat_openai(&p, "", "", "ping", ANTHROPIC_MAX_TOKENS).unwrap(), "ok");
         let req = rx.recv().unwrap();
         assert_eq!(req.header("authorization"), "", "空 key 不该发 Authorization 头");
         assert_eq!(req.body["model"], "local-model");

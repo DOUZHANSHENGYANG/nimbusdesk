@@ -108,6 +108,7 @@ export function AddSkillDialog({
   const [newMode, setNewMode] = useState<"preview" | "edit" | "split">("edit");
 
   // 市场
+  const [mMarket, setMMarket] = useState<"skillhub" | "deepskill" | "github">("skillhub");
   const [mq, setMq] = useState("");
   const [mCategory, setMCategory] = useState("all");
   const [mSource, setMSource] = useState("all");
@@ -180,11 +181,12 @@ export function AddSkillDialog({
     try {
       const r = await api.skillhubSearch({
         keyword: mq,
-        category: mCategory,
-        source: mSource,
+        category: mMarket === "skillhub" ? mCategory : "all",
+        source: mMarket === "skillhub" ? mSource : "all",
         sort: mSort,
         page,
         pageSize: PAGE_SIZE,
+        market: mMarket,
       });
       setMSkills(r.skills);
       setMTotal(r.total);
@@ -203,7 +205,15 @@ export function AddSkillDialog({
     // 打开弹框 / 切换筛选时回到第 1 页重查（关键词用回车或按钮触发，避免每次击键都打接口）
     void runSearch(1);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, mode, gitSub, mCategory, mSource, mSort]);
+  }, [open, mode, gitSub, mMarket, mCategory, mSource, mSort]);
+
+  // 换市场来源：清空上一家的结果与勾选，避免用 A 市场的坐标去装 B 市场的技能
+  useEffect(() => {
+    setMSel(new Set());
+    setMReport(null);
+    setMSkills([]);
+    setMTotal(0);
+  }, [mMarket]);
 
   useEffect(() => {
     if (!open || mode !== "git" || gitSub !== "market" || mCats.length) return;
@@ -216,7 +226,13 @@ export function AddSkillDialog({
   const installSelected = async () => {
     const targets = mSkills
       .filter((s) => mSel.has(s.coordinate))
-      .map((s) => ({ slug: s.slug, namespace: s.namespace, version: s.version, name: s.name }));
+      .map((s) => ({
+        slug: s.slug,
+        namespace: s.namespace,
+        version: s.version,
+        name: s.name,
+        source: mMarket === "skillhub" ? "" : mMarket,
+      }));
     if (!targets.length) return;
     setBusy(true);
     try {
@@ -584,6 +600,30 @@ export function AddSkillDialog({
             {/* ── 市场（Git 方式的子来源）：腾讯 SkillHub ── */}
             {mode === "git" && gitSub === "market" ? (
               <div className="flex min-h-0 flex-1 flex-col gap-3">
+                {/* 来源市场：统一成一套卡片，安装时按来源分派 */}
+                <div className="flex shrink-0 flex-wrap items-center gap-1.5">
+                  {(
+                    [
+                      ["skillhub", "skills.marketTabSkillhub"],
+                      ["deepskill", "skills.marketTabDeepskill"],
+                      ["github", "skills.marketTabGithub"],
+                    ] as const
+                  ).map(([id, key]) => (
+                    <Button
+                      key={id}
+                      size="sm"
+                      variant={mMarket === id ? "secondary" : "ghost"}
+                      className="h-7 text-[11px]"
+                      aria-pressed={mMarket === id}
+                      onClick={() => setMMarket(id)}
+                    >
+                      {t(key)}
+                    </Button>
+                  ))}
+                  <span className="text-[10px] text-ink-3">
+                    {t(mMarket === "github" ? "skills.marketGithubHint" : mMarket === "deepskill" ? "skills.marketDeepskillHint" : "skills.marketSkillhubHint")}
+                  </span>
+                </div>
                 {/* 搜索栏 */}
                 <div className="flex shrink-0 flex-wrap items-center gap-2">
                   <div className="relative min-w-52 flex-1">
@@ -598,30 +638,34 @@ export function AddSkillDialog({
                       className="h-9 pl-8"
                     />
                   </div>
-                  <Select value={mCategory} onValueChange={setMCategory}>
-                    <SelectTrigger className="h-9 w-36 text-xs">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">{t("skills.marketAllCats")}</SelectItem>
-                      {mCats.map((c) => (
-                        <SelectItem key={c.key} value={c.key}>
-                          {c.name || c.nameEn || c.key}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <Select value={mSource} onValueChange={setMSource}>
-                    <SelectTrigger className="h-9 w-32 text-xs">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">{t("skills.marketAllSources")}</SelectItem>
-                      <SelectItem value="enterprise">{t("skills.marketSrcEnterprise")}</SelectItem>
-                      <SelectItem value="community">{t("skills.marketSrcCommunity")}</SelectItem>
-                      <SelectItem value="clawhub">{t("skills.marketSrcClawhub")}</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  {mMarket === "skillhub" ? (
+                    <>
+                      <Select value={mCategory} onValueChange={setMCategory}>
+                        <SelectTrigger className="h-9 w-36 text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">{t("skills.marketAllCats")}</SelectItem>
+                          {mCats.map((c) => (
+                            <SelectItem key={c.key} value={c.key}>
+                              {c.name || c.nameEn || c.key}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <Select value={mSource} onValueChange={setMSource}>
+                        <SelectTrigger className="h-9 w-32 text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="all">{t("skills.marketAllSources")}</SelectItem>
+                          <SelectItem value="enterprise">{t("skills.marketSrcEnterprise")}</SelectItem>
+                          <SelectItem value="community">{t("skills.marketSrcCommunity")}</SelectItem>
+                          <SelectItem value="clawhub">{t("skills.marketSrcClawhub")}</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </>
+                  ) : null}
                   <Select value={mSort} onValueChange={setMSort}>
                     <SelectTrigger className="h-9 w-32 text-xs">
                       <SelectValue />

@@ -672,4 +672,26 @@ mod tests {
         assert!(import_at(&outside.0, &root.0, "", false).is_err());
         std::fs::remove_dir(&link).unwrap();
     }
+    /// 与前端 ProjectDocuments 的调用顺序一致：先建 docs/，再建 md，再写入模板。
+    /// 这条守的是「文档槽位真的能落盘」，不是 JS 那层参数拼装。
+    #[test]
+    fn project_document_slots_create_folder_then_markdown_with_template() {
+        let root = Fixture::new();
+        std::fs::create_dir_all(&root.0).unwrap();
+        // 缺父目录时不能直接建文件，前端正是靠这个错误决定要不要先建 docs/
+        assert!(create_at(&root.0, "docs", "01-feasibility", "markdown").is_err());
+        create_at(&root.0, "", "docs", "folder").unwrap();
+        assert!(root.0.join("docs").is_dir());
+        let path = create_at(&root.0, "docs", "01-feasibility", "markdown").unwrap();
+        assert!(path.replace('\\', "/").ends_with("docs/01-feasibility.md"), "{path}");
+        let body = "# 可行性分析\n\n## 同类产品与解决方案\n";
+        write_text_at(&root.0, &path, "", body).unwrap();
+        assert_eq!(std::fs::read_to_string(root.0.join(&path)).unwrap(), body);
+        // 第二次写入必须带上前一份内容作为预期版本，否则就是冲突
+        assert!(write_text_at(&root.0, &path, "", "overwrite").is_err());
+        write_text_at(&root.0, &path, body, "updated").unwrap();
+        assert_eq!(std::fs::read_to_string(root.0.join(&path)).unwrap(), "updated");
+        let listed = list_at(&root.0, "docs").unwrap();
+        assert!(listed.iter().any(|file| !file.directory && file.path.replace('\\', "/").ends_with("01-feasibility.md")));
+    }
 }

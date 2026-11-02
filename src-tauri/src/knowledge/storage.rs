@@ -8,9 +8,12 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-const INBOX: &str = "08-收件箱/工作台";
+// 采集条目落在人的收件箱里 —— 库的规范是 `00-Human工作区/Inbox` 归人，
+// AI 采集只是往里丢素材，不能另开一个 `08-收件箱` 把设计绕过去。
+use super::INBOX_ROOT;
+const INBOX: &str = "00-Agent工作区/Inbox/工作台";
 const IMAGES: &str = "assets/images/工作台";
-const TRANSACTIONS: &str = "08-收件箱/工作台/.transactions";
+const TRANSACTIONS: &str = "00-Agent工作区/Inbox/工作台/.transactions";
 const IMAGE_LIMIT: usize = 20 * 1024 * 1024;
 const NOTE_LIMIT: u64 = 8 * 1024 * 1024;
 static WRITES: Mutex<()> = Mutex::new(());
@@ -46,7 +49,7 @@ fn folder_syntax(folder: &str) -> bool {
         })
 }
 fn protected_folder(folder: &str) -> bool {
-    ["08-收件箱", "assets"]
+    [INBOX_ROOT, "assets"]
         .iter()
         .any(|reserved| overlaps(folder, reserved))
 }
@@ -96,18 +99,18 @@ fn validate_vault_folders(vault: &Vault, folders: KnowledgeFolders) -> Result<Kn
     }
     Ok(folders)
 }
-fn note_kind(relative: &str, folders: &KnowledgeFolders) -> &'static str {
-    if inside(relative, &folders.experience) {
-        "experience"
-    } else if inside(relative, &folders.recipe) {
-        "recipe"
-    } else if inside(relative, &folders.resource) {
-        "resource"
-    } else if inside(relative, "08-收件箱") {
-        "inbox"
-    } else {
-        "note"
+/// 分类就是库自己的顶层目录（区域），收件箱单列。
+/// 这样库的结构变了（改目录名、加一个区），笔记栏跟着变，不需要在应用里再绑一遍。
+fn note_kind(relative: &str) -> String {
+    if inside(relative, INBOX_ROOT) {
+        return "inbox".into();
     }
+    relative
+        .split('/')
+        .next()
+        .filter(|first| !first.is_empty())
+        .unwrap_or("note")
+        .to_string()
 }
 
 #[derive(Clone, Serialize, Deserialize)]
@@ -330,7 +333,7 @@ impl Vault {
             .chars()
             .take(220)
             .collect();
-        let kind = note_kind(relative, &KnowledgeFolders::default());
+        let kind = note_kind(relative);
         Ok(KnowledgeNote {
             path: relative.into(),
             title,
@@ -679,7 +682,6 @@ fn walk(
     output: &mut Vec<KnowledgeNote>,
     depth: usize,
     limit: usize,
-    folders: &KnowledgeFolders,
 ) -> Result<()> {
     if output.len() >= limit {
         return Ok(());
@@ -688,17 +690,24 @@ fn walk(
         return Err("知识库目录嵌套过深".into());
     }
     // Scope roots may also be junctions; skip them before strict path resolution.
-    match fs::symlink_metadata(vault.root.join(relative)) {
-        Ok(metadata)
-            if reparse(&metadata) || hidden(&metadata) || metadata.file_type().is_symlink() =>
-        {
-            return Ok(());
+    // 顶层（relative 为空）是库根本身，不做重解析检查。
+    if !relative.is_empty() {
+        match fs::symlink_metadata(vault.root.join(relative)) {
+            Ok(metadata)
+                if reparse(&metadata) || hidden(&metadata) || metadata.file_type().is_symlink() =>
+            {
+                return Ok(());
+            }
+            Ok(_) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+            Err(error) => return Err(fail("检查知识库目录失败", error)),
         }
-        Ok(_) => {}
-        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(()),
-        Err(error) => return Err(fail("检查知识库目录失败", error)),
     }
-    let folder = vault.path(relative)?;
+    let folder = if relative.is_empty() {
+        vault.root.clone()
+    } else {
+        vault.path(relative)?
+    };
     if !folder.exists() {
         return Ok(());
     }
@@ -709,8 +718,18 @@ fn walk(
         let entry = entry.map_err(|e| fail("扫描知识库条目失败", e))?;
         let name = entry.file_name().to_string_lossy().into_owned();
         if name.starts_with('.')
-            || ["node_modules", "skills", "target", "vendor"]
-                .contains(&name.to_lowercase().as_str())
+            || [
+                "node_modules",
+                "skills",
+                "target",
+                "vendor",
+                "assets",
+                "_raw",
+                "trash",
+                "99-系统",
+                "07-模板",
+            ]
+            .contains(&name.to_lowercase().as_str())
         {
             continue;
         }
@@ -722,10 +741,14 @@ fn walk(
         if reparse(&metadata) || hidden(&metadata) || metadata.file_type().is_symlink() {
             continue;
         }
-        let child = format!("{relative}/{name}");
+        let child = if relative.is_empty() {
+            name.clone()
+        } else {
+            format!("{relative}/{name}")
+        };
         let path = vault.path(&child)?;
         if path.is_dir() {
-            walk(vault, &child, query, output, depth + 1, limit, folders)?;
+            walk(vault, &child, query, output, depth + 1, limit)?;
         } else if metadata.is_file() && name.to_lowercase().ends_with(".md") {
             if child.starts_with(&format!("{INBOX}/")) && child.ends_with("/条目.md") {
                 let id = child
@@ -746,33 +769,59 @@ fn walk(
                 || child.to_lowercase().contains(query)
             {
                 let mut note = vault.note(&child, &text)?;
-                note.kind = note_kind(&child, folders).into();
+                note.kind = note_kind(&child);
                 output.push(note);
             }
         }
     }
     Ok(())
 }
+/// 库自己声明的内容区（`99-系统/config.yaml` 的 areas）。扫到未声明的目录就跳过，
+/// 免得把缓存、临时目录或别的库扫进来。
+fn declared_areas(root: &std::path::Path) -> Vec<String> {
+    let Ok(text) = fs::read_to_string(root.join("99-系统").join("config.yaml")) else {
+        return vec![];
+    };
+    let mut areas = vec![];
+    let mut inside = false;
+    for line in text.lines() {
+        if line.starts_with("areas:") {
+            inside = true;
+            continue;
+        }
+        if !inside {
+            continue;
+        }
+        if !line.starts_with(' ') {
+            break;
+        }
+        if let Some(rest) = line.trim().strip_prefix("- name:") {
+            let name = rest.trim().trim_matches('"').trim_matches('\'').to_string();
+            if !name.is_empty() {
+                areas.push(name);
+            }
+        }
+    }
+    areas
+}
+
 #[cfg(test)]
 pub fn scan(root: &str) -> Result<Vec<KnowledgeNote>> {
     scan_with_folders(root, &KnowledgeFolders::default())
 }
-pub fn scan_with_folders(root: &str, folders: &KnowledgeFolders) -> Result<Vec<KnowledgeNote>> {
-    search_with_folders(root, "", folders)
+/// 文件夹绑定只影响「归档落点」，不再决定笔记栏的范围 —— 范围是库里声明的区域。
+pub fn scan_with_folders(root: &str, _folders: &KnowledgeFolders) -> Result<Vec<KnowledgeNote>> {
+    search_with_folders(root, "", _folders)
 }
 pub fn templates(root: &str) -> Result<Vec<KnowledgeNote>> {
     let vault = Vault::new(root)?;
     let mut notes = vec![];
-    walk(
-        &vault,
-        "07-模板",
-        "",
-        &mut notes,
-        0,
-        100,
-        &KnowledgeFolders::default(),
-    )?;
+    // 新版库模板在 99-系统/模板，旧版在 07-模板；两处都收，按路径去重。
+    for scope in ["99-系统/模板", "07-模板"] {
+        walk(&vault, scope, "", &mut notes, 1, 100)?;
+    }
     notes.sort_by(|a, b| a.path.cmp(&b.path));
+    notes.dedup_by(|a, b| a.path == b.path);
     Ok(notes)
 }
 #[cfg(test)]
@@ -782,24 +831,26 @@ pub fn search(root: &str, query: &str) -> Result<Vec<KnowledgeNote>> {
 pub fn search_with_folders(
     root: &str,
     query: &str,
-    folders: &KnowledgeFolders,
+    _folders: &KnowledgeFolders,
 ) -> Result<Vec<KnowledgeNote>> {
     let _guard = WRITES
         .lock()
         .map_err(|_| "知识库写入锁异常，请重启工作台")?;
     let vault = Vault::new(root)?;
-    let folders = validate_vault_folders(&vault, folders.clone())?;
     organization::recover(&vault)?;
     let mut notes = vec![];
     let query = query.trim().to_lowercase();
-    for scope in [
-        folders.experience.as_str(),
-        folders.recipe.as_str(),
-        folders.resource.as_str(),
-        "08-收件箱",
-    ] {
-        walk(&vault, scope, &query, &mut notes, 0, usize::MAX, &folders)?;
+    // 只扫 config.yaml 里声明的区域；没有配置时才退回扫全库。
+    let areas = declared_areas(&vault.root);
+    if areas.is_empty() {
+        walk(&vault, "", &query, &mut notes, 0, usize::MAX)?;
+    } else {
+        for area in areas {
+            walk(&vault, &area, &query, &mut notes, 0, usize::MAX)?;
+        }
     }
+    // 库根下散落的单文件（AGENTS.md / README.md）不属于任何区，不进列表。
+    notes.retain(|note| note.path.contains('/'));
     notes.sort_by(|a, b| {
         b.modified_at
             .cmp(&a.modified_at)
@@ -807,6 +858,189 @@ pub fn search_with_folders(
     });
     organization::mark_completed(&vault, &mut notes)?;
     Ok(notes)
+}
+
+/// 只接受库内相对目录：不允许空、绝对路径、`.` `..` 或反斜杠段。
+fn normalize_relative(value: &str) -> Result<String> {
+    let trimmed = value.trim().replace('\\', "/");
+    let trimmed = trimmed.trim_matches('/');
+    if trimmed.is_empty()
+        || trimmed.split('/').any(|part| part.is_empty() || part == "." || part == "..")
+    {
+        return Err("目标文件夹不合法".into());
+    }
+    Ok(trimmed.to_string())
+}
+
+/// 把一个外部文件复制进库内目录（上传）。同名不覆盖，扩展名不限。
+pub fn import_file(root: &str, source: &str, folder: &str) -> Result<String> {
+    let _guard = WRITES
+        .lock()
+        .map_err(|_| "知识库写入锁异常，请重启工作台")?;
+    let vault = Vault::new(root)?;
+    let folder = normalize_relative(folder)?;
+    let name = std::path::Path::new(source)
+        .file_name()
+        .and_then(|value| value.to_str())
+        .ok_or("无法读取文件名")?
+        .to_string();
+    let relative = format!("{folder}/{name}");
+    let target = vault.path(&relative)?;
+    if target.exists() {
+        return Err(format!("{relative} 已存在，没有覆盖"));
+    }
+    vault.mkdir(&folder)?;
+    fs::copy(source, &target).map_err(|e| format!("复制失败：{e}"))?;
+    Ok(relative)
+}
+
+/// 在库内某个文件夹新建一篇笔记。同名不覆盖。
+pub fn create_note(root: &str, folder: &str, name: &str, content: &str) -> Result<String> {
+    let _guard = WRITES
+        .lock()
+        .map_err(|_| "知识库写入锁异常，请重启工作台")?;
+    let vault = Vault::new(root)?;
+    let folder = normalize_relative(folder)?;
+    let stem = name.trim().trim_end_matches(".md").trim();
+    if stem.is_empty()
+        || stem.chars().count() > 120
+        || stem.starts_with('.')
+        || stem.chars().any(|ch| "/\\:*?\"<>|".contains(ch))
+    {
+        return Err("标题不能为空，也不能包含 / \\ : * ? \" < > |".into());
+    }
+    let relative = format!("{folder}/{stem}.md");
+    let target = vault.path(&relative)?;
+    if target.exists() {
+        return Err(format!("{relative} 已存在，没有覆盖"));
+    }
+    vault.mkdir(&folder)?;
+    fs::write(&target, content.as_bytes()).map_err(|e| format!("写入失败：{e}"))?;
+    Ok(relative)
+}
+
+fn for_each_markdown(dir: &std::path::Path, root: &std::path::Path, visit: &mut impl FnMut(&std::path::Path)) {
+    let Ok(entries) = fs::read_dir(dir) else { return };
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().to_lowercase();
+        if name.starts_with('.')
+            || ["node_modules", "skills", "target", "vendor", "99-系统"].contains(&name.as_str())
+        {
+            continue;
+        }
+        let path = entry.path();
+        let Ok(metadata) = fs::symlink_metadata(&path) else { continue };
+        if metadata.file_type().is_symlink() {
+            continue;
+        }
+        if path.is_dir() {
+            for_each_markdown(&path, root, visit);
+        } else if name.ends_with(".md") && path.starts_with(root) {
+            visit(&path);
+        }
+    }
+}
+
+/// 移动/改名后把库内指向旧路径的 wikilink 改过来：
+/// 路径式 `[[02-IT/旧/笔记]]` 一定断，改；文件名式 `[[笔记]]` 只在改过名字时改。
+fn rewrite_links(root: &std::path::Path, old_rel: &str, new_rel: &str) {
+    let old_path = old_rel.trim_end_matches(".md").to_string();
+    let new_path = new_rel.trim_end_matches(".md").to_string();
+    let old_stem = old_path.rsplit('/').next().unwrap_or(&old_path).to_string();
+    let new_stem = new_path.rsplit('/').next().unwrap_or(&new_path).to_string();
+    for_each_markdown(root, root, &mut |path| {
+        let Ok(text) = fs::read_to_string(path) else { return };
+        let mut next = text.clone();
+        for marker in ["]", "|", "#"] {
+            next = next.replace(
+                &format!("[[{old_path}{marker}"),
+                &format!("[[{new_path}{marker}"),
+            );
+        }
+        if old_stem != new_stem {
+            for marker in ["]", "|", "#"] {
+                next = next.replace(
+                    &format!("[[{old_stem}{marker}"),
+                    &format!("[[{new_stem}{marker}"),
+                );
+            }
+        }
+        if next != text {
+            let _ = fs::write(path, next);
+        }
+    });
+}
+
+/// 把一篇笔记移到库内另一个文件夹（同名保留），并改掉指向旧路径的链接。
+pub fn move_note(root: &str, path: &str, folder: &str) -> Result<String> {
+    let _guard = WRITES
+        .lock()
+        .map_err(|_| "知识库写入锁异常，请重启工作台")?;
+    let vault = Vault::new(root)?;
+    let folder = normalize_relative(folder)?;
+    let source_rel = path.trim().replace('\\', "/");
+    let file = source_rel
+        .rsplit('/')
+        .next()
+        .filter(|name| !name.is_empty())
+        .ok_or("路径不合法")?
+        .to_string();
+    if !file.to_lowercase().ends_with(".md") {
+        return Err("只移动 Markdown 笔记".into());
+    }
+    let source = vault.path(&source_rel)?;
+    if !source.is_file() {
+        return Err("源文件不存在".into());
+    }
+    let relative = format!("{folder}/{file}");
+    let target = vault.path(&relative)?;
+    if target.exists() {
+        return Err(format!("{relative} 已存在，没有覆盖"));
+    }
+    vault.mkdir(&folder)?;
+    fs::rename(&source, &target).map_err(|e| format!("移动失败：{e}"))?;
+    rewrite_links(&vault.root, &source_rel, &relative);
+    Ok(relative)
+}
+
+/// 改名（留在原文件夹）。标题就是文件名，所以同时改掉指向旧名的链接。
+pub fn rename_note(root: &str, path: &str, name: &str) -> Result<String> {
+    let _guard = WRITES
+        .lock()
+        .map_err(|_| "知识库写入锁异常，请重启工作台")?;
+    let vault = Vault::new(root)?;
+    let source_rel = path.trim().replace('\\', "/");
+    let folder = source_rel
+        .rsplit_once('/')
+        .map(|(head, _)| head.to_string())
+        .unwrap_or_default();
+    let stem = name.trim().trim_end_matches(".md").trim();
+    if stem.is_empty()
+        || stem.chars().count() > 120
+        || stem.starts_with('.')
+        || stem.chars().any(|ch| "/\\:*?\"<>|".contains(ch))
+    {
+        return Err("标题不能为空，也不能包含 / \\ : * ? \" < > |".into());
+    }
+    let source = vault.path(&source_rel)?;
+    if !source.is_file() {
+        return Err("源文件不存在".into());
+    }
+    let relative = if folder.is_empty() {
+        format!("{stem}.md")
+    } else {
+        format!("{folder}/{stem}.md")
+    };
+    if relative == source_rel {
+        return Ok(relative);
+    }
+    let target = vault.path(&relative)?;
+    if target.exists() {
+        return Err(format!("{relative} 已存在，没有覆盖"));
+    }
+    fs::rename(&source, &target).map_err(|e| format!("改名失败：{e}"))?;
+    rewrite_links(&vault.root, &source_rel, &relative);
+    Ok(relative)
 }
 
 pub fn capture(root: &str, input: CaptureInput) -> Result<CaptureRecord> {

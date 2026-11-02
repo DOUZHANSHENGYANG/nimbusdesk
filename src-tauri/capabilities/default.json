@@ -4,11 +4,14 @@
   "description": "Capability for the main window",
   "windows": [
     "main",
+    "canvas-window",
     "capture",
     "search",
     "quick-tools",
+    "quick-panel",
     "desktop-dock",
     "fence-*",
+    "fence-group-*",
     "popup-menu",
     "edge-hub-*"
   ],

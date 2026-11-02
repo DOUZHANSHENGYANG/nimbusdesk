@@ -23,16 +23,16 @@ const ROUTES = [
   "/",
   "/projects",
   "/plans",
-  "/files",
-  "/feeds",
-  "/knowledge",
+  "/tools/files",
+  "/tools/feeds",
+  "/ai/knowledge",
   "/tools",
   "/toolbox/skills",
   "/toolbox/prompts",
   "/toolbox/mcp",
   "/toolbox/harness",
-  "/agent",
-  "/schedules",
+  "/ai/agent",
+  "/ai/schedules",
   "/settings",
 ];
 
@@ -106,7 +106,7 @@ try {
 
   // ── A2. 对话页：直接打开时那一片必须出现 ───────────────────────────
   const agent = await newPage();
-  await agent.open("/agent");
+  await agent.open("/ai/agent");
   await agent.page.waitForTimeout(2500);
   const panelChunks = agent.chunks().filter((file) => file.startsWith("panel-"));
   assert.equal(panelChunks.length > 0, true, "打开 /agent 后应请求到对话页那一片");

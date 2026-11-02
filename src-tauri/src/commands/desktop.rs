@@ -13,7 +13,7 @@ fn allowed_route(route: &str) -> bool {
     }
     matches!(
         route.split('?').next().unwrap_or_default(),
-        "/" | "/plans" | "/projects" | "/files" | "/knowledge" | "/settings"
+        "/" | "/plans" | "/projects" | "/tools/files" | "/ai/knowledge" | "/settings"
     )
 }
 
@@ -201,7 +201,7 @@ mod tests {
 
     #[test]
     fn main_routes_allow_only_known_desktop_destinations() {
-        for route in ["/", "/plans", "/files", "/settings", "/projects?project=p1", "/projects?item=doing"] {
+        for route in ["/", "/plans", "/tools/files", "/settings", "/projects?project=p1", "/projects?item=doing"] {
             assert!(super::allowed_route(route), "{route}");
         }
         for route in [

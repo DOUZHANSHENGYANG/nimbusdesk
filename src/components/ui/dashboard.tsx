@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
+import { ScrambleNumber } from "@/components/ui/scramble-number";
 
 /**
  * 看板式页面的两块“积木”：数字格与卡片。
@@ -18,19 +19,24 @@ export function StatTile({ id, label, value, hint, tone }: {
 }) {
   return <div data-stat={id} className="rounded-lg border border-border bg-muted/20 px-3 py-2">
     <p className="text-[11px] text-muted-foreground">{label}</p>
-    <p data-stat-value className={cn("mt-0.5 text-2xl font-semibold tabular-nums", tone)}>{value}</p>
-    {hint && <p className="truncate text-[11px] text-muted-foreground/80">{hint}</p>}
+    <p data-stat-value className={cn("mt-0.5 text-2xl font-semibold tabular-nums", tone)}>
+      {/* 读数落定只在 endfield 下演；其它 skin 下 ScrambleNumber 就是原值 */}
+      <ScrambleNumber value={value} />
+    </p>
+    {hint && <p className="truncate text-[11px] text-muted-foreground">{hint}</p>}
   </div>;
 }
 
-export function DashboardCard({ title, action, children, className }: {
+export function DashboardCard({ title, action, children, className, titleClassName }: {
   title: string;
   action?: ReactNode;
   children: ReactNode;
   className?: string;
+  /** 主卡的标题要压过其它卡：传 `text-[13px] font-semibold text-foreground`。 */
+  titleClassName?: string;
 }) {
   return <section className={cn("flex min-w-0 flex-col rounded-lg border border-border bg-muted/10 p-2", className)}>
-    <header className="mb-1.5 flex min-h-7 items-center justify-between gap-2 px-0.5"><h3 className="truncate text-[11px] font-medium text-muted-foreground">{title}</h3>{action}</header>
+    <header className="mb-1.5 flex min-h-7 items-center justify-between gap-2 px-0.5"><h3 className={cn("truncate text-[11px] font-medium text-muted-foreground", titleClassName)}>{title}</h3>{action}</header>
     {children}
   </section>;
 }

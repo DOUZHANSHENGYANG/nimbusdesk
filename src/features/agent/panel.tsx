@@ -2,7 +2,10 @@ import { useEffect } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { Bot, Sparkles, Target, X } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
+import { exportSessionToCanvas } from "@/features/canvas/api";
+import { messageText } from "./transcript";
 import {
   Empty,
   EmptyContent,
@@ -36,6 +39,25 @@ export function AgentPage() {
   const send = useAgent((state) => state.send);
   const goal = useAgent((state) => state.goal);
   const setGoal = useAgent((state) => state.setGoal);
+  const messages = useAgent((state) => state.messages);
+
+  const exportToCanvas = async () => {
+    const payload = messages
+      .filter((message) => message.role === "user" || message.role === "assistant")
+      .map((message) => ({ role: message.role, text: messageText(message) }))
+      .filter((message) => message.text.trim().length > 0);
+    if (payload.length === 0) {
+      toast.error(t("canvas.exportEmpty"));
+      return;
+    }
+    try {
+      const id = await exportSessionToCanvas(t("nav.canvas"), payload);
+      toast.success(t("canvas.exported", { id }));
+      navigate("/tools/canvas");
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : String(cause));
+    }
+  };
 
   useEffect(() => {
     void init();
@@ -43,6 +65,11 @@ export function AgentPage() {
 
   return (
     <div className="agent workbench-ui">
+      <div className="flex items-center gap-1 px-3 pt-2">
+        <Button variant="secondary" size="sm">{t("nav.agent")}</Button>
+        <Button variant="ghost" size="sm" onClick={() => navigate("/tools/canvas")}>{t("nav.canvas")}</Button>
+        <Button variant="ghost" size="sm" onClick={() => void exportToCanvas()} disabled={messages.length === 0}>{t("canvas.export")}</Button>
+      </div>
       <Status />
       {goal && (
         /* 本次目标：一小条，关掉就是清除（它同时会从 instructions 里去掉） */

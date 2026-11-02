@@ -21,6 +21,8 @@ import type {
   SkillDoc,
   SkillMeta,
   SkillSavePayload,
+  SkillUpdateProbe,
+  SkillUpdateReport,
   StorageStats,
   ImportPreview,
   PromptVariable,
@@ -69,6 +71,9 @@ export const api = {
   saveMcp: (server: McpServer) => invoke<McpServer>("save_mcp", { server }),
   deleteMcp: (id: string) => invoke<void>("delete_mcp", { id }),
   exportMcpConfig: (ids: string[]) => invoke<unknown>("export_mcp_config", { ids }),
+  /** 打包导出：技能 → skills.zip，提示词 → prompts.zip（每篇 .md），MCP → mcp.json */
+  exportBundle: (kind: "skills" | "prompts" | "mcp", ids: string[], files: { name: string; body: string }[], outDir: string) =>
+    invoke<string>("export_bundle", { kind, ids, files, outDir }),
   testMcpConnectivity: (mcp: McpServer) => invoke<McpTestResult>("test_mcp_connectivity", { mcp }),
   aiSuggestTags: (name: string, description: string) => invoke<string[]>("ai_suggest_tags", { name, description }),
 
@@ -259,10 +264,32 @@ export const api = {
   syncPush: (message: string, authed: boolean, provider: string) => invoke<string>("sync_push", { message, authed, provider }),
   syncPull: (authed: boolean, provider: string) => invoke<string>("sync_pull", { authed, provider }),
   gitFetchSkills: (url: string) =>
-    invoke<{ tempDir: string; skills: { path: string; name: string; description: string }[] }>("git_fetch_skills", { url }),
+    invoke<{
+      tempDir: string;
+      /** 克隆到的提交；更新时作为安装指纹落库 */
+      revision: string;
+      skills: {
+        path: string;
+        name: string;
+        description: string;
+        /** 该技能在仓库里的相对路径（用来只比它自己那个子目录） */
+        repoPath: string;
+        /** 该子目录在 revision 上的树 sha */
+        subtreeSha: string;
+      }[];
+    }>("git_fetch_skills", { url }),
   cleanupGitTemp: (path: string) => invoke<void>("cleanup_git_temp", { path }),
   // ---------------- 腾讯 SkillHub 市场 ----------------
-  skillhubSearch: (p: { keyword: string; category: string; source: string; sort: string; page: number; pageSize: number }) =>
+  skillhubSearch: (p: {
+    keyword: string;
+    category: string;
+    source: string;
+    sort: string;
+    page: number;
+    pageSize: number;
+    /** 空 = SkillHub；deepskill / github 走对应市场的搜索 */
+    market?: string;
+  }) =>
     invoke<MarketPage>("skillhub_search", {
       keyword: p.keyword,
       category: p.category,
@@ -270,12 +297,111 @@ export const api = {
       sort: p.sort,
       page: p.page,
       pageSize: p.pageSize,
+      market: p.market ?? null,
     }),
   skillhubCategories: () => invoke<MarketCategory[]>("skillhub_categories"),
   skillhubInstall: (targets: MarketInstallTarget[], overwrite: boolean) =>
     invoke<MarketInstallReport[]>("skillhub_install", { targets, overwrite }),
   checkUpstream: (dirName: string) =>
-    invoke<{ watched: boolean; mode: string; remote: string; remoteHead: string; lastHead: string; changed: boolean; note: string; checkedAt: string }>("check_upstream", { dirName }),
+    invoke<{
+      watched: boolean;
+      mode: string;
+      remote: string;
+      remoteHead: string;
+      lastHead: string;
+      installedRevision: string;
+      changed: boolean;
+      subtreeUnchanged: boolean;
+      note: string;
+      checkedAt: string;
+    }>("check_upstream", { dirName }),
+  /** 批量检查：同一个 remote 只连一次；按安装修订 + 子树指纹判定，不再拿仓库 HEAD 当内容版本 */
+  checkUpstreamBatch: (dirNames: string[]) =>
+    invoke<
+      {
+        dirName: string;
+        ok: boolean;
+        note?: string;
+        report?: {
+          watched: boolean;
+          mode: string;
+          remote: string;
+          remoteHead: string;
+          lastHead: string;
+          installedRevision: string;
+          changed: boolean;
+          subtreeUnchanged: boolean;
+          hintRemote: string;
+          hintMode: string;
+          hintStrong: boolean;
+          hintEvidence: string;
+          note: string;
+          checkedAt: string;
+        };
+      }[]
+    >("check_upstream_batch", { dirNames }),
+  /** 补全上游：只从本地证据（文档里的仓库地址 / 本地 git 远端）推导，不联网 */
+  upstreamBackfill: (dirNames: string[] | null, applyWeak = false) =>
+    invoke<{
+      filled: number;
+      weak: number;
+      items: { dirName: string; remote: string; mode: string; subpath: string; evidence: string; applied: boolean; note: string }[];
+    }>("upstream_backfill", { dirNames, applyWeak }),
+  /** 覆盖前对账：本地改没改过、差哪些文件、SKILL.md 两边各是什么 */
+  skillUpdatePreview: (dirName: string, candidatePath: string) =>
+    invoke<{
+      localModified: boolean | null;
+      identical: boolean;
+      changed: string[];
+      added: string[];
+      removed: string[];
+      /** 本地相对安装时改动 / 新增 / 删除的文件 */
+      localChanged: string[];
+      skillMdLocal: string;
+      skillMdRemote: string;
+    }>("skill_update_preview", { dirName, candidatePath }),
+  /** 冲突弹窗里逐行看差异：按需读单个文件 */
+  skillUpdateFileDiff: (dirName: string, candidatePath: string, relPath: string) =>
+    invoke<{ path: string; local: string; remote: string; binary: boolean }>("skill_update_file_diff", {
+      dirName,
+      candidatePath,
+      relPath,
+    }),
+  skillUpdateProbe: (dirName: string) => invoke<SkillUpdateProbe>("skill_update_probe", { dirName }),
+  /** 后端真实解析默认 AI 提供商（含云台桥接），界面不要自己拼判断 */
+  skillUpdateAiReady: () => invoke<boolean>("skill_update_ai_ready"),
+  skillUpdateDiscover: (dirName: string, workDir: string, threshold: number, preferredUrl?: string) =>
+    invoke<SkillUpdateReport>("skill_update_discover", {
+      dirName,
+      workDir,
+      threshold,
+      preferredUrl: preferredUrl ?? null,
+    }),
+  skillUpdateApply: (
+    dirName: string,
+    candidatePath: string,
+    sourceUrl: string,
+    mode: string,
+    confidence: number,
+    extra?: {
+      revision?: string;
+      subtreePath?: string;
+      subtreeSha?: string;
+      /** use-remote（默认）/ keep-mine / keep-both */
+      strategy?: string;
+    },
+  ) =>
+    invoke<SkillMeta>("skill_update_apply", {
+      dirName,
+      candidatePath,
+      sourceUrl,
+      mode,
+      confidence,
+      revision: extra?.revision ?? null,
+      subtreePath: extra?.subtreePath ?? null,
+      subtreeSha: extra?.subtreeSha ?? null,
+      strategy: extra?.strategy ?? null,
+    }),
   updateSkillExt: (
     dirName: string,
     payload: {

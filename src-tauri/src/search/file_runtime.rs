@@ -118,7 +118,7 @@ fn default_roots(data: &Path, knowledge: Option<&Value>) -> Vec<String> {
                     folders.experience,
                     folders.recipe,
                     folders.resource,
-                    "08-收件箱".into(),
+                    crate::knowledge::INBOX_ROOT.into(),
                     "assets/images/工作台".into(),
                 ] {
                     let relative = Path::new(&relative);

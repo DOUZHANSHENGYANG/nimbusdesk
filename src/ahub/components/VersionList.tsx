@@ -80,7 +80,7 @@ const DIFF_STYLES = {
 } as const;
 
 /** 竖栏里塞不下左右两栏，用统一视图；行号保留，方便对「第几行变了」 */
-function DiffView({ from, to, title }: { from: string; to: string; title: string }) {
+export function DiffView({ from, to, title, height = "max-h-64" }: { from: string; to: string; title: string; height?: string }) {
   const dark = typeof document !== "undefined" && document.documentElement.classList.contains("dark");
   return (
     <div className="mt-2 w-full min-w-0 overflow-hidden rounded-lg border border-border bg-surface">
@@ -88,7 +88,7 @@ function DiffView({ from, to, title }: { from: string; to: string; title: string
         <GitCompare className="size-3 shrink-0 text-ink-3" />
         <span className="min-w-0 flex-1 truncate text-[10.5px] text-ink-3">{title}</span>
       </div>
-      <div className="ahub-diff max-h-64 w-full min-w-0 overflow-auto">
+      <div className={`ahub-diff ${height} w-full min-w-0 overflow-auto`}>
         <ReactDiffViewer
           oldValue={from}
           newValue={to}

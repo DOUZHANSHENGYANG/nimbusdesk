@@ -1,4 +1,4 @@
-import { Archive, ArrowRight, Boxes, Check, ChevronDown, CircleAlert, Clock, CloudUpload, Columns2, Copy, Eye, FolderOpen, GitCompare, History, Layers, Loader2, Package, Pencil, Plus, RefreshCw, RotateCw, Save, ScanSearch, Settings2, ShieldAlert, ShieldCheck, Sparkles, Tag, Trash2, Wand2, Wrench, X, Zap } from "lucide-react";
+import { Archive, ArrowRight, Boxes, Check, ChevronDown, CircleAlert, Clock, CloudDownload, CloudUpload, Columns2, Copy, Eye, FileCode2, FolderOpen, GitBranch, GitCompare, History, Layers, Loader2, Package, Pencil, Plus, RefreshCw, RotateCw, Save, ScanSearch, Settings2, ShieldAlert, ShieldCheck, Sparkles, Tag, Trash2, Wand2, Wrench, X, Zap } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { i18n } from "@/lib/i18n";
@@ -9,13 +9,15 @@ import { EmptyState } from "@/ahub/components/EmptyState";
 import { matchTags, type TagMode } from "@/ahub/components/TagFilter";
 import { TagShelf } from "@/ahub/components/TagShelf";
 import { BatchTagDialog, TagPicker } from "@/ahub/components/TagPicker";
-import { UpstreamCheckDialog, UpstreamCheckIcon, type UpstreamRow } from "@/ahub/components/UpstreamCheckDialog";
-import { TagManagerView } from "@/ahub/components/TagManagerView";
+import { UpstreamCheckDialog, UpstreamCheckIcon, type UpstreamRow, type UpstreamStatus } from "@/ahub/components/UpstreamCheckDialog";
+import { UpstreamConflictDialog, type UpstreamConflict } from "@/ahub/components/UpstreamConflictDialog";
+import { useUpstreamWatch } from "@/ahub/stores/upstream-watch";
 import { SearchBar } from "@/ahub/components/SearchBar";
 import { HarnessDialog } from "@/ahub/components/HarnessDialog";
 import { SkillsConfigDialog } from "@/ahub/components/SkillsConfigDialog";
 import { Markdown } from "@/ahub/components/Markdown";
 import { PageShell } from "@/ahub/components/PageShell";
+import { ToolboxTabs } from "@/ahub/components/ToolboxTabs";
 import { SkillPicker } from "@/ahub/components/SkillPicker";
 import { VersionHistoryDialog } from "@/ahub/components/VersionHistoryDialog";
 import { VetReviewPanel } from "@/ahub/components/VetReviewPanel";
@@ -48,6 +50,8 @@ import type { HarnessReport, Preset, SkillDoc, SkillMeta } from "@/ahub/lib/type
 import { appliedHarnesses } from "@/ahub/lib/skillHarness";
 import { cn } from "@/ahub/lib/utils";
 import { useData } from "@/ahub/stores/data";
+import { useSkillUpdateQueue } from "@/ahub/stores/skill-update";
+import { useAiJobs } from "@/ahub/stores/ai-jobs";
 import { useSettings } from "@/ahub/stores/settings";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/ahub/components/motion/tabs";
 
@@ -166,19 +170,23 @@ export function SkillsPage() {
   const [query, setQuery] = useState("");
   const [activeTags, setActiveTags] = useState<Set<string>>(new Set());
   const [tagMode, setTagMode] = useState<TagMode>("or");
-  const [pageTab, setPageTab] = useState<"skills" | "tags">("skills");
-  const [batchTagOpen, setBatchTagOpen] = useState(false);
+  const [batchTagOpen, setBatchTagOpen] = useState(false), [suggestedTags, setSuggestedTags] = useState<string[]>([]), [suggestBusy, setSuggestBusy] = useState(false);
   /** 刚导入的目录名：批量打标签优先作用在这批上，而不是当前勾选 */
   const [tagTargetDirs, setTagTargetDirs] = useState<string[] | null>(null);
   const [upstreamOpen, setUpstreamOpen] = useState(false);
   const [upstreamRows, setUpstreamRows] = useState<UpstreamRow[]>([]);
+  const [conflictQueue, setConflictQueue] = useState<UpstreamConflict[]>([]);
+  const conflict = conflictQueue[0] ?? null;
+  // 检查结果一变，侧栏角标跟着变（更新完立刻从 ↑N 掉下来，不用等下一轮定时检查）
+  useEffect(() => {
+    useUpstreamWatch.getState().setRows(upstreamRows);
+  }, [upstreamRows]);
   const [upstreamBusy, setUpstreamBusy] = useState(false);
+  const [backfilling, setBackfilling] = useState<Set<string>>(new Set());
   const [upstreamUpdating, setUpstreamUpdating] = useState<Set<string>>(new Set());
   const [scanOpen, setScanOpen] = useState(false);
   const [cfgOpen, setCfgOpen] = useState(false);
   const [harnessReports, setHarnessReports] = useState<HarnessReport[] | null>(null);
-  const [addOpen, setAddOpen] = useState(false);
-  const [addMode, setAddMode] = useState<"create" | "file" | "git">("file");
   const [batchSel, setBatchSel] = useState<Set<string>>(new Set());
   const [batchDeleteOpen, setBatchDeleteOpen] = useState(false);
   const [onboardBusy, setOnboardBusy] = useState(false);
@@ -544,9 +552,41 @@ export function SkillsPage() {
   };
 
 
+  // 后台 AI 任务只需要这两个能力：给某个技能追加标签、跑完刷新列表
+  useEffect(() => {
+    useAiJobs.getState().configure({
+      applyTags: async (dirName, tags) => { await applyTagsToSelection("add", tags, [dirName]); },
+      reload: () => loadSkills(),
+    });
+    // 只注册一次；applyTagsToSelection 读取的是显式目录，不依赖闭包里的勾选
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  /** 智能标签：单个 → AI 建议后让用户挑；批量 → 直接排队，不再弹窗 */
+  const runSmartTags = async () => {
+    const targets = skills.filter((meta) => batchSel.has(meta.dirName));
+    if (!targets.length) return;
+    if (targets.length > 1) {
+      useAiJobs.getState().enqueueTags(targets.map((meta) => ({ dirName: meta.dirName, name: meta.name, description: meta.description })));
+      toast.success(t("skills.aiJobsQueued", { n: targets.length }));
+      return;
+    }
+    setSuggestBusy(true);
+    try {
+      const tags = await api.aiSuggestTags(targets[0].name, targets[0].description);
+      setSuggestedTags(tags.map((tag) => tag.trim()).filter(Boolean).slice(0, 4));
+      setTagTargetDirs([targets[0].dirName]);
+      setBatchTagOpen(true);
+    } catch (error) {
+      toast.error(String(error));
+    } finally {
+      setSuggestBusy(false);
+    }
+  };
+
   /** 批量改标签：追加 / 移除 / 清空，作用于当前勾选的技能 */
-  const applyTagsToSelection = async (mode: "add" | "remove" | "clear", tags: string[]) => {
-    const dirs = tagTargetDirs ?? [...batchSel];
+  const applyTagsToSelection = async (mode: "add" | "remove" | "clear", tags: string[], dirsOverride?: string[]) => {
+    const dirs = dirsOverride ?? tagTargetDirs ?? [...batchSel];
     for (const dirName of dirs) {
       const doc = await api.readSkill(dirName);
       const next =
@@ -572,49 +612,91 @@ export function SkillsPage() {
     setTagTargetDirs(null);
   };
 
-  /** 导入完成 → 直接拉起打标签弹窗，作用范围是刚导入的这批 */
+  /** 导入完成 → 自动一条龙：接入协议、打标签、生成摘要、修上游。不再弹窗让人填。 */
   const openTagForImported = (items: { dirName: string; name: string }[]) => {
     if (!items.length) return;
-    setTagTargetDirs(items.map((it) => it.dirName));
-    setBatchTagOpen(true);
+    const known = new Map(skills.map((meta) => [meta.dirName, meta.description]));
+    useAiJobs.getState().enqueuePipeline(items.map((item) => ({ ...item, description: known.get(item.dirName) ?? "" })));
+    toast.success(t("skills.aiPipelineQueued", { n: items.length }));
   };
 
   /**
    * 批量检查上游：勾了就只查勾选的，没勾就查全部。
-   * 逐个跑（每个一次 git ls-remote），失败只记在那一条上，不中断整批。
+   * 同一个远端只连一次；判定看「装的那一版」跟上游，而不是仓库 HEAD 有没有动。
    */
   const runUpstreamCheck = async () => {
     const targets = batchSel.size > 0 ? skills.filter((meta) => batchSel.has(meta.dirName)) : skills;
-    if (targets.length === 0) return;
+    if (!targets.length) return;
     setUpstreamBusy(true);
-    const rows: UpstreamRow[] = [];
     try {
-      for (const meta of targets) {
-        try {
-          const report = await api.checkUpstream(meta.dirName);
-          const status = !report.watched
+      const result = await api.checkUpstreamBatch(targets.map((meta) => meta.dirName));
+      const names = new Map(targets.map((meta) => [meta.dirName, meta.name]));
+      const rows: UpstreamRow[] = result.map((item) => {
+        const report = item.report;
+        const status: UpstreamStatus = !item.ok
+          ? /未接入|未跟踪/.test(item.note ?? "")
+            ? "untracked"
+            : "error"
+          : !report?.watched || !report.remote
             ? "untracked"
             : report.changed
               ? "changed"
-              : report.remoteHead
-                ? "current"
-                : "error";
-          rows.push({ dirName: meta.dirName, name: meta.name, status, remote: report.remote, mode: report.mode, note: report.note });
-        } catch (e) {
-          rows.push({ dirName: meta.dirName, name: meta.name, status: "error", remote: "", mode: "", note: String(e) });
-        }
-      }
+              : "current";
+        return {
+          dirName: item.dirName,
+          name: names.get(item.dirName) ?? item.dirName,
+          status,
+          remote: report?.remote ?? "",
+          mode: report?.mode ?? "",
+          note: (item.ok ? report?.note : item.note) ?? "",
+          installedRevision: report?.installedRevision ?? "",
+          hintRemote: report?.hintRemote ?? "",
+          hintStrong: report?.hintStrong ?? false,
+          hintEvidence: report?.hintEvidence ?? "",
+        };
+      });
       setUpstreamRows(rows);
+      useUpstreamWatch.getState().setRows(rows);
       setUpstreamOpen(true);
+    } catch (error) {
+      toast.error(String(error));
     } finally {
       setUpstreamBusy(false);
     }
   };
 
   /**
-   * 一键更新：同一个远端只 clone 一次；逐个同名技能覆盖。
-   * 覆盖前 `import_skill_folder` 会自动把旧正文压成版本（后端逻辑），
-   * 覆盖后再把 `[source.upstream]` 写回去，避免更新完反而显示「未跟踪上游」。
+   * 补全上游：只读本地证据（文档里写的仓库地址、导入来源的 git 远端）推导，不联网。
+   * 单行点进来的（哪怕只有弱证据）就是用户认可这一条；底部批量只挂强证据。
+   */
+  const backfillUpstream = async (rows: UpstreamRow[]) => {
+    const targets = rows.filter((row) => row.hintRemote);
+    if (!targets.length) return;
+    setBackfilling(new Set(targets.map((row) => row.dirName)));
+    try {
+      const report = await api.upstreamBackfill(
+        targets.map((row) => row.dirName),
+        targets.some((row) => !row.hintStrong),
+      );
+      if (report.filled) toast.success(t("skills.upBackfilled", { n: report.filled }));
+      else toast.info(t("skills.upBackfillNone"));
+      await runUpstreamCheck();
+    } catch (error) {
+      toast.error(String(error));
+    } finally {
+      setBackfilling(new Set());
+    }
+  };
+
+  /** 更新一行检查结果 */
+  const markRow = (dirName: string, patch: Partial<UpstreamRow>) =>
+    setUpstreamRows((current) => current.map((row) => (row.dirName === dirName ? { ...row, ...patch } : row)));
+
+  /**
+   * 一键更新：同一个远端只 clone 一次；逐个同名技能先对账再覆盖。
+   * - 内容一致 → 只把安装指纹记上，不覆盖；
+   * - 本地改过 → 不碰，弹三选一（保留我的 / 用上游 / 两个都留）；
+   * - 其余 → 覆盖，并写下 revision + 子目录树 sha。
    */
   const updateUpstream = async (targets: UpstreamRow[]) => {
     const rows = targets.filter((row) => row.status === "changed" && row.remote);
@@ -630,8 +712,8 @@ export function SkillsPage() {
       value.trim().toLowerCase().replace(/[\s_]+/g, "-").replace(/[^a-z0-9\u4e00-\u9fa5-]/g, "");
     const baseName = (path: string) =>
       normalize(path.replace(/\\/g, "/").split("/").filter(Boolean).pop() ?? "");
-    const mark = (dirName: string, patch: Partial<UpstreamRow>) =>
-      setUpstreamRows((current) => current.map((row) => (row.dirName === dirName ? { ...row, ...patch } : row)));
+    /** 有待用户决定的冲突时，临时目录先留着，等选完再清 */
+    const keepTemp = new Set<string>();
     let ok = 0;
     let failed = 0;
     for (const [remote, group] of groups) {
@@ -640,7 +722,7 @@ export function SkillsPage() {
         fetched = await api.gitFetchSkills(remote);
       } catch (e) {
         for (const row of group) {
-          mark(row.dirName, { status: "error", note: String(e) });
+          markRow(row.dirName, { status: "error", note: String(e) });
           failed += 1;
         }
         continue;
@@ -654,33 +736,92 @@ export function SkillsPage() {
             fetched.skills.find((skill) => normalize(skill.name) === wanted) ??
             fetched.skills.find((skill) => baseName(skill.path) === wanted);
           if (!candidate) {
-            mark(row.dirName, { status: "error", note: t("skills.upUpdateNoMatch") });
+            markRow(row.dirName, { status: "error", note: t("skills.upUpdateNoMatch") });
             failed += 1;
             continue;
           }
           try {
-            await api.importSkillFolder(candidate.path, true);
-            // 覆盖会把远端仓库里的 SKILL.toml 带进来，上游跟踪信息要写回去；
-            // 随后 check_upstream 会把 remote_head 记成刚拉到的那一版。
-            await api.updateSkillExt(row.dirName, {
-              upstream: { watch: true, mode: row.mode || "git-scan", remote },
+            const preview = await api.skillUpdatePreview(row.dirName, candidate.path);
+            if (preview.identical) {
+              await api.skillUpdateApply(row.dirName, candidate.path, remote, row.mode || "git-scan", 1, {
+                revision: fetched.revision,
+                subtreePath: candidate.repoPath,
+                subtreeSha: candidate.subtreeSha,
+              });
+              markRow(row.dirName, { status: "current", note: t("skills.upNoChange") });
+              ok += 1;
+              continue;
+            }
+            if (preview.localModified) {
+              keepTemp.add(fetched.tempDir);
+              // 一批评出多个冲突时排队，逐个让用户决定，别互相覆盖
+              setConflictQueue((current) => [
+                ...current,
+                {
+                  dirName: row.dirName,
+                  name: row.name,
+                  remote,
+                  mode: row.mode || "git-scan",
+                  revision: fetched.revision,
+                  repoPath: candidate.repoPath,
+                  subtreeSha: candidate.subtreeSha,
+                  candidatePath: candidate.path,
+                  tempDir: fetched.tempDir,
+                  preview,
+                },
+              ]);
+              markRow(row.dirName, { status: "changed", note: t("skills.upConflictPending") });
+              continue;
+            }
+            await api.skillUpdateApply(row.dirName, candidate.path, remote, row.mode || "git-scan", 1, {
+              revision: fetched.revision,
+              subtreePath: candidate.repoPath,
+              subtreeSha: candidate.subtreeSha,
             });
-            await api.checkUpstream(row.dirName);
-            mark(row.dirName, { status: "current", note: t("skills.upUpdated") });
+            markRow(row.dirName, { status: "current", note: t("skills.upUpdated") });
             ok += 1;
           } catch (e) {
-            mark(row.dirName, { status: "error", note: String(e) });
+            markRow(row.dirName, { status: "error", note: String(e) });
             failed += 1;
           }
         }
       } finally {
-        await api.cleanupGitTemp(fetched.tempDir).catch(() => undefined);
+        if (!keepTemp.has(fetched.tempDir)) {
+          await api.cleanupGitTemp(fetched.tempDir).catch(() => undefined);
+        }
       }
     }
     setUpstreamUpdating(new Set());
     await loadSkills();
     if (ok) toast.success(t("skills.upUpdateDone", { n: ok }));
     if (failed) toast.warning(t("skills.upUpdateFailed", { n: failed }));
+  };
+
+  /** 冲突三选一：保留我的（不动）/ 用上游 / 两个都留 */
+  const resolveConflict = async (strategy: "keep-mine" | "use-remote" | "keep-both") => {
+    if (!conflict) return;
+    const pending = conflict;
+    setConflictQueue((current) => current.slice(1));
+    try {
+      if (strategy !== "keep-mine") {
+        await api.skillUpdateApply(pending.dirName, pending.candidatePath, pending.remote, pending.mode, 1, {
+          revision: pending.revision,
+          subtreePath: pending.repoPath,
+          subtreeSha: pending.subtreeSha,
+          strategy,
+        });
+        toast.success(t(strategy === "keep-both" ? "skills.upKeptBoth" : "skills.upUpdated"));
+      } else {
+        toast.info(t("skills.upKeptMine"));
+      }
+      markRow(pending.dirName, { status: "current", note: t("skills.upConflictResolved") });
+    } catch (error) {
+      markRow(pending.dirName, { status: "error", note: String(error) });
+      toast.error(String(error));
+    } finally {
+      await api.cleanupGitTemp(pending.tempDir).catch(() => undefined);
+      await loadSkills();
+    }
   };
 
   const deleteTargetsOf = (items: SkillMeta[]): DeleteSkillTarget[] =>
@@ -840,23 +981,9 @@ export function SkillsPage() {
     }
     setBatchSummaryBusy(true);
     try {
-      const outcomes = await api.skillGenerateSummaryBatch(targets);
-      const ok = outcomes.filter((o) => o.ok).length;
-      const failed = outcomes.length - ok;
-      if (failed === 0) {
-        toast.success(t("skills.batchSummaryDone", { ok, failed }));
-      } else {
-        toast.warning(t("skills.batchSummaryDone", { ok, failed }));
-      }
-      await loadSkills();
-      // 当前详情若在本次目标里，就地更新摘要 —— 不重开详情，避免丢掉未保存的编辑
-      const mine = outcomes.find((o) => o.ok && o.summary && o.dirName === detail?.meta.dirName);
-      if (mine?.summary) {
-        const s = mine.summary;
-        setDetail((d) => (d && d.meta.dirName === mine.dirName ? { ...d, meta: { ...d.meta, summary: s } } : d));
-      }
-    } catch (e) {
-      toast.error(String(e));
+      const items = skills.filter((meta) => targets.includes(meta.dirName)).map((meta) => ({ dirName: meta.dirName, name: meta.name, description: meta.description }));
+      useAiJobs.getState().enqueueSummaries(items);
+      toast.success(t("skills.aiJobsQueued", { n: items.length }));
     } finally {
       setBatchSummaryBusy(false);
     }
@@ -964,6 +1091,7 @@ export function SkillsPage() {
   return (
     <PageShell
       title={t("nav.skills")}
+      tabs={<ToolboxTabs />}
       actions={
         <>
           <SearchBar value={query} onChange={setQuery} placeholder={t("skills.searchPlaceholder")} className="w-56" />
@@ -984,6 +1112,14 @@ export function SkillsPage() {
           </Button>
           <Button
             variant="secondary"
+            onClick={() => useSkillUpdateQueue.getState().openCenter()}
+            title={t("skills.skillUpdate.openHint")}
+          >
+            <CloudDownload />
+            {t("skills.skillUpdate.open")}
+          </Button>
+          <Button
+            variant="secondary"
             onClick={() => void runUpstreamCheck()}
             disabled={upstreamBusy || skills.length === 0}
             title={t("skills.upBatchHint")}
@@ -994,55 +1130,36 @@ export function SkillsPage() {
         </>
       }
     >
-      <div className="mb-3 flex w-fit items-center gap-1 rounded-lg border border-border bg-surface p-0.5">
-        {([
-          { id: "skills" as const, label: t("nav.skills"), count: skills.length },
-          { id: "tags" as const, label: t("tagShelf.title"), count: allTags.length },
-        ]).map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            aria-pressed={pageTab === item.id}
-            onClick={() => setPageTab(item.id)}
-            className={cn(
-              "flex h-7 items-center gap-1.5 rounded-md px-2.5 text-[11.5px] font-medium",
-              pageTab === item.id ? "bg-primary-soft text-primary" : "text-ink-3 hover:text-foreground",
+      <div className="flex h-full min-h-0 items-stretch gap-3">
+            {/* 整栏一张底：两块内容（预设 / 标签）叠在同一张底上，不再各自画框。
+                两者都为空时整栏不渲染；只有预设时不留一块空标签区。 */}
+            {(presetRailItems.length > 0 || allTags.length > 0) && (
+              <aside className="flex min-h-0 w-[212px] shrink-0 flex-col gap-3 overflow-hidden rounded-lg bg-surface/40 p-1.5">
+                {presetRailItems.length > 0 && (
+                  <PresetRail
+                    items={presetRailItems}
+                    selectedId={selectedPresetId}
+                    onSelect={setSelectedPresetId}
+                    onManage={() => {
+                      void loadPresets();
+                      setPresetManagerOpen(true);
+                    }}
+                    total={skills.length}
+                  />
+                )}
+                {allTags.length > 0 && (
+                  <TagShelf
+                    allTags={allTags}
+                    counts={tagCounts}
+                    selected={activeTags}
+                    onChange={setActiveTags}
+                    mode={tagMode}
+                    onModeChange={setTagMode}
+                  />
+                )}
+              </aside>
             )}
-          >
-            {item.label}
-            <span className="font-mono text-[10px] opacity-60">{item.count}</span>
-          </button>
-        ))}
-      </div>
-
-      {pageTab === "tags" ? (
-        <TagManagerView allTags={allTags} counts={tagCounts} />
-      ) : (
-        <>
-          <div className="flex min-h-0 flex-1 items-start gap-3">
-            <aside className="flex w-[212px] shrink-0 flex-col gap-2">
-              <PresetRail
-                items={presetRailItems}
-                selectedId={selectedPresetId}
-                onSelect={setSelectedPresetId}
-                onManage={() => {
-                  void loadPresets();
-                  setPresetManagerOpen(true);
-                }}
-                total={skills.length}
-              />
-              <TagShelf
-                allTags={allTags}
-                counts={tagCounts}
-                hideWhenEmpty={false}
-                selected={activeTags}
-                onChange={setActiveTags}
-                mode={tagMode}
-                onModeChange={setTagMode}
-                onManage={() => setPageTab("tags")}
-              />
-            </aside>
-            <div className="min-w-0 flex-1">
+            <div className="min-h-0 min-w-0 flex-1 overflow-y-auto">
       {/* ── 筛选台：结果计数 · 批量动作（与 MCP 页一样只是一行，不吸顶、不加底色） ── */}
       {skills.length > 0 ? (
         <div data-anim className="mb-4 flex flex-col gap-2">
@@ -1138,13 +1255,10 @@ export function SkillsPage() {
                   size="sm"
                   variant="secondary"
                   className="h-7 justify-center text-[11px]"
-                  disabled={batchSel.size === 0}
-                  onClick={() => {
-                    setTagTargetDirs(null);
-                    setBatchTagOpen(true);
-                  }}
+                  disabled={batchSel.size === 0 || suggestBusy}
+                  onClick={() => void runSmartTags()}
                 >
-                  <Tag className="size-3.5" />
+                  {suggestBusy ? <Loader2 className="size-3.5 animate-spin" /> : <Tag className="size-3.5" />}
                   {t("skills.batchTagBtn")}
                 </Button>
 
@@ -1214,31 +1328,6 @@ export function SkillsPage() {
             <h3 className="mt-2 text-sm font-semibold text-foreground">{t("skills.emptyTitle")}</h3>
             <p className="mt-1 text-xs text-ink-3">{t("skills.emptyHint")}</p>
           </div>
-          <div className="grid w-full max-w-2xl gap-2 sm:grid-cols-3">
-            {(
-              [
-                { icon: Archive, title: t("skills.emptyPickZip"), hint: t("skills.emptyPickZipHint"), mode: "file" as const },
-                { icon: FolderOpen, title: t("skills.emptyPickFolder"), hint: t("skills.emptyPickFolderHint"), mode: "file" as const },
-                { icon: GitCompare, title: t("skills.emptyPickGit"), hint: t("skills.emptyPickGitHint"), mode: "git" as const },
-              ] as const
-            ).map(({ icon: Icon, title, hint, mode }) => (
-              <button
-                key={title}
-                type="button"
-                onClick={() => {
-                  setAddMode(mode);
-                  setAddOpen(true);
-                }}
-                className="flex flex-col items-start gap-2 rounded-xl border border-border bg-card p-4 text-left outline-none transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md"
-              >
-                <span className="grid size-8 place-items-center rounded-lg bg-primary-soft text-primary">
-                  <Icon className="size-4" />
-                </span>
-                <span className="text-[12.5px] font-semibold text-foreground">{title}</span>
-                <span className="text-[11px] leading-snug text-ink-3">{hint}</span>
-              </button>
-            ))}
-          </div>
           <Button onClick={() => setScanOpen(true)} variant="secondary">
             <ScanSearch />
             {t("common.scan")}
@@ -1290,6 +1379,23 @@ export function SkillsPage() {
                   {/* 右上角：只在「需要你知道」时才出现的状态徽标（生命周期 / 审查结论）。
                       常态是空的 —— 大多数技能这两件事都没什么要说。 */}
                   <span className="flex shrink-0 items-center gap-1">
+                    {/* 一眼可见的两个状态：纳入协议管理 / 有更新源 */}
+                    {s.hasToml ? (
+                      <span
+                        title={t("skills.protoManagedHint")}
+                        className="grid size-5 place-items-center rounded-md bg-primary/10 text-primary"
+                      >
+                        <FileCode2 className="size-3.5" />
+                      </span>
+                    ) : null}
+                    {s.hasUpstream ? (
+                      <span
+                        title={t("skills.hasUpstreamHint")}
+                        className="grid size-5 place-items-center rounded-md bg-success/10 text-success"
+                      >
+                        <GitBranch className="size-3.5" />
+                      </span>
+                    ) : null}
                     {s.hasToml && s.status !== "active" ? (
                       <Badge variant="warning" title={t("skills.statusHint")}>
                         {STATUS_LABEL[s.status] ?? s.status}
@@ -2050,25 +2156,30 @@ export function SkillsPage() {
         onChanged={() => void loadSkills()}
       />
 
-      <AddSkillDialog
-        onDone={() => void loadSkills()}
-        onImported={openTagForImported}
-        open={addOpen}
-        onOpenChange={setAddOpen}
-        initialMode={addMode}
-      />
-
       <UpstreamCheckDialog
         open={upstreamOpen}
         onOpenChange={setUpstreamOpen}
         rows={upstreamRows}
         updating={upstreamUpdating}
+        backfilling={backfilling}
+        onBackfill={(rows) => void backfillUpstream(rows)}
         onUpdate={(targets) => void updateUpstream(targets)}
         onOpenSkill={(dirName) => {
           const meta = skills.find((item) => item.dirName === dirName);
           if (!meta) return;
           setUpstreamOpen(false);
           void openDetail(meta);
+        }}
+      />
+      <UpstreamConflictDialog
+        conflict={conflict}
+        onResolve={(strategy) => void resolveConflict(strategy)}
+        onCancel={() => {
+          if (!conflict) return;
+          const pending = conflict;
+          setConflictQueue((current) => current.slice(1));
+          markRow(pending.dirName, { status: "changed", note: t("skills.upConflictPending") });
+          void api.cleanupGitTemp(pending.tempDir).catch(() => undefined);
         }}
       />
       <BatchTagDialog
@@ -2079,7 +2190,8 @@ export function SkillsPage() {
         }}
         count={tagTargetDirs?.length ?? batchSel.size}
         allTags={allTags}
-        onApply={applyTagsToSelection}
+        initialTags={suggestedTags}
+        onApply={async (mode, tags) => { await applyTagsToSelection(mode, tags); setSuggestedTags([]); }}
       />
 
       {/* ── 保存为预设（skill-presets） ── */}
@@ -2219,8 +2331,7 @@ export function SkillsPage() {
 
             </div>
           </div>
-        </>
-      )}
+
    </PageShell>
   );
 }

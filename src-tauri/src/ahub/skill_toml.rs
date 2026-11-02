@@ -604,7 +604,14 @@ pub fn update_ext(
 
     if let Some(up) = upstream {
         let src = table_mut(&mut doc, "source");
-        let mut t = toml::value::Table::new();
+        // 合并而不是重建：revision / content_hash 这些安装指纹是别的流程写的，
+        // 界面改一下 watch/mode 不能把它们抹掉。
+        let existing = src
+            .get("upstream")
+            .and_then(|v| v.as_table())
+            .cloned()
+            .unwrap_or_default();
+        let mut t = existing;
         t.insert("watch".into(), toml::Value::Boolean(up.watch));
         t.insert("mode".into(), toml::Value::String(up.mode));
         t.insert("remote".into(), toml::Value::String(up.remote));

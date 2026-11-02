@@ -1,4 +1,4 @@
-import { AlertTriangle, CheckCircle2, CloudDownload, HelpCircle, Loader2, RefreshCw } from "lucide-react";
+import { AlertTriangle, CheckCircle2, CloudDownload, GitBranch, HelpCircle, Loader2, RefreshCw } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Badge } from "@/ahub/components/ui/badge";
 import { Button } from "@/ahub/components/ui/button";
@@ -16,6 +16,12 @@ export interface UpstreamRow {
   mode: string;
   /** 后端给的说明（git 不可用 / 未开 watch / ls-remote 失败原因） */
   note: string;
+  /** 本地这份内容对应的上游修订，较新检查才有 */
+  installedRevision?: string;
+  /** 未跟踪时：本地能推出的上游（可一键补全） */
+  hintRemote?: string;
+  hintStrong?: boolean;
+  hintEvidence?: string;
 }
 
 const ORDER: Record<UpstreamStatus, number> = { changed: 0, error: 1, untracked: 2, current: 3 };
@@ -33,6 +39,8 @@ export function UpstreamCheckDialog({
   onOpenSkill,
   onUpdate,
   updating,
+  onBackfill,
+  backfilling,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -41,10 +49,14 @@ export function UpstreamCheckDialog({
   /** 拉取上游并覆盖同名技能；一次可以传多行 */
   onUpdate?: (rows: UpstreamRow[]) => void | Promise<void>;
   updating?: ReadonlySet<string>;
+  /** 补全上游：本地文档 / git 远端能推出来的地址，一键挂上后重查 */
+  onBackfill?: (rows: UpstreamRow[]) => void | Promise<void>;
+  backfilling?: ReadonlySet<string>;
 }) {
   const { t } = useTranslation();
   const sorted = [...rows].sort((a, b) => ORDER[a.status] - ORDER[b.status] || a.name.localeCompare(b.name));
   const changed = rows.filter((row) => row.status === "changed").length;
+  const fillable = rows.filter((row) => row.status === "untracked" && row.hintRemote && row.hintStrong);
   const icon = (status: UpstreamStatus) =>
     status === "changed" ? (
       <CloudDownload className="size-3.5 text-warning" />
@@ -85,8 +97,14 @@ export function UpstreamCheckDialog({
                     {icon(row.status)}
                     <span className="min-w-0 flex-1">
                       <span className="block truncate text-[12px] text-foreground">{row.name}</span>
-                      <span className="block truncate font-mono text-[10px] text-ink-3">
-                        {row.remote || row.note || t("skills.upNoRemote")}
+                      <span
+                        className="block truncate font-mono text-[10px] text-ink-3"
+                        title={row.hintRemote ? row.hintEvidence : undefined}
+                      >
+                        {row.remote ||
+                          (row.status === "untracked" && row.hintRemote
+                            ? t("skills.upHintFound", { url: row.hintRemote })
+                            : row.note || t("skills.upNoRemote"))}
                       </span>
                     </span>
                     <Badge variant={tone(row.status)}>
@@ -117,6 +135,23 @@ export function UpstreamCheckDialog({
                       {t(updating?.has(row.dirName) ? "skills.upUpdating" : "skills.upUpdate")}
                     </Button>
                   ) : null}
+                  {row.status === "untracked" && row.hintRemote && onBackfill ? (
+                    <Button
+                      size="sm"
+                      variant={row.hintStrong ? "secondary" : "ghost"}
+                      className="mr-2 h-7 shrink-0 text-[11px]"
+                      title={row.hintEvidence}
+                      disabled={backfilling?.has(row.dirName)}
+                      onClick={() => void onBackfill([row])}
+                    >
+                      {backfilling?.has(row.dirName) ? (
+                        <Loader2 className="size-3.5 animate-spin" />
+                      ) : (
+                        <GitBranch className="size-3.5" />
+                      )}
+                      {t(row.hintStrong ? "skills.upBackfill" : "skills.upBackfillWeak")}
+                    </Button>
+                  ) : null}
                 </div>
               ))}
             </div>
@@ -126,6 +161,12 @@ export function UpstreamCheckDialog({
           <Button variant="secondary" onClick={() => onOpenChange(false)}>
             {t("common.close")}
           </Button>
+          {fillable.length > 0 && onBackfill ? (
+            <Button variant="secondary" disabled={Boolean(backfilling?.size)} onClick={() => void onBackfill(fillable)}>
+              <GitBranch className="size-3.5" />
+              {t("skills.upBackfillAll", { n: fillable.length })}
+            </Button>
+          ) : null}
           {changed > 0 && onUpdate ? (
             <Button
               disabled={Boolean(updating?.size)}
